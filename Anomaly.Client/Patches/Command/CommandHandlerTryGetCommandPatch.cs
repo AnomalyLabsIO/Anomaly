@@ -11,12 +11,14 @@ public class CommandHandlerTryGetCommandPatch
     {
         try
         {
-            return !Axon.Client.Command.CommandHandler.OnCommand(cmd);
+           
         }
         catch(Exception e)
         {
             MelonLogger.Msg("Patch.Il2CppGameCore.Console.TypeCommand: " + e);
             return true;
         }
+
+        return false;
     }
 }

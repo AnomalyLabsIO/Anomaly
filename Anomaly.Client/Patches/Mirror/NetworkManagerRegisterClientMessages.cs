@@ -12,7 +12,7 @@ public static class NetworkManagerRegisterClientMessages
     {
         try
         {
-            MessageHandler.RegisterMessages();
+            //MessageHandler.RegisterMessages();
         }
         catch(Exception e)
         {

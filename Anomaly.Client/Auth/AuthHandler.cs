@@ -12,6 +12,7 @@ using Il2CppLiteNetLib.Utils;
 using Il2CppLiteNetLib;
 using System.Collections;
 using Anomaly.Client.API.Features;
+using Anomaly.Client.Components;
 using Anomaly.Shared.Auth;
 using Il2CppMEC;
 using Newtonsoft.Json;
@@ -110,6 +111,7 @@ public static class AuthHandler
 
             if (!isSecondTime)
             {
+                AuthStatusOverlay.BeginAuthenticating();
                 var clientEnv = ClientAuthSession.Generate(PlayerAuth.GetIdentity());
                 _connections[server] = new ServerConnection
                 {
@@ -147,6 +149,7 @@ public static class AuthHandler
         var requestType = data.GetByte();
         if (requestType != 100)
         {
+            AuthStatusOverlay.EndAuthenticating();
             MelonLogger.Warning($"Server rejected with code {requestType} (expected 100 for handshake). Passing to base handler.");
             info.AdditionalData._position = pos;
             return true; // Not our rejection, let original handler process it
@@ -204,6 +207,7 @@ public static class AuthHandler
     public static void OnDisconnected()
     {
         _authWriteCalled = false;
+        AuthStatusOverlay.EndAuthenticating();
         MelonLogger.Msg("OnDisconnected");
     }
 }

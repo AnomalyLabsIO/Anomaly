@@ -373,6 +373,8 @@
 		<Compile Include="Auth\AuthHandler.cs" />
 		<Compile Include="Auth\PlayerAuth.cs" />
 		<Compile Include="Auth\ServerConnection.cs" />
+		<Compile Include="Commands\NameCommand.cs" />
+		<Compile Include="Components\AuthStatusOverrideComponent.cs" />
 		<Compile Include="Components\CreditsHookComponent.cs" />
 		<Compile Include="Core.cs" />
 		<Compile Include="Events\AnEventHandler.cs" />

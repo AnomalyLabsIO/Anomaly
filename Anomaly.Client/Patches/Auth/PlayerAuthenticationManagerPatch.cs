@@ -1,5 +1,6 @@
-﻿using Anomaly.Client.API.Features;
+using Anomaly.Client.API.Features;
 using Anomaly.Client.Auth;
+using Anomaly.Client.Components;
 using HarmonyLib;
 using Il2Cpp;
 using Il2CppCentralAuth;
@@ -25,6 +26,7 @@ public static class PlayerAuthenticationManagerPatch
     public static void Start(PlayerAuthenticationManager __instance)
     {
         if (!__instance.isLocalPlayer) return;
+        AuthStatusOverlay.EndAuthenticating();
         __instance._hub.encryptedChannelManager.EncryptionKey = AuthHandler.CurrentKey;
         MelonLogger.Warning("Starting player authentication manager");
     }
