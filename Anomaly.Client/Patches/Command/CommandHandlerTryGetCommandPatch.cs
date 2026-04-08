@@ -3,6 +3,7 @@ using MelonLoader;
 
 namespace Anomaly.Client.Patches.Command;
 
+/*
 [HarmonyPatch(typeof(Il2CppGameCore.Console),nameof(Il2CppGameCore.Console.TypeCommand))]
 public class CommandHandlerTryGetCommandPatch
 {
@@ -21,4 +22,4 @@ public class CommandHandlerTryGetCommandPatch
 
         return false;
     }
-}
+}*/

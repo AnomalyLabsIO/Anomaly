@@ -7,6 +7,7 @@ using Il2CppInventorySystem.Items;
 using Il2CppInventorySystem.Searching;
 using Il2CppMapGeneration;
 using Il2CppPlayerRoles;
+using Il2CppPlayerRoles.FirstPersonControl;
 using Il2CppPlayerStatsSystem;
 using Il2CppRemoteAdmin;
 using UnityEngine;
@@ -50,6 +51,10 @@ public class Player
     public PlayerEffectsController PlayerEffectsController => ReferenceHub.playerEffectsController;
     public CurrentRoomPlayerCache CurrentRoomPlayerCache => ReferenceHub.CurrentRoomPlayerCache;
 
+    public ItemIdentifier CurrentItem => ReferenceHub.inventory.CurItem;
+
+    public FirstPersonMovementModule FirstPersonMovementModule =>
+        (ReferenceHub.roleManager.CurrentRole.Cast<IFpcRole>())?.FpcModule;
 
     public Il2CppSystem.Collections.Generic.List<ItemBase> Items
     {

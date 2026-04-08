@@ -26,6 +26,7 @@ public static class AuthHandler
     private static Dictionary<string, ServerConnection> _connections = new();
     
     public static byte[] CurrentKey { get; private set; }
+    public static bool UsingAnomalyAuth { get; internal set; }
 
     public static string AuthFilePath { get; private set; }
     public static PlayerAuth PlayerAuth { get; private set; }
@@ -109,6 +110,8 @@ public static class AuthHandler
 
             MelonLogger.Msg($"AuthWrite phase: {(isSecondTime ? "2 (login)" : "1 (handshake)")}, server: {server}");
 
+            UsingAnomalyAuth = true;
+
             if (!isSecondTime)
             {
                 AuthStatusOverlay.BeginAuthenticating();
@@ -127,8 +130,8 @@ public static class AuthHandler
                 _connections.Remove(server);
                 var attempt = connection.Session.CreateLoginAttempt(connection.Handshake);
                 writer.PutBytesWithLength(attempt.Encode());
-                writer.Put(connection.ServerIdentifier);
-                writer.Put(PlayerAuth.Username);
+                writer.Put(connection.ServerIdentifier, 0);
+                writer.Put(PlayerAuth.Username, 0);
 
                 CurrentKey = connection.Session.GetSharedSecret(connection.Handshake);
             }
@@ -207,6 +210,7 @@ public static class AuthHandler
     public static void OnDisconnected()
     {
         _authWriteCalled = false;
+        UsingAnomalyAuth = false;
         AuthStatusOverlay.EndAuthenticating();
         MelonLogger.Msg("OnDisconnected");
     }

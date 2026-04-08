@@ -4,7 +4,7 @@ namespace Anomaly.Client.Events.Handlers;
 
 public class ClientEvents
 {
-    public static event AnEventHandler<SceneLoadedEventArgs> SceneLoaded;
+    /*public static event AnEventHandler<SceneLoadedEventArgs> SceneLoaded;
     public static event AnEventHandler<CanvasReadyEventArgs> CanvasReady;
     public static event AnEventHandler<CreditHookEventArgs> CreditHook; 
     
@@ -21,5 +21,5 @@ public class ClientEvents
     public static void OnCreditHook(CreditHookEventArgs args)
     {
         CreditHook.Invoke(args);
-    }
+    }*/
 }

@@ -55,7 +55,7 @@ public class CreditsHookComponent : MonoBehaviour
                     _titleGameObject = GameObject.Find("/New Main Menu/Credits/root/Content/CreditsCategory(Clone)");
                     _roleGameObject = GameObject.Find("/New Main Menu/Credits/root/Content/CreditsElement with Role(Clone)/");
                     _creditsReadyToUse = true;
-                    ClientEvents.OnCreditHook(new CreditHookEventArgs(this));
+                    //ClientEvents.OnCreditHook(new CreditHookEventArgs(this));
                 }
             }
         }

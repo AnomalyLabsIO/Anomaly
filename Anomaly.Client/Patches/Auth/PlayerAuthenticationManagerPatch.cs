@@ -26,6 +26,7 @@ public static class PlayerAuthenticationManagerPatch
     public static void Start(PlayerAuthenticationManager __instance)
     {
         if (!__instance.isLocalPlayer) return;
+        if (!AuthHandler.UsingAnomalyAuth) return;
         AuthStatusOverlay.EndAuthenticating();
         __instance._hub.encryptedChannelManager.EncryptionKey = AuthHandler.CurrentKey;
         MelonLogger.Warning("Starting player authentication manager");
@@ -36,6 +37,12 @@ public static class PlayerAuthenticationManagerPatch
     public static bool OnPack(EncryptedChannelManager __instance, out bool __result,
         string content, EncryptedChannelManager.EncryptedChannel channel)
     {
+        if (!AuthHandler.UsingAnomalyAuth)
+        {
+            __result = false;
+            return true;
+        }
+
         if (__instance._txCounter == 4294967295U)
             __instance._txCounter = 0;
         __instance._txCounter++;
@@ -92,6 +99,9 @@ public static class PlayerAuthenticationManagerPatch
     [HarmonyPatch(typeof(EncryptedChannelManager), nameof(EncryptedChannelManager.ClientReceivePackedMessage))]
     public static bool OnReceivePackedMessage(EncryptedChannelManager.EncryptedMessageOutside packed)
     {
+        if (!AuthHandler.UsingAnomalyAuth)
+            return true;
+
         MelonLogger.Warning("Got message back.");
         var hub = LocalPlayer.Instance.ReferenceHub;
 

@@ -386,6 +386,7 @@
 		<Compile Include="Patches\Auth\PlayerAuthenticationManagerPatch.cs" />
 		<Compile Include="Patches\Command\CommandHandlerTryGetCommandPatch.cs" />
 		<Compile Include="Patches\Credits\NewCreditsPatch.cs" />
+		<Compile Include="Patches\Loader\LoaderPatch.cs" />
 		<Compile Include="Patches\Menu\CanvasPatch.cs" />
 		<Compile Include="Patches\Menu\NewServerBrowserOnEnablePatch.cs" />
 		<Compile Include="Patches\Menu\NewsLoaderStartPatch.cs" />

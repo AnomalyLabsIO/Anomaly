@@ -27,6 +27,12 @@ public static class NetDataWriterPut
     [HarmonyPrefix]
     public static bool OnPrefix1(NetDataWriter writer)
     {
+        if (NetworkServer.active)
+        {
+            MelonLogger.Msg("GetConnectData intercepted - local hosted server, skipping Anomaly auth");
+            return true;
+        }
+
         MelonLogger.Msg("GetConnectData intercepted - writing auth data");
         AuthHandler.AuthWrite(writer);
         return false;
@@ -36,6 +42,9 @@ public static class NetDataWriterPut
     [HarmonyPrefix]
     public static bool ConnectionRefused(DisconnectInfo disconnectinfo)
     {
+        if (!AuthHandler.UsingAnomalyAuth)
+            return true;
+
         MelonLogger.Msg($"Connection refused - Reason: {disconnectinfo.Reason}, HasData: {disconnectinfo.AdditionalData?.RawData != null}");
         return AuthHandler.RejectAuth(disconnectinfo);
     }

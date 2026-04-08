@@ -7,6 +7,7 @@ namespace Anomaly.Shared.Auth;
 public static class Base58
 {
     private const string Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    
     private static readonly int[] Base58Indexes = new int[128];
 
     static Base58()

@@ -1,6 +1,8 @@
 ﻿using Il2Cpp;
 using Il2CppCentralAuth;
 using Il2CppHints;
+using Il2CppInteractables;
+using Il2CppPlayerRoles.FirstPersonControl;
 using Il2CppRemoteAdmin;
 using UnityEngine;
 
@@ -33,7 +35,9 @@ public class LocalPlayer : Player
     public PlayerAuthenticationManager AuthManager => ReferenceHub.authManager;
     public EncryptedChannelManager EncryptedChannelManager => ReferenceHub.encryptedChannelManager;
     public QueryProcessor  QueryProcessor => ReferenceHub.queryProcessor;
+
+    public InteractionCoordinator InteractionCoordinator => ReferenceHub.interCoordinator;
     
 
-    public Camera Camera => ReferenceHub.PlayerCameraReference.gameObject.GetComponent<Camera>();
+    public Camera Camera => GameObject.Find("Main Camera Controller/Default Camera/All Cameras/CharacterCamera").GetComponent<Camera>();
 }

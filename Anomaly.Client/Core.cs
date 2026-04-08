@@ -1,7 +1,10 @@
 ﻿using Anomaly.Client.Auth;
 using Il2Cpp;
 using Il2CppCentralAuth;
+using Il2CppTMPro;
 using MelonLoader;
+using UnityEngine;
+using UnityEngine.SceneManagement;
 
 [assembly: MelonInfo(typeof(Anomaly.Client.Core), "Anomaly", "1.0.0", "AnomalyLabs", null)]
 [assembly: MelonGame("Northwood", "SCPSL")]
@@ -21,6 +24,8 @@ public class Core : MelonMod
         
         AuthHandler.Init();
         LoggerInstance.Msg("Initialized.");
+        
     }
+
     
 }

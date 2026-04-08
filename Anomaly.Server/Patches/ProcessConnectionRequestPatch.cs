@@ -285,7 +285,7 @@ public static class ProcessConnectionRequestPatch
             //Maybe make this earlier and let it use the ip instead of userid
             if (CustomLiteNetLib4MirrorTransport.UserRateLimiting)
             {
-                if (CustomLiteNetLib4MirrorTransport.UserRateLimit.Contains(userId))
+                if (CustomLiteNetLib4MirrorTransport.UserRateLimit.ContainsKey(userId))
                 {
                     RequestRejected();
                     if (LogRejection)
@@ -299,7 +299,7 @@ public static class ProcessConnectionRequestPatch
                     CustomLiteNetLib4MirrorTransport.ResetIdleMode();
                     return false;
                 }
-                CustomLiteNetLib4MirrorTransport.UserRateLimit.Add(userId);
+                CustomLiteNetLib4MirrorTransport.UserRateLimit.TryAdd(userId, 0);
             }
             #endregion
 
