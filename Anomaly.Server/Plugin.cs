@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Anomaly.Server.Networking;
 using Anomaly.Server.Utils;
 using CentralAuth;
 using HarmonyLib;
@@ -32,6 +33,9 @@ public class Plugin : Plugin<Config>
             Logger.Info("OnlineMode set to false");
 
             Instance = this;
+
+            AnomalyMessageRegistry.RegisterAll();
+            Logger.Info("AnomalyMessageRegistry initialized");
 
             Harmony.PatchAll();
             var patchedMethods = Harmony.GetPatchedMethods().ToList();

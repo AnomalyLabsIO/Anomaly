@@ -1,4 +1,5 @@
 using Anomaly.Client.API.Features;
+using Anomaly.Client.API.Networking;
 using Anomaly.Client.Auth;
 using Anomaly.Client.Components;
 using Anomaly.Client.Internal.Wrappers;
@@ -120,6 +121,16 @@ public static class PlayerAuthenticationManagerPatch
         var decryptedData = AES.AesGcmDecrypt(packed.Data, hub.encryptedChannelManager.EncryptionKey);
 
         var channel = (EncryptedChannelManager.EncryptedChannel)decryptedData[0];
+
+        // Anomaly custom messages use a separate dispatch path (no counter validation)
+        if ((byte)channel == AnomalyChannel.ChannelId)
+        {
+            var anomalyPayload = new byte[decryptedData.Length - 1];
+            Array.Copy(decryptedData, 1, anomalyPayload, 0, anomalyPayload.Length);
+            AnomalyMessaging.OnReceived(anomalyPayload);
+            return false;
+        }
+
         var counter = BitConverter.ToUInt32(decryptedData, 1);
         var content = Encoding.UTF8.GetString(decryptedData, 5, decryptedData.Length - 5);
         EncryptedChannelManager.EncryptedMessage message = new EncryptedChannelManager.EncryptedMessage(channel, content, counter);
@@ -134,7 +145,7 @@ public static class PlayerAuthenticationManagerPatch
         }
 
         hub.encryptedChannelManager._rxCounter = counter;
-        
+
 
         if (!EncryptedChannelManager.ClientChannelHandlers.ContainsKey(channel))
         {

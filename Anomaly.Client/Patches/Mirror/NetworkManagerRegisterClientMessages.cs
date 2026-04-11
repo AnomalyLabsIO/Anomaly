@@ -1,4 +1,5 @@
-﻿using HarmonyLib;
+﻿using Anomaly.Client.API.Networking;
+using HarmonyLib;
 using Il2CppMirror;
 using MelonLoader;
 
@@ -12,7 +13,7 @@ public static class NetworkManagerRegisterClientMessages
     {
         try
         {
-            //MessageHandler.RegisterMessages();
+            AnomalyMessageRegistry.RegisterAll();
         }
         catch(Exception e)
         {

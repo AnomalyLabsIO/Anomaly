@@ -387,6 +387,12 @@
 		<Compile Include="API\Features\ShootingTargetAdminToy.cs" />
 		<Compile Include="API\Features\SpeakerAdminToy.cs" />
 		<Compile Include="API\Features\VoiceMessagePacket.cs" />
+		<Compile Include="API\Networking\AnomalyChannel.cs" />
+		<Compile Include="API\Networking\AnomalyMessageRegistry.cs" />
+		<Compile Include="API\Networking\AnomalyMessaging.cs" />
+		<Compile Include="API\Networking\IAnomalyMessage.cs" />
+		<Compile Include="API\Networking\Messages\BoneTransformsMessage.cs" />
+		<Compile Include="API\Networking\Messages\EmotionBlendShapesMessage.cs" />
 		<Compile Include="Auth\AuthHandler.cs" />
 		<Compile Include="Auth\PlayerAuth.cs" />
 		<Compile Include="Auth\ServerConnection.cs" />
@@ -434,6 +440,8 @@
 		<Compile Include="Events\Handlers\ProjectileEvents.cs" />
 		<Compile Include="Events\Handlers\RoleEvents.cs" />
 		<Compile Include="Events\Handlers\StatsEvents.cs" />
+		<Compile Include="Events\Args\AnomalyMessageReceivedEventArgs.cs" />
+		<Compile Include="Events\Handlers\NetworkMessageEvents.cs" />
 		<Compile Include="Events\Handlers\VoiceEvents.cs" />
 		<Compile Include="Internal\Bootstrap\ClientRuntime.cs" />
 		<Compile Include="Internal\Effects\EffectStateTracker.cs" />

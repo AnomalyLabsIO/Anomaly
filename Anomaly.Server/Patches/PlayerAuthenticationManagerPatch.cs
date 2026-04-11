@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Text;
 using Anomaly.Server.Auth;
+using Anomaly.Server.Networking;
 using Anomaly.Server.Utils;
 using CentralAuth;
 using Cryptography;
@@ -115,6 +116,16 @@ public static class PlayerAuthenticationManagerPatch
         if (conn.identity.isLocalPlayer)
         {
             channel = (EncryptedChannelManager.EncryptedChannel)packed.Data[0];
+
+            // Anomaly custom messages -- separate dispatch, no counter
+            if ((byte)channel == AnomalyChannel.ChannelId)
+            {
+                var anomalyPayload = new byte[packed.Data.Length - 1];
+                Array.Copy(packed.Data, 1, anomalyPayload, 0, anomalyPayload.Length);
+                AnomalyMessaging.OnReceived(hub, anomalyPayload);
+                return false;
+            }
+
             counter = BitConverter.ToUInt32(packed.Data, 1);
             content = Encoding.UTF8.GetString(packed.Data, 5, packed.Data.Length - 5);
             message = new EncryptedChannelManager.EncryptedMessage(channel, content, counter);
@@ -130,10 +141,20 @@ public static class PlayerAuthenticationManagerPatch
             var decryptedData = AES.AesGcmDecrypt(packed.Data, hub.encryptedChannelManager.EncryptionKey);
 
             channel = (EncryptedChannelManager.EncryptedChannel)decryptedData[0];
+
+            // Anomaly custom messages -- separate dispatch, no counter
+            if ((byte)channel == AnomalyChannel.ChannelId)
+            {
+                var anomalyPayload = new byte[decryptedData.Length - 1];
+                Array.Copy(decryptedData, 1, anomalyPayload, 0, anomalyPayload.Length);
+                AnomalyMessaging.OnReceived(hub, anomalyPayload);
+                return false;
+            }
+
             counter = BitConverter.ToUInt32(decryptedData, 1);
             content = Encoding.UTF8.GetString(decryptedData, 5, decryptedData.Length - 5);
             message = new EncryptedChannelManager.EncryptedMessage(channel, content, counter);
-            
+
 
             if (hub.encryptedChannelManager._rxCounter == 4294967295U)
                 hub.encryptedChannelManager._rxCounter = 0;

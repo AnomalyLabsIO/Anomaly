@@ -170,6 +170,13 @@
         <Compile Include="Patches\ProcessConnectionRequestPatch.cs" />
         <Compile Include="Plugin.cs" />
         <Compile Include="Properties\AssemblyInfo.cs"/>
+        <Compile Include="Networking\AnomalyChannel.cs" />
+        <Compile Include="Networking\AnomalyMessageRegistry.cs" />
+        <Compile Include="Networking\AnomalyMessaging.cs" />
+        <Compile Include="Networking\HalfHelper.cs" />
+        <Compile Include="Networking\IAnomalyMessage.cs" />
+        <Compile Include="Networking\Messages\BoneTransformsMessage.cs" />
+        <Compile Include="Networking\Messages\EmotionBlendShapesMessage.cs" />
         <Compile Include="Utils\OffThreadLogger.cs" />
     </ItemGroup>
     <ItemGroup>
