@@ -7,7 +7,7 @@ namespace Anomaly.Server.Networking.Messages;
 public class EmotionBlendShapesMessage : IAnomalyMessage
 {
     public string MessageName => "anomaly:blendshapes";
-    public int TransportChannel => 2; // Sequenced
+    public MessageChannel TransportChannel => MessageChannel.Sequenced; // Sequenced
 
     public uint NetId { get; set; }
     public List<BlendShapeEntry> BlendShapes { get; set; } = new List<BlendShapeEntry>();

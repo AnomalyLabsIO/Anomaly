@@ -62,7 +62,7 @@ public static class AnomalyMessaging
                 EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encrypted);
         }
 
-        NetworkClient.Send(packed, msg.TransportChannel);
+        NetworkClient.Send(packed, (int)msg.TransportChannel);
     }
 
     internal static void OnReceived(byte[] anomalyPayload)

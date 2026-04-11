@@ -1,3 +1,4 @@
+using Anomaly.Client.API.Enum;
 using UnityEngine;
 
 namespace Anomaly.Client.API.Networking.Messages;
@@ -5,7 +6,7 @@ namespace Anomaly.Client.API.Networking.Messages;
 public class BoneTransformsMessage : IAnomalyMessage
 {
     public string MessageName => "anomaly:bonetransforms";
-    public int TransportChannel => 2; // Sequenced -- only latest pose matters
+    public MessageChannel TransportChannel => MessageChannel.Sequenced; // Sequenced -- only latest pose matters
 
     public uint NetId { get; set; }
     public List<BoneEntry> Bones { get; set; } = new();

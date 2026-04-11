@@ -8,7 +8,7 @@ namespace Anomaly.Server.Networking.Messages;
 public class BoneTransformsMessage : IAnomalyMessage
 {
     public string MessageName => "anomaly:bonetransforms";
-    public int TransportChannel => 2; // Sequenced
+    public MessageChannel TransportChannel => MessageChannel.Sequenced; // Sequenced
 
     public uint NetId { get; set; }
     public List<BoneEntry> Bones { get; set; } = new List<BoneEntry>();

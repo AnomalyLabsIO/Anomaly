@@ -166,6 +166,7 @@
         <Compile Include="Auth\Connection.cs" />
         <Compile Include="Auth\PlayerStorage.cs" />
         <Compile Include="Config.cs" />
+        <Compile Include="Networking\MessageChannel.cs" />
         <Compile Include="Patches\PlayerAuthenticationManagerPatch.cs" />
         <Compile Include="Patches\ProcessConnectionRequestPatch.cs" />
         <Compile Include="Plugin.cs" />
@@ -177,6 +178,7 @@
         <Compile Include="Networking\IAnomalyMessage.cs" />
         <Compile Include="Networking\Messages\BoneTransformsMessage.cs" />
         <Compile Include="Networking\Messages\EmotionBlendShapesMessage.cs" />
+        <Compile Include="Networking\Messages\SilentRoleChangeMessage.cs" />
         <Compile Include="Utils\OffThreadLogger.cs" />
     </ItemGroup>
     <ItemGroup>

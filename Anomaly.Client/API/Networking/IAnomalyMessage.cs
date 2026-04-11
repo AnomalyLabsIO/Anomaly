@@ -1,3 +1,5 @@
+using Anomaly.Client.API.Enum;
+
 namespace Anomaly.Client.API.Networking;
 
 public interface IAnomalyMessage
@@ -12,7 +14,7 @@ public interface IAnomalyMessage
     /// Mirror transport channel to use when sending.
     /// 0 = ReliableOrdered, 1 = Unreliable, 2 = Sequenced, 3 = ReliableSequenced, 4 = ReliableUnordered.
     /// </summary>
-    int TransportChannel { get; }
+    MessageChannel TransportChannel { get; }
 
     void Serialize(BinaryWriter writer);
 

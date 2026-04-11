@@ -1,9 +1,11 @@
+using Anomaly.Client.API.Enum;
+
 namespace Anomaly.Client.API.Networking.Messages;
 
 public class EmotionBlendShapesMessage : IAnomalyMessage
 {
     public string MessageName => "anomaly:blendshapes";
-    public int TransportChannel => 2; // Sequenced -- only latest state matters
+    public MessageChannel TransportChannel => MessageChannel.Sequenced; // Sequenced -- only latest state matters
 
     public uint NetId { get; set; }
     public List<BlendShapeEntry> BlendShapes { get; set; } = new();

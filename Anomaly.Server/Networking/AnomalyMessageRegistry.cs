@@ -56,6 +56,7 @@ public static class AnomalyMessageRegistry
     {
         Register("anomaly:blendshapes", () => new EmotionBlendShapesMessage());
         Register("anomaly:bonetransforms", () => new BoneTransformsMessage());
+        Register("anomaly:silentrolechance", () => new SilentRoleChangeMessage());
     }
 
     /// <summary>

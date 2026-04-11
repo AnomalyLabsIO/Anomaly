@@ -39,7 +39,7 @@ public static class AnomalyMessaging
                 EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encrypted);
         }
 
-        hub.connectionToClient.Send(packed, msg.TransportChannel);
+        hub.connectionToClient.Send(packed, (int)msg.TransportChannel);
     }
 
     public static void SendToAll(IAnomalyMessage msg)
