@@ -1,6 +1,7 @@
 using Anomaly.Client.API.Features;
 using Anomaly.Client.Auth;
 using Anomaly.Client.Components;
+using Anomaly.Client.Internal.Wrappers;
 using HarmonyLib;
 using Il2Cpp;
 using Il2CppCentralAuth;
@@ -103,7 +104,13 @@ public static class PlayerAuthenticationManagerPatch
             return true;
 
         MelonLogger.Warning("Got message back.");
-        var hub = LocalPlayer.Instance.ReferenceHub;
+
+        ReferenceHub hub = LocalPlayer.Instance?.ReferenceHub;
+        if (hub == null && !PlayerRegistry.TryGetLocalHub(out hub))
+        {
+            MelonLogger.Warning("Got encrypted message before the local player hub was ready.");
+            return false;
+        }
 
         if(hub.encryptedChannelManager.EncryptionKey == null)
         {

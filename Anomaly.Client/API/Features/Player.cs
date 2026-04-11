@@ -1,4 +1,5 @@
 ﻿using System.Collections.ObjectModel;
+using Anomaly.Client.Internal.Wrappers;
 using Il2Cpp;
 using Il2CppHints;
 using Il2CppInteractables;
@@ -8,6 +9,8 @@ using Il2CppInventorySystem.Searching;
 using Il2CppMapGeneration;
 using Il2CppPlayerRoles;
 using Il2CppPlayerRoles.FirstPersonControl;
+using Il2CppPlayerRoles.FirstPersonControl.Thirdperson;
+using Il2CppPlayerRoles.FirstPersonControl.Thirdperson.Subcontrollers;
 using Il2CppPlayerStatsSystem;
 using Il2CppRemoteAdmin;
 using UnityEngine;
@@ -16,66 +19,98 @@ namespace Anomaly.Client.API.Features;
 
 public class Player
 {
-    public static ReadOnlyCollection<Player> PlayerList { get; internal set; } = new(new List<Player>());
-    public static ReadOnlyDictionary<GameObject, Player> GameObjectToPlayer { get; internal set; } = new(new Dictionary<GameObject, Player>());
-
-    public Player(GameObject gameObject) : this(ReferenceHub.GetHub(gameObject)) { }
-    public Player(ReferenceHub hub)
+    internal Player(ReferenceHub hub)
     {
         ReferenceHub = hub;
-
-        var list = new List<Player>(PlayerList)
-        {
-            this
-        };
-        PlayerList = new(list);
-
-        var dic = new Dictionary<GameObject, Player>(GameObjectToPlayer);
-        dic[hub.gameObject] = this;
-        GameObjectToPlayer = new(dic);
     }
 
-    public ReferenceHub ReferenceHub;
+    internal Player(GameObject gameObject) : this(ReferenceHub.GetHub(gameObject)) { }
 
-    public Vector3 Position => ReferenceHub.gameObject.transform.position;
-    public Transform Transform => ReferenceHub.gameObject.transform;
-    public CharacterClassManager CharacterClassManager  => ReferenceHub.characterClassManager;
+    public static ReadOnlyCollection<Player> PlayerList => PlayerRegistry.PlayerList;
+
+    public static ReadOnlyDictionary<GameObject, Player> GameObjectToPlayer => PlayerRegistry.GameObjectToPlayer;
+
+    public ReferenceHub ReferenceHub { get; }
+
+    public GameObject GameObject => ReferenceHub.gameObject;
+
+    public bool IsLocal => this is LocalPlayer;
+
+    public Vector3 Position => Transform.position;
+    public Transform Transform => GameObject.transform;
+    public CharacterClassManager CharacterClassManager => ReferenceHub.characterClassManager;
     public PlayerRoleManager RoleManager => ReferenceHub.roleManager;
+    public PlayerRoleBase CurrentRole => RoleManager.CurrentRole;
+    public Role Role => Role.Get(CurrentRole);
     public PlayerStats PlayerStats => ReferenceHub.playerStats;
-    public Inventory Inventory => ReferenceHub.inventory;
+    public PlayerStatsWrapper Stats => PlayerStatsWrapper.Get(PlayerStats);
+    public Inventory InventoryBase => ReferenceHub.inventory;
+    public PlayerInventory Inventory => PlayerInventory.Get(InventoryBase);
     public SearchCoordinator SearchCoordinator => ReferenceHub.searchCoordinator;
-    public ServerRoles  ServerRoles => ReferenceHub.serverRoles;
-    
+    public ServerRoles ServerRoles => ReferenceHub.serverRoles;
+
     public NicknameSync NicknameSync => ReferenceHub.nicknameSync;
     public InteractionCoordinator InteractionCoordinator => ReferenceHub.interCoordinator;
     public PlayerEffectsController PlayerEffectsController => ReferenceHub.playerEffectsController;
+    public PlayerEffects Effects => PlayerEffects.Get(PlayerEffectsController);
     public CurrentRoomPlayerCache CurrentRoomPlayerCache => ReferenceHub.CurrentRoomPlayerCache;
+    public Room Room => Room.Get(this);
 
-    public ItemIdentifier CurrentItem => ReferenceHub.inventory.CurItem;
+    public ItemIdentifier CurrentItemIdentifier => ReferenceHub.inventory.CurItem;
+    public Item CurrentItem => Inventory.CurrentItem;
 
     public FirstPersonMovementModule FirstPersonMovementModule =>
         (ReferenceHub.roleManager.CurrentRole.Cast<IFpcRole>())?.FpcModule;
 
-    public Il2CppSystem.Collections.Generic.List<ItemBase> Items
+    public CharacterModel CharacterModel => FirstPersonMovementModule?.CharacterModelInstance;
+    
+    public EmotionSubcontroller EmotionSubcontroller
     {
         get
         {
-            var itemBases = new Il2CppSystem.Collections.Generic.List<ItemBase>();
+            if(CharacterModel is not AnimatedCharacterModel) return null;
+            EmotionSubcontroller subcontroller = null;
+            if(!(CharacterModel as AnimatedCharacterModel).TryGetSubcontroller<EmotionSubcontroller>(out subcontroller)) return null;
+            return subcontroller;
+        }
+    }
+
+    public ReadOnlyCollection<ItemBase> ItemBases
+    {
+        get
+        {
+            List<ItemBase> itemBases = new();
             foreach (var userInventoryItem in ReferenceHub.inventory.UserInventory.Items)
             {
                 itemBases.Add(userInventoryItem.Value);
             }
-            return itemBases;
+
+            return itemBases.AsReadOnly();
         }
     }
 
+    public ReadOnlyCollection<Item> Items => Item.Get(ItemBases);
+
+    public float Health => Stats.Health;
+
+    public float MaxHealth => Stats.MaxHealth;
+
+    public float HumeShield => Stats.HumeShield;
+
+    public float MaxHumeShield => Stats.MaxHumeShield;
+
+    public static Player Get(ReferenceHub hub) => PlayerRegistry.Get(hub);
+
     public static Player Get(GameObject gameObject)
     {
-        if (gameObject == null)
-            return null;
-        Player player;
-        if (Player.GameObjectToPlayer.TryGetValue(gameObject, out player))
-            return player;
-        return player;
+        return PlayerRegistry.Get(gameObject);
     }
+
+    public static Player Get(int playerId) => PlayerRegistry.Get(playerId);
+
+    public static bool TryGet(ReferenceHub hub, out Player player) => PlayerRegistry.TryGet(hub, out player);
+
+    public static bool TryGet(GameObject gameObject, out Player player) => PlayerRegistry.TryGet(gameObject, out player);
+
+    public override string ToString() => $"{GetType().Name}({GameObject?.name ?? "null"})";
 }

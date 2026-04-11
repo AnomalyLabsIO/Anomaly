@@ -9,10 +9,11 @@ namespace Anomaly.Client.Patches.Menu;
 [HarmonyPatch(typeof(NewMainMenu),nameof(NewMainMenu.Start))]
 public static class CanvasPatch
 {
-    /*[HarmonyPostfix]
-    public static void OnMenuStartLate()
+    [HarmonyPostfix]
+    public static void OnMenuStartLate(NewMainMenu __instance)
     {
-        var ev = new CanvasReadyEventArgs(GameObject.Find("Canvas"));
+        GameObject canvas = UnityEngine.Object.FindObjectOfType<Canvas>()?.gameObject ?? __instance.gameObject;
+        var ev = new CanvasReadyEventArgs(canvas);
         ClientEvents.OnCanvasReady(ev);
-    }*/
+    }
 }

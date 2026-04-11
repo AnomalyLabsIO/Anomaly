@@ -23,7 +23,7 @@ public class NewsLoaderStartPatch
             __instance.ShowAnnouncement(0);
             return false;
         }
-        catch(Exception e)
+        catch(Exception)
         {
             return false;
         }
