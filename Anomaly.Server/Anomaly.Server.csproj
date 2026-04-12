@@ -179,6 +179,13 @@
         <Compile Include="Networking\Messages\BoneTransformsMessage.cs" />
         <Compile Include="Networking\Messages\EmotionBlendShapesMessage.cs" />
         <Compile Include="Networking\Messages\SilentRoleChangeMessage.cs" />
+        <Compile Include="Networking\Messages\FileManifestMessage.cs" />
+        <Compile Include="Networking\Messages\FileRequestMessage.cs" />
+        <Compile Include="Networking\Messages\FileChunkMessage.cs" />
+        <Compile Include="Networking\Messages\FileTransferCompleteMessage.cs" />
+        <Compile Include="Networking\Messages\FileAckMessage.cs" />
+        <Compile Include="FileTransfer\FileTransferSession.cs" />
+        <Compile Include="FileTransfer\ServerAssetManager.cs" />
         <Compile Include="Utils\OffThreadLogger.cs" />
     </ItemGroup>
     <ItemGroup>

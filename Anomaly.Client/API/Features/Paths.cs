@@ -5,10 +5,13 @@ public static class Paths
     public static string ApplicationDataPath { get; }
     public static string AnomalyPath { get; }
 
+    public static string FileCachePath { get; }
+
     static Paths()
     {
         ApplicationDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         AnomalyPath = Path.Combine(ApplicationDataPath, "Anomaly");
+        FileCachePath = Path.Combine(AnomalyPath, "FileCache");
         if(!Directory.Exists(AnomalyPath))
             Directory.CreateDirectory(AnomalyPath);
     }

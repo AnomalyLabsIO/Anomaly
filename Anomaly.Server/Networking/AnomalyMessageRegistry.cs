@@ -57,6 +57,11 @@ public static class AnomalyMessageRegistry
         Register("anomaly:blendshapes", () => new EmotionBlendShapesMessage());
         Register("anomaly:bonetransforms", () => new BoneTransformsMessage());
         Register("anomaly:silentrolechance", () => new SilentRoleChangeMessage());
+        Register("anomaly:filemanifest", () => new FileManifestMessage());
+        Register("anomaly:filerequest", () => new FileRequestMessage());
+        Register("anomaly:filechunk", () => new FileChunkMessage());
+        Register("anomaly:filecomplete", () => new FileTransferCompleteMessage());
+        Register("anomaly:fileack", () => new FileAckMessage());
     }
 
     /// <summary>

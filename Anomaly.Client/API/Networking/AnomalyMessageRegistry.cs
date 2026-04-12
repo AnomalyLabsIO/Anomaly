@@ -1,5 +1,6 @@
 using System.Text;
 using Anomaly.Client.API.Networking.Messages;
+using Anomaly.Client.FileTransfer;
 using MelonLoader;
 
 namespace Anomaly.Client.API.Networking;
@@ -55,8 +56,15 @@ public static class AnomalyMessageRegistry
         Register("anomaly:blendshapes", () => new EmotionBlendShapesMessage());
         Register("anomaly:bonetransforms", () => new BoneTransformsMessage());
         Register("anomaly:silentrolechance", () => new SilentRoleChangeMessage());
+        Register("anomaly:filemanifest", () => new FileManifestMessage());
+        Register("anomaly:filerequest", () => new FileRequestMessage());
+        Register("anomaly:filechunk", () => new FileChunkMessage());
+        Register("anomaly:filecomplete", () => new FileTransferCompleteMessage());
+        Register("anomaly:fileack", () => new FileAckMessage());
 
         SilentRoleChangeMessage.Register();
+        FileCache.Init();
+        FileTransferClient.Init();
     }
 
     /// <summary>

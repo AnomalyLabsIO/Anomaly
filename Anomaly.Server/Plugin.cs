@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Networking;
 using Anomaly.Server.Utils;
 using CentralAuth;
@@ -36,6 +37,13 @@ public class Plugin : Plugin<Config>
 
             AnomalyMessageRegistry.RegisterAll();
             Logger.Info("AnomalyMessageRegistry initialized");
+
+            ServerAssetManager.Init(Config.AssetDirectory);
+
+            AnomalyMessaging.MessageReceived += (hub, msg) =>
+            {
+                FileTransferSession.HandleMessage(hub, msg);
+            };
 
             Harmony.PatchAll();
             var patchedMethods = Harmony.GetPatchedMethods().ToList();
