@@ -10,10 +10,12 @@ using Il2CppCustomPlayerEffects;
 using Il2Cpp;
 using Il2CppInventorySystem;
 using Il2CppInventorySystem.Items;
+using Il2CppInventorySystem.Items.Firearms.ShotEvents;
 using Il2CppInventorySystem.Items.Pickups;
 using Il2CppInventorySystem.Items.ThrowableProjectiles;
 using Il2CppPlayerRoles;
 using Il2CppPlayerStatsSystem;
+using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine.SceneManagement;
 using ClientApi = global::Anomaly.Client.API.Features.Client;
@@ -34,6 +36,9 @@ internal static class ClientRuntime
             return;
 
         _initialized = true;
+
+        ShotEventManager.OnShot += DelegateSupport.ConvertDelegate<ShotEventManager.Shot>(
+            new Action<ShotEvent>(HandleFirearmShot));
 
         PlayerRegistry.Resync();
     }
@@ -224,6 +229,14 @@ internal static class ClientRuntime
             if (projectile != null)
                 ProjectileEvents.OnSpawned(new ProjectileSpawnedEventArgs(projectile));
         }, nameof(HandleProjectileSpawned));
+    }
+
+    internal static void HandleFirearmShot(ShotEvent shotEvent)
+    {
+        RunSafely(() =>
+        {
+            FirearmEvents.OnShot(new FirearmShotEventArgs(shotEvent));
+        }, nameof(HandleFirearmShot));
     }
 
     internal static void HandleAdminToyAdded(AdminToyBase adminToyBase)

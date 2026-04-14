@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 
 public static class Program
 {
-    private const int TotalSteps = 6;
+    private const int TotalSteps = 7;
 
     [STAThread]
     public static int Main(string[] args)
@@ -37,22 +37,14 @@ public static class Program
     private static void Run(string[] args)
     {
         var platform = new PlatformInfo();
-        // Use the exe's actual directory, not the single-file extraction temp dir
         string installerDir = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
 
         Console.WriteLine($"Platform: {(platform.IsWindows ? "Windows" : platform.IsLinux ? "Linux" : "Unknown")}");
         Console.WriteLine($"Install directory: {installerDir}");
         Console.WriteLine();
 
-        // Validate bundle contents
-        string patchInfoPath = Path.Combine(installerDir, "patchinfo.json");
-        string unlicensePath = Path.Combine(installerDir, "unlicense.exe");
-        string cleanLauncherPath = Path.Combine(installerDir, "SCPSL.exe");
-
-        ValidateBundle(patchInfoPath, unlicensePath, cleanLauncherPath);
-
-        // Load patch config up front
-        PatchInfo patchInfo = LoadPatchInfo(patchInfoPath);
+        // Load patch config from embedded resource
+        PatchInfo patchInfo = LoadPatchInfo();
         Console.WriteLine($"Patch config loaded (metadata version: {patchInfo.metadataVersion}, {patchInfo.patchMethods.Length} patch methods)");
         Console.WriteLine();
 
@@ -62,59 +54,78 @@ public static class Program
         Console.WriteLine($"Vanilla game directory: {vanillaDir}");
         Console.WriteLine();
 
+        // Save vanilla path for future reference
+        string vanillaPathFile = Path.Combine(installerDir, "vanilla_path.txt");
+        File.WriteAllText(vanillaPathFile, vanillaDir);
+        Console.WriteLine($"Vanilla path saved to vanilla_path.txt");
+        Console.WriteLine();
+
         // Step 1: Copy game files
         ConsoleUI.PrintStep(1, TotalSteps, "Copying game files...");
         CopyGameFiles(vanillaDir, installerDir);
         ConsoleUI.PrintSuccess("Game files copied.");
         Console.WriteLine();
 
-        // Step 2: Unpack (if Themida-protected) and load IL2CPP
-        ConsoleUI.PrintStep(2, TotalSteps, "Loading IL2CPP...");
+        // Step 2: Extract clean launcher from embedded resources
+        ConsoleUI.PrintStep(2, TotalSteps, "Extracting clean launcher...");
+        string cleanLauncherPath = Path.Combine(installerDir, "SCPSL.exe");
+        EmbeddedResources.ExtractToFile("SCPSL.exe", cleanLauncherPath);
+        ConsoleUI.PrintSuccess("Clean SCPSL.exe extracted.");
+        Console.WriteLine();
+
+        // Step 3: Unpack (if Themida-protected) and load IL2CPP
+        ConsoleUI.PrintStep(3, TotalSteps, "Loading IL2CPP...");
         string gameAssemblyPath = Path.Combine(installerDir, "GameAssembly.dll");
         string metadataPath = Path.Combine(installerDir, "SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat");
 
-        // Fix metadata version BEFORE IL2CPP loading — Il2CppDumper needs a
-        // compatible version byte to parse the file. The game's original metadata
-        // may have a version that Il2CppDumper doesn't recognize.
+        // Fix metadata version BEFORE IL2CPP loading
         Patcher.FixMetadataVersion(patchInfo.metadataVersion, installerDir);
 
         byte[] gameAssemblyData = LoadAndUnpackGameAssembly(
-            gameAssemblyPath, metadataPath, unlicensePath, platform, installerDir, patchInfo.metadataVersion);
+            gameAssemblyPath, metadataPath, platform, installerDir, patchInfo.metadataVersion);
 
         var il2CppManager = new Il2CppManager(gameAssemblyData, installerDir);
         il2CppManager.LoadIl2Cpp(metadataPath, patchInfo.metadataVersion);
 
-        Console.WriteLine("Dumping IL2CPP...");
+        Console.WriteLine("  Dumping IL2CPP...");
         il2CppManager.DumpIl2Cpp();
         il2CppManager.GetScriptJson();
         il2CppManager.GetMethodsDictionary();
         ConsoleUI.PrintSuccess("IL2CPP loaded and parsed.");
         Console.WriteLine();
 
-        // Step 3: Patch GameAssembly
-        ConsoleUI.PrintStep(3, TotalSteps, "Applying patches...");
+        // Step 4: Patch GameAssembly
+        ConsoleUI.PrintStep(4, TotalSteps, "Applying patches...");
         var patcher = new Patcher(gameAssemblyPath, gameAssemblyData, il2CppManager, patchInfo);
         patcher.PatchGameAssembly();
         patcher.SaveGameAssembly();
         ConsoleUI.PrintSuccess("GameAssembly.dll patched.");
         Console.WriteLine();
 
-        // Step 4: Clean launcher is already in place from the bundle
-        ConsoleUI.PrintStep(4, TotalSteps, "Verifying clean launcher...");
-        if (File.Exists(cleanLauncherPath))
-            ConsoleUI.PrintSuccess("Clean SCPSL.exe launcher is in place.");
+        // Step 5: Fix game version in Unity metadata
+        ConsoleUI.PrintStep(5, TotalSteps, "Fixing game version...");
+        var version = Patcher.ReadGameVersion(gameAssemblyData, il2CppManager);
+        if (version.HasValue)
+        {
+            var (major, minor, revision) = version.Value;
+            Console.WriteLine($"  Detected game version: {major}.{minor}.{revision}");
+            Patcher.FixBundleVersion(installerDir, major, minor, revision);
+            ConsoleUI.PrintSuccess("Game version fixed.");
+        }
         else
-            ConsoleUI.PrintWarning("Clean SCPSL.exe not found in bundle directory. You may need to add it manually.");
+        {
+            ConsoleUI.PrintWarning("Could not detect game version — bundle version unchanged.");
+        }
         Console.WriteLine();
 
-        // Step 5: Install MelonLoader
-        ConsoleUI.PrintStep(5, TotalSteps, "Installing MelonLoader 0.7.2...");
+        // Step 6: Install MelonLoader
+        ConsoleUI.PrintStep(6, TotalSteps, "Installing MelonLoader 0.7.2...");
         MelonLoaderInstaller.Install(installerDir);
         ConsoleUI.PrintSuccess("MelonLoader installed.");
         Console.WriteLine();
 
-        // Step 6: Verify mod files
-        ConsoleUI.PrintStep(6, TotalSteps, "Verifying mod files...");
+        // Step 7: Verify mod files
+        ConsoleUI.PrintStep(7, TotalSteps, "Verifying mod files...");
         VerifyModFiles(installerDir);
         Console.WriteLine();
 
@@ -141,30 +152,17 @@ public static class Program
         catch (InvalidOperationException) { /* stdin redirected, just exit */ }
     }
 
-    private static void ValidateBundle(string patchInfoPath, string unlicensePath, string cleanLauncherPath)
-    {
-        if (!File.Exists(patchInfoPath))
-            throw new InstallerException($"patchinfo.json not found at: {patchInfoPath}");
-        if (!File.Exists(unlicensePath))
-            throw new InstallerException($"unlicense.exe not found at: {unlicensePath}");
-        if (!File.Exists(cleanLauncherPath))
-            ConsoleUI.PrintWarning("Clean SCPSL.exe launcher not found in bundle. It will not be replaced.");
-    }
-
     private static string GetVanillaPath(string[] args)
     {
-        // Check for --vanilla-path command line argument
         for (int i = 0; i < args.Length - 1; i++)
         {
             if (args[i] == "--vanilla-path")
                 return args[i + 1];
         }
 
-        // Also accept as first positional argument
         if (args.Length > 0 && File.Exists(args[0]) && args[0].EndsWith("SCPSL.exe", StringComparison.OrdinalIgnoreCase))
             return args[0];
 
-        // Interactive prompt
         Console.WriteLine("Please enter the path to your vanilla SCPSL.exe:");
         Console.WriteLine("(e.g., C:\\Program Files\\Steam\\steamapps\\common\\SCP Secret Laboratory\\SCPSL.exe)");
         string path = ConsoleUI.PromptPath("Path to SCPSL.exe");
@@ -185,7 +183,6 @@ public static class Program
             "SCPSL.exe"
         };
 
-        // Count total files and bytes for the progress bar
         var sourceInfo = new DirectoryInfo(sourceDir);
         var allFiles = sourceInfo.GetFiles("*", SearchOption.AllDirectories)
             .Where(f => !skipFiles.Contains(f.Name))
@@ -218,6 +215,19 @@ public static class Program
                 continue;
 
             string destPath = Path.Combine(target.FullName, file.Name);
+            var destFile = new FileInfo(destPath);
+
+            // Skip if destination already matches (same size + same last-write time)
+            if (destFile.Exists && destFile.Length == file.Length && destFile.LastWriteTimeUtc == file.LastWriteTimeUtc)
+            {
+                copiedFiles++;
+                copiedBytes += file.Length;
+                ConsoleUI.PrintProgressBar("Copying files",
+                    copiedBytes, totalBytes,
+                    $"({copiedFiles:N0} / {totalFiles:N0})");
+                continue;
+            }
+
             file.CopyTo(destPath, true);
 
             copiedFiles++;
@@ -230,42 +240,52 @@ public static class Program
 
     /// <summary>
     /// Attempts to load GameAssembly.dll via Il2CppDumper to check for Themida protection.
-    /// If protected, unpacks it with unlicense.exe and returns the fresh bytes.
-    /// If not protected (or already unpacked), returns the original bytes.
+    /// If protected, extracts unlicense.exe from embedded resources, unpacks, and returns fresh bytes.
     /// </summary>
-    private static byte[] LoadAndUnpackGameAssembly(string gameAssemblyPath, string metadataPath, string unlicensePath, PlatformInfo platform, string workingDir, int metadataVersion)
+    private static byte[] LoadAndUnpackGameAssembly(string gameAssemblyPath, string metadataPath, PlatformInfo platform, string workingDir, int metadataVersion)
     {
         if (!File.Exists(gameAssemblyPath))
             throw new InstallerException("GameAssembly.dll not found. Game files may not have copied correctly.");
 
         byte[] data = Patcher.GetGameAssemblyData(gameAssemblyPath);
 
-        // Try loading to detect if it's Themida-protected
         var testManager = new Il2CppManager(data, workingDir);
         try
         {
             testManager.LoadIl2Cpp(metadataPath, metadataVersion);
-            // Success — file is not protected, return the data as-is
             testManager.RemoveDumpFolder();
             return data;
         }
         catch (FileIsProtectedException)
         {
-            Console.WriteLine("Themida protection detected. Running unpacker...");
-            var unpacker = new Unpacker(unlicensePath, gameAssemblyPath, platform);
-            unpacker.UnpackGameAssembly();
+            Console.WriteLine("  Themida protection detected. Extracting unpacker...");
 
-            // Return fresh bytes from the unpacked file
-            return Patcher.GetGameAssemblyData(gameAssemblyPath);
+            // Extract unlicense.exe to temp file
+            string tempUnlicense = Path.Combine(Path.GetTempPath(), "anomaly_unlicense.exe");
+            try
+            {
+                EmbeddedResources.ExtractToFile("unlicense.exe", tempUnlicense);
+
+                var unpacker = new Unpacker(tempUnlicense, gameAssemblyPath, platform);
+                unpacker.UnpackGameAssembly();
+
+                return Patcher.GetGameAssemblyData(gameAssemblyPath);
+            }
+            finally
+            {
+                // Clean up temp file
+                try { if (File.Exists(tempUnlicense)) File.Delete(tempUnlicense); }
+                catch { /* best effort cleanup */ }
+            }
         }
     }
 
-    private static PatchInfo LoadPatchInfo(string path)
+    private static PatchInfo LoadPatchInfo()
     {
-        string json = File.ReadAllText(path);
+        string json = EmbeddedResources.ReadText("patchinfo.json");
         PatchInfo? patchInfo = JsonConvert.DeserializeObject<PatchInfo>(json);
         if (patchInfo == null || patchInfo.patchMethods.Length == 0)
-            throw new InstallerException("Failed to load patchinfo.json or no patch methods defined.");
+            throw new InstallerException("Failed to load embedded patchinfo.json or no patch methods defined.");
         return patchInfo;
     }
 

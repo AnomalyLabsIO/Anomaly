@@ -65,6 +65,43 @@ public static class PlayerAuthenticationManagerPatch
     }
 
     [HarmonyPrefix]
+    [HarmonyPatch(typeof(EncryptedChannelManager), nameof(EncryptedChannelManager.TrySendMessageToClient), new Type[] { typeof(byte[]), typeof(EncryptedChannelManager.EncryptedChannel) })]
+    public static bool OnPackBytes(EncryptedChannelManager __instance, out bool __result,
+        byte[] content, EncryptedChannelManager.EncryptedChannel channel)
+    {
+        if (__instance._txCounter == 4294967295U)
+            __instance._txCounter = 0;
+        __instance._txCounter++;
+
+        EncryptedChannelManager.EncryptedMessageOutside messageOut;
+
+        var data = new byte[content.Length + 5];
+        data[0] = (byte)channel;
+        BitConverter.GetBytes(__instance._txCounter).CopyTo(data, 1);
+        Array.Copy(content, 0, data, 5, content.Length);
+
+        if (__instance.isLocalPlayer)
+        {
+            messageOut = new EncryptedChannelManager.EncryptedMessageOutside(EncryptedChannelManager.SecurityLevel.Unsecured, data);
+        }
+        else
+        {
+            if (__instance.EncryptionKey == null)
+            {
+                OffThreadLogger.Warn("Tried to send encrypted byte[] message, but no key was found");
+                __result = false;
+                return false;
+            }
+            var encryptedData = Cryptography.AES.AesGcmEncrypt(data, __instance.EncryptionKey, EncryptedChannelManager.SecureRandom);
+            messageOut = new EncryptedChannelManager.EncryptedMessageOutside(EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encryptedData);
+        }
+
+        __instance.connectionToClient.Send(messageOut);
+        __result = true;
+        return false;
+    }
+
+    [HarmonyPrefix]
     [HarmonyPatch(typeof(EncryptedChannelManager), nameof(EncryptedChannelManager.TrySendMessageToClient), new Type[] { typeof(string), typeof(EncryptedChannelManager.EncryptedChannel) })]
     public static bool OnPack(EncryptedChannelManager __instance, out bool __result,
         string content, EncryptedChannelManager.EncryptedChannel channel)

@@ -1,0 +1,56 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Anomaly.Launcher.ViewModels"
+        x:Class="Anomaly.Launcher.Views.CrashReportDialog"
+        x:DataType="vm:CrashReportDialogViewModel"
+        Title="{Binding Title}"
+        Width="700" Height="500"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <DockPanel Margin="16">
+        <!-- Header -->
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Title}"
+                   FontSize="18" FontWeight="Bold" Margin="0,0,0,12"
+                   Foreground="#FF5252" />
+
+        <!-- Report selector (if multiple) -->
+        <ComboBox DockPanel.Dock="Top"
+                  ItemsSource="{Binding Reports}"
+                  SelectedItem="{Binding SelectedReport}"
+                  IsVisible="{Binding Reports.Count, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  Margin="0,0,0,8"
+                  HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock>
+                        <Run Text="{Binding TriggerType}" />
+                        <Run Text=" - " />
+                        <Run Text="{Binding Timestamp, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}" />
+                        <Run Text=" - " />
+                        <Run Text="{Binding ExceptionType}" />
+                    </TextBlock>
+                </DataTemplate>
+            </ComboBox.ItemTemplate>
+        </ComboBox>
+
+        <!-- Buttons -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                    HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Open Reports Folder" x:Name="OpenFolderButton"
+                    Padding="12,6" />
+            <Button Content="Copy to Clipboard" x:Name="CopyButton"
+                    Padding="12,6" />
+            <Button Content="Close" x:Name="CloseButton"
+                    Padding="12,6" />
+        </StackPanel>
+
+        <!-- Report content -->
+        <ScrollViewer>
+            <SelectableTextBlock Text="{Binding SelectedReportDetail}"
+                                 FontFamily="Cascadia Mono,Consolas,Courier New,monospace"
+                                 FontSize="11"
+                                 TextWrapping="Wrap" />
+        </ScrollViewer>
+    </DockPanel>
+</Window>

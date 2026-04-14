@@ -1,6 +1,8 @@
+using Anomaly.Installer.Extensions;
 using Anomaly.Installer.IL2Cpp;
 using Il2CppDumper;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Anomaly.Installer.Patching;
 
@@ -154,5 +156,154 @@ internal class Patcher
     public void SaveGameAssembly()
     {
         File.WriteAllBytes(_gameAssemblyPath, _gameAssemblyData);
+    }
+
+    // --- Game Version Reading ---
+
+    private const string VersionMethodName = "GameCore.Version$$.cctor";
+
+    /// <summary>
+    /// Reads the real game version from GameCore.Version's static constructor in GameAssembly.dll.
+    /// Uses auto-find to locate the version byte offsets dynamically.
+    /// </summary>
+    public static (byte major, byte minor, byte revision)? ReadGameVersion(byte[] gameAssemblyData, Il2CppManager il2CppManager)
+    {
+        int methodOffset = GetOffsetFromFuncName(
+            il2CppManager.IL2CPP, VersionMethodName, il2CppManager.MethodsDictionary);
+
+        if (methodOffset < 0)
+        {
+            ConsoleUI.PrintWarning($"Could not find {VersionMethodName} — skipping version read.");
+            return null;
+        }
+
+        try
+        {
+            // Find the pattern that precedes version field writes:
+            // mov rcx, [rax+0B8h]
+            byte[] pattern = { 0x48, 0x8B, 0x88, 0xB8, 0x00, 0x00, 0x00 };
+            long patternOffset = gameAssemblyData.IndexOf(pattern, methodOffset);
+            if (patternOffset == -1)
+            {
+                ConsoleUI.PrintWarning("Version auto-find pattern not found — skipping version read.");
+                return null;
+            }
+
+            int searchFrom = (int)patternOffset;
+
+            // Field offsets within the GameVersion struct: major=0, minor=1, revision=2
+            byte[] fieldOffsets = { 0, 1, 2 };
+            byte[] values = new byte[3];
+
+            for (int i = 0; i < fieldOffsets.Length; i++)
+            {
+                byte[] instrBytes = fieldOffsets[i] == 0
+                    ? new byte[] { 0xC6, 0x01 }                        // mov byte ptr [rcx], {value}
+                    : new byte[] { 0xC6, 0x41, fieldOffsets[i] };       // mov byte ptr [rcx+offset], {value}
+
+                int instrOffset = (int)gameAssemblyData.IndexOf(instrBytes, searchFrom);
+                if (instrOffset == -1)
+                {
+                    ConsoleUI.PrintWarning($"Version field instruction not found for offset {fieldOffsets[i]} — skipping version read.");
+                    return null;
+                }
+
+                int valueOffset = instrOffset + instrBytes.Length;
+                values[i] = gameAssemblyData[valueOffset];
+                searchFrom = valueOffset + 1;
+            }
+
+            return (values[0], values[1], values[2]);
+        }
+        catch (Exception ex)
+        {
+            ConsoleUI.PrintWarning($"Version auto-find failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    // --- Bundle Version Fix ---
+
+    /// <summary>
+    /// Patches the bundleVersion string in SCPSL_Data/globalgamemanagers to match the real game version.
+    /// The string is stored as a 4-byte little-endian length prefix followed by the ASCII string.
+    /// </summary>
+    public static void FixBundleVersion(string gamePath, byte major, byte minor, byte revision)
+    {
+        string ggmPath = Path.Combine(gamePath, "SCPSL_Data", "globalgamemanagers");
+        if (!File.Exists(ggmPath))
+        {
+            ConsoleUI.PrintWarning("globalgamemanagers not found — skipping bundle version fix.");
+            return;
+        }
+
+        byte[] data = File.ReadAllBytes(ggmPath);
+        string newVersion = $"{major}.{minor}.{revision}";
+
+        // Search for an existing version string pattern: 4-byte length + digits.digits.digits
+        int versionOffset = FindBundleVersionOffset(data);
+        if (versionOffset == -1)
+        {
+            ConsoleUI.PrintWarning("Could not locate bundleVersion in globalgamemanagers — skipping.");
+            return;
+        }
+
+        int oldLength = BitConverter.ToInt32(data, versionOffset);
+        string oldVersion = Encoding.ASCII.GetString(data, versionOffset + 4, oldLength);
+        byte[] newVersionBytes = Encoding.ASCII.GetBytes(newVersion);
+
+        if (oldVersion == newVersion)
+        {
+            Console.WriteLine($"  Bundle version already correct ({newVersion}).");
+            return;
+        }
+
+        if (newVersionBytes.Length != oldLength)
+        {
+            ConsoleUI.PrintWarning(
+                $"Version string length changed (old=\"{oldVersion}\" [{oldLength}], new=\"{newVersion}\" [{newVersionBytes.Length}]). " +
+                "Updating length prefix — verify the game launches correctly.");
+
+            // Update the length prefix
+            byte[] newLengthBytes = BitConverter.GetBytes(newVersionBytes.Length);
+            Array.Copy(newLengthBytes, 0, data, versionOffset, 4);
+
+            // If new string is shorter, zero out the remaining old bytes
+            for (int i = newVersionBytes.Length; i < oldLength; i++)
+                data[versionOffset + 4 + i] = 0;
+        }
+
+        // Write the new version string
+        Array.Copy(newVersionBytes, 0, data, versionOffset + 4, newVersionBytes.Length);
+
+        File.WriteAllBytes(ggmPath, data);
+        Console.WriteLine($"  Bundle version updated: {oldVersion} -> {newVersion}");
+    }
+
+    /// <summary>
+    /// Scans globalgamemanagers bytes for a length-prefixed version string matching N.N.N pattern.
+    /// Returns the offset of the 4-byte length prefix, or -1 if not found.
+    /// </summary>
+    private static int FindBundleVersionOffset(byte[] data)
+    {
+        // Version strings are short (3-10 chars). Scan for length-prefixed ASCII strings
+        // that match a dotted version pattern like "14.1.0" or "14.2.6".
+        for (int i = 0; i < data.Length - 14; i++)
+        {
+            int len = BitConverter.ToInt32(data, i);
+            if (len < 3 || len > 20 || i + 4 + len > data.Length)
+                continue;
+
+            // Check if the bytes after the length form a version string
+            string candidate = Encoding.ASCII.GetString(data, i + 4, len);
+            if (Regex.IsMatch(candidate, @"^\d{1,3}\.\d{1,3}\.\d{1,3}$"))
+            {
+                // Validate it looks like a game version (major >= 10 for SCPSL)
+                string[] parts = candidate.Split('.');
+                if (byte.TryParse(parts[0], out byte maj) && maj >= 10)
+                    return i;
+            }
+        }
+        return -1;
     }
 }

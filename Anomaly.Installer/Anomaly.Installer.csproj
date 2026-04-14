@@ -28,6 +28,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\patchinfo.json" />
+    <EmbeddedResource Include="Resources\unlicense.exe" />
+    <EmbeddedResource Include="Resources\SCPSL.exe" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="Il2CppDumper\Il2CppDumper.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

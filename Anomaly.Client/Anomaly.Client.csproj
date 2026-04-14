@@ -408,6 +408,14 @@
 		<Compile Include="Components\CreditsHookComponent.cs" />
 		<Compile Include="Components\FileTransferOverlayComponent.cs" />
 		<Compile Include="Core.cs" />
+		<Compile Include="Diagnostics\CircularLogBuffer.cs" />
+		<Compile Include="Diagnostics\CrashHooks.cs" />
+		<Compile Include="Diagnostics\CrashReport.cs" />
+		<Compile Include="Diagnostics\CrashReportWriter.cs" />
+		<Compile Include="Diagnostics\DiagnosticBootstrap.cs" />
+		<Compile Include="Diagnostics\DiagnosticCollector.cs" />
+		<Compile Include="Diagnostics\HangWatchdog.cs" />
+		<Compile Include="Diagnostics\NativeMethods.cs" />
 		<Compile Include="Events\AnEventHandler.cs" />
 		<Compile Include="Events\EventInvoker.cs" />
 		<Compile Include="Events\Args\CanvasReadyEventArgs.cs" />
@@ -418,6 +426,7 @@
 		<Compile Include="Events\Args\CurrentItemChangedEventArgs.cs" />
 		<Compile Include="Events\Args\AdminToyAddedEventArgs.cs" />
 		<Compile Include="Events\Args\AdminToyRemovedEventArgs.cs" />
+		<Compile Include="Events\Args\FirearmShotEventArgs.cs" />
 		<Compile Include="Events\Args\EffectDisabledEventArgs.cs" />
 		<Compile Include="Events\Args\EffectEnabledEventArgs.cs" />
 		<Compile Include="Events\Args\EffectIntensityChangedEventArgs.cs" />
@@ -441,6 +450,7 @@
 		<Compile Include="Events\Args\VoiceMessageSentEventArgs.cs" />
 		<Compile Include="Events\Handlers\AdminToyEvents.cs" />
 		<Compile Include="Events\Handlers\ClientEvents.cs" />
+		<Compile Include="Events\Handlers\FirearmEvents.cs" />
 		<Compile Include="Events\Handlers\EffectEvents.cs" />
 		<Compile Include="Events\Handlers\InventoryEvents.cs" />
 		<Compile Include="Events\Handlers\PlayerEvents.cs" />
