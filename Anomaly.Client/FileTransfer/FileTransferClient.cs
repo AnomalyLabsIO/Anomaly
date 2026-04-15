@@ -1,9 +1,10 @@
 using System.Security.Cryptography;
 using Anomaly.Client.API.Networking;
-using Anomaly.Client.API.Networking.Messages;
 using Anomaly.Client.Components;
 using Anomaly.Client.Events.Args;
 using Anomaly.Client.Events.Handlers;
+using Anomaly.Shared.Networking;
+using Anomaly.Shared.Networking.Messages;
 using MelonLoader;
 
 namespace Anomaly.Client.FileTransfer;

@@ -4,8 +4,8 @@ namespace Anomaly.Client.Events.Handlers;
 
 public static class ProjectileEvents
 {
-    public static event AnEventHandler<ProjectileSpawnedEventArgs> Spawned;
-    public static event AnEventHandler<ProjectileRemovedEventArgs> Removed;
+    public static event AnomalyEventHandler<ProjectileSpawnedEventArgs> Spawned;
+    public static event AnomalyEventHandler<ProjectileRemovedEventArgs> Removed;
 
     internal static void OnSpawned(ProjectileSpawnedEventArgs args) => EventInvoker.Invoke(Spawned, args);
 

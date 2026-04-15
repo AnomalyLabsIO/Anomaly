@@ -20,6 +20,13 @@ public partial class MainWindow : Window
 
         if (DataContext is MainWindowViewModel vm)
         {
+            // Wire clipboard access — Avalonia requires a Window reference
+            vm._copyToClipboard = async text =>
+            {
+                if (Clipboard != null)
+                    await Clipboard.SetTextAsync(text);
+            };
+
             vm.PropertyChanged += (_, args) =>
             {
                 if (args.PropertyName == nameof(MainWindowViewModel.ShowCrashDialog)

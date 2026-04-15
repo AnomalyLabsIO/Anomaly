@@ -78,6 +78,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private ObservableCollection<ModItemViewModel> _mods = new();
 
+    // --- Launch args ---
+
+    [ObservableProperty]
+    private string _launchArgs = string.Empty;
+
     // --- Game state ---
 
     [ObservableProperty]
@@ -139,12 +144,46 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _syncContext = SynchronizationContext.Current;
 
         Username = userProfile.GetUsername();
+        LaunchArgs = LoadLaunchArgs();
         LoadMods();
         LoadStaticInfo();
 
         _gameProcess.GameExited += OnGameExited;
 
         _ = RefreshStateAsync();
+    }
+
+    partial void OnLaunchArgsChanged(string value)
+    {
+        SaveLaunchArgs(value);
+    }
+
+    private string LoadLaunchArgs()
+    {
+        try
+        {
+            var file = Path.Combine(_paths.AnomalyDataDir, "launch_args.txt");
+            return File.Exists(file) ? File.ReadAllText(file).Trim() : string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private void SaveLaunchArgs(string args)
+    {
+        try
+        {
+            var dir = _paths.AnomalyDataDir;
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "launch_args.txt"), args);
+        }
+        catch
+        {
+            // Ignore save failures
+        }
     }
 
     private void LoadStaticInfo()
@@ -357,6 +396,26 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IsEditingUsername = false;
     }
 
+    [RelayCommand]
+    private void CopyUserId()
+    {
+        var userId = _userProfile.GetUserId();
+        if (userId != null)
+        {
+            _copyToClipboard?.Invoke(userId);
+            GameStatusText = "User ID copied to clipboard";
+        }
+        else
+        {
+            GameStatusText = "No identity found — launch the game first to generate one";
+        }
+    }
+
+    /// <summary>
+    /// Set by the View to provide clipboard access (Avalonia clipboard requires a Window reference).
+    /// </summary>
+    public Action<string>? _copyToClipboard;
+
     // ===================== Launch / Kill =====================
 
     [RelayCommand]
@@ -376,7 +435,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void LaunchModded()
     {
-        if (_gameProcess.LaunchModded())
+        var args = string.IsNullOrWhiteSpace(LaunchArgs) ? null : LaunchArgs.Trim();
+        if (_gameProcess.LaunchModded(args))
         {
             IsGameRunning = true;
             GameStatusText = "Game running (modded)";

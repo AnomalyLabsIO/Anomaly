@@ -4,12 +4,12 @@ namespace Anomaly.Client.Events.Handlers;
 
 public static class ClientEvents
 {
-    public static event AnEventHandler<SceneLoadedEventArgs> SceneLoaded;
-    public static event AnEventHandler<ClientConnectedEventArgs> Connected;
-    public static event AnEventHandler<ClientDisconnectedEventArgs> Disconnected;
-    public static event AnEventHandler<ClientReadyEventArgs> Ready;
-    public static event AnEventHandler<CanvasReadyEventArgs> CanvasReady;
-    public static event AnEventHandler<CreditHookEventArgs> CreditHook;
+    public static event AnomalyEventHandler<SceneLoadedEventArgs> SceneLoaded;
+    public static event AnomalyEventHandler<ClientConnectedEventArgs> Connected;
+    public static event AnomalyEventHandler<ClientDisconnectedEventArgs> Disconnected;
+    public static event AnomalyEventHandler<ClientReadyEventArgs> Ready;
+    public static event AnomalyEventHandler<CanvasReadyEventArgs> CanvasReady;
+    public static event AnomalyEventHandler<CreditHookEventArgs> CreditHook;
 
     internal static void OnSceneLoaded(SceneLoadedEventArgs args) => EventInvoker.Invoke(SceneLoaded, args);
 

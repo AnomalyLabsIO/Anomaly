@@ -3,6 +3,7 @@ using System.Linq;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Networking;
 using Anomaly.Server.Utils;
+using Anomaly.Shared.Networking;
 using CentralAuth;
 using HarmonyLib;
 using LabApi.Features.Console;
@@ -35,7 +36,9 @@ public class Plugin : Plugin<Config>
 
             Instance = this;
 
-            AnomalyMessageRegistry.RegisterAll();
+            AnomalyMessageRegistry.Log = s => Logger.Info(s);
+            AnomalyMessageRegistry.Warn = s => Logger.Warn(s);
+            AnomalyMessageRegistry.RegisterDefaults();
             Logger.Info("AnomalyMessageRegistry initialized");
 
             ServerAssetManager.Init(Config.AssetDirectory);

@@ -4,8 +4,8 @@ namespace Anomaly.Client.Events.Handlers;
 
 public static class PickupEvents
 {
-    public static event AnEventHandler<PickupAddedEventArgs> Added;
-    public static event AnEventHandler<PickupRemovedEventArgs> Removed;
+    public static event AnomalyEventHandler<PickupAddedEventArgs> Added;
+    public static event AnomalyEventHandler<PickupRemovedEventArgs> Removed;
 
     internal static void OnAdded(PickupAddedEventArgs args) => EventInvoker.Invoke(Added, args);
 

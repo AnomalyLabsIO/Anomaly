@@ -1,4 +1,4 @@
-using Anomaly.Client.API.Networking;
+using Anomaly.Shared.Networking;
 
 namespace Anomaly.Client.Events.Args;
 

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<TargetFramework>net6.0</TargetFramework>
+		<PlatformTarget>x64</PlatformTarget>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>disable</Nullable>
 		<RootNamespace>Anomaly.Client</RootNamespace>
@@ -363,7 +364,6 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="API\Enum\MessageChannel.cs" />
 		<Compile Include="API\Enum\SceneType.cs" />
 		<Compile Include="API\Features\Client.cs" />
 		<Compile Include="API\Features\Computer.cs" />
@@ -388,18 +388,8 @@
 		<Compile Include="API\Features\ShootingTargetAdminToy.cs" />
 		<Compile Include="API\Features\SpeakerAdminToy.cs" />
 		<Compile Include="API\Features\VoiceMessagePacket.cs" />
-		<Compile Include="API\Networking\AnomalyChannel.cs" />
-		<Compile Include="API\Networking\AnomalyMessageRegistry.cs" />
 		<Compile Include="API\Networking\AnomalyMessaging.cs" />
-		<Compile Include="API\Networking\IAnomalyMessage.cs" />
-		<Compile Include="API\Networking\Messages\BoneTransformsMessage.cs" />
-		<Compile Include="API\Networking\Messages\EmotionBlendShapesMessage.cs" />
-		<Compile Include="API\Networking\Messages\SilentRoleChangeMessage.cs" />
-		<Compile Include="API\Networking\Messages\FileManifestMessage.cs" />
-		<Compile Include="API\Networking\Messages\FileRequestMessage.cs" />
-		<Compile Include="API\Networking\Messages\FileChunkMessage.cs" />
-		<Compile Include="API\Networking\Messages\FileTransferCompleteMessage.cs" />
-		<Compile Include="API\Networking\Messages\FileAckMessage.cs" />
+		<Compile Include="API\Networking\SilentRoleChangeHandler.cs" />
 		<Compile Include="Auth\AuthHandler.cs" />
 		<Compile Include="Auth\PlayerAuth.cs" />
 		<Compile Include="Auth\ServerConnection.cs" />
@@ -416,7 +406,7 @@
 		<Compile Include="Diagnostics\DiagnosticCollector.cs" />
 		<Compile Include="Diagnostics\HangWatchdog.cs" />
 		<Compile Include="Diagnostics\NativeMethods.cs" />
-		<Compile Include="Events\AnEventHandler.cs" />
+		<Compile Include="Events\AnomalyEventHandler.cs" />
 		<Compile Include="Events\EventInvoker.cs" />
 		<Compile Include="Events\Args\CanvasReadyEventArgs.cs" />
 		<Compile Include="Events\Args\ClientConnectedEventArgs.cs" />

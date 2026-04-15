@@ -52,6 +52,19 @@
         <Compile Include="Auth\ClientLoginAttempt.cs" />
         <Compile Include="Auth\ServerAuthSession.cs" />
         <Compile Include="Auth\ServerHandshake.cs" />
+        <Compile Include="Networking\AnomalyChannel.cs" />
+        <Compile Include="Networking\AnomalyMessageRegistry.cs" />
+        <Compile Include="Networking\HalfHelper.cs" />
+        <Compile Include="Networking\IAnomalyMessage.cs" />
+        <Compile Include="Networking\MessageChannel.cs" />
+        <Compile Include="Networking\Messages\BoneTransformsMessage.cs" />
+        <Compile Include="Networking\Messages\EmotionBlendShapesMessage.cs" />
+        <Compile Include="Networking\Messages\FileAckMessage.cs" />
+        <Compile Include="Networking\Messages\FileChunkMessage.cs" />
+        <Compile Include="Networking\Messages\FileManifestMessage.cs" />
+        <Compile Include="Networking\Messages\FileRequestMessage.cs" />
+        <Compile Include="Networking\Messages\FileTransferCompleteMessage.cs" />
+        <Compile Include="Networking\Messages\SilentRoleChangeMessage.cs" />
         <Compile Include="Properties\AssemblyInfo.cs"/>
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
-using Anomaly.Server.Networking.Messages;
+using Anomaly.Shared.Networking.Messages;
 using Logger = LabApi.Features.Console.Logger;
 
 namespace Anomaly.Server.FileTransfer;

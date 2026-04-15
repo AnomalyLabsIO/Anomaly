@@ -1,4 +1,6 @@
 ﻿using Anomaly.Client.API.Networking;
+using Anomaly.Client.FileTransfer;
+using Anomaly.Shared.Networking;
 using HarmonyLib;
 using Il2CppMirror;
 using MelonLoader;
@@ -13,7 +15,13 @@ public static class NetworkManagerRegisterClientMessages
     {
         try
         {
-            AnomalyMessageRegistry.RegisterAll();
+            AnomalyMessageRegistry.Log = s => MelonLogger.Msg(s);
+            AnomalyMessageRegistry.Warn = s => MelonLogger.Warning(s);
+            AnomalyMessageRegistry.RegisterDefaults();
+
+            SilentRoleChangeHandler.Register();
+            FileCache.Init();
+            FileTransferClient.Init();
         }
         catch(Exception e)
         {

@@ -4,9 +4,9 @@ namespace Anomaly.Client.Events.Handlers;
 
 public static class EffectEvents
 {
-    public static event AnEventHandler<EffectEnabledEventArgs> Enabled;
-    public static event AnEventHandler<EffectDisabledEventArgs> Disabled;
-    public static event AnEventHandler<EffectIntensityChangedEventArgs> IntensityChanged;
+    public static event AnomalyEventHandler<EffectEnabledEventArgs> Enabled;
+    public static event AnomalyEventHandler<EffectDisabledEventArgs> Disabled;
+    public static event AnomalyEventHandler<EffectIntensityChangedEventArgs> IntensityChanged;
 
     internal static void OnEnabled(EffectEnabledEventArgs args) => EventInvoker.Invoke(Enabled, args);
 

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using Anomaly.Shared.Networking;
 using Cryptography;
 using GameCore;
 using Mirror;

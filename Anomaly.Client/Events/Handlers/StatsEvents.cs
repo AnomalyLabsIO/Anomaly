@@ -4,9 +4,9 @@ namespace Anomaly.Client.Events.Handlers;
 
 public static class StatsEvents
 {
-    public static event AnEventHandler<PlayerDamagedEventArgs> Damaged;
-    public static event AnEventHandler<PlayerDiedEventArgs> Died;
-    public static event AnEventHandler<PlayerHealedEventArgs> Healed;
+    public static event AnomalyEventHandler<PlayerDamagedEventArgs> Damaged;
+    public static event AnomalyEventHandler<PlayerDiedEventArgs> Died;
+    public static event AnomalyEventHandler<PlayerHealedEventArgs> Healed;
 
     internal static void OnDamaged(PlayerDamagedEventArgs args) => EventInvoker.Invoke(Damaged, args);
 

@@ -4,8 +4,8 @@ namespace Anomaly.Client.Events.Handlers;
 
 public static class AdminToyEvents
 {
-    public static event AnEventHandler<AdminToyAddedEventArgs> Added;
-    public static event AnEventHandler<AdminToyRemovedEventArgs> Removed;
+    public static event AnomalyEventHandler<AdminToyAddedEventArgs> Added;
+    public static event AnomalyEventHandler<AdminToyRemovedEventArgs> Removed;
 
     internal static void OnAdded(AdminToyAddedEventArgs args) => EventInvoker.Invoke(Added, args);
 

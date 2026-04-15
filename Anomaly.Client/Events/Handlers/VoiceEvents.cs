@@ -4,10 +4,10 @@ namespace Anomaly.Client.Events.Handlers;
 
 public static class VoiceEvents
 {
-    public static event AnEventHandler<VoiceMessageSendingEventArgs> Sending;
-    public static event AnEventHandler<VoiceMessageReceivingEventArgs> Receiving;
-    public static event AnEventHandler<VoiceMessageSentEventArgs> Sent;
-    public static event AnEventHandler<VoiceMessageReceivedEventArgs> Received;
+    public static event AnomalyEventHandler<VoiceMessageSendingEventArgs> Sending;
+    public static event AnomalyEventHandler<VoiceMessageReceivingEventArgs> Receiving;
+    public static event AnomalyEventHandler<VoiceMessageSentEventArgs> Sent;
+    public static event AnomalyEventHandler<VoiceMessageReceivedEventArgs> Received;
 
     internal static void OnSending(VoiceMessageSendingEventArgs args) => EventInvoker.Invoke(Sending, args);
 

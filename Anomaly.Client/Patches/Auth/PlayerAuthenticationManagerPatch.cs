@@ -3,6 +3,7 @@ using Anomaly.Client.API.Networking;
 using Anomaly.Client.Auth;
 using Anomaly.Client.Components;
 using Anomaly.Client.Internal.Wrappers;
+using Anomaly.Shared.Networking;
 using HarmonyLib;
 using Il2Cpp;
 using Il2CppCentralAuth;

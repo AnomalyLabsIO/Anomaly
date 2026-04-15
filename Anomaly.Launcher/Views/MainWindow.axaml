@@ -5,6 +5,7 @@
         x:Class="Anomaly.Launcher.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Anomaly Launcher"
+        Icon="/Assets/AnomalyLogo.png"
         Width="900" Height="600"
         MinWidth="700" MinHeight="450"
         WindowStartupLocation="CenterScreen"
@@ -30,7 +31,14 @@
                             Padding="4,0" Margin="-4,0,0,0"
                             Background="Transparent"
                             Cursor="Hand"
-                            ToolTip.Tip="Click to change username" />
+                            ToolTip.Tip="Click to change username, right-click for options">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Copy User ID"
+                                          Command="{Binding CopyUserIdCommand}" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                 </StackPanel>
 
                 <!-- Username: edit mode -->
@@ -83,7 +91,12 @@
                                FontSize="12" VerticalAlignment="Center" Opacity="0.8" />
                 </StackPanel>
 
-                <Panel /> <!-- Spacer -->
+                <!-- Launch Args -->
+                <TextBox Text="{Binding LaunchArgs}"
+                         Watermark="Launch arguments..."
+                         FontSize="11" Margin="8,0"
+                         VerticalAlignment="Center"
+                         ToolTip.Tip="Extra arguments passed to modded SCPSL.exe (saved automatically)" />
             </DockPanel>
         </Border>
 
@@ -102,6 +115,7 @@
                                         <DockPanel>
                                             <CheckBox DockPanel.Dock="Left"
                                                       IsChecked="{Binding IsActive}"
+                                                      IsEnabled="{Binding CanToggle}"
                                                       VerticalAlignment="Center" />
                                             <StackPanel Margin="8,0,0,0">
                                                 <DockPanel>

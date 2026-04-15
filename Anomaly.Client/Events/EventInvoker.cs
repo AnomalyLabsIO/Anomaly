@@ -4,13 +4,13 @@ namespace Anomaly.Client.Events;
 
 internal static class EventInvoker
 {
-    internal static void Invoke<TEventArgs>(AnEventHandler<TEventArgs> eventHandler, TEventArgs args)
+    internal static void Invoke<TEventArgs>(AnomalyEventHandler<TEventArgs> eventHandler, TEventArgs args)
         where TEventArgs : EventArgs
     {
         if (eventHandler == null)
             return;
 
-        foreach (AnEventHandler<TEventArgs> subscriber in eventHandler.GetInvocationList())
+        foreach (AnomalyEventHandler<TEventArgs> subscriber in eventHandler.GetInvocationList())
         {
             try
             {

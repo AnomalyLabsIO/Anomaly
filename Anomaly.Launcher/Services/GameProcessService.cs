@@ -27,13 +27,13 @@ public class GameProcessService
         return StartProcess(vanillaPath);
     }
 
-    public bool LaunchModded()
+    public bool LaunchModded(string? extraArgs = null)
     {
         var moddedPath = _paths.GetModdedExePath();
         if (!File.Exists(moddedPath))
             return false;
 
-        return StartProcess(moddedPath);
+        return StartProcess(moddedPath, extraArgs);
     }
 
     public void KillGame()
@@ -78,7 +78,7 @@ public class GameProcessService
         }
     }
 
-    private bool StartProcess(string exePath)
+    private bool StartProcess(string exePath, string? extraArgs = null)
     {
         if (IsRunning)
             return false;
@@ -96,6 +96,9 @@ public class GameProcessService
             {
                 psi.FileName = exePath;
             }
+
+            if (!string.IsNullOrWhiteSpace(extraArgs))
+                psi.Arguments = extraArgs;
 
             psi.UseShellExecute = false;
             psi.WorkingDirectory = Path.GetDirectoryName(exePath);

@@ -68,11 +68,14 @@ public static class AuthHandler
 
             // If _authWriteCalled is still true but the connection state for this server
             // was already consumed (removed after phase 2), this is a fresh connection
-            // attempt (e.g. after round restart disconnect). Reset the flag.
+            // attempt (e.g. after round restart disconnect). Reset the flag and bump the
+            // generation so any still-yielding ConnectAgain coroutine from the previous
+            // session bails out instead of issuing a stale phase-2 reconnect.
             if (_authWriteCalled && !_connections.ContainsKey(server))
             {
                 MelonLogger.Msg("Resetting auth state for fresh connection attempt (previous session completed or expired)");
                 _authWriteCalled = false;
+                _connectionGeneration++;
             }
 
             if (_authWriteCalled)
