@@ -9,7 +9,7 @@ namespace Anomaly.Shared.Networking.Messages
     /// </summary>
     public class SilentRoleChangeMessage : IAnomalyMessage
     {
-        public string MessageName => "anomaly:silentrolechance";
+        public string MessageName => "anomaly:silentrolechange";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered; // ReliableOrdered -- must arrive before RoleSyncInfo
 
         public void Serialize(BinaryWriter writer)

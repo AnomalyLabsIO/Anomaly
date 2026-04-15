@@ -388,8 +388,15 @@
 		<Compile Include="API\Features\ShootingTargetAdminToy.cs" />
 		<Compile Include="API\Features\SpeakerAdminToy.cs" />
 		<Compile Include="API\Features\VoiceMessagePacket.cs" />
+		<Compile Include="API\Assets\AnomalyResources.cs" />
+		<Compile Include="API\Assets\AssetEvents.cs" />
 		<Compile Include="API\Networking\AnomalyMessaging.cs" />
 		<Compile Include="API\Networking\SilentRoleChangeHandler.cs" />
+		<Compile Include="Assets\OverrideApplier.cs" />
+		<Compile Include="Assets\OverrideRegistry.cs" />
+		<Compile Include="Assets\ScriptStripper.cs" />
+		<Compile Include="Assets\ShaderRemapper.cs" />
+		<Compile Include="Assets\SpawnedObjectRegistry.cs" />
 		<Compile Include="Auth\AuthHandler.cs" />
 		<Compile Include="Auth\PlayerAuth.cs" />
 		<Compile Include="Auth\ServerConnection.cs" />
@@ -449,6 +456,11 @@
 		<Compile Include="Events\Handlers\RoleEvents.cs" />
 		<Compile Include="Events\Handlers\StatsEvents.cs" />
 		<Compile Include="Events\Args\AnomalyMessageReceivedEventArgs.cs" />
+		<Compile Include="Events\Args\AssetDespawnedEventArgs.cs" />
+		<Compile Include="Events\Args\AssetOverrideAppliedEventArgs.cs" />
+		<Compile Include="Events\Args\AssetOverrideClearedEventArgs.cs" />
+		<Compile Include="Events\Args\AssetReloadedEventArgs.cs" />
+		<Compile Include="Events\Args\AssetSpawnedEventArgs.cs" />
 		<Compile Include="Events\Args\FileTransferProgressEventArgs.cs" />
 		<Compile Include="Events\Args\FileTransferCompleteEventArgs.cs" />
 		<Compile Include="Events\Handlers\FileTransferEvents.cs" />
@@ -470,6 +482,7 @@
 		<Compile Include="Patches\Menu\CanvasPatch.cs" />
 		<Compile Include="Patches\Menu\NewServerBrowserOnEnablePatch.cs" />
 		<Compile Include="Patches\Menu\NewsLoaderStartPatch.cs" />
+		<Compile Include="Patches\Mirror\NetworkIdentityOnStartClientPatch.cs" />
 		<Compile Include="Patches\Mirror\NetworkManagerRegisterClientMessages.cs" />
 		<Compile Include="Patches\Network\CustomNetworkManagerPatch.cs" />
 		<Compile Include="Patches\Runtime\InventoryPatch.cs" />

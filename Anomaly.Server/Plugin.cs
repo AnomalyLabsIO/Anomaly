@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Anomaly.Server.Assets;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Networking;
 using Anomaly.Server.Utils;
@@ -42,6 +43,10 @@ public class Plugin : Plugin<Config>
             Logger.Info("AnomalyMessageRegistry initialized");
 
             ServerAssetManager.Init(Config.AssetDirectory);
+            AssetRegistry.LogSummary();
+            AssetSpawner.Init();
+            AssetOverrides.Init();
+            AssetFileWatcher.Start(Config.AssetDirectory);
 
             AnomalyMessaging.MessageReceived += (hub, msg) =>
             {
@@ -64,6 +69,7 @@ public class Plugin : Plugin<Config>
 
     public override void Disable()
     {
+        AssetFileWatcher.Stop();
         Harmony.UnpatchAll();
 
         Instance = null;

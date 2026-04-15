@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Anomaly.Shared.Assets;
 
 namespace Anomaly.Shared.Networking.Messages
 {
@@ -21,6 +22,7 @@ namespace Anomaly.Shared.Networking.Messages
                 writer.Write(pathBytes);
                 writer.Write(file.Hash);
                 writer.Write(file.Size);
+                writer.Write((byte)file.Kind);
             }
         }
 
@@ -34,7 +36,8 @@ namespace Anomaly.Shared.Networking.Messages
                 string path = Encoding.UTF8.GetString(reader.ReadBytes(pathLen));
                 byte[] hash = reader.ReadBytes(32);
                 uint size = reader.ReadUInt32();
-                Files.Add(new FileEntry(path, hash, size));
+                AssetKind kind = (AssetKind)reader.ReadByte();
+                Files.Add(new FileEntry(path, hash, size, kind));
             }
         }
 
@@ -43,12 +46,14 @@ namespace Anomaly.Shared.Networking.Messages
             public string Path;
             public byte[] Hash;
             public uint Size;
+            public AssetKind Kind;
 
-            public FileEntry(string path, byte[] hash, uint size)
+            public FileEntry(string path, byte[] hash, uint size, AssetKind kind)
             {
                 Path = path;
                 Hash = hash;
                 Size = size;
+                Kind = kind;
             }
         }
     }

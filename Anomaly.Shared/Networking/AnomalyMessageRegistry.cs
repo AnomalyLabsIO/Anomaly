@@ -79,12 +79,22 @@ namespace Anomaly.Shared.Networking
         {
             Register("anomaly:blendshapes", () => new EmotionBlendShapesMessage());
             Register("anomaly:bonetransforms", () => new BoneTransformsMessage());
-            Register("anomaly:silentrolechance", () => new SilentRoleChangeMessage());
+            Register("anomaly:silentrolechange", () => new SilentRoleChangeMessage());
             Register("anomaly:filemanifest", () => new FileManifestMessage());
             Register("anomaly:filerequest", () => new FileRequestMessage());
             Register("anomaly:filechunk", () => new FileChunkMessage());
             Register("anomaly:filecomplete", () => new FileTransferCompleteMessage());
             Register("anomaly:fileack", () => new FileAckMessage());
+
+            Register("anomaly:asset:spawn", () => new AssetSpawnMessage());
+            Register("anomaly:asset:despawn", () => new AssetDespawnMessage());
+            Register("anomaly:asset:transform", () => new AssetSetTransformMessage());
+            Register("anomaly:asset:texture", () => new AssetSetTextureMessage());
+            Register("anomaly:asset:active", () => new AssetSetActiveMessage());
+            Register("anomaly:asset:reload", () => new AssetReloadMessage());
+            Register("anomaly:asset:override-texture", () => new AssetOverrideTextureMessage());
+            Register("anomaly:asset:override-clear", () => new AssetClearOverrideMessage());
+            Register("anomaly:asset:override-clearall", () => new AssetClearAllOverridesMessage());
         }
 
         /// <summary>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using Anomaly.Shared.Assets;
 using Anomaly.Shared.Networking.Messages;
 using Logger = LabApi.Features.Console.Logger;
 
@@ -47,7 +48,7 @@ public static class ServerAssetManager
         foreach (var kv in Assets)
         {
             manifest.Files.Add(new FileManifestMessage.FileEntry(
-                kv.Value.RelativePath, kv.Value.Hash, kv.Value.Size));
+                kv.Value.RelativePath, kv.Value.Hash, kv.Value.Size, kv.Value.Kind));
         }
         return manifest;
     }
@@ -80,7 +81,8 @@ public static class ServerAssetManager
                         FullPath = filePath,
                         RelativePath = relativePath,
                         Hash = hash,
-                        Size = (uint)data.Length
+                        Size = (uint)data.Length,
+                        Kind = InferKind(filePath)
                     };
                 }
                 catch (Exception ex)
@@ -102,11 +104,33 @@ public static class ServerAssetManager
         return fullPath.Substring(_assetDirectory.Length + 1);
     }
 
+    internal static AssetKind InferKind(string filePath)
+    {
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        switch (ext)
+        {
+            case ".png":
+            case ".jpg":
+            case ".jpeg":
+                return AssetKind.Texture2D;
+            case ".ttf":
+            case ".otf":
+                return AssetKind.Font;
+            case ".unity3d":
+            case ".bundle":
+            case ".assetbundle":
+                return AssetKind.AssetBundle;
+            default:
+                return AssetKind.Unknown;
+        }
+    }
+
     public struct AssetInfo
     {
         public string FullPath;
         public string RelativePath;
         public byte[] Hash;
         public uint Size;
+        public AssetKind Kind;
     }
 }

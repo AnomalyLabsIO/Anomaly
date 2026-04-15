@@ -16,6 +16,14 @@ public class FileTransferSession
     private static readonly Dictionary<ReferenceHub, FileTransferSession> ActiveSessions =
         new Dictionary<ReferenceHub, FileTransferSession>();
 
+    /// <summary>
+    /// Fires once per player after their file transfer finishes (either because all
+    /// requested files were delivered, or because they had everything cached already).
+    /// Downstream systems (asset spawn replay, override replay) hook this to bring
+    /// newly-joined players up to date.
+    /// </summary>
+    public static event Action<ReferenceHub> SessionCompleted;
+
     private readonly ReferenceHub _hub;
     private readonly Queue<ServerAssetManager.AssetInfo> _pendingFiles = new Queue<ServerAssetManager.AssetInfo>();
     private ServerAssetManager.AssetInfo _currentFile;
@@ -81,6 +89,7 @@ public class FileTransferSession
         {
             Logger.Info($"FileTransfer: {_hub.LoggedNameFromRefHub()} has all files cached.");
             ActiveSessions.Remove(_hub);
+            FireSessionCompleted();
             return;
         }
 
@@ -102,6 +111,7 @@ public class FileTransferSession
         {
             Logger.Info($"FileTransfer: All files sent to {_hub.LoggedNameFromRefHub()}");
             ActiveSessions.Remove(_hub);
+            FireSessionCompleted();
             return;
         }
 
@@ -159,6 +169,12 @@ public class FileTransferSession
         // All chunks sent, signal completion
         AnomalyMessaging.SendToClient(_hub, new FileTransferCompleteMessage { Hash = _currentFile.Hash });
         _sending = false;
+    }
+
+    private void FireSessionCompleted()
+    {
+        try { SessionCompleted?.Invoke(_hub); }
+        catch (Exception ex) { Logger.Error($"FileTransfer: SessionCompleted handler threw: {ex}"); }
     }
 
     private void HandleFileAck(FileAckMessage ack)
