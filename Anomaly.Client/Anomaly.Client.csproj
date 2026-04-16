@@ -364,6 +364,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<Compile Include="API\Localization\LocalizationService.cs" />
+		<Compile Include="API\Localization\Tr.cs" />
+		<Compile Include="Internal\Localization\RegistryTxtReader.cs" />
+		<Compile Include="Internal\Localization\TrKeys.cs" />
 		<Compile Include="API\Enum\SceneType.cs" />
 		<Compile Include="API\Features\Client.cs" />
 		<Compile Include="API\Features\Computer.cs" />
@@ -511,6 +515,10 @@
 
 	<ItemGroup>
 	  <Folder Include="Lua\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <EmbeddedResource Include="Resources\i18n\*.json" />
 	</ItemGroup>
 	
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">

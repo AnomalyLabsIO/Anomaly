@@ -1,0 +1,10 @@
+{
+  "anomaly.overlay.authenticating": "Authenticating, Please Wait...",
+
+  "anomaly.overlay.file_transfer.preparing": "Preparing download...",
+  "anomaly.overlay.file_transfer.downloading": "Downloading {0}  {1}/{2}",
+
+  "anomaly.news.anomaly.title": "<color=#ff3300>Anomaly</color>",
+  "anomaly.news.anomaly.body": "<b><size=20>Welcome to Anomaly, a SCP:SL modded version.</size></b>\n\n<color=#ec0c02>Alpha Build</color>",
+  "anomaly.news.anomaly.date": "April 5, 2026"
+}

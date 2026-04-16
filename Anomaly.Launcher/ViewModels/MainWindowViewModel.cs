@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Anomaly.Launcher.Models;
 using Anomaly.Launcher.Services;
+using Anomaly.Launcher.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -89,7 +90,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isGameRunning;
 
     [ObservableProperty]
-    private string _gameStatusText = "Ready";
+    private string _gameStatusText = Tr.Get(TrKeys.Status_Ready);
 
     // --- State 1: manual path entry ---
 
@@ -188,7 +189,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void LoadStaticInfo()
     {
-        MelonLoaderVersion = _systemInfo.GetMelonLoaderVersion() ?? "Not installed";
+        MelonLoaderVersion = _systemInfo.GetMelonLoaderVersion() ?? Tr.Get(TrKeys.InfoPanel_NotInstalled);
         HasInstallerAvailable = _systemInfo.GetInstallerPath() != null;
     }
 
@@ -403,11 +404,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (userId != null)
         {
             _copyToClipboard?.Invoke(userId);
-            GameStatusText = "User ID copied to clipboard";
+            GameStatusText = Tr.Get(TrKeys.Status_UserIdCopied);
         }
         else
         {
-            GameStatusText = "No identity found — launch the game first to generate one";
+            GameStatusText = Tr.Get(TrKeys.Status_NoIdentity);
         }
     }
 
@@ -424,11 +425,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (_gameProcess.LaunchVanilla())
         {
             IsGameRunning = true;
-            GameStatusText = "Game running (vanilla)";
+            GameStatusText = Tr.Get(TrKeys.Status_GameRunningVanilla);
         }
         else
         {
-            GameStatusText = "Failed to launch vanilla game";
+            GameStatusText = Tr.Get(TrKeys.Status_FailedLaunchVanilla);
         }
     }
 
@@ -439,11 +440,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (_gameProcess.LaunchModded(args))
         {
             IsGameRunning = true;
-            GameStatusText = "Game running (modded)";
+            GameStatusText = Tr.Get(TrKeys.Status_GameRunningModded);
         }
         else
         {
-            GameStatusText = "Failed to launch modded game";
+            GameStatusText = Tr.Get(TrKeys.Status_FailedLaunchModded);
         }
     }
 
@@ -461,7 +462,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var path = ManualVanillaPath.Trim();
         if (string.IsNullOrEmpty(path))
         {
-            GameStatusText = "Please enter a path";
+            GameStatusText = Tr.Get(TrKeys.Status_EnterPath);
             return;
         }
 
@@ -471,7 +472,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             var exeInDir = Path.Combine(path, "SCPSL.exe");
             if (!File.Exists(exeInDir))
             {
-                GameStatusText = "SCPSL.exe not found in that directory";
+                GameStatusText = Tr.Get(TrKeys.Status_ExeNotInDir);
                 return;
             }
         }
@@ -481,12 +482,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         else
         {
-            GameStatusText = "Invalid path — provide the SCPSL.exe or its directory";
+            GameStatusText = Tr.Get(TrKeys.Status_InvalidPath);
             return;
         }
 
         _paths.SaveVanillaPath(path);
-        GameStatusText = "Vanilla path set";
+        GameStatusText = Tr.Get(TrKeys.Status_VanillaPathSet);
 
         // Launch installer to set up
         SyncAnomaly();
@@ -518,7 +519,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
         }
 
-        GameStatusText = "No SCPSL.exe found in dropped files";
+        GameStatusText = Tr.Get(TrKeys.Status_NoExeInDrop);
     }
 
     // ===================== Steam URI commands =====================
@@ -527,21 +528,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void InstallGame()
     {
         OpenSteamUri("steam://install/700330");
-        GameStatusText = "Opening Steam to install SCP:SL...";
+        GameStatusText = Tr.Get(TrKeys.Status_OpeningInstall);
     }
 
     [RelayCommand]
     private void UpdateScpsl()
     {
         OpenSteamUri("steam://install/700330");
-        GameStatusText = "Opening Steam to update SCP:SL...";
+        GameStatusText = Tr.Get(TrKeys.Status_OpeningUpdate);
     }
 
     [RelayCommand]
     private void ValidateGameFiles()
     {
         OpenSteamUri("steam://validate/700330");
-        GameStatusText = "Opening Steam to validate game files...";
+        GameStatusText = Tr.Get(TrKeys.Status_OpeningValidate);
     }
 
     private static void OpenSteamUri(string uri)
@@ -564,15 +565,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var installerPath = _systemInfo.GetInstallerPath();
         if (installerPath == null)
         {
-            GameStatusText = "Anomaly.Installer not found next to launcher";
+            GameStatusText = Tr.Get(TrKeys.Status_InstallerNotFound);
             return;
         }
 
         var vanillaExe = _paths.GetVanillaExePath();
         if (_gameProcess.LaunchInstaller(installerPath, vanillaExe))
-            GameStatusText = "Installer launched";
+            GameStatusText = Tr.Get(TrKeys.Status_InstallerLaunched);
         else
-            GameStatusText = "Failed to launch installer";
+            GameStatusText = Tr.Get(TrKeys.Status_FailedInstaller);
     }
 
     // ===================== Crash dialog =====================
@@ -617,7 +618,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             if (exitCode != 0 || reports.Count > 0)
             {
-                GameStatusText = $"Game exited abnormally (code {exitCode})";
+                GameStatusText = Tr.Get(TrKeys.Status_GameExitedAbnormally, exitCode);
                 if (reports.Count > 0)
                 {
                     CrashDialogViewModel = new CrashReportDialogViewModel(reports);
@@ -626,7 +627,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
             else
             {
-                GameStatusText = "Game exited normally";
+                GameStatusText = Tr.Get(TrKeys.Status_GameExitedNormally);
             }
         });
     }

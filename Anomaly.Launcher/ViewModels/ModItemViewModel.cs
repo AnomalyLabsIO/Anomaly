@@ -1,5 +1,6 @@
 using Anomaly.Launcher.Models;
 using Anomaly.Launcher.Services;
+using Anomaly.Launcher.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Anomaly.Launcher.ViewModels;
@@ -15,7 +16,7 @@ public partial class ModItemViewModel : ObservableObject
     public string DisplayName => _mod.AssemblyName ?? Path.GetFileNameWithoutExtension(
         _mod.FileName.Replace(".DISABLED", "", StringComparison.OrdinalIgnoreCase));
 
-    public string VersionText => _mod.Version ?? "Unknown";
+    public string VersionText => _mod.Version ?? Tr.Get(TrKeys.ModItem_UnknownVersion);
 
     public string? TargetGameVersion => _mod.TargetGameVersion;
 
@@ -42,7 +43,7 @@ public partial class ModItemViewModel : ObservableObject
             && mod.TargetGameVersion != currentGameVersion)
         {
             IsVersionMismatch = true;
-            VersionWarningText = $"Built for {mod.TargetGameVersion}, game is {currentGameVersion}";
+            VersionWarningText = Tr.Get(TrKeys.ModItem_VersionWarning, mod.TargetGameVersion, currentGameVersion);
         }
     }
 

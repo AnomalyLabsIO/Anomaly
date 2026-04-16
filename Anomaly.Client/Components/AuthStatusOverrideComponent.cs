@@ -1,4 +1,6 @@
 using Anomaly.Client.API.Features;
+using Anomaly.Client.API.Localization;
+using Anomaly.Client.Internal.Localization;
 using Il2CppInterop.Runtime.Attributes;
 using Il2CppTMPro;
 using MelonLoader;
@@ -119,12 +121,10 @@ public class AuthStatusOverrideComponent : MonoBehaviour
 
 public static class AuthStatusOverlay
 {
-    public const string AuthenticatingMessage = "Authenticating, Please Wait...";
-
     public static void BeginAuthenticating()
     {
         var component = EnsureComponent();
-        component?.BeginOverride(AuthenticatingMessage);
+        component?.BeginOverride(Tr.Get(TrKeys.Overlay_Authenticating));
     }
 
     public static void EndAuthenticating(bool restoreOriginalText = true)

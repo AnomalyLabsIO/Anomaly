@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Anomaly.Launcher.ViewModels"
+        xmlns:l="using:Anomaly.Launcher.Markup"
         x:Class="Anomaly.Launcher.Views.CrashReportDialog"
         x:DataType="vm:CrashReportDialogViewModel"
         Title="{Binding Title}"
@@ -37,11 +38,11 @@
         <!-- Buttons -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
                     HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Open Reports Folder" x:Name="OpenFolderButton"
+            <Button Content="{l:Tr launcher.crash.open_reports_folder}" x:Name="OpenFolderButton"
                     Padding="12,6" />
-            <Button Content="Copy to Clipboard" x:Name="CopyButton"
+            <Button Content="{l:Tr launcher.crash.copy_to_clipboard}" x:Name="CopyButton"
                     Padding="12,6" />
-            <Button Content="Close" x:Name="CloseButton"
+            <Button Content="{l:Tr launcher.crash.close}" x:Name="CloseButton"
                     Padding="12,6" />
         </StackPanel>
 

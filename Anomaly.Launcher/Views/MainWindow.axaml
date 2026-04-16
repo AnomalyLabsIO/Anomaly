@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Anomaly.Launcher.ViewModels"
         xmlns:conv="using:Anomaly.Launcher.Converters"
+        xmlns:l="using:Anomaly.Launcher.Markup"
         x:Class="Anomaly.Launcher.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Anomaly Launcher"
@@ -23,7 +24,7 @@
                 <!-- Username: display mode -->
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal"
                             IsVisible="{Binding !IsEditingUsername}">
-                    <TextBlock Text="Welcome, " FontSize="16" FontWeight="SemiBold"
+                    <TextBlock Text="{l:Tr launcher.mainwindow.welcome_prefix}" FontSize="16" FontWeight="SemiBold"
                                VerticalAlignment="Center" Opacity="0.7" />
                     <Button Content="{Binding Username}"
                             Command="{Binding BeginEditUsernameCommand}"
@@ -31,10 +32,10 @@
                             Padding="4,0" Margin="-4,0,0,0"
                             Background="Transparent"
                             Cursor="Hand"
-                            ToolTip.Tip="Click to change username, right-click for options">
+                            ToolTip.Tip="{l:Tr launcher.mainwindow.username_tooltip}">
                         <Button.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Copy User ID"
+                                <MenuItem Header="{l:Tr launcher.mainwindow.username_copy_user_id}"
                                           Command="{Binding CopyUserIdCommand}" />
                             </ContextMenu>
                         </Button.ContextMenu>
@@ -45,14 +46,14 @@
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6"
                             IsVisible="{Binding IsEditingUsername}"
                             VerticalAlignment="Center">
-                    <TextBlock Text="Username:" FontSize="14" VerticalAlignment="Center" Opacity="0.7" />
+                    <TextBlock Text="{l:Tr launcher.mainwindow.username_label}" FontSize="14" VerticalAlignment="Center" Opacity="0.7" />
                     <TextBox Text="{Binding EditingUsernameText}"
                              Width="180" FontSize="14"
-                             Watermark="Enter username"
+                             Watermark="{l:Tr launcher.mainwindow.username_watermark}"
                              x:Name="UsernameTextBox" />
-                    <Button Content="Save" Command="{Binding SaveUsernameCommand}"
+                    <Button Content="{l:Tr launcher.mainwindow.username_save}" Command="{Binding SaveUsernameCommand}"
                             Padding="10,4" FontSize="12" Classes="accent" />
-                    <Button Content="Cancel" Command="{Binding CancelEditUsernameCommand}"
+                    <Button Content="{l:Tr launcher.mainwindow.username_cancel}" Command="{Binding CancelEditUsernameCommand}"
                             Padding="10,4" FontSize="12" />
                 </StackPanel>
 
@@ -64,21 +65,21 @@
         <Border DockPanel.Dock="Bottom" Padding="12,8" Background="#1E1E2E">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8">
-                    <Button Content="Launch Vanilla"
+                    <Button Content="{l:Tr launcher.mainwindow.launch_vanilla}"
                             Command="{Binding LaunchVanillaCommand}"
                             IsEnabled="{Binding CanLaunch}"
                             Padding="16,8" />
-                    <Button Content="Launch Modded"
+                    <Button Content="{l:Tr launcher.mainwindow.launch_modded}"
                             Command="{Binding LaunchModdedCommand}"
                             IsEnabled="{Binding CanLaunch}"
                             Padding="16,8"
                             Classes="accent" />
-                    <Button Content="Kill Game"
+                    <Button Content="{l:Tr launcher.mainwindow.kill_game}"
                             Command="{Binding KillGameCommand}"
                             IsVisible="{Binding IsGameRunning}"
                             Padding="16,8"
                             Classes="danger" />
-                    <Button Content="Refresh"
+                    <Button Content="{l:Tr launcher.mainwindow.refresh}"
                             Command="{Binding RefreshStateCommand}"
                             Padding="16,8" />
                 </StackPanel>
@@ -93,10 +94,10 @@
 
                 <!-- Launch Args -->
                 <TextBox Text="{Binding LaunchArgs}"
-                         Watermark="Launch arguments..."
+                         Watermark="{l:Tr launcher.mainwindow.launch_args_watermark}"
                          FontSize="11" Margin="8,0"
                          VerticalAlignment="Center"
-                         ToolTip.Tip="Extra arguments passed to modded SCPSL.exe (saved automatically)" />
+                         ToolTip.Tip="{l:Tr launcher.mainwindow.launch_args_tooltip}" />
             </DockPanel>
         </Border>
 
@@ -105,7 +106,7 @@
             <!-- Left Panel: Mod List -->
             <Border Grid.Column="0" BorderBrush="#333" BorderThickness="0,0,1,0">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="Mods" FontSize="14" FontWeight="SemiBold"
+                    <TextBlock DockPanel.Dock="Top" Text="{l:Tr launcher.mainwindow.mods_header}" FontSize="14" FontWeight="SemiBold"
                                Margin="12,10" />
                     <ScrollViewer>
                         <ItemsControl ItemsSource="{Binding Mods}">
@@ -147,7 +148,7 @@
 
                     <!-- ========== State 1: Game Not Installed ========== -->
                     <StackPanel Spacing="12" IsVisible="{Binding IsGameNotInstalled}">
-                        <TextBlock Text="Setup Required" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="{l:Tr launcher.state1.header}" FontSize="16" FontWeight="SemiBold" />
 
                         <!-- Drop zone -->
                         <Border Background="#1A1A2E" CornerRadius="6" Padding="24"
@@ -155,25 +156,25 @@
                                 x:Name="DropZone"
                                 MinHeight="100">
                             <StackPanel Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="Drag SCPSL.exe here"
+                                <TextBlock Text="{l:Tr launcher.state1.drop_zone_primary}"
                                            FontSize="14" HorizontalAlignment="Center" Opacity="0.7" />
-                                <TextBlock Text="or enter the path below"
+                                <TextBlock Text="{l:Tr launcher.state1.drop_zone_secondary}"
                                            FontSize="11" HorizontalAlignment="Center" Opacity="0.5" />
                             </StackPanel>
                         </Border>
 
                         <!-- Manual path entry -->
                         <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="Set Path"
+                            <Button DockPanel.Dock="Right" Content="{l:Tr launcher.state1.set_path}"
                                     Command="{Binding SetVanillaPathCommand}"
                                     Padding="12,6" Margin="8,0,0,0" />
                             <TextBox Text="{Binding ManualVanillaPath}"
-                                     Watermark="C:\Program Files\Steam\steamapps\common\SCP Secret Laboratory\SCPSL.exe"
+                                     Watermark="{l:Tr launcher.state1.path_watermark}"
                                      FontSize="12" />
                         </DockPanel>
 
                         <!-- Install Game button -->
-                        <Button Content="Install SCP:SL via Steam"
+                        <Button Content="{l:Tr launcher.state1.install_game}"
                                 Command="{Binding InstallGameCommand}"
                                 Padding="16,8" FontSize="13"
                                 HorizontalAlignment="Left" />
@@ -183,11 +184,11 @@
                     <Border Background="#33FF9800" CornerRadius="6" Padding="16"
                             IsVisible="{Binding IsVanillaUpdated}">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="Anomaly Sync Required" FontSize="14" FontWeight="SemiBold"
+                            <TextBlock Text="{l:Tr launcher.state2.header}" FontSize="14" FontWeight="SemiBold"
                                        Foreground="#FF9800" />
-                            <TextBlock Text="The vanilla game has been updated. Anomaly needs to be re-synced with the new game files."
+                            <TextBlock Text="{l:Tr launcher.state2.body}"
                                        FontSize="12" TextWrapping="Wrap" Opacity="0.9" />
-                            <Button Content="Sync Anomaly"
+                            <Button Content="{l:Tr launcher.state2.sync_anomaly}"
                                     Command="{Binding SyncAnomalyCommand}"
                                     IsEnabled="{Binding HasInstallerAvailable}"
                                     Padding="16,8" Classes="accent"
@@ -199,19 +200,19 @@
                     <Border Background="#334FC3F7" CornerRadius="6" Padding="16"
                             IsVisible="{Binding IsOnlineBuildMismatch}">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="Game Update Available" FontSize="14" FontWeight="SemiBold"
+                            <TextBlock Text="{l:Tr launcher.state3.header}" FontSize="14" FontWeight="SemiBold"
                                        Foreground="#4FC3F7" />
                             <StackPanel Spacing="2">
                                 <TextBlock FontSize="12" Opacity="0.9">
-                                    <Run Text="Your build: " />
+                                    <Run Text="{l:Tr launcher.state3.your_build}" />
                                     <Run Text="{Binding LocalBuildId}" FontWeight="SemiBold" />
                                 </TextBlock>
                                 <TextBlock FontSize="12" Opacity="0.9">
-                                    <Run Text="Latest build: " />
+                                    <Run Text="{l:Tr launcher.state3.latest_build}" />
                                     <Run Text="{Binding OnlineBuildId}" FontWeight="SemiBold" />
                                 </TextBlock>
                             </StackPanel>
-                            <Button Content="Update SCP:SL"
+                            <Button Content="{l:Tr launcher.state3.update}"
                                     Command="{Binding UpdateScpslCommand}"
                                     Padding="16,8" Classes="accent"
                                     HorizontalAlignment="Left" />
@@ -222,13 +223,13 @@
                     <Border Background="#334CAF50" CornerRadius="6" Padding="16"
                             IsVisible="{Binding IsAllGood}">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="Everything is up to date" FontSize="14" FontWeight="SemiBold"
+                            <TextBlock Text="{l:Tr launcher.state4.header}" FontSize="14" FontWeight="SemiBold"
                                        Foreground="#4CAF50" />
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Content="Validate Game Files"
+                                <Button Content="{l:Tr launcher.state4.validate_files}"
                                         Command="{Binding ValidateGameFilesCommand}"
                                         Padding="12,6" />
-                                <Button Content="Sync Anomaly"
+                                <Button Content="{l:Tr launcher.state4.sync_anomaly}"
                                         Command="{Binding SyncAnomalyCommand}"
                                         IsEnabled="{Binding HasInstallerAvailable}"
                                         Padding="12,6" />
@@ -240,43 +241,43 @@
                     <Border Background="#1A1A2E" CornerRadius="6" Padding="16"
                             IsVisible="{Binding IsGameInstalled}">
                         <StackPanel Spacing="10">
-                            <TextBlock Text="Build Information" FontSize="13" FontWeight="SemiBold" Opacity="0.8" />
+                            <TextBlock Text="{l:Tr launcher.info.header}" FontSize="13" FontWeight="SemiBold" Opacity="0.8" />
 
                             <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Branch"
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="{l:Tr launcher.info.branch}"
                                            FontSize="12" Opacity="0.6" />
                                 <TextBlock Grid.Row="0" Grid.Column="1"
-                                           Text="{Binding Branch, FallbackValue='Unknown'}"
+                                           Text="{Binding Branch}"
                                            FontSize="12" FontWeight="Medium" />
 
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Local Build ID"
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="{l:Tr launcher.info.local_build_id}"
                                            FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
                                 <TextBlock Grid.Row="1" Grid.Column="1"
-                                           Text="{Binding LocalBuildId, FallbackValue='Unknown'}"
+                                           Text="{Binding LocalBuildId}"
                                            FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
 
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Online Build ID"
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="{l:Tr launcher.info.online_build_id}"
                                            FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
                                 <TextBlock Grid.Row="2" Grid.Column="1"
-                                           Text="{Binding OnlineBuildId, FallbackValue='Checking...'}"
+                                           Text="{Binding OnlineBuildId}"
                                            FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
 
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="MelonLoader"
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="{l:Tr launcher.info.melonloader}"
                                            FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
                                 <TextBlock Grid.Row="3" Grid.Column="1"
                                            Text="{Binding MelonLoaderVersion}"
                                            FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
 
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Vanilla GA Modified"
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="{l:Tr launcher.info.vanilla_ga_date}"
                                            FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
                                 <TextBlock Grid.Row="4" Grid.Column="1"
-                                           Text="{Binding VanillaGaDate, FallbackValue='N/A'}"
+                                           Text="{Binding VanillaGaDate}"
                                            FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
 
-                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Modded GA Modified"
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="{l:Tr launcher.info.modded_ga_date}"
                                            FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
                                 <TextBlock Grid.Row="5" Grid.Column="1"
-                                           Text="{Binding ModdedGaDate, FallbackValue='N/A'}"
+                                           Text="{Binding ModdedGaDate}"
                                            FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
                             </Grid>
                         </StackPanel>

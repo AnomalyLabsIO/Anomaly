@@ -1,3 +1,5 @@
+using Anomaly.Client.API.Localization;
+using Anomaly.Client.Internal.Localization;
 using Il2CppInterop.Runtime.Attributes;
 using Il2CppTMPro;
 using MelonLoader;
@@ -53,7 +55,7 @@ public class FileTransferOverlayComponent : MonoBehaviour
     [HideFromIl2Cpp]
     public void UpdateProgress(string fileName, int fileIndex, int totalFiles, float percent)
     {
-        _pendingStatus = $"Downloading {fileName}  {fileIndex}/{totalFiles}";
+        _pendingStatus = Tr.Get(TrKeys.FileTransfer_Downloading, fileName, fileIndex, totalFiles);
         _pendingPercent = $"{Mathf.RoundToInt(percent * 100f)}%";
         _pendingFill = Mathf.Clamp01(percent);
         _dirty = true;
@@ -97,7 +99,7 @@ public class FileTransferOverlayComponent : MonoBehaviour
         _statusText.fontSize = 14f;
         _statusText.color = Color.white;
         _statusText.alignment = TextAlignmentOptions.Left;
-        _statusText.text = "Preparing download...";
+        _statusText.text = Tr.Get(TrKeys.FileTransfer_Preparing);
 
         // Bar track (bottom half of panel)
         var trackGo = CreateUIElement("BarTrack", panelGo.transform);

@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Anomaly.Launcher.Services;
+using Anomaly.Launcher.Services.Localization;
 using Anomaly.Launcher.ViewModels;
 using Anomaly.Launcher.Views;
 
@@ -19,6 +20,10 @@ public class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var paths = new PathService();
+
+            // Initialize localization before any window is constructed so AXAML TrExtension lookups resolve.
+            Tr.Register(new LocalizationService(paths.AnomalyDataDir));
+
             var userProfile = new UserProfileService(paths);
             var modManager = new ModManagerService(paths);
             var gameProcess = new GameProcessService(paths);
