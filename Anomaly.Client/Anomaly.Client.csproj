@@ -364,6 +364,37 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<Compile Include="API\Mods\AnomalyClientModAttribute.cs" />
+		<Compile Include="API\Mods\AnomalyClientMods.cs" />
+		<Compile Include="API\Mods\IAnomalyClientMod.cs" />
+		<Compile Include="API\Scheduling\ScheduledTask.cs" />
+		<Compile Include="API\Scheduling\Scheduler.cs" />
+		<Compile Include="Internal\Scheduling\SchedulerTick.cs" />
+		<Compile Include="API\Input\InputBindingDefinition.cs" />
+		<Compile Include="API\Input\InputKey.cs" />
+		<Compile Include="API\Input\InputRegistry.cs" />
+		<Compile Include="Internal\Input\InputConfigLoader.cs" />
+		<Compile Include="Internal\Input\InputPoller.cs" />
+		<Compile Include="Events\Handlers\RoundEvents.cs" />
+		<Compile Include="Events\Args\RoundPhaseChangedEventArgs.cs" />
+		<Compile Include="Internal\Round\RoundStateReceiver.cs" />
+		<Compile Include="API\Config\IConfigSource.cs" />
+		<Compile Include="API\Config\ClientConfig.cs" />
+		<Compile Include="Internal\Config\JsonConfigSource.cs" />
+		<Compile Include="Internal\Config\ConfigFileWatcher.cs" />
+		<Compile Include="API\Commands\ICommand.cs" />
+		<Compile Include="API\Commands\CommandContext.cs" />
+		<Compile Include="API\Commands\CommandRegistry.cs" />
+		<Compile Include="Patches\Command\ConsoleTypeCommandPatch.cs" />
+		<Compile Include="API\Persistence\IPersistenceStore.cs" />
+		<Compile Include="API\Persistence\ClientPersistence.cs" />
+		<Compile Include="Internal\Persistence\JsonPersistenceStore.cs" />
+		<Compile Include="API\UI\UiAnchor.cs" />
+		<Compile Include="API\UI\SafeArea.cs" />
+		<Compile Include="API\UI\UiCanvas.cs" />
+		<Compile Include="API\UI\UiPrefabValidator.cs" />
+		<Compile Include="API\UI\UiParameterBinder.cs" />
+		<Compile Include="Internal\UI\UiBootstrap.cs" />
 		<Compile Include="API\Localization\LocalizationService.cs" />
 		<Compile Include="API\Localization\Tr.cs" />
 		<Compile Include="Internal\Localization\RegistryTxtReader.cs" />
@@ -480,7 +511,6 @@
 		<Compile Include="Internal\Wrappers\PlayerRegistry.cs" />
 		<Compile Include="Patches\Auth\NetDataWriterPut.cs" />
 		<Compile Include="Patches\Auth\PlayerAuthenticationManagerPatch.cs" />
-		<Compile Include="Patches\Command\CommandHandlerTryGetCommandPatch.cs" />
 		<Compile Include="Patches\Credits\NewCreditsPatch.cs" />
 		<Compile Include="Patches\Loader\LoaderPatch.cs" />
 		<Compile Include="Patches\Menu\CanvasPatch.cs" />

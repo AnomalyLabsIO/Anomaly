@@ -1,8 +1,12 @@
 using System.Reflection;
+using Anomaly.Client.API.Config;
 using Anomaly.Client.API.Localization;
+using Anomaly.Client.API.Mods;
+using Anomaly.Client.API.Persistence;
 using Anomaly.Client.Auth;
 using Anomaly.Client.Diagnostics;
 using Anomaly.Client.Internal.Bootstrap;
+using Anomaly.Client.Internal.UI;
 using Il2Cpp;
 using Il2CppCentralAuth;
 using MelonLoader;
@@ -34,6 +38,12 @@ public class Core : MelonMod
         AuthHandler.Init();
         ClientRuntime.Initialize();
         DiagnosticBootstrap.Initialize();
+        UiBootstrap.Init();
+
+        // Discover [AnomalyClientMod]-attributed classes in loaded assemblies.
+        // Mods that prefer explicit registration can still call
+        // AnomalyClientMods.Register(this) directly from their own OnInitializeMelon.
+        AnomalyClientMods.Discover();
 
         LoggerInstance.Msg($"Initialized (locale: {Tr.ActiveLocale}).");
     }
@@ -46,6 +56,9 @@ public class Core : MelonMod
 
     public override void OnApplicationQuit()
     {
+        AnomalyClientMods.DisableAll();
+        ClientConfig.DisposeAll();
+        ClientPersistence.FlushAll();
         DiagnosticBootstrap.Shutdown();
     }
 }

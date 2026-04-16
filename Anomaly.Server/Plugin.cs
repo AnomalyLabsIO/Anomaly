@@ -1,8 +1,10 @@
 using System;
 using System.Linq;
+using Anomaly.Server.API.Plugins;
 using Anomaly.Server.Assets;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Networking;
+using Anomaly.Server.Round;
 using Anomaly.Server.Utils;
 using Anomaly.Shared.Networking;
 using CentralAuth;
@@ -53,6 +55,8 @@ public class Plugin : Plugin<Config>
                 FileTransferSession.HandleMessage(hub, msg);
             };
 
+            RoundStateBroadcaster.Init();
+
             Harmony.PatchAll();
             var patchedMethods = Harmony.GetPatchedMethods().ToList();
             Logger.Info($"Anomaly.Server enabled - {patchedMethods.Count} methods patched:");
@@ -60,6 +64,10 @@ public class Plugin : Plugin<Config>
             {
                 Logger.Info($"  - {method.DeclaringType?.FullName}.{method.Name}");
             }
+
+            // Discover [AnomalyPlugin]-attributed LabAPI plugins. Runs after Harmony
+            // so any plugins loaded alongside us are already instantiated.
+            AnomalyServerPlugins.Discover();
         }
         catch (Exception ex)
         {
@@ -69,6 +77,7 @@ public class Plugin : Plugin<Config>
 
     public override void Disable()
     {
+        RoundStateBroadcaster.Disable();
         AssetFileWatcher.Stop();
         Harmony.UnpatchAll();
 

@@ -162,6 +162,9 @@
         </Reference>
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="API\Plugins\AnomalyPluginAttribute.cs" />
+        <Compile Include="API\Plugins\AnomalyServerPlugins.cs" />
+        <Compile Include="Round\RoundStateBroadcaster.cs" />
         <Compile Include="Auth\AuthHandler.cs" />
         <Compile Include="Auth\Connection.cs" />
         <Compile Include="Auth\PlayerStorage.cs" />

@@ -3,6 +3,8 @@ using Anomaly.Client.API.Features;
 using Anomaly.Client.Events.Args;
 using Anomaly.Client.Events.Handlers;
 using Anomaly.Client.Internal.Effects;
+using Anomaly.Client.Internal.Input;
+using Anomaly.Client.Internal.Scheduling;
 using Anomaly.Client.Internal.Stats;
 using Anomaly.Client.Internal.Wrappers;
 using Il2CppAdminToys;
@@ -116,6 +118,8 @@ internal static class ClientRuntime
 
         RunSafely(() =>
         {
+            SchedulerTick.Update();
+            InputPoller.Update();
             EffectStateTracker.Update();
             HealthStateTracker.Update();
         }, nameof(Update));

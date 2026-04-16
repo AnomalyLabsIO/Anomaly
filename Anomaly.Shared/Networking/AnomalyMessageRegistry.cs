@@ -80,6 +80,7 @@ namespace Anomaly.Shared.Networking
             Register("anomaly:blendshapes", () => new EmotionBlendShapesMessage());
             Register("anomaly:bonetransforms", () => new BoneTransformsMessage());
             Register("anomaly:silentrolechange", () => new SilentRoleChangeMessage());
+            Register("anomaly:round:state", () => new RoundStateMessage());
             Register("anomaly:filemanifest", () => new FileManifestMessage());
             Register("anomaly:filerequest", () => new FileRequestMessage());
             Register("anomaly:filechunk", () => new FileChunkMessage());

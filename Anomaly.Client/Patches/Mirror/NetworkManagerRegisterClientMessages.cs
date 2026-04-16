@@ -3,6 +3,7 @@ using Anomaly.Client.API.Networking;
 using Anomaly.Client.Assets;
 using Anomaly.Client.Events.Handlers;
 using Anomaly.Client.FileTransfer;
+using Anomaly.Client.Internal.Round;
 using Anomaly.Shared.Networking;
 using HarmonyLib;
 using Il2CppMirror;
@@ -33,6 +34,7 @@ public static class NetworkManagerRegisterClientMessages
 
             SpawnedObjectRegistry.Init();
             OverrideRegistry.Init();
+            RoundStateReceiver.Init();
 
             // Clean up everything the asset pipeline created so reconnecting to a
             // different server doesn't leak bundles/textures or leave stale
