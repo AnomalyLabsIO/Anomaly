@@ -189,10 +189,20 @@
       </ProjectReference>
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
+    <!--
+      Optional post-build deploy to a local test server. Set $(AnomalyServerDir) in your
+      environment (env var) or user .csproj.user to point at your server's install root.
+      If the target doesn't exist on this machine the build succeeds without copying.
+    -->
     <PropertyGroup>
-      <PostBuildEvent>COPY "$(TargetPath)" "E:\Projects\AnomalyLabs\Server\server\AppData\SCP Secret Laboratory\LabAPI\plugins\global"
-COPY "$(TargetDir)Anomaly.Shared.dll" "E:\Projects\AnomalyLabs\Server\server\AppData\SCP Secret Laboratory\LabAPI\dependencies\global"</PostBuildEvent>
+      <AnomalyServerDir Condition="'$(AnomalyServerDir)' == ''">..\..\..\Server\server</AnomalyServerDir>
+      <AnomalyPluginsDir>$(AnomalyServerDir)\AppData\SCP Secret Laboratory\LabAPI\plugins\global</AnomalyPluginsDir>
+      <AnomalyDependenciesDir>$(AnomalyServerDir)\AppData\SCP Secret Laboratory\LabAPI\dependencies\global</AnomalyDependenciesDir>
     </PropertyGroup>
+    <Target Name="CopyToLocalServer" AfterTargets="Build" Condition="Exists('$(AnomalyPluginsDir)')">
+      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyPluginsDir)" SkipUnchangedFiles="true" />
+      <Copy SourceFiles="$(TargetDir)Anomaly.Shared.dll" DestinationFolder="$(AnomalyDependenciesDir)" SkipUnchangedFiles="true" Condition="Exists('$(AnomalyDependenciesDir)')" />
+    </Target>
     <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
          Other similar extension points exist, see Microsoft.Common.targets.
     <Target Name="BeforeBuild">

@@ -509,6 +509,7 @@
 		<Compile Include="Internal\Effects\EffectStateTracker.cs" />
 		<Compile Include="Internal\Stats\HealthStateTracker.cs" />
 		<Compile Include="Internal\Wrappers\PlayerRegistry.cs" />
+		<Compile Include="Patches\PatchInvocationGuard.cs" />
 		<Compile Include="Patches\Auth\NetDataWriterPut.cs" />
 		<Compile Include="Patches\Auth\PlayerAuthenticationManagerPatch.cs" />
 		<Compile Include="Patches\Credits\NewCreditsPatch.cs" />
@@ -538,20 +539,23 @@
 	<ItemGroup>
 	  <PackageReference Include="HarmonyX" Version="2.16.0" />
 	  <PackageReference Include="LavaGang.MelonLoader" Version="0.7.2" />
-	  <PackageReference Include="MoonSharp" Version="2.0.0" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1" />
 	  <PackageReference Include="System.Runtime.InteropServices" Version="4.3.0" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="Lua\" />
 	</ItemGroup>
 
 	<ItemGroup>
 	  <EmbeddedResource Include="Resources\i18n\*.json" />
 	</ItemGroup>
 	
-	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
-		<Exec Command="COPY &quot;$(TargetPath)&quot; &quot;E:\Projects\AnomalyLabs\Client\Mods&quot;" />
+	<!--
+	  Optional post-build deploy to a local test client. Override $(AnomalyClientModsDir)
+	  via env var or a .csproj.user file to change the target. If the directory doesn't
+	  exist on this machine, the build succeeds without copying.
+	-->
+	<PropertyGroup>
+		<AnomalyClientModsDir Condition="'$(AnomalyClientModsDir)' == ''">..\..\..\Client\Mods</AnomalyClientModsDir>
+	</PropertyGroup>
+	<Target Name="CopyToLocalClient" AfterTargets="Build" Condition="Exists('$(AnomalyClientModsDir)')">
+		<Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientModsDir)" SkipUnchangedFiles="true" />
 	</Target>
 </Project>

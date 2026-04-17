@@ -4,6 +4,12 @@ using System.Numerics;
 
 namespace Anomaly.Shared.Auth;
 
+/// <summary>
+/// Canonical Base58 implementation for Anomaly user IDs. Also reimplemented in
+/// Anomaly.Launcher (Services/UserProfileService.cs) because the Launcher can't
+/// reference Shared across frameworks. If you change the alphabet/encoding here,
+/// mirror it there.
+/// </summary>
 public static class Base58
 {
     private const string Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";

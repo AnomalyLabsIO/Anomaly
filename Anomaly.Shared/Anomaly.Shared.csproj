@@ -79,9 +79,21 @@
         <Compile Include="Properties\AssemblyInfo.cs"/>
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
+    <!--
+      Optional post-build deploy to a local test server and client UserLibs directory.
+      Set $(AnomalyServerDir) / $(AnomalyClientDir) to override the defaults. If the
+      target directories don't exist on this machine, the build succeeds without copying.
+    -->
     <PropertyGroup>
-      <PostBuildEvent>COPY "$(TargetPath)" "E:\Projects\AnomalyLabs\Server\server\AppData\SCP Secret Laboratory\LabAPI\dependencies\global" &amp;&amp; COPY "$(TargetPath)" "E:\Projects\AnomalyLabs\Client\UserLibs"</PostBuildEvent>
+      <AnomalyServerDir Condition="'$(AnomalyServerDir)' == ''">..\..\..\Server\server</AnomalyServerDir>
+      <AnomalyClientDir Condition="'$(AnomalyClientDir)' == ''">..\..\..\Client</AnomalyClientDir>
+      <AnomalyServerDepsDir>$(AnomalyServerDir)\AppData\SCP Secret Laboratory\LabAPI\dependencies\global</AnomalyServerDepsDir>
+      <AnomalyClientUserLibsDir>$(AnomalyClientDir)\UserLibs</AnomalyClientUserLibsDir>
     </PropertyGroup>
+    <Target Name="CopySharedToLocalTargets" AfterTargets="Build">
+      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyServerDepsDir)" SkipUnchangedFiles="true" Condition="Exists('$(AnomalyServerDepsDir)')" />
+      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)')" />
+    </Target>
     <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
          Other similar extension points exist, see Microsoft.Common.targets.
     <Target Name="BeforeBuild">

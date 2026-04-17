@@ -11,6 +11,7 @@ public static class ItemPickupBasePatch
     [HarmonyPatch(typeof(ItemPickupBase), nameof(ItemPickupBase.OnStartClient))]
     public static void OnStartClientPostfix(ItemPickupBase __instance)
     {
+        if (!PatchInvocationGuard.ShouldFire(__instance, PatchInvocationGuard.PickupAdded)) return;
         ClientRuntime.HandlePickupAdded(__instance);
     }
 
@@ -18,6 +19,7 @@ public static class ItemPickupBasePatch
     [HarmonyPatch(typeof(ItemPickupBase), nameof(ItemPickupBase.OnDestroy))]
     public static void OnDestroyPrefix(ItemPickupBase __instance)
     {
+        if (!PatchInvocationGuard.ShouldFire(__instance, PatchInvocationGuard.PickupRemoved)) return;
         ClientRuntime.HandlePickupRemoved(__instance);
     }
 }

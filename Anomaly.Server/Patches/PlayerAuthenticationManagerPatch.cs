@@ -6,13 +6,10 @@ using Anomaly.Server.Utils;
 using Anomaly.Shared.Networking;
 using CentralAuth;
 using Cryptography;
-using GameCore;
 using HarmonyLib;
 using MEC;
 using Mirror;
 using Mirror.LiteNetLib4Mirror;
-using UnityEngine;
-using Logger = LabApi.Features.Console.Logger;
 
 namespace Anomaly.Server.Patches;
 
@@ -199,7 +196,7 @@ public static class PlayerAuthenticationManagerPatch
 
             if (counter <= hub.encryptedChannelManager._rxCounter)
             {
-                GameCore.Console.AddLog(string.Format("Received message with counter {0}, which is lower or equal to last received message counter {1}. Discarding message!", counter, hub.encryptedChannelManager._rxCounter), Color.red, false, ConsoleLogType.Log);
+                OffThreadLogger.Warn($"Received message with counter {counter}, which is lower or equal to last received message counter {hub.encryptedChannelManager._rxCounter}. Discarding message!");
                 return false;
             }
 
@@ -209,7 +206,7 @@ public static class PlayerAuthenticationManagerPatch
 
         if (!EncryptedChannelManager.ServerChannelHandlers.ContainsKey(channel))
         {
-            GameCore.Console.AddLog(string.Format("No handler is registered for encrypted channel {0} (server).", channel), Color.red, false, ConsoleLogType.Log);
+            OffThreadLogger.Warn($"No handler is registered for encrypted channel {channel} (server).");
             return false;
         }
 
@@ -219,8 +216,8 @@ public static class PlayerAuthenticationManagerPatch
         }
         catch (Exception ex)
         {
-            GameCore.Console.AddLog(string.Format("Exception while handling encrypted message on channel {0} (server, running a handler). Exception: {1}", channel, ex.Message), Color.red, false, ConsoleLogType.Log);
-            GameCore.Console.AddLog(ex.StackTrace, Color.red, false, ConsoleLogType.Log);
+            OffThreadLogger.Error($"Exception while handling encrypted message on channel {channel} (server, running a handler). Exception: {ex.Message}");
+            OffThreadLogger.Error(ex.StackTrace);
         }
         return false;
     }

@@ -2,6 +2,11 @@ using System.Runtime.InteropServices;
 
 namespace Anomaly.Installer.Platform;
 
+/// <summary>
+/// OS + Wine detection used by the Installer. Mirror of Anomaly.Launcher.Platform.PlatformHelper
+/// (same logic, different shape — static class there). Kept in sync manually; if you change
+/// the Wine detection probe here, update the Launcher copy.
+/// </summary>
 public class PlatformInfo
 {
     public bool IsWindows { get; }

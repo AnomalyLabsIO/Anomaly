@@ -13,10 +13,26 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        var parsedArgs = InstallerArgs.Parse(args);
+
+        if (parsedArgs.ShowHelp)
+        {
+            InstallerArgs.PrintHelp();
+            return 0;
+        }
+
+        string? logPath = InstallLogger.Init();
+
         try
         {
             ConsoleUI.PrintBanner();
-            Run(args);
+            if (logPath != null)
+                Console.WriteLine($"Log file: {logPath}");
+            if (parsedArgs.DryRun)
+                ConsoleUI.PrintWarning("DRY RUN — no files will be written.");
+            Console.WriteLine();
+
+            Run(parsedArgs);
             return 0;
         }
         catch (InstallerException ex)
@@ -32,9 +48,13 @@ public static class Program
             WaitForExit();
             return 1;
         }
+        finally
+        {
+            InstallLogger.Shutdown();
+        }
     }
 
-    private static void Run(string[] args)
+    private static void Run(InstallerArgs args)
     {
         var platform = new PlatformInfo();
         string installerDir = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
@@ -54,69 +74,136 @@ public static class Program
         Console.WriteLine($"Vanilla game directory: {vanillaDir}");
         Console.WriteLine();
 
-        // Save vanilla path for future reference
-        string vanillaPathFile = Path.Combine(installerDir, "vanilla_path.txt");
-        File.WriteAllText(vanillaPathFile, vanillaDir);
-        Console.WriteLine($"Vanilla path saved to vanilla_path.txt");
+        // Save vanilla path to the canonical Launcher-visible location (%APPDATA%/Anomaly/).
+        // Shared schema: the Launcher reads this same file via PathService.VanillaPathFile.
+        string anomalyDataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Anomaly");
+        string vanillaPathFile = Path.Combine(anomalyDataDir, "vanilla_path.txt");
+        if (!args.DryRun)
+        {
+            Directory.CreateDirectory(anomalyDataDir);
+            File.WriteAllText(vanillaPathFile, vanillaDir);
+            Console.WriteLine($"Vanilla path saved to {vanillaPathFile}");
+        }
+        else
+        {
+            Console.WriteLine($"[dry-run] Would write vanilla path to {vanillaPathFile}");
+        }
         Console.WriteLine();
 
         // Step 1: Copy game files
         ConsoleUI.PrintStep(1, TotalSteps, "Copying game files...");
-        CopyGameFiles(vanillaDir, installerDir);
-        ConsoleUI.PrintSuccess("Game files copied.");
+        if (!args.DryRun)
+        {
+            CopyGameFiles(vanillaDir, installerDir);
+            ConsoleUI.PrintSuccess("Game files copied.");
+        }
+        else
+        {
+            Console.WriteLine($"[dry-run] Would copy game files from {vanillaDir} to {installerDir}");
+        }
         Console.WriteLine();
 
         // Step 2: Extract clean launcher from embedded resources
         ConsoleUI.PrintStep(2, TotalSteps, "Extracting clean launcher...");
         string cleanLauncherPath = Path.Combine(installerDir, "SCPSL.exe");
-        EmbeddedResources.ExtractToFile("SCPSL.exe", cleanLauncherPath);
-        ConsoleUI.PrintSuccess("Clean SCPSL.exe extracted.");
+        if (!args.DryRun)
+        {
+            EmbeddedResources.ExtractToFile("SCPSL.exe", cleanLauncherPath);
+            ConsoleUI.PrintSuccess("Clean SCPSL.exe extracted.");
+        }
+        else
+        {
+            Console.WriteLine($"[dry-run] Would extract embedded SCPSL.exe to {cleanLauncherPath}");
+        }
         Console.WriteLine();
+
+        // In dry-run we stop before the destructive steps (we can't load IL2CPP without a
+        // real GameAssembly.dll in place, and users just want a path sanity check).
+        if (args.DryRun)
+        {
+            string gaPreview = Path.Combine(installerDir, "GameAssembly.dll");
+            string mdPreview = Path.Combine(installerDir, "SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat");
+            string ggmPreview = Path.Combine(installerDir, "SCPSL_Data", "globalgamemanagers");
+
+            Console.WriteLine("[dry-run] Remaining steps that WOULD run:");
+            Console.WriteLine($"[dry-run]   3. Load IL2CPP from {gaPreview}");
+            Console.WriteLine($"[dry-run]   4. Backup + patch {gaPreview} + {mdPreview} + {ggmPreview}");
+            Console.WriteLine($"[dry-run]   5. Fix bundle version in {ggmPreview}");
+            Console.WriteLine($"[dry-run]   6. Download MelonLoader 0.7.2 into {installerDir}");
+            Console.WriteLine($"[dry-run]   7. Verify Mods/ and UserLibs/");
+            Console.WriteLine();
+            Console.WriteLine("[dry-run] Dry run complete. Re-run without --dry-run to install.");
+            Console.WriteLine();
+            WaitForExit();
+            return;
+        }
 
         // Step 3: Unpack (if Themida-protected) and load IL2CPP
         ConsoleUI.PrintStep(3, TotalSteps, "Loading IL2CPP...");
         string gameAssemblyPath = Path.Combine(installerDir, "GameAssembly.dll");
         string metadataPath = Path.Combine(installerDir, "SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat");
+        string bundleVersionPath = Path.Combine(installerDir, "SCPSL_Data", "globalgamemanagers");
 
-        // Fix metadata version BEFORE IL2CPP loading
-        Patcher.FixMetadataVersion(patchInfo.metadataVersion, installerDir);
+        // Backup vanilla-copies of files we're about to mutate. First successful install
+        // captures the vanilla snapshot; subsequent re-runs reuse the existing .bak.
+        // On failure further down this method, we restore from these backups.
+        BackupManager.BackupFile(gameAssemblyPath);
+        BackupManager.BackupFile(metadataPath);
+        BackupManager.BackupFile(bundleVersionPath);
 
-        byte[] gameAssemblyData = LoadAndUnpackGameAssembly(
-            gameAssemblyPath, metadataPath, platform, installerDir, patchInfo.metadataVersion);
-
-        var il2CppManager = new Il2CppManager(gameAssemblyData, installerDir);
-        il2CppManager.LoadIl2Cpp(metadataPath, patchInfo.metadataVersion);
-
-        Console.WriteLine("  Dumping IL2CPP...");
-        il2CppManager.DumpIl2Cpp();
-        il2CppManager.GetScriptJson();
-        il2CppManager.GetMethodsDictionary();
-        ConsoleUI.PrintSuccess("IL2CPP loaded and parsed.");
-        Console.WriteLine();
-
-        // Step 4: Patch GameAssembly
-        ConsoleUI.PrintStep(4, TotalSteps, "Applying patches...");
-        var patcher = new Patcher(gameAssemblyPath, gameAssemblyData, il2CppManager, patchInfo);
-        patcher.PatchGameAssembly();
-        patcher.SaveGameAssembly();
-        ConsoleUI.PrintSuccess("GameAssembly.dll patched.");
-        Console.WriteLine();
-
-        // Step 5: Fix game version in Unity metadata
-        ConsoleUI.PrintStep(5, TotalSteps, "Fixing game version...");
-        var version = Patcher.ReadGameVersion(gameAssemblyData, il2CppManager);
-        if (version.HasValue)
+        Il2CppManager il2CppManager;
+        byte[] gameAssemblyData;
+        try
         {
-            var (major, minor, revision) = version.Value;
-            Console.WriteLine($"  Detected game version: {major}.{minor}.{revision}");
-            Patcher.FixBundleVersion(installerDir, major, minor, revision);
-            ConsoleUI.PrintSuccess("Game version fixed.");
+            // Fix metadata version BEFORE IL2CPP loading
+            Patcher.FixMetadataVersion(patchInfo.metadataVersion, installerDir);
+
+            gameAssemblyData = LoadAndUnpackGameAssembly(
+                gameAssemblyPath, metadataPath, platform, installerDir, patchInfo.metadataVersion);
+
+            il2CppManager = new Il2CppManager(gameAssemblyData, installerDir);
+            il2CppManager.LoadIl2Cpp(metadataPath, patchInfo.metadataVersion);
+
+            Console.WriteLine("  Dumping IL2CPP...");
+            il2CppManager.DumpIl2Cpp();
+            il2CppManager.GetScriptJson();
+            il2CppManager.GetMethodsDictionary();
+            ConsoleUI.PrintSuccess("IL2CPP loaded and parsed.");
+            Console.WriteLine();
+
+            // Step 4: Patch GameAssembly
+            ConsoleUI.PrintStep(4, TotalSteps, "Applying patches...");
+            var patcher = new Patcher(gameAssemblyPath, gameAssemblyData, il2CppManager, patchInfo);
+            patcher.PatchGameAssembly();
+            patcher.SaveGameAssembly();
+            ConsoleUI.PrintSuccess("GameAssembly.dll patched.");
+            Console.WriteLine();
+
+            // Step 5: Fix game version in Unity metadata
+            ConsoleUI.PrintStep(5, TotalSteps, "Fixing game version...");
+            var version = Patcher.ReadGameVersion(gameAssemblyData, il2CppManager);
+            if (version.HasValue)
+            {
+                var (major, minor, revision) = version.Value;
+                Console.WriteLine($"  Detected game version: {major}.{minor}.{revision}");
+                Patcher.FixBundleVersion(installerDir, major, minor, revision);
+                ConsoleUI.PrintSuccess("Game version fixed.");
+            }
+            else
+            {
+                ConsoleUI.PrintWarning("Could not detect game version — bundle version unchanged.");
+            }
+            Console.WriteLine();
         }
-        else
+        catch
         {
-            ConsoleUI.PrintWarning("Could not detect game version — bundle version unchanged.");
+            ConsoleUI.PrintError("Patching failed — restoring vanilla files from backup.");
+            BackupManager.RestoreFile(gameAssemblyPath);
+            BackupManager.RestoreFile(metadataPath);
+            BackupManager.RestoreFile(bundleVersionPath);
+            throw;
         }
-        Console.WriteLine();
 
         // Step 6: Install MelonLoader
         ConsoleUI.PrintStep(6, TotalSteps, "Installing MelonLoader 0.7.2...");
@@ -152,16 +239,24 @@ public static class Program
         catch (InvalidOperationException) { /* stdin redirected, just exit */ }
     }
 
-    private static string GetVanillaPath(string[] args)
+    private static string GetVanillaPath(InstallerArgs args)
     {
-        for (int i = 0; i < args.Length - 1; i++)
+        // If --vanilla-path was a directory, look up SCPSL.exe in it.
+        if (!string.IsNullOrEmpty(args.VanillaPath))
         {
-            if (args[i] == "--vanilla-path")
-                return args[i + 1];
-        }
+            string provided = args.VanillaPath;
+            if (File.Exists(provided) && provided.EndsWith("SCPSL.exe", StringComparison.OrdinalIgnoreCase))
+                return provided;
 
-        if (args.Length > 0 && File.Exists(args[0]) && args[0].EndsWith("SCPSL.exe", StringComparison.OrdinalIgnoreCase))
-            return args[0];
+            if (Directory.Exists(provided))
+            {
+                string exe = Path.Combine(provided, "SCPSL.exe");
+                if (File.Exists(exe)) return exe;
+                throw new InstallerException($"SCPSL.exe not found in directory: {provided}");
+            }
+
+            throw new InstallerException($"Vanilla path not found: {provided}");
+        }
 
         Console.WriteLine("Please enter the path to your vanilla SCPSL.exe:");
         Console.WriteLine("(e.g., C:\\Program Files\\Steam\\steamapps\\common\\SCP Secret Laboratory\\SCPSL.exe)");

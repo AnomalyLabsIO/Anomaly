@@ -87,6 +87,9 @@ public class UserProfileService
         }
     }
 
+    // Duplicated intentionally from Anomaly.Shared.Auth.Base58 — the Launcher cannot
+    // reference Shared (net48 vs net8.0). If you change the alphabet or encoding here,
+    // mirror the change in Anomaly.Shared/Auth/Base58.cs so IDs round-trip identically.
     private static string Base58Encode(byte[] bytes)
     {
         const string alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";

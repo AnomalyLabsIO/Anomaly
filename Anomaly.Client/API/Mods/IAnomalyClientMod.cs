@@ -40,11 +40,31 @@ public interface IAnomalyClientMod
     /// Called once after the mod is registered and the Anomaly core is ready.
     /// Use this to wire up event subscriptions and register subsystem resources.
     /// </summary>
+    /// <remarks>
+    /// Hot-unload is not supported. Anything allocated here lives for the rest of
+    /// the game session — you cannot rely on <see cref="OnDisable"/> being called
+    /// to free it mid-session.
+    /// </remarks>
     void OnEnable();
 
     /// <summary>
-    /// Called once when the game is shutting down. Use this to release resources.
-    /// Anomaly does not currently support hot-unloading.
+    /// Called once during application shutdown (<c>OnApplicationQuit</c>) in reverse
+    /// registration order. Use it to flush buffers, close files, and release OS
+    /// handles — the game is about to exit.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Hot-unload is not supported.</strong> <see cref="OnDisable"/> is invoked
+    /// only on game shutdown. There is no runtime path that disables a mod while the
+    /// game is still running, so event subscriptions, <c>MonoBehaviour</c> instances,
+    /// Harmony patches, Unity objects, and cached references registered during
+    /// <see cref="OnEnable"/> remain live for the session.
+    /// </para>
+    /// <para>
+    /// Do not design mods that expect to be toggled on/off mid-session. If you need
+    /// a disabled state, expose a feature flag your own code reads; do not rely on
+    /// the framework tearing your mod down.
+    /// </para>
+    /// </remarks>
     void OnDisable();
 }

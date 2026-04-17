@@ -7,6 +7,7 @@ public class PathService
     public string AnomalyDataDir { get; }
     public string CrashReportsDir { get; }
     public string UserJsonPath { get; }
+    public string VanillaPathFile { get; }
     public string GameLogPath { get; }
 
     public PathService()
@@ -17,7 +18,31 @@ public class PathService
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Anomaly");
         CrashReportsDir = Path.Combine(AnomalyDataDir, "CrashReports");
         UserJsonPath = Path.Combine(AnomalyDataDir, "user.json");
+        VanillaPathFile = Path.Combine(AnomalyDataDir, "vanilla_path.txt");
         GameLogPath = Path.Combine(LauncherDir, "Latest.log");
+
+        MigrateLegacyVanillaPath();
+    }
+
+    /// <summary>
+    /// Older Launcher/Installer builds stored vanilla_path.txt next to the launcher
+    /// executable. If the legacy file exists and the new one doesn't, carry it forward.
+    /// </summary>
+    private void MigrateLegacyVanillaPath()
+    {
+        var legacy = Path.Combine(LauncherDir, "vanilla_path.txt");
+        if (!File.Exists(legacy) || File.Exists(VanillaPathFile))
+            return;
+
+        try
+        {
+            Directory.CreateDirectory(AnomalyDataDir);
+            File.Copy(legacy, VanillaPathFile);
+        }
+        catch
+        {
+            // Best-effort migration — if it fails, the user will be re-prompted for the path.
+        }
     }
 
     // --- Vanilla / Steam paths (computed on access, not constructor) ---
@@ -77,11 +102,10 @@ public class PathService
 
     public string? GetVanillaExePath()
     {
-        var vanillaPathFile = Path.Combine(LauncherDir, "vanilla_path.txt");
-        if (!File.Exists(vanillaPathFile))
+        if (!File.Exists(VanillaPathFile))
             return null;
 
-        var path = File.ReadAllText(vanillaPathFile).Trim();
+        var path = File.ReadAllText(VanillaPathFile).Trim();
         if (string.IsNullOrEmpty(path))
             return null;
 
@@ -112,7 +136,7 @@ public class PathService
             dir = directoryOrExePath;
         }
 
-        var vanillaPathFile = Path.Combine(LauncherDir, "vanilla_path.txt");
-        File.WriteAllText(vanillaPathFile, dir);
+        Directory.CreateDirectory(AnomalyDataDir);
+        File.WriteAllText(VanillaPathFile, dir);
     }
 }

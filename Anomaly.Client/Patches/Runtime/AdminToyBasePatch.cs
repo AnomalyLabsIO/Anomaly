@@ -11,6 +11,7 @@ public static class AdminToyBasePatch
     [HarmonyPatch(typeof(AdminToyBase), nameof(AdminToyBase.OnStartClient))]
     public static void OnStartClientPostfix(AdminToyBase __instance)
     {
+        if (!PatchInvocationGuard.ShouldFire(__instance, PatchInvocationGuard.AdminToyAdded)) return;
         ClientRuntime.HandleAdminToyAdded(__instance);
     }
 
@@ -18,6 +19,7 @@ public static class AdminToyBasePatch
     [HarmonyPatch(typeof(AdminToyBase), nameof(AdminToyBase.OnDestroy))]
     public static void OnDestroyPrefix(AdminToyBase __instance)
     {
+        if (!PatchInvocationGuard.ShouldFire(__instance, PatchInvocationGuard.AdminToyRemoved)) return;
         ClientRuntime.HandleAdminToyRemoved(__instance);
     }
 }

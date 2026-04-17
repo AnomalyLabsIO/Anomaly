@@ -198,7 +198,7 @@ public static class ProcessConnectionRequestPatch
                     OffThreadLogger.Info(serverIdentifier);
 
                     OffThreadLogger.Info("Checking connection");
-                    if(!AuthHandler._connections.TryGetValue(serverIdentifier,out var connection))
+                    if(!AuthHandler.TryConsumeConnection(serverIdentifier, out var connection))
                     {
                         OffThreadLogger.Warn($"No matching handshake session for identifier from {ip}. Session may have expired.");
                         RequestWriter.Reset();
@@ -215,7 +215,7 @@ public static class ProcessConnectionRequestPatch
                     if (!connection.ServerEnv.Validate(connection.Handshake, attempt))
                     {
                         OffThreadLogger.Warn($"Login attempt validation failed for {ip}. Signature mismatch.");
-                        AuthHandler._connections.Remove(serverIdentifier);
+                        AuthHandler.RemoveConnection(serverIdentifier);
                         RequestWriter.Reset();
                         RequestWriter.Put((byte)RejectionReason.InvalidToken);
                         request.RejectForce(RequestWriter);
@@ -223,7 +223,7 @@ public static class ProcessConnectionRequestPatch
                     }
 
                     OffThreadLogger.Info("Removing identifier");
-                    AuthHandler._connections.Remove(serverIdentifier);
+                    AuthHandler.RemoveConnection(serverIdentifier);
 
                     OffThreadLogger.Info("Getting username");
                     if (!request.Data.TryGetString(out name))

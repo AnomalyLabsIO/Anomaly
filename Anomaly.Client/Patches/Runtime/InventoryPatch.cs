@@ -12,6 +12,7 @@ public static class InventoryPatch
     [HarmonyPatch(typeof(Inventory), nameof(Inventory.Start))]
     public static void StartPostfix(Inventory __instance)
     {
+        if (!PatchInvocationGuard.ShouldFire(__instance, PatchInvocationGuard.InventoryStart)) return;
         if (__instance.isLocalPlayer)
             ClientRuntime.HandleLocalClientStarted();
     }
