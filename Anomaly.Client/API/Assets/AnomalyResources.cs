@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Anomaly.Client.Assets;
 using Anomaly.Client.FileTransfer;
 using Anomaly.Shared.Assets;
 using MelonLoader;
@@ -34,11 +35,10 @@ namespace Anomaly.Client.API.Assets
             try
             {
                 var bytes = File.ReadAllBytes(FileCache.GetFilePath(hash));
-                var tex = new Texture2D(2, 2);
-                if (!ImageConversion.LoadImage(tex, bytes))
+                var tex = PngLoader.TryDecode(bytes);
+                if (tex == null)
                 {
-                    MelonLogger.Warning($"AnomalyResources: ImageConversion.LoadImage failed for {hex}.");
-                    UnityEngine.Object.Destroy(tex);
+                    MelonLogger.Warning($"AnomalyResources: PNG decode failed for {hex}.");
                     return false;
                 }
                 _textures[hex] = tex;

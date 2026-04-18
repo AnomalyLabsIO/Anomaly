@@ -193,9 +193,6 @@
 		<Reference Include="UnityEngine.HotReloadModule">
 			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.HotReloadModule.dll</HintPath>
 		</Reference>
-		<Reference Include="UnityEngine.ImageConversionModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.ImageConversionModule.dll</HintPath>
-		</Reference>
 		<Reference Include="UnityEngine.IMGUIModule">
 			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.IMGUIModule.dll</HintPath>
 		</Reference>
@@ -361,6 +358,8 @@
 	<PropertyGroup>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 		<EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+		<!-- Surface NuGet dependency DLLs (BigGustave) in bin/ for deployment. -->
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -393,6 +392,7 @@
 		<Compile Include="API\UI\UiPrefabValidator.cs" />
 		<Compile Include="API\UI\UiParameterBinder.cs" />
 		<Compile Include="Internal\UI\UiBootstrap.cs" />
+		<Compile Include="Internal\UI\PreloaderSkinBootstrap.cs" />
 		<Compile Include="API\Localization\LocalizationService.cs" />
 		<Compile Include="API\Localization\Tr.cs" />
 		<Compile Include="Internal\Localization\RegistryTxtReader.cs" />
@@ -425,6 +425,8 @@
 		<Compile Include="API\Assets\AssetEvents.cs" />
 		<Compile Include="API\Networking\AnomalyMessaging.cs" />
 		<Compile Include="API\Networking\SilentRoleChangeHandler.cs" />
+		<Compile Include="Assets\LocalTextures.cs" />
+		<Compile Include="Assets\PngLoader.cs" />
 		<Compile Include="Assets\OverrideApplier.cs" />
 		<Compile Include="Assets\OverrideRegistry.cs" />
 		<Compile Include="Assets\ScriptStripper.cs" />
@@ -542,6 +544,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <!-- Pure-managed PNG decoder. Zero native deps, ~20KB, MIT. Required because
+	       both UnityEngine.ImageConversion.LoadImage and MelonLoader's shipped
+	       UnityEngine.Il2CppImageConversionManager shim ultimately route through
+	       Il2CppSystem.ReadOnlySpan<byte>.GetPinnableReference — a method this
+	       Il2CppInterop build doesn't export, causing MissingMethodException at
+	       runtime. See Anomaly.Client.Assets.PngLoader. -->
+	  <PackageReference Include="BigGustave" Version="1.0.3" />
 	  <PackageReference Include="HarmonyX" Version="2.16.0" />
 	  <PackageReference Include="LavaGang.MelonLoader" Version="0.7.2" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1" />
@@ -557,10 +566,13 @@
 	-->
 	<PropertyGroup>
 		<AnomalyClientModsDir Condition="'$(AnomalyClientModsDir)' == ''">E:\Projects\AnomalyLabs\Client\Mods</AnomalyClientModsDir>
+		<AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">E:\Projects\AnomalyLabs\Client\UserLibs</AnomalyClientUserLibsDir>
 	</PropertyGroup>
 	<Target Name="CopyToLocalClient" AfterTargets="Build">
 		<Message Importance="high" Text="Anomaly.Client: copying $(TargetFileName) -&gt; $(AnomalyClientModsDir)" Condition="Exists('$(AnomalyClientModsDir)')" />
 		<Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientModsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientModsDir)')" />
 		<Warning Text="Anomaly.Client: AnomalyClientModsDir does not exist: $(AnomalyClientModsDir)" Condition="!Exists('$(AnomalyClientModsDir)')" />
+		<Message Importance="high" Text="Anomaly.Client: copying BigGustave.dll -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)BigGustave.dll')" />
+		<Copy SourceFiles="$(OutputPath)BigGustave.dll" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)BigGustave.dll')" />
 	</Target>
 </Project>

@@ -40,6 +40,7 @@ public class Core : MelonMod
         ClientRuntime.Initialize();
         DiagnosticBootstrap.Initialize();
         UiBootstrap.Init();
+        PreloaderSkinBootstrap.Init();
 
         CommandRegistry.Register("anomaly", new NameCommand());
 
@@ -57,5 +58,10 @@ public class Core : MelonMod
         ClientConfig.DisposeAll();
         ClientPersistence.FlushAll();
         DiagnosticBootstrap.Shutdown();
+    }
+
+    public override void OnSceneWasLoaded(int buildIndex, string sceneName)
+    {
+        PreloaderSkinBootstrap.HandleSceneWasLoaded(sceneName);
     }
 }

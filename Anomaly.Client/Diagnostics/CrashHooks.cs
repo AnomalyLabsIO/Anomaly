@@ -28,6 +28,12 @@ internal static class CrashHooks
         // First-frame Alphawarhead UI access before AlphaWarheadController.Singleton is set
         "AlphaWarheadOutsitePanel.UpdateDisplays",
         "AlphaWarheadController.get_TimeUntilDetonation",
+        // PreLoader-phase SDR/NativeHttp type-init cascade. Our central-auth binary
+        // patches short-circuit the code that would normally set up the native HTTP
+        // module, so SteamDatagramRelayHandler.Start() hits a missing-DLL Win32Exception
+        // (mono-io-layer-error 126 / ERROR_MOD_NOT_FOUND) in NativeHttp..cctor. The
+        // framework's custom auth replaces SDR entirely, so this is harmless.
+        "Utils.Http.SDR.SteamDatagramRelayHandler.Start",
     };
 
     // SEH filter must be kept alive to prevent GC collection
