@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using Anomaly.Client.API.Mods;
+using Anomaly.Client.Internal;
 using MelonLoader;
 
 namespace Anomaly.Client.API.Commands;
@@ -48,8 +48,13 @@ public static class CommandRegistry
         new ReadOnlyCollection<ICommand>(_byName.Values.Select(e => e.Command).ToList());
 
     /// <summary>Registers a command under <paramref name="modId"/>.</summary>
-    /// <remarks>The caller's mod id must be registered (see <see cref="AnomalyClientMods"/>).
-    /// The special id "anomaly" is accepted for core commands.</remarks>
+    /// <remarks>
+    /// <paramref name="modId"/> must be a syntactically valid dotted-lowercase
+    /// namespace (e.g. <c>"mymod"</c>, <c>"acme.wargames"</c>). Pick a unique
+    /// prefix and use it consistently across all your Anomaly registrations.
+    /// The reserved <c>"anomaly"</c> / <c>"anomaly.*"</c> prefix is used by
+    /// Anomaly's own built-in commands.
+    /// </remarks>
     public static void Register(string modId, ICommand command)
     {
         if (command == null) throw new ArgumentNullException(nameof(command));
@@ -58,10 +63,10 @@ public static class CommandRegistry
         if (!NamePattern.IsMatch(command.Name))
             throw new ArgumentException($"Command name '{command.Name}' is invalid (lowercase alphanumeric/underscore, no dots).");
 
-        // modId must be registered or the reserved "anomaly" core.
-        bool isCore = modId == "anomaly" || modId.StartsWith("anomaly.", StringComparison.Ordinal);
-        if (!isCore && !AnomalyClientMods.IsKeyOwnedByRegisteredMod(modId))
-            throw new ArgumentException($"CommandRegistry.Register: mod id '{modId}' is not registered.");
+        if (!ModNamespace.IsReserved(modId) && !ModNamespace.IsValid(modId))
+            throw new ArgumentException(
+                $"CommandRegistry.Register: mod id '{modId}' is not a valid namespace (lowercase dotted, e.g. \"mymod\").",
+                nameof(modId));
 
         string canonical = $"{modId}.{command.Name}";
         if (_byName.ContainsKey(canonical))

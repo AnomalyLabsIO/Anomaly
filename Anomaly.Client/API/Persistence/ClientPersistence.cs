@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Anomaly.Client.API.Mods;
+using Anomaly.Client.Internal;
 using Anomaly.Client.Internal.Persistence;
 using MelonLoader.Utils;
 
@@ -29,18 +29,19 @@ public static class ClientPersistence
 
     /// <summary>
     /// Returns (or creates) the persistence store for <paramref name="modId"/>.
+    /// <paramref name="modId"/> must be a syntactically valid dotted-lowercase
+    /// namespace; the reserved <c>"anomaly"</c> prefix is accepted for the
+    /// framework's own stores.
     /// </summary>
     public static IPersistenceStore For(string modId)
     {
         if (string.IsNullOrEmpty(modId))
             throw new ArgumentException("Mod id must be non-empty.", nameof(modId));
 
-        if (modId != "anomaly" &&
-            !modId.StartsWith("anomaly.", StringComparison.Ordinal) &&
-            !AnomalyClientMods.IsKeyOwnedByRegisteredMod(modId))
+        if (!ModNamespace.IsReserved(modId) && !ModNamespace.IsValid(modId))
         {
             throw new ArgumentException(
-                $"ClientPersistence.For('{modId}'): mod id is not registered (see AnomalyClientMods.Register).",
+                $"ClientPersistence.For('{modId}'): id is not a valid namespace (lowercase dotted, e.g. \"mymod\").",
                 nameof(modId));
         }
 

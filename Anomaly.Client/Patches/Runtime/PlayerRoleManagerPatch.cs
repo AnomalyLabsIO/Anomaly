@@ -2,6 +2,7 @@ using Anomaly.Client.Internal;
 using Anomaly.Client.Internal.Bootstrap;
 using HarmonyLib;
 using Il2CppPlayerRoles;
+using MelonLoader;
 
 namespace Anomaly.Client.Patches.Runtime;
 
@@ -19,7 +20,12 @@ public static class PlayerRoleManagerPatch
     {
         // Always clear the silent flag after any role change, even if something went wrong
         if (__instance._hub != null && __instance._hub.isLocalPlayer)
+        {
+            string previousRole = __state?.RoleTypeId.ToString() ?? "<null>";
+            string newRole = __instance._curRole?.RoleTypeId.ToString() ?? "<null>";
+            MelonLogger.Msg($"PlayerRoleManager.InitializeNewRole local change: {previousRole} -> {newRole}");
             SilentRoleChange.IsPending = false;
+        }
 
         if (__instance._hub == null || ReferenceEquals(__state, __instance._curRole))
             return;

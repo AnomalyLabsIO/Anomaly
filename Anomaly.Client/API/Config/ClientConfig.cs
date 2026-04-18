@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Anomaly.Client.API.Mods;
+using Anomaly.Client.Internal;
 using Anomaly.Client.Internal.Config;
 using MelonLoader.Utils;
 
@@ -26,20 +26,19 @@ public static class ClientConfig
 
     /// <summary>
     /// Returns (or creates) the config store for <paramref name="modId"/>.
-    /// The id must belong to a registered mod or be the reserved "anomaly"
-    /// core prefix.
+    /// <paramref name="modId"/> must be a syntactically valid dotted-lowercase
+    /// namespace; the reserved <c>"anomaly"</c> prefix is accepted for the
+    /// framework's own config.
     /// </summary>
     public static IConfigSource For(string modId)
     {
         if (string.IsNullOrEmpty(modId))
             throw new ArgumentException("Mod id must be non-empty.", nameof(modId));
 
-        if (modId != "anomaly" &&
-            !modId.StartsWith("anomaly.", StringComparison.Ordinal) &&
-            !AnomalyClientMods.IsKeyOwnedByRegisteredMod(modId))
+        if (!ModNamespace.IsReserved(modId) && !ModNamespace.IsValid(modId))
         {
             throw new ArgumentException(
-                $"ClientConfig.For('{modId}'): mod id is not registered (see AnomalyClientMods.Register).",
+                $"ClientConfig.For('{modId}'): id is not a valid namespace (lowercase dotted, e.g. \"mymod\").",
                 nameof(modId));
         }
 

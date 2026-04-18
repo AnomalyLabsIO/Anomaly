@@ -6,6 +6,7 @@ using Il2CppInteractables.Interobjects.DoorUtils;
 using Il2CppMirror;
 using Il2CppMirror.LiteNetLib4Mirror;
 using Il2CppMapGeneration;
+using MelonLoader;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -56,17 +57,30 @@ public static class Client
 
     public static void Connect(string address)
     {
-        if (!IsConnected)
-            MainMenu.Connect(address);
+        if (IsConnected) return;
+
+        var menu = MainMenu;
+        if (menu == null)
+        {
+            MelonLogger.Warning($"Client.Connect('{address}'): main menu not available yet — call after ClientEvents.CanvasReady.");
+            return;
+        }
+
+        menu.Connect(address);
     }
 
     public static void Disconnect()
     {
-        if (IsConnected)
-        {
-            Il2CppGameCore.Console.Singleton.TypeCommand("disconnect");
-            Il2CppGameCore.Console.Singleton._clientCommandLogs.RemoveAt(Il2CppGameCore.Console.Singleton._clientCommandLogs.Count - 1);
-        }
+        if (!IsConnected) return;
+
+        var console = Il2CppGameCore.Console.Singleton;
+        console.TypeCommand("disconnect");
+
+        // TypeCommand appended our injected "disconnect" to the visible command log;
+        // pop it so the user's history isn't polluted by a programmatic disconnect.
+        var logs = console._clientCommandLogs;
+        if (logs != null && logs.Count > 0)
+            logs.RemoveAt(logs.Count - 1);
     }
 
     public static void Reconnect()

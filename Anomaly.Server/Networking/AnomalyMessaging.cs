@@ -15,6 +15,21 @@ public static class AnomalyMessaging
 {
     public static event Action<ReferenceHub, IAnomalyMessage> MessageReceived;
 
+    /// <summary>
+    /// Fires once per newly-authenticated hub the moment the Anomaly encrypted
+    /// channel is ready to carry messages to that client (i.e. the shared
+    /// encryption key has been set on its <c>encryptedChannelManager</c>).
+    /// Subsystems that need to push per-player state immediately after auth —
+    /// before the round-start snapshot goes out — hook this.
+    /// </summary>
+    public static event Action<ReferenceHub> ClientReady;
+
+    internal static void RaiseClientReady(ReferenceHub hub)
+    {
+        try { ClientReady?.Invoke(hub); }
+        catch (Exception ex) { Logger.Error($"AnomalyMessaging.ClientReady handler threw: {ex}"); }
+    }
+
     private static readonly SecureRandom SecureRandom = new SecureRandom();
 
     public static void SendToClient(ReferenceHub hub, IAnomalyMessage msg)

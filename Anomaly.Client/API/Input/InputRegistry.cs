@@ -2,15 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using Anomaly.Client.API.Mods;
+using Anomaly.Client.Internal;
 using Anomaly.Client.Internal.Input;
 using MelonLoader;
 
 namespace Anomaly.Client.API.Input;
 
 /// <summary>
-/// Static registry for named input bindings. Plugins register their bindings once
-/// (usually in <see cref="IAnomalyClientMod.OnEnable"/>), and poll state each
+/// Static registry for named input bindings. Mods register their bindings
+/// (typically in their <c>MelonMod.OnInitializeMelon</c>), and poll state each
 /// frame via <see cref="IsPressed"/>, <see cref="WasPressedThisFrame"/>, or
 /// <see cref="WasReleasedThisFrame"/>.
 /// </summary>
@@ -19,9 +19,9 @@ namespace Anomaly.Client.API.Input;
 /// default key declared at registration time. Conflict detection warns when two
 /// distinct bindings resolve to the same effective key but does not prevent the
 /// collision — final say is the user's.</para>
-/// <para>All bindings must be prefixed by a registered mod id (see
-/// <see cref="AnomalyClientMods"/>). Anomaly core itself uses the "anomaly."
-/// prefix.</para>
+/// <para>Binding ids must be syntactically valid dotted-lowercase namespaces
+/// (e.g. <c>"mymod.jump"</c>). The reserved <c>"anomaly."</c> prefix is used
+/// by Anomaly's own built-in bindings.</para>
 /// </remarks>
 public static class InputRegistry
 {
@@ -46,8 +46,10 @@ public static class InputRegistry
     public static event Action<string> Released;
 
     /// <summary>
-    /// Registers a binding. The id must be prefixed by a registered mod id or
-    /// the "anomaly." core prefix. Duplicate registrations are rejected with a warning.
+    /// Registers a binding. The id must be a syntactically valid dotted-lowercase
+    /// namespace (e.g. <c>"mymod.jump"</c>); the reserved <c>"anomaly."</c>
+    /// prefix is accepted for framework built-ins. Duplicate registrations are
+    /// rejected with a warning.
     /// </summary>
     public static void Register(InputBindingDefinition definition)
     {
@@ -146,11 +148,11 @@ public static class InputRegistry
         if (string.IsNullOrEmpty(id))
             throw new ArgumentException("Binding id must be non-empty.", nameof(id));
 
-        if (id.StartsWith("anomaly.", StringComparison.Ordinal)) return;
-        if (AnomalyClientMods.IsKeyOwnedByRegisteredMod(id)) return;
+        if (ModNamespace.IsReserved(id)) return;
+        if (ModNamespace.IsValid(id)) return;
 
         throw new ArgumentException(
-            $"Binding id '{id}' must be prefixed by a registered mod id (see AnomalyClientMods.Register).",
+            $"Binding id '{id}' must be a dotted-lowercase namespace prefixed by your mod id (e.g. \"mymod.jump\").",
             nameof(id));
     }
 

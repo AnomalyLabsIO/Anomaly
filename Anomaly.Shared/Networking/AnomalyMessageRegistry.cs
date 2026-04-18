@@ -96,6 +96,7 @@ namespace Anomaly.Shared.Networking
             Register("anomaly:asset:override-texture", () => new AssetOverrideTextureMessage());
             Register("anomaly:asset:override-clear", () => new AssetClearOverrideMessage());
             Register("anomaly:asset:override-clearall", () => new AssetClearAllOverridesMessage());
+
         }
 
         /// <summary>

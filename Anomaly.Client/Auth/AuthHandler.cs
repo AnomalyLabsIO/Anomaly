@@ -57,6 +57,7 @@ public static class AuthHandler
     }
 
     private static bool _authWriteCalled;
+    private static bool _phase2Sent;
     private static int _connectionGeneration;
 
     internal static void AuthWrite(NetDataWriter writer)
@@ -66,18 +67,10 @@ public static class AuthHandler
             MelonLogger.Msg("AuthWrite called");
             var server = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.clientAddress;
 
-            // If _authWriteCalled is still true but the connection state for this server
-            // was already consumed (removed after phase 2), this is a fresh connection
-            // attempt (e.g. after round restart disconnect). Reset the flag and bump the
-            // generation so any still-yielding ConnectAgain coroutine from the previous
-            // session bails out instead of issuing a stale phase-2 reconnect.
-            if (_authWriteCalled && !_connections.ContainsKey(server))
-            {
-                MelonLogger.Msg("Resetting auth state for fresh connection attempt (previous session completed or expired)");
-                _authWriteCalled = false;
-                _connectionGeneration++;
-            }
-
+            // Dedup: LiteNetLib invokes GetConnectData twice per logical connect
+            // (~30ms apart, likely IPv4+IPv6 or internal retry) and IL2CPP adds
+            // its own vtable-dispatch duplicates. Second+ calls must be no-ops
+            // so the writer keeps the phase data written by the first call.
             if (_authWriteCalled)
             {
                 MelonLogger.Warning("AuthWrite called again for same connection — ignoring duplicate GetConnectData call");
@@ -127,16 +120,21 @@ public static class AuthHandler
                 var clientHandshake = clientEnv.CreateHandshake();
 
                 writer.PutBytesWithLength(clientHandshake.Encode());
+                _phase2Sent = false;
             }
             else
             {
-                _connections.Remove(server);
                 var attempt = connection.Session.CreateLoginAttempt(connection.Handshake);
                 writer.PutBytesWithLength(attempt.Encode());
                 writer.Put(connection.ServerIdentifier, 0);
                 writer.Put(PlayerAuth.Username, 0);
 
                 CurrentKey = connection.Session.GetSharedSecret(connection.Handshake);
+                // Don't remove _connections[server] here — LiteNetLib calls
+                // GetConnectData twice per connect and the duplicate must
+                // still see the entry so it dedups instead of re-entering
+                // phase-1. OnDisconnected clears the entry after phase-2.
+                _phase2Sent = true;
             }
         }
         catch(Exception e)
@@ -215,6 +213,23 @@ public static class AuthHandler
         _authWriteCalled = false;
         UsingAnomalyAuth = false;
         AuthStatusOverlay.EndAuthenticating();
+
+        // A disconnect BEFORE phase-2 was sent is the transient reject that
+        // happens between phase-1 (handshake) and phase-2 (login) — the
+        // server rejects the phase-1 packet on purpose to push the handshake
+        // back in the rejection data. We need to preserve _connections and
+        // _connectionGeneration so ConnectAgain can use the stored handshake.
+        //
+        // A disconnect AFTER phase-2 was sent ends the session (success or
+        // failure); the cached handshake is single-use server-side, so drop
+        // it and bump the generation to cancel any stale ConnectAgain.
+        if (_phase2Sent)
+        {
+            _connections.Clear();
+            _connectionGeneration++;
+            _phase2Sent = false;
+        }
+
         MelonLogger.Msg("OnDisconnected");
     }
 }

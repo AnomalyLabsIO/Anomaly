@@ -15,6 +15,21 @@ internal static class CrashHooks
     private const int FloodThreshold = 50;
     private static readonly TimeSpan FloodWindow = TimeSpan.FromSeconds(10);
 
+    // Unity log exception dedup: same signature within the window reports once.
+    private static readonly ConcurrentDictionary<string, UnityLogRateLimiter> _unityLogLimiters = new();
+    private static readonly TimeSpan UnityLogDedupWindow = TimeSpan.FromSeconds(30);
+
+    // Well-known vanilla SCP:SL exceptions that self-resolve and shouldn't
+    // generate reports at all. Each entry is a substring matched against the
+    // first line of the stack trace. Add to this list when a new benign
+    // repeat-offender appears in the flood.
+    private static readonly string[] VanillaBenignStackSignatures =
+    {
+        // First-frame Alphawarhead UI access before AlphaWarheadController.Singleton is set
+        "AlphaWarheadOutsitePanel.UpdateDisplays",
+        "AlphaWarheadController.get_TimeUntilDetonation",
+    };
+
     // SEH filter must be kept alive to prevent GC collection
     private static NativeMethods.UnhandledExceptionFilterDelegate _sehFilterDelegate;
 
@@ -136,6 +151,24 @@ internal static class CrashHooks
         // Write crash reports for exceptions and asserts
         if (type == LogType.Exception || type == LogType.Assert)
         {
+            // Skip reports for well-known vanilla SCP:SL bugs that self-
+            // heal within a frame or two (e.g., Alphawarhead panel null deref
+            // before AlphaWarheadController.Singleton resolves).
+            if (IsKnownBenignVanillaException(stackTrace))
+                return;
+
+            // Dedup: same (message + top-of-stack) within the window gets
+            // one report. The FirstN counter lets a handful through so the
+            // first instance is always captured, and further recurrences
+            // don't flood the disk and console.
+            string signature = BuildUnityLogSignature(message, stackTrace);
+            // Use the non-lambda GetOrAdd overload — the Func<K,V> variant
+            // pulls in nullable-reference-type annotations from its signature
+            // and triggers CS0656 when Nullable is disabled on this project.
+            var limiter = _unityLogLimiters.GetOrAdd(signature, new UnityLogRateLimiter());
+            if (!limiter.ShouldReport())
+                return;
+
             if (Interlocked.CompareExchange(ref _isHandlingCrash, 1, 0) != 0)
                 return;
 
@@ -164,6 +197,33 @@ internal static class CrashHooks
                 Interlocked.Exchange(ref _isHandlingCrash, 0);
             }
         }
+    }
+
+    private static bool IsKnownBenignVanillaException(string stackTrace)
+    {
+        if (string.IsNullOrEmpty(stackTrace)) return false;
+        foreach (var sig in VanillaBenignStackSignatures)
+        {
+            if (stackTrace.IndexOf(sig, StringComparison.Ordinal) >= 0) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Build a stable signature for Unity log exceptions to enable dedup.
+    /// Uses the message + the first non-empty stack frame (usually the
+    /// topmost method in the exception origin), which is enough to catch
+    /// per-frame repeats without merging genuinely different exceptions.
+    /// </summary>
+    private static string BuildUnityLogSignature(string message, string stackTrace)
+    {
+        string firstFrame = "";
+        if (!string.IsNullOrEmpty(stackTrace))
+        {
+            int nl = stackTrace.IndexOf('\n');
+            firstFrame = (nl >= 0 ? stackTrace.Substring(0, nl) : stackTrace).Trim();
+        }
+        return (message ?? "") + "|" + firstFrame;
     }
 
     private static int SehFilter(IntPtr exceptionPointers)
@@ -233,6 +293,27 @@ internal static class CrashHooks
                 _windowStart = DateTime.UtcNow;
             }
             Interlocked.Increment(ref _count);
+        }
+    }
+
+    /// <summary>
+    /// Per-signature rate limiter for Unity log exceptions. Report the
+    /// first occurrence in each window; drop the rest. The window resets
+    /// when <see cref="UnityLogDedupWindow"/> elapses with no hits.
+    /// </summary>
+    private class UnityLogRateLimiter
+    {
+        private DateTime _lastReport = DateTime.MinValue;
+
+        public bool ShouldReport()
+        {
+            var now = DateTime.UtcNow;
+            lock (this)
+            {
+                if (now - _lastReport < UnityLogDedupWindow) return false;
+                _lastReport = now;
+                return true;
+            }
         }
     }
 }

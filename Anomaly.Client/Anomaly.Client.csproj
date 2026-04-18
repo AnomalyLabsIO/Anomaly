@@ -364,9 +364,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="API\Mods\AnomalyClientModAttribute.cs" />
-		<Compile Include="API\Mods\AnomalyClientMods.cs" />
-		<Compile Include="API\Mods\IAnomalyClientMod.cs" />
+		<Compile Include="Internal\ModNamespace.cs" />
 		<Compile Include="API\Scheduling\ScheduledTask.cs" />
 		<Compile Include="API\Scheduling\Scheduler.cs" />
 		<Compile Include="Internal\Scheduling\SchedulerTick.cs" />
@@ -505,6 +503,8 @@
 		<Compile Include="FileTransfer\FileCache.cs" />
 		<Compile Include="FileTransfer\FileTransferClient.cs" />
 		<Compile Include="Internal\Bootstrap\ClientRuntime.cs" />
+		<Compile Include="Internal\Map\FacilityBootstrapMessages.cs" />
+		<Compile Include="Internal\Map\FacilityRecipeClient.cs" />
 		<Compile Include="Internal\SilentRoleChange.cs" />
 		<Compile Include="Internal\Effects\EffectStateTracker.cs" />
 		<Compile Include="Internal\Stats\HealthStateTracker.cs" />
@@ -517,9 +517,14 @@
 		<Compile Include="Patches\Menu\CanvasPatch.cs" />
 		<Compile Include="Patches\Menu\NewServerBrowserOnEnablePatch.cs" />
 		<Compile Include="Patches\Menu\NewsLoaderStartPatch.cs" />
+		<Compile Include="Patches\Diagnostics\MirrorDiagnosticPatches.cs" />
+		<Compile Include="Patches\Mirror\EncryptedChannelHandlerFix.cs" />
 		<Compile Include="Patches\Mirror\NetworkIdentityOnStartClientPatch.cs" />
 		<Compile Include="Patches\Mirror\NetworkManagerRegisterClientMessages.cs" />
+		<Compile Include="Patches\Mirror\PrefabRegistrationFix.cs" />
 		<Compile Include="Patches\Network\CustomNetworkManagerPatch.cs" />
+		<Compile Include="Patches\Runtime\AtlasZoneGeneratorPatch.cs" />
+		<Compile Include="Patches\Runtime\AudioLogServerSyncClipFix.cs" />
 		<Compile Include="Patches\Runtime\InventoryPatch.cs" />
 		<Compile Include="Patches\Runtime\ItemPickupBasePatch.cs" />
 		<Compile Include="Patches\Runtime\AdminToyBasePatch.cs" />
@@ -540,7 +545,6 @@
 	  <PackageReference Include="HarmonyX" Version="2.16.0" />
 	  <PackageReference Include="LavaGang.MelonLoader" Version="0.7.2" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1" />
-	  <PackageReference Include="System.Runtime.InteropServices" Version="4.3.0" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -548,14 +552,15 @@
 	</ItemGroup>
 	
 	<!--
-	  Optional post-build deploy to a local test client. Override $(AnomalyClientModsDir)
-	  via env var or a .csproj.user file to change the target. If the directory doesn't
-	  exist on this machine, the build succeeds without copying.
+	  Post-build deploy to the local test client's MelonLoader Mods folder. Override
+	  $(AnomalyClientModsDir) via env var or a .csproj.user file to redirect.
 	-->
 	<PropertyGroup>
-		<AnomalyClientModsDir Condition="'$(AnomalyClientModsDir)' == ''">..\..\..\Client\Mods</AnomalyClientModsDir>
+		<AnomalyClientModsDir Condition="'$(AnomalyClientModsDir)' == ''">E:\Projects\AnomalyLabs\Client\Mods</AnomalyClientModsDir>
 	</PropertyGroup>
-	<Target Name="CopyToLocalClient" AfterTargets="Build" Condition="Exists('$(AnomalyClientModsDir)')">
-		<Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientModsDir)" SkipUnchangedFiles="true" />
+	<Target Name="CopyToLocalClient" AfterTargets="Build">
+		<Message Importance="high" Text="Anomaly.Client: copying $(TargetFileName) -&gt; $(AnomalyClientModsDir)" Condition="Exists('$(AnomalyClientModsDir)')" />
+		<Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientModsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientModsDir)')" />
+		<Warning Text="Anomaly.Client: AnomalyClientModsDir does not exist: $(AnomalyClientModsDir)" Condition="!Exists('$(AnomalyClientModsDir)')" />
 	</Target>
 </Project>

@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Anomaly.Client.API.Mods;
+using Anomaly.Client.Internal;
 using MelonLoader;
 
 namespace Anomaly.Client.API.Scheduling;
@@ -14,9 +14,14 @@ namespace Anomaly.Client.API.Scheduling;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Cooldowns</b> are addressed by a string key, which must be prefixed by a
-/// registered mod id (see <see cref="AnomalyClientMods"/>). This prevents
-/// accidental collisions between mods.
+/// <b>Cooldowns</b> are addressed by a string key, which must be a syntactically
+/// valid dotted-lowercase namespace (e.g. <c>"mymod.ability"</c>). Use your
+/// mod id as the prefix so keys don't collide across mods.
+/// </para>
+/// <para>
+/// Scheduled tasks and cooldowns are automatically cleared on client disconnect
+/// and scene load by <c>ClientRuntime</c>; don't schedule cross-session work
+/// expecting it to survive either boundary.
 /// </para>
 /// <para>
 /// Server-authoritative cooldowns (e.g. custom ability cooldowns broadcast to the
@@ -219,13 +224,11 @@ public static class Scheduler
         if (string.IsNullOrEmpty(key))
             throw new ArgumentException("Cooldown key must be non-empty.", nameof(key));
 
-        // Require the key to be owned by a registered mod unless the Anomaly core
-        // itself is the owner (prefix "anomaly."). This prevents accidental collisions.
-        if (key.StartsWith("anomaly.", StringComparison.Ordinal)) return;
-        if (AnomalyClientMods.IsKeyOwnedByRegisteredMod(key)) return;
+        if (ModNamespace.IsReserved(key)) return;
+        if (ModNamespace.IsValid(key)) return;
 
         throw new ArgumentException(
-            $"Cooldown key '{key}' must be prefixed by a registered mod id (see AnomalyClientMods.Register).",
+            $"Cooldown key '{key}' must be a dotted-lowercase namespace prefixed by your mod id (e.g. \"mymod.ability\").",
             nameof(key));
     }
 }

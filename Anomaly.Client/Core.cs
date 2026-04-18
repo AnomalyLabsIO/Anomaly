@@ -1,9 +1,10 @@
 using System.Reflection;
+using Anomaly.Client.API.Commands;
 using Anomaly.Client.API.Config;
 using Anomaly.Client.API.Localization;
-using Anomaly.Client.API.Mods;
 using Anomaly.Client.API.Persistence;
 using Anomaly.Client.Auth;
+using Anomaly.Client.Commands;
 using Anomaly.Client.Diagnostics;
 using Anomaly.Client.Internal.Bootstrap;
 using Anomaly.Client.Internal.UI;
@@ -32,7 +33,7 @@ public class Core : MelonMod
 
         HarmonyInstance.PatchAll();
 
-        CustomNetworkManager.Modded = true;
+        //CustomNetworkManager.Modded = true;
         CentralAuthManager.NoAuthStartupArg = "-noauth";
 
         AuthHandler.Init();
@@ -40,10 +41,7 @@ public class Core : MelonMod
         DiagnosticBootstrap.Initialize();
         UiBootstrap.Init();
 
-        // Discover [AnomalyClientMod]-attributed classes in loaded assemblies.
-        // Mods that prefer explicit registration can still call
-        // AnomalyClientMods.Register(this) directly from their own OnInitializeMelon.
-        AnomalyClientMods.Discover();
+        CommandRegistry.Register("anomaly", new NameCommand());
 
         LoggerInstance.Msg($"Initialized (locale: {Tr.ActiveLocale}).");
     }
@@ -56,7 +54,6 @@ public class Core : MelonMod
 
     public override void OnApplicationQuit()
     {
-        AnomalyClientMods.DisableAll();
         ClientConfig.DisposeAll();
         ClientPersistence.FlushAll();
         DiagnosticBootstrap.Shutdown();

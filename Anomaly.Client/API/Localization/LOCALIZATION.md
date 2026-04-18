@@ -69,7 +69,7 @@ public override void OnInitializeMelon()
 }
 ```
 
-**Important:** Anomaly initializes its own localization in `Core.OnInitializeMelon()`. Make sure your mod's `MelonPriority` is lower than Anomaly's (or just rely on the default — MelonLoader processes `InitializeMelon` in dependency order, and referencing Anomaly.Client makes you load after it).
+**Important:** Anomaly initializes its own localization in `Core.OnInitializeMelon()`, which means yours must run after it. Declare the dependency explicitly with `[assembly: MelonAdditionalDependencies("Anomaly")]` — CLR assembly references do not affect MelonLoader's `OnInitializeMelon` order. See [MODDING.md](../../MODDING.md) for the full load-order contract.
 
 ### 4. Look up translations
 

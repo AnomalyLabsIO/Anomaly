@@ -1,5 +1,6 @@
 using System;
 using Anomaly.Client.API.Features;
+using Anomaly.Client.API.Scheduling;
 using Anomaly.Client.Events.Args;
 using Anomaly.Client.Events.Handlers;
 using Anomaly.Client.Internal.Effects;
@@ -66,10 +67,14 @@ internal static class ClientRuntime
             (string serverIp, ushort serverPort) = GetServerEndpoint();
 
             IsClientReady = false;
+            // Dispatch disconnect before clearing so subscribers see the final state.
+            // Scheduler.ClearAll runs last so tasks scheduled during disconnect
+            // handlers (short-lived server-session work) still get cancelled.
             ClientEvents.OnDisconnected(new ClientDisconnectedEventArgs(serverIp, serverPort));
             EffectStateTracker.Clear();
             HealthStateTracker.Clear();
             PlayerRegistry.Clear();
+            Scheduler.ClearAll();
         }, nameof(HandleClientDisconnected));
     }
 

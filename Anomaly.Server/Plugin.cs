@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using Anomaly.Server.API.Plugins;
 using Anomaly.Server.Assets;
+using Anomaly.Server.Diagnostics;
 using Anomaly.Server.FileTransfer;
+using Anomaly.Server.Map;
 using Anomaly.Server.Networking;
 using Anomaly.Server.Round;
 using Anomaly.Server.Utils;
@@ -30,6 +32,7 @@ public class Plugin : Plugin<Config>
         try
         {
             Logger.Info("Anomaly.Server enabling...");
+            //CustomNetworkManager.Modded = true;
 
             OffThreadLogger.Init();
             Logger.Info("OffThreadLogger initialized");
@@ -56,6 +59,8 @@ public class Plugin : Plugin<Config>
             };
 
             RoundStateBroadcaster.Init();
+            RoundStartBridge.Init();
+            FacilityLayout.Init();
 
             Harmony.PatchAll();
             var patchedMethods = Harmony.GetPatchedMethods().ToList();
@@ -64,6 +69,8 @@ public class Plugin : Plugin<Config>
             {
                 Logger.Info($"  - {method.DeclaringType?.FullName}.{method.Name}");
             }
+
+            AuthAndRoleDiag.Init();
 
             // Discover [AnomalyPlugin]-attributed LabAPI plugins. Runs after Harmony
             // so any plugins loaded alongside us are already instantiated.
@@ -77,6 +84,8 @@ public class Plugin : Plugin<Config>
 
     public override void Disable()
     {
+        AuthAndRoleDiag.Disable();
+        RoundStartBridge.Disable();
         RoundStateBroadcaster.Disable();
         AssetFileWatcher.Stop();
         Harmony.UnpatchAll();

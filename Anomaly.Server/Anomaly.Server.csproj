@@ -165,6 +165,7 @@
         <Compile Include="API\Plugins\AnomalyPluginAttribute.cs" />
         <Compile Include="API\Plugins\AnomalyServerPlugins.cs" />
         <Compile Include="Round\RoundStateBroadcaster.cs" />
+        <Compile Include="Round\RoundStartBridge.cs" />
         <Compile Include="Auth\AuthHandler.cs" />
         <Compile Include="Auth\Connection.cs" />
         <Compile Include="Auth\PlayerStorage.cs" />
@@ -180,7 +181,14 @@
         <Compile Include="Assets\AssetSpawner.cs" />
         <Compile Include="FileTransfer\FileTransferSession.cs" />
         <Compile Include="FileTransfer\ServerAssetManager.cs" />
+        <Compile Include="Map\FacilityGlyphs.cs" />
+        <Compile Include="Map\FacilityBootstrapMessages.cs" />
+        <Compile Include="Map\FacilityLayout.cs" />
+        <Compile Include="Map\RecipeEntry.cs" />
+        <Compile Include="Map\Patches\AtlasZoneGeneratorPatch.cs" />
+        <Compile Include="Map\Patches\SeedSynchronizerPatch.cs" />
         <Compile Include="Utils\OffThreadLogger.cs" />
+        <Compile Include="Diagnostics\AuthAndRoleDiag.cs" />
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj">
@@ -190,18 +198,17 @@
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
     <!--
-      Optional post-build deploy to a local test server. Set $(AnomalyServerDir) in your
-      environment (env var) or user .csproj.user to point at your server's install root.
-      If the target doesn't exist on this machine the build succeeds without copying.
+      Post-build deploy to the local test server's LabAPI plugins folder. Override
+      $(AnomalyPluginsDir) via env var or a .csproj.user file to redirect. Anomaly.Shared
+      is deployed by its own post-build target so it isn't copied here.
     -->
     <PropertyGroup>
-      <AnomalyServerDir Condition="'$(AnomalyServerDir)' == ''">..\..\..\Server\server</AnomalyServerDir>
-      <AnomalyPluginsDir>$(AnomalyServerDir)\AppData\SCP Secret Laboratory\LabAPI\plugins\global</AnomalyPluginsDir>
-      <AnomalyDependenciesDir>$(AnomalyServerDir)\AppData\SCP Secret Laboratory\LabAPI\dependencies\global</AnomalyDependenciesDir>
+      <AnomalyPluginsDir Condition="'$(AnomalyPluginsDir)' == ''">E:\Projects\AnomalyLabs\Server\server\AppData\SCP Secret Laboratory\LabAPI\plugins\global</AnomalyPluginsDir>
     </PropertyGroup>
-    <Target Name="CopyToLocalServer" AfterTargets="Build" Condition="Exists('$(AnomalyPluginsDir)')">
-      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyPluginsDir)" SkipUnchangedFiles="true" />
-      <Copy SourceFiles="$(TargetDir)Anomaly.Shared.dll" DestinationFolder="$(AnomalyDependenciesDir)" SkipUnchangedFiles="true" Condition="Exists('$(AnomalyDependenciesDir)')" />
+    <Target Name="CopyToLocalServer" AfterTargets="Build">
+      <Message Importance="high" Text="Anomaly.Server: copying $(TargetFileName) -&gt; $(AnomalyPluginsDir)" Condition="Exists('$(AnomalyPluginsDir)')" />
+      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyPluginsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyPluginsDir)')" />
+      <Warning Text="Anomaly.Server: AnomalyPluginsDir does not exist: $(AnomalyPluginsDir)" Condition="!Exists('$(AnomalyPluginsDir)')" />
     </Target>
     <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
          Other similar extension points exist, see Microsoft.Common.targets.

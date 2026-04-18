@@ -69,6 +69,8 @@
         <Compile Include="Networking\Messages\AssetSpawnMessage.cs" />
         <Compile Include="Networking\Messages\BoneTransformsMessage.cs" />
         <Compile Include="Networking\Messages\EmotionBlendShapesMessage.cs" />
+        <Compile Include="Networking\Messages\FacilityAtlasEditsMessage.cs" />
+        <Compile Include="Networking\Messages\FacilityLayoutRecipeMessage.cs" />
         <Compile Include="Networking\Messages\FileAckMessage.cs" />
         <Compile Include="Networking\Messages\FileChunkMessage.cs" />
         <Compile Include="Networking\Messages\FileManifestMessage.cs" />
@@ -80,19 +82,21 @@
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
     <!--
-      Optional post-build deploy to a local test server and client UserLibs directory.
-      Set $(AnomalyServerDir) / $(AnomalyClientDir) to override the defaults. If the
-      target directories don't exist on this machine, the build succeeds without copying.
+      Post-build deploy to the local test server's LabAPI dependencies folder and the
+      local test client's MelonLoader UserLibs folder. Override $(AnomalyServerDepsDir)
+      or $(AnomalyClientUserLibsDir) via env var or a .csproj.user file to redirect.
     -->
     <PropertyGroup>
-      <AnomalyServerDir Condition="'$(AnomalyServerDir)' == ''">..\..\..\Server\server</AnomalyServerDir>
-      <AnomalyClientDir Condition="'$(AnomalyClientDir)' == ''">..\..\..\Client</AnomalyClientDir>
-      <AnomalyServerDepsDir>$(AnomalyServerDir)\AppData\SCP Secret Laboratory\LabAPI\dependencies\global</AnomalyServerDepsDir>
-      <AnomalyClientUserLibsDir>$(AnomalyClientDir)\UserLibs</AnomalyClientUserLibsDir>
+      <AnomalyServerDepsDir Condition="'$(AnomalyServerDepsDir)' == ''">E:\Projects\AnomalyLabs\Server\server\AppData\SCP Secret Laboratory\LabAPI\dependencies\global</AnomalyServerDepsDir>
+      <AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">E:\Projects\AnomalyLabs\Client\UserLibs</AnomalyClientUserLibsDir>
     </PropertyGroup>
     <Target Name="CopySharedToLocalTargets" AfterTargets="Build">
-      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyServerDepsDir)" SkipUnchangedFiles="true" Condition="Exists('$(AnomalyServerDepsDir)')" />
-      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)')" />
+      <Message Importance="high" Text="Anomaly.Shared: copying $(TargetFileName) -&gt; $(AnomalyServerDepsDir)" Condition="Exists('$(AnomalyServerDepsDir)')" />
+      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyServerDepsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyServerDepsDir)')" />
+      <Message Importance="high" Text="Anomaly.Shared: copying $(TargetFileName) -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)')" />
+      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)')" />
+      <Warning Text="Anomaly.Shared: AnomalyServerDepsDir does not exist: $(AnomalyServerDepsDir)" Condition="!Exists('$(AnomalyServerDepsDir)')" />
+      <Warning Text="Anomaly.Shared: AnomalyClientUserLibsDir does not exist: $(AnomalyClientUserLibsDir)" Condition="!Exists('$(AnomalyClientUserLibsDir)')" />
     </Target>
     <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
          Other similar extension points exist, see Microsoft.Common.targets.

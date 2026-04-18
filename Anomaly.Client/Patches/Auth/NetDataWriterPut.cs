@@ -21,7 +21,8 @@ namespace Anomaly.Client.Patches.Auth;
 [HarmonyPatch]
 public static class NetDataWriterPut
 {
-    
+    private static int _lastRefusedFrame = -1;
+    private static int _lastDisconnectFrame = -1;
 
     [HarmonyPatch(typeof(CustomLiteNetLib4MirrorTransport), nameof(CustomLiteNetLib4MirrorTransport.GetConnectData))]
     [HarmonyPrefix]
@@ -45,6 +46,17 @@ public static class NetDataWriterPut
         if (!AuthHandler.UsingAnomalyAuth)
             return true;
 
+        // IL2CPP dispatches virtual-method prefixes twice per invocation (once
+        // for the derived slot, once for the base). The first call consumes
+        // bytes from DisconnectInfo.AdditionalData inside RejectAuth; a second
+        // call in the same frame would read past the consumed bytes, misread
+        // the handshake response as a real rejection, and forward it to the
+        // vanilla handler — which tears down the connection.
+        int frame = Time.frameCount;
+        if (frame == _lastRefusedFrame)
+            return false;
+        _lastRefusedFrame = frame;
+
         MelonLogger.Msg($"Connection refused - Reason: {disconnectinfo.Reason}, HasData: {disconnectinfo.AdditionalData?.RawData != null}");
         return AuthHandler.RejectAuth(disconnectinfo);
     }
@@ -53,6 +65,11 @@ public static class NetDataWriterPut
     [HarmonyPrefix]
     public static void OnClientDisconnect()
     {
+        int frame = Time.frameCount;
+        if (frame == _lastDisconnectFrame)
+            return;
+        _lastDisconnectFrame = frame;
+
         AuthHandler.OnDisconnected();
     }
 }

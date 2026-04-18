@@ -7,6 +7,8 @@ using Anomaly.Shared.Networking;
 using CentralAuth;
 using Cryptography;
 using HarmonyLib;
+using LabApi.Events.Arguments.PlayerEvents;
+using LabApi.Events.Handlers;
 using MEC;
 using Mirror;
 using Mirror.LiteNetLib4Mirror;
@@ -29,13 +31,13 @@ public static class PlayerAuthenticationManagerPatch
     }*/
     
 
-    [HarmonyPrefix]
+    [HarmonyPostfix]
     [HarmonyPatch(typeof(PlayerAuthenticationManager), nameof(PlayerAuthenticationManager.FixedUpdate))]
-    public static bool FixedUpdate(PlayerAuthenticationManager __instance)
+    public static void FixedUpdate(PlayerAuthenticationManager __instance)
     {
-        if (__instance.isLocalPlayer) return true; // Let vanilla handle the host player
-        if (__instance._authenticationRequested) return false; // Already authed by us, skip vanilla
-        if (!__instance.connectionToClient.isReady) return false; // Not ready yet, but don't let vanilla run either
+        if (__instance.isLocalPlayer) return;
+        if (__instance._authenticationRequested) return;
+        if (!__instance.connectionToClient.isReady) return;
 
         OffThreadLogger.Info("Processing auth in FixedUpdate for connection " + __instance.connectionToClient.connectionId);
 
@@ -44,7 +46,7 @@ public static class PlayerAuthenticationManagerPatch
         {
             OffThreadLogger.Error($"Player from {endPoint} joined the server without being authenticated. No stored player data found.");
             __instance.RejectAuthentication("Authentication failed Server Side", null, false);
-            return false;
+            return;
         }
 
         __instance._authenticationRequested = true;
@@ -54,12 +56,22 @@ public static class PlayerAuthenticationManagerPatch
         __instance._hub.nicknameSync.UpdateNickname(player.NickName);
         __instance._hub.encryptedChannelManager.EncryptionKey = player.SharedKey;
         OffThreadLogger.Info($"Authenticated {player.NickName} ({player.UserId}) from {endPoint}, encryption key set ({player.SharedKey?.Length ?? 0} bytes)");
+        __instance._hub.serverRoles.RefreshPermissions(false);
+
+        // Vanilla fires PlayerEvents.OnJoined from
+        // PlayerAuthenticationManager.ServerReceiveAuthenticationResponse (the
+        // central-auth callback we bypass) and from NicknameSync.CmdSetNick (the
+        // modded client doesn't send CmdSetNick — we set the nick server-side
+        // above). Without this explicit invocation, no LabAPI plugin sees our
+        // hub as "joined", which breaks any plugin hooked to PlayerEvents.Joined.
+        try { PlayerEvents.OnJoined(new PlayerJoinedEventArgs(__instance._hub)); }
+        catch (Exception ex) { OffThreadLogger.Error($"PlayerEvents.OnJoined dispatch failed: {ex}"); }
+
+        AnomalyMessaging.RaiseClientReady(__instance._hub);
         Timing.CallDelayed(1f, () =>
         {
             __instance._hub.serverRoles.RefreshPermissions(false);
-            //Exiled.Events.Patches.Events.Player.Verified.Postfix(__instance);
         });
-        return false; // Skip vanilla FixedUpdate entirely
     }
 
     [HarmonyPrefix]
@@ -140,8 +152,13 @@ public static class PlayerAuthenticationManagerPatch
     [HarmonyPatch(typeof(EncryptedChannelManager), nameof(EncryptedChannelManager.ServerReceivePackedMessage))]
     public static bool OnReceivePackedMessage(NetworkConnection conn, EncryptedChannelManager.EncryptedMessageOutside packed)
     {
-        if (!ReferenceHub.TryGetHub(conn.identity.gameObject, out var hub))
+        if (!ReferenceHub.TryGetHub(conn, out var hub))
+        {
+            OffThreadLogger.Warn(
+                $"Encrypted message dropped: no hub for connection {conn?.connectionId ?? -1} " +
+                $"(isReady={conn?.isReady}, identity={(conn?.identity == null ? "null" : conn.identity.netId.ToString())}).");
             return false;
+        }
 
         EncryptedChannelManager.EncryptedChannel channel;
         uint counter;
