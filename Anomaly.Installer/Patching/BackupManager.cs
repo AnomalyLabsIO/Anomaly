@@ -24,11 +24,18 @@ internal static class BackupManager
             return;
 
         File.Copy(filePath, backupPath);
+
+        // Verify the backup was written correctly — a silent truncation here would
+        // leave us with a bad .bak that passes HasBackup() but fails restore.
+        string sourceHash = ResourceIntegrity.ComputeFileSha256(filePath);
+        string backupHash = ResourceIntegrity.ComputeFileSha256(backupPath);
+        ResourceIntegrity.VerifyHash($"backup of {Path.GetFileName(filePath)}", sourceHash, backupHash);
     }
 
     /// <summary>
     /// Restores <paramref name="filePath"/> from its sidecar .bak. Returns true if a
-    /// restore happened, false if no backup was available.
+    /// restore happened, false if no backup was available. Throws if the restore
+    /// completed but the on-disk bytes do not match the backup (disk full, AV lock, etc.).
     /// </summary>
     public static bool RestoreFile(string filePath)
     {
@@ -37,6 +44,13 @@ internal static class BackupManager
             return false;
 
         File.Copy(backupPath, filePath, overwrite: true);
+
+        string backupHash = ResourceIntegrity.ComputeFileSha256(backupPath);
+        string restoredHash = ResourceIntegrity.ComputeFileSha256(filePath);
+        ResourceIntegrity.VerifyHash(
+            $"restored {Path.GetFileName(filePath)} (backup at {backupPath})",
+            backupHash, restoredHash);
+
         return true;
     }
 

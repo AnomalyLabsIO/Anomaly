@@ -32,7 +32,7 @@ public class Plugin : Plugin<Config>
         try
         {
             Logger.Info("Anomaly.Server enabling...");
-            //CustomNetworkManager.Modded = true;
+            CustomNetworkManager.Modded = true;
 
             OffThreadLogger.Init();
             Logger.Info("OffThreadLogger initialized");

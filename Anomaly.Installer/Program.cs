@@ -32,12 +32,21 @@ public static class Program
                 ConsoleUI.PrintWarning("DRY RUN — no files will be written.");
             Console.WriteLine();
 
+            if (parsedArgs.Uninstall)
+            {
+                string installerDir = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
+                int code = Uninstaller.Run(installerDir);
+                WaitForExit();
+                return code;
+            }
+
             Run(parsedArgs);
             return 0;
         }
         catch (InstallerException ex)
         {
             ConsoleUI.PrintError(ex.Message);
+            PrintLogPathHint(logPath);
             WaitForExit();
             return 1;
         }
@@ -45,6 +54,7 @@ public static class Program
         {
             ConsoleUI.PrintError($"Unexpected error: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
+            PrintLogPathHint(logPath);
             WaitForExit();
             return 1;
         }
@@ -69,10 +79,14 @@ public static class Program
         Console.WriteLine();
 
         // Get vanilla game path
-        string vanillaPath = GetVanillaPath(args);
+        string vanillaPath = GetVanillaPath(args, platform);
         string vanillaDir = Path.GetDirectoryName(vanillaPath)!;
         Console.WriteLine($"Vanilla game directory: {vanillaDir}");
         Console.WriteLine();
+
+        // Preflight before anything destructive — fail loud if we can't write,
+        // don't have disk space, or are missing Wine on Linux.
+        Preflight.Run(installerDir, vanillaDir, platform, args.DryRun);
 
         // Save vanilla path to the canonical Launcher-visible location (%APPDATA%/Anomaly/).
         // Shared schema: the Launcher reads this same file via PathService.VanillaPathFile.
@@ -120,18 +134,11 @@ public static class Program
 
         // In dry-run we stop before the destructive steps (we can't load IL2CPP without a
         // real GameAssembly.dll in place, and users just want a path sanity check).
+        // We do still exercise the read-only checks for steps 3-6 so path/config issues
+        // surface here rather than mid-install.
         if (args.DryRun)
         {
-            string gaPreview = Path.Combine(installerDir, "GameAssembly.dll");
-            string mdPreview = Path.Combine(installerDir, "SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat");
-            string ggmPreview = Path.Combine(installerDir, "SCPSL_Data", "globalgamemanagers");
-
-            Console.WriteLine("[dry-run] Remaining steps that WOULD run:");
-            Console.WriteLine($"[dry-run]   3. Load IL2CPP from {gaPreview}");
-            Console.WriteLine($"[dry-run]   4. Backup + patch {gaPreview} + {mdPreview} + {ggmPreview}");
-            Console.WriteLine($"[dry-run]   5. Fix bundle version in {ggmPreview}");
-            Console.WriteLine($"[dry-run]   6. Download MelonLoader 0.7.2 into {installerDir}");
-            Console.WriteLine($"[dry-run]   7. Verify Mods/ and UserLibs/");
+            DryRunRemainingSteps(installerDir, vanillaDir, patchInfo);
             Console.WriteLine();
             Console.WriteLine("[dry-run] Dry run complete. Re-run without --dry-run to install.");
             Console.WriteLine();
@@ -160,7 +167,7 @@ public static class Program
             Patcher.FixMetadataVersion(patchInfo.metadataVersion, installerDir);
 
             gameAssemblyData = LoadAndUnpackGameAssembly(
-                gameAssemblyPath, metadataPath, platform, installerDir, patchInfo.metadataVersion);
+                gameAssemblyPath, metadataPath, platform, installerDir, patchInfo.metadataVersion, args.UnpackTimeoutMs);
 
             il2CppManager = new Il2CppManager(gameAssemblyData, installerDir);
             il2CppManager.LoadIl2Cpp(metadataPath, patchInfo.metadataVersion);
@@ -177,6 +184,9 @@ public static class Program
             var patcher = new Patcher(gameAssemblyPath, gameAssemblyData, il2CppManager, patchInfo);
             patcher.PatchGameAssembly();
             patcher.SaveGameAssembly();
+            patcher.VerifySavedAssembly();
+            Console.WriteLine("  Re-parsing patched GameAssembly to verify structure...");
+            patcher.VerifyPatchedStructure(metadataPath, patchInfo.metadataVersion, installerDir);
             ConsoleUI.PrintSuccess("GameAssembly.dll patched.");
             Console.WriteLine();
 
@@ -199,14 +209,14 @@ public static class Program
         catch
         {
             ConsoleUI.PrintError("Patching failed — restoring vanilla files from backup.");
-            BackupManager.RestoreFile(gameAssemblyPath);
-            BackupManager.RestoreFile(metadataPath);
-            BackupManager.RestoreFile(bundleVersionPath);
+            SafeRestore(gameAssemblyPath);
+            SafeRestore(metadataPath);
+            SafeRestore(bundleVersionPath);
             throw;
         }
 
         // Step 6: Install MelonLoader
-        ConsoleUI.PrintStep(6, TotalSteps, "Installing MelonLoader 0.7.2...");
+        ConsoleUI.PrintStep(6, TotalSteps, $"Installing MelonLoader {MelonLoaderInstaller.PinnedVersion()}...");
         MelonLoaderInstaller.Install(installerDir);
         ConsoleUI.PrintSuccess("MelonLoader installed.");
         Console.WriteLine();
@@ -239,7 +249,34 @@ public static class Program
         catch (InvalidOperationException) { /* stdin redirected, just exit */ }
     }
 
-    private static string GetVanillaPath(InstallerArgs args)
+    private static void PrintLogPathHint(string? logPath)
+    {
+        if (string.IsNullOrEmpty(logPath)) return;
+        Console.WriteLine();
+        Console.WriteLine($"Full log: {logPath}");
+    }
+
+    /// <summary>
+    /// Restores a backup file, converting any restore-time failure into a clear error message.
+    /// We're already unwinding from a patch failure; a failed restore is bad news that the
+    /// user needs to see — point them at the .bak they can copy back manually.
+    /// </summary>
+    private static void SafeRestore(string filePath)
+    {
+        try
+        {
+            if (!BackupManager.RestoreFile(filePath))
+                ConsoleUI.PrintWarning($"No backup found for {filePath} — nothing to restore.");
+        }
+        catch (Exception ex)
+        {
+            ConsoleUI.PrintError(
+                $"Failed to restore {filePath} from backup: {ex.Message} " +
+                $"The original is at {filePath}{BackupManager.BackupExtension} — copy it manually.");
+        }
+    }
+
+    private static string GetVanillaPath(InstallerArgs args, PlatformInfo platform)
     {
         // If --vanilla-path was a directory, look up SCPSL.exe in it.
         if (!string.IsNullOrEmpty(args.VanillaPath))
@@ -256,6 +293,15 @@ public static class Program
             }
 
             throw new InstallerException($"Vanilla path not found: {provided}");
+        }
+
+        // Auto-detect: offer a remembered/Steam path as the default so the user can just hit Enter.
+        string? detected = GameDetector.TryFindVanilla(platform);
+        if (detected != null)
+        {
+            Console.WriteLine($"Auto-detected vanilla SCPSL.exe at: {detected}");
+            if (ConsoleUI.PromptYesNo("Use this path?"))
+                return detected;
         }
 
         Console.WriteLine("Please enter the path to your vanilla SCPSL.exe:");
@@ -312,8 +358,11 @@ public static class Program
             string destPath = Path.Combine(target.FullName, file.Name);
             var destFile = new FileInfo(destPath);
 
-            // Skip if destination already matches (same size + same last-write time)
-            if (destFile.Exists && destFile.Length == file.Length && destFile.LastWriteTimeUtc == file.LastWriteTimeUtc)
+            // FileInfo caches attributes on first property access — read Exists once,
+            // reuse Length/LastWriteTimeUtc from the same snapshot instead of issuing
+            // a fresh stat call per property.
+            bool destExists = destFile.Exists;
+            if (destExists && destFile.Length == file.Length && destFile.LastWriteTimeUtc == file.LastWriteTimeUtc)
             {
                 copiedFiles++;
                 copiedBytes += file.Length;
@@ -323,7 +372,7 @@ public static class Program
                 continue;
             }
 
-            file.CopyTo(destPath, true);
+            file.CopyTo(destPath, overwrite: destExists);
 
             copiedFiles++;
             copiedBytes += file.Length;
@@ -337,7 +386,7 @@ public static class Program
     /// Attempts to load GameAssembly.dll via Il2CppDumper to check for Themida protection.
     /// If protected, extracts unlicense.exe from embedded resources, unpacks, and returns fresh bytes.
     /// </summary>
-    private static byte[] LoadAndUnpackGameAssembly(string gameAssemblyPath, string metadataPath, PlatformInfo platform, string workingDir, int metadataVersion)
+    private static byte[] LoadAndUnpackGameAssembly(string gameAssemblyPath, string metadataPath, PlatformInfo platform, string workingDir, int metadataVersion, int? unpackTimeoutMs)
     {
         if (!File.Exists(gameAssemblyPath))
             throw new InstallerException("GameAssembly.dll not found. Game files may not have copied correctly.");
@@ -361,7 +410,9 @@ public static class Program
             {
                 EmbeddedResources.ExtractToFile("unlicense.exe", tempUnlicense);
 
-                var unpacker = new Unpacker(tempUnlicense, gameAssemblyPath, platform);
+                Unpacker unpacker = unpackTimeoutMs is int ms
+                    ? new Unpacker(tempUnlicense, gameAssemblyPath, platform, ms)
+                    : new Unpacker(tempUnlicense, gameAssemblyPath, platform);
                 unpacker.UnpackGameAssembly();
 
                 return Patcher.GetGameAssemblyData(gameAssemblyPath);
@@ -382,6 +433,66 @@ public static class Program
         if (patchInfo == null || patchInfo.patchMethods.Length == 0)
             throw new InstallerException("Failed to load embedded patchinfo.json or no patch methods defined.");
         return patchInfo;
+    }
+
+    /// <summary>
+    /// Read-only previews of steps 3-6 for dry-run: we can't actually load IL2CPP or
+    /// download MelonLoader, but we can verify required source files exist in the vanilla
+    /// dir and that the MelonLoader download URL resolves. Anything that would fail during
+    /// a real run here is better caught now.
+    /// </summary>
+    private static void DryRunRemainingSteps(string installerDir, string vanillaDir, PatchInfo patchInfo)
+    {
+        string gaPreview = Path.Combine(vanillaDir, "GameAssembly.dll");
+        string mdPreview = Path.Combine(vanillaDir, "SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat");
+        string ggmPreview = Path.Combine(vanillaDir, "SCPSL_Data", "globalgamemanagers");
+
+        Console.WriteLine("[dry-run] Checking sources for steps 3-6:");
+        DryRunCheckFile("  GameAssembly.dll", gaPreview);
+        DryRunCheckFile("  global-metadata.dat", mdPreview);
+        DryRunCheckFile("  globalgamemanagers", ggmPreview);
+
+        Console.WriteLine($"[dry-run]   Patch config: metadataVersion={patchInfo.metadataVersion}, {patchInfo.patchMethods.Length} methods");
+
+        MelonLoaderConfig mlConfig;
+        try
+        {
+            string json = EmbeddedResources.ReadText("melonloader.json");
+            mlConfig = JsonConvert.DeserializeObject<MelonLoaderConfig>(json)
+                ?? throw new InstallerException("melonloader.json deserialised to null.");
+        }
+        catch (Exception ex)
+        {
+            ConsoleUI.PrintError($"[dry-run] melonloader.json invalid: {ex.Message}");
+            return;
+        }
+
+        Console.WriteLine($"[dry-run]   MelonLoader: v{mlConfig.version} from {mlConfig.downloadUrl}");
+        if (string.IsNullOrWhiteSpace(mlConfig.sha256))
+            ConsoleUI.PrintWarning("[dry-run] No pinned SHA-256 for the MelonLoader release.");
+        else
+            Console.WriteLine($"[dry-run]   SHA-256: {mlConfig.sha256}");
+
+        Console.WriteLine();
+        Console.WriteLine("[dry-run] Steps that WOULD run on a real install:");
+        Console.WriteLine($"[dry-run]   3. Load IL2CPP from {Path.Combine(installerDir, "GameAssembly.dll")}");
+        Console.WriteLine($"[dry-run]   4. Backup + patch GameAssembly.dll, global-metadata.dat, globalgamemanagers");
+        Console.WriteLine($"[dry-run]   5. Fix bundle version in globalgamemanagers");
+        Console.WriteLine($"[dry-run]   6. Download MelonLoader {mlConfig.version} into {installerDir}");
+        Console.WriteLine($"[dry-run]   7. Verify Mods/ and UserLibs/");
+    }
+
+    private static void DryRunCheckFile(string label, string path)
+    {
+        if (File.Exists(path))
+        {
+            long size = new FileInfo(path).Length;
+            Console.WriteLine($"[dry-run] {label}: OK ({ConsoleUI.FormatBytes(size)}) at {path}");
+        }
+        else
+        {
+            ConsoleUI.PrintError($"[dry-run] {label}: MISSING at {path} — real install would fail here.");
+        }
     }
 
     private static void VerifyModFiles(string installerDir)

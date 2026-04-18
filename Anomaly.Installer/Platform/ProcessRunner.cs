@@ -5,7 +5,9 @@ namespace Anomaly.Installer.Platform;
 public static class ProcessRunner
 {
     /// <summary>
-    /// Runs a Windows executable, using Wine on Linux if needed.
+    /// Runs a Windows executable, using Wine on Linux if needed. Forwards stdout and
+    /// stderr to the console (and thus to the install log) as the process produces them,
+    /// so failures in the subprocess are visible in real time.
     /// </summary>
     public static int RunExe(string exePath, string arguments, PlatformInfo platform, int timeoutMs = 120000)
     {
@@ -32,15 +34,34 @@ public static class ProcessRunner
         psi.RedirectStandardError = true;
         psi.CreateNoWindow = true;
 
-        using var process = Process.Start(psi);
-        if (process == null)
+        using var process = new Process { StartInfo = psi };
+
+        // Forward stdout/stderr line-by-line with a [exe] prefix so the install log can be
+        // grepped by origin. Without this, the user saw nothing if the subprocess failed.
+        string exeLabel = Path.GetFileNameWithoutExtension(exePath);
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data != null) Console.WriteLine($"    [{exeLabel}] {e.Data}");
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data != null) Console.Error.WriteLine($"    [{exeLabel}] {e.Data}");
+        };
+
+        if (!process.Start())
             throw new InstallerException($"Failed to start process: {exePath}");
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
 
         if (!process.WaitForExit(timeoutMs))
         {
-            process.Kill();
+            try { process.Kill(); } catch { /* best-effort */ }
             throw new InstallerException($"Process timed out after {timeoutMs / 1000} seconds: {exePath}");
         }
+
+        // Drain remaining async output before returning.
+        process.WaitForExit();
 
         return process.ExitCode;
     }

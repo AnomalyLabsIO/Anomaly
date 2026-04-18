@@ -1,20 +1,22 @@
 using System.IO.Compression;
+using Newtonsoft.Json;
 
 namespace Anomaly.Installer.MelonLoader;
 
 internal static class MelonLoaderInstaller
 {
-    private const string MelonLoaderUrl =
-        "https://github.com/LavaGang/MelonLoader/releases/download/v0.7.2/MelonLoader.x64.zip";
-
+    private const string ConfigResource = "melonloader.json";
     private const string ZipFileName = "MelonLoader.x64.zip";
 
     /// <summary>
-    /// Downloads and installs MelonLoader 0.7.2 to the game directory.
-    /// Always uses the Windows x64 build since SCPSL runs through Proton on Linux.
+    /// Downloads and installs MelonLoader to the game directory, using the version and URL
+    /// pinned in the embedded melonloader.json. Always uses the Windows x64 build since
+    /// SCPSL runs through Proton on Linux.
     /// </summary>
     public static void Install(string gameDir)
     {
+        MelonLoaderConfig config = LoadConfig();
+
         string melonLoaderDir = Path.Combine(gameDir, "MelonLoader");
         if (Directory.Exists(melonLoaderDir))
         {
@@ -24,7 +26,21 @@ internal static class MelonLoaderInstaller
 
         string zipPath = Path.Combine(gameDir, ZipFileName);
 
-        DownloadFile(MelonLoaderUrl, zipPath);
+        DownloadFileAsync(config.downloadUrl, zipPath, config.downloadTimeoutMinutes)
+            .GetAwaiter().GetResult();
+
+        if (!string.IsNullOrWhiteSpace(config.sha256))
+        {
+            Console.WriteLine("  Verifying download integrity...");
+            string actual = ResourceIntegrity.ComputeFileSha256(zipPath);
+            ResourceIntegrity.VerifyHash("MelonLoader ZIP", config.sha256, actual);
+        }
+        else
+        {
+            ConsoleUI.PrintWarning(
+                "No SHA-256 pinned for the MelonLoader release — skipping integrity check. " +
+                "Populate melonloader.json::sha256 to enable verification.");
+        }
 
         Console.WriteLine("  Extracting...");
         ZipFile.ExtractToDirectory(zipPath, gameDir, overwriteFiles: true);
@@ -32,25 +48,43 @@ internal static class MelonLoaderInstaller
         File.Delete(zipPath);
     }
 
-    private static void DownloadFile(string url, string destPath)
+    /// <summary>
+    /// Returns the pinned MelonLoader version string (e.g. "0.7.2"). Used by the
+    /// caller to format step messages.
+    /// </summary>
+    public static string PinnedVersion()
     {
-        using var client = new HttpClient();
-        client.Timeout = TimeSpan.FromMinutes(5);
+        return LoadConfig().version;
+    }
 
-        using var response = client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).Result;
+    private static MelonLoaderConfig LoadConfig()
+    {
+        string json = EmbeddedResources.ReadText(ConfigResource);
+        MelonLoaderConfig? config = JsonConvert.DeserializeObject<MelonLoaderConfig>(json);
+        if (config == null || string.IsNullOrWhiteSpace(config.downloadUrl))
+            throw new InstallerException("Embedded melonloader.json is missing or invalid.");
+        return config;
+    }
+
+    private static async Task DownloadFileAsync(string url, string destPath, int timeoutMinutes)
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(timeoutMinutes) };
+
+        using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
+            .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         long? totalBytes = response.Content.Headers.ContentLength;
-        using var contentStream = response.Content.ReadAsStreamAsync().Result;
-        using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192);
+        await using var contentStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        await using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, useAsync: true);
 
         byte[] buffer = new byte[8192];
         long totalRead = 0;
         int bytesRead;
 
-        while ((bytesRead = contentStream.Read(buffer, 0, buffer.Length)) > 0)
+        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
         {
-            fileStream.Write(buffer, 0, bytesRead);
+            await fileStream.WriteAsync(buffer, 0, bytesRead).ConfigureAwait(false);
             totalRead += bytesRead;
             if (totalBytes.HasValue)
             {
@@ -60,7 +94,6 @@ internal static class MelonLoaderInstaller
             }
         }
 
-        // If no content-length header was available, print final size
         if (!totalBytes.HasValue)
             Console.WriteLine($"  Downloaded {ConsoleUI.FormatBytes(totalRead)}");
     }

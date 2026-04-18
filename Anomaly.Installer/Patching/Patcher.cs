@@ -61,9 +61,17 @@ internal class Patcher
     public static void FixMetadataVersion(int metadataVersion, string gamePath)
     {
         string metadataPath = Path.Combine(gamePath, "SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat");
+        if (!File.Exists(metadataPath))
+            throw new InstallerException($"global-metadata.dat not found at {metadataPath}.");
+
         byte[] metadataData = File.ReadAllBytes(metadataPath);
         byte[] metadataVersionBytes = BitConverter.GetBytes(metadataVersion);
-        int versionOffset = 4;
+        const int versionOffset = 4;
+
+        if (metadataData.Length < versionOffset + metadataVersionBytes.Length)
+            throw new InstallerException(
+                $"global-metadata.dat is too small ({metadataData.Length} bytes) to contain a valid version header. File may be truncated or corrupt.");
+
         for (int i = 0; i < metadataVersionBytes.Length; i++)
         {
             metadataData[i + versionOffset] = metadataVersionBytes[i];
@@ -103,6 +111,14 @@ internal class Patcher
 
         int patchOffset = functionOffset + patchMethod.patchOffset;
         int patchSize = patchMethod.patchSize ?? patchData.Length;
+
+        if (patchOffset < 0 || patchOffset + patchSize > _gameAssemblyData.Length)
+        {
+            throw new InstallerException(
+                $"Patch for ({patchMethod.name}) would write outside GameAssembly.dll " +
+                $"(offset={patchOffset:X}, size={patchSize}, file={_gameAssemblyData.Length:X} bytes). " +
+                "Aborting before corrupting the file.");
+        }
 
         for (int i = 0; i < patchSize; i++)
         {
@@ -156,6 +172,41 @@ internal class Patcher
     public void SaveGameAssembly()
     {
         File.WriteAllBytes(_gameAssemblyPath, _gameAssemblyData);
+    }
+
+    /// <summary>
+    /// Re-reads GameAssembly.dll from disk and verifies it matches the patched in-memory bytes.
+    /// Guards against partial writes, AV interference, or disk corruption between write and next step.
+    /// </summary>
+    public void VerifySavedAssembly()
+    {
+        string expected = ResourceIntegrity.ComputeSha256(_gameAssemblyData);
+        string actual = ResourceIntegrity.ComputeFileSha256(_gameAssemblyPath);
+        ResourceIntegrity.VerifyHash("patched GameAssembly.dll", expected, actual);
+    }
+
+    /// <summary>
+    /// Re-parses the patched GameAssembly via Il2CppDumper to confirm the patches didn't
+    /// break IL2CPP structure. Catches bad offsets before the user hits a runtime crash.
+    /// A hash check alone only proves bytes landed on disk; this proves they're still valid.
+    /// </summary>
+    public void VerifyPatchedStructure(string metadataPath, int metadataVersion, string workingDir)
+    {
+        // Use a fresh copy so the dumper can't mutate the bytes we just wrote.
+        byte[] copy = new byte[_gameAssemblyData.Length];
+        Buffer.BlockCopy(_gameAssemblyData, 0, copy, 0, copy.Length);
+
+        var verifier = new Il2CppManager(copy, workingDir);
+        try
+        {
+            verifier.LoadIl2Cpp(metadataPath, metadataVersion);
+        }
+        catch (Exception ex)
+        {
+            throw new InstallerException(
+                "Patched GameAssembly.dll failed re-parse — a patch likely wrote to a bad offset. " +
+                $"Underlying error: {ex.Message}");
+        }
     }
 
     // --- Game Version Reading ---
@@ -249,13 +300,22 @@ internal class Patcher
         }
 
         int oldLength = BitConverter.ToInt32(data, versionOffset);
-        string oldVersion = Encoding.ASCII.GetString(data, versionOffset + 4, oldLength);
-        byte[] newVersionBytes = Encoding.ASCII.GetBytes(newVersion);
+        string oldVersion = Encoding.UTF8.GetString(data, versionOffset + 4, oldLength);
+        byte[] newVersionBytes = Encoding.UTF8.GetBytes(newVersion);
 
         if (oldVersion == newVersion)
         {
             Console.WriteLine($"  Bundle version already correct ({newVersion}).");
             return;
+        }
+
+        if (newVersionBytes.Length > oldLength)
+        {
+            // Growing in place would overwrite whatever follows the version slot in
+            // globalgamemanagers. Refuse rather than silently corrupting the file.
+            throw new InstallerException(
+                $"Detected game version \"{newVersion}\" ({newVersionBytes.Length} bytes) is longer than the " +
+                $"existing bundle version slot (\"{oldVersion}\", {oldLength} bytes). Growing in-place is unsafe.");
         }
 
         if (newVersionBytes.Length != oldLength)
@@ -295,7 +355,7 @@ internal class Patcher
                 continue;
 
             // Check if the bytes after the length form a version string
-            string candidate = Encoding.ASCII.GetString(data, i + 4, len);
+            string candidate = Encoding.UTF8.GetString(data, i + 4, len);
             if (Regex.IsMatch(candidate, @"^\d{1,3}\.\d{1,3}\.\d{1,3}$"))
             {
                 // Validate it looks like a game version (major >= 10 for SCPSL)

@@ -33,7 +33,7 @@ public class Core : MelonMod
 
         HarmonyInstance.PatchAll();
 
-        //CustomNetworkManager.Modded = true;
+        CustomNetworkManager.Modded = true;
         CentralAuthManager.NoAuthStartupArg = "-noauth";
 
         AuthHandler.Init();

@@ -16,6 +16,9 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="System.IO.Hashing" Version="8.0.0" />
+    <!-- Needed for Windows Steam registry auto-detect. Safe to reference from net6.0 —
+         API throws PlatformNotSupportedException on Linux, which we catch in GameDetector. -->
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,6 +32,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\patchinfo.json" />
+    <EmbeddedResource Include="Resources\melonloader.json" />
     <EmbeddedResource Include="Resources\unlicense.exe" />
     <EmbeddedResource Include="Resources\SCPSL.exe" />
     <EmbeddedResource Remove="publish\**" />

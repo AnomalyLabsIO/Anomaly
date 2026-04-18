@@ -1,0 +1,53 @@
+{
+  "metadataVersion": 31,
+  "patchMethods": [
+    {
+      "name": "LauncherCommunicator$$.cctor",
+      "patchOffset": 0,
+      "patchData": "[RET]",
+      "patchSize": 2
+    },
+    {
+      "name": "SimpleMenu.<StartLoad>d__8$$MoveNext",
+      "patchOffset": 439,
+      "patchData": "[NOP]",
+      "patchSize": 9
+    },
+    {
+      "name": "SimpleMenu.<StartLoad>d__8$$MoveNext",
+      "patchOffset": 566,
+      "patchData": "B801000000",
+      "patchSize": 13
+    },
+    {
+      "name": "CentralAuth.CentralAuthManager$$Authentication",
+      "patchOffset": 0,
+      "patchData": "[RET]",
+      "patchSize": 3
+    },
+    {
+      "name": "CentralAuth.CentralAuthManager$$InitAuth",
+      "patchOffset": 0,
+      "patchData": "[RET]",
+      "patchSize": 3
+    },
+    {
+      "name": "CentralServer$$Init",
+      "patchOffset": 0,
+      "patchData": "[RET]",
+      "patchSize": 3
+    },
+    {
+      "name": "CentralServer$$RefreshServerList",
+      "patchOffset": 0,
+      "patchData": "[RET]",
+      "patchSize": 3
+    },
+    {
+      "name": "CentralAuth.CentralAuthManager$$RequestToken",
+      "patchOffset": 0,
+      "patchData": "[RET]",
+      "patchSize": 3
+    }
+  ]
+}
