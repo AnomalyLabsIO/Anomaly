@@ -19,6 +19,21 @@ internal static class CrashHooks
     private static readonly ConcurrentDictionary<string, UnityLogRateLimiter> _unityLogLimiters = new();
     private static readonly TimeSpan UnityLogDedupWindow = TimeSpan.FromSeconds(30);
 
+    // First-chance exception types that are known infrastructure noise —
+    // always caught internally by the runtime, surfaced to us only because
+    // the FirstChance hook runs before any catch. Don't count these toward
+    // flood detection or we'll generate crash reports for nothing.
+    private static readonly HashSet<string> BenignFirstChanceTypes = new HashSet<string>
+    {
+        // MelonLogger.Msg/Warning/Error internally do `new StackTrace(fNeedFileInfo:true)`
+        // to identify the calling mod. .NET's StackTraceSymbols.GetSourceLineInfo
+        // walks PDBs via System.Reflection.Metadata — any assembly on the stack
+        // with a missing/malformed PDB trips BlobReader out-of-bounds. The throw
+        // is swallowed (symbolication falls back to no-source), but it fires on
+        // every MelonLogger call. Noisy at connect time when many logs happen.
+        "System.BadImageFormatException",
+    };
+
     // Well-known vanilla SCP:SL exceptions that self-resolve and shouldn't
     // generate reports at all. Each entry is a substring matched against the
     // first line of the stack trace. Add to this list when a new benign
@@ -128,8 +143,22 @@ internal static class CrashHooks
         // Feed log buffer, don't write report unless flooding
         string typeName = args.Exception?.GetType().FullName ?? "Unknown";
 
+        // Skip known-benign infrastructure noise entirely.
+        if (BenignFirstChanceTypes.Contains(typeName))
+            return;
+
         var tracker = _floodTrackers.GetOrAdd(typeName, new FloodTracker());
         tracker.Increment();
+
+        // Capture the managed stack on the FIRST hit per window — the
+        // exception's own Stack is often just the throw helper at this
+        // point (stack gets populated when it propagates), so the flood
+        // report wouldn't tell us WHERE the throw originated without this.
+        if (tracker.FirstStackCapture == null)
+        {
+            try { tracker.FirstStackCapture = new System.Diagnostics.StackTrace(true).ToString(); }
+            catch { /* best effort, never throw from the handler */ }
+        }
 
         if (tracker.Count == FloodThreshold && tracker.IsWithinWindow)
         {
@@ -137,6 +166,12 @@ internal static class CrashHooks
             {
                 var report = BuildReport("FirstChanceFlood", args.Exception);
                 report.ExceptionMessage = $"Exception '{typeName}' fired {FloodThreshold}+ times in {FloodWindow.TotalSeconds}s";
+                if (!string.IsNullOrEmpty(tracker.FirstStackCapture))
+                {
+                    report.StackTrace = (args.Exception?.ToString() ?? "") +
+                        "\n\n=== First-occurrence managed stack ===\n" +
+                        tracker.FirstStackCapture;
+                }
                 CrashReportWriter.Write(report);
             }
             catch { /* best effort */ }
@@ -287,6 +322,7 @@ internal static class CrashHooks
     {
         private int _count;
         private DateTime _windowStart = DateTime.UtcNow;
+        public string FirstStackCapture;
 
         public int Count => _count;
         public bool IsWithinWindow => (DateTime.UtcNow - _windowStart) < FloodWindow;
@@ -297,6 +333,7 @@ internal static class CrashHooks
             {
                 _count = 0;
                 _windowStart = DateTime.UtcNow;
+                FirstStackCapture = null;
             }
             Interlocked.Increment(ref _count);
         }

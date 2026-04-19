@@ -11,6 +11,7 @@ using Anomaly.Server.Utils;
 using Anomaly.Shared.Networking;
 using CentralAuth;
 using HarmonyLib;
+using LabApi.Events.Handlers;
 using LabApi.Features.Console;
 using LabApi.Loader;
 using LabApi.Loader.Features.Plugins;
@@ -57,6 +58,15 @@ public class Plugin : Plugin<Config>
             {
                 FileTransferSession.HandleMessage(hub, msg);
             };
+
+            // Kick off the manifest + chunk send the instant the encrypted
+            // channel is live, so the client isn't stuck staring at a loading
+            // screen while we wait for any later lifecycle event.
+            AnomalyMessaging.ClientReady += FileTransferSession.StartForPlayer;
+
+            // Drop any in-flight session if the player disconnects between
+            // chunks — otherwise ActiveSessions would leak an entry per drop.
+            PlayerEvents.Left += ev => FileTransferSession.CleanupPlayer(ev.Player.ReferenceHub);
 
             RoundStateBroadcaster.Init();
             RoundStartBridge.Init();

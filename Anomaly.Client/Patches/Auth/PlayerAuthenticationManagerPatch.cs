@@ -67,6 +67,7 @@ public static class PlayerAuthenticationManagerPatch
     }
 
     private static int _lastSendFrame = -1;
+    private static long _lastSendFingerprint;
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(EncryptedChannelManager), nameof(EncryptedChannelManager.TrySendMessageToServer), new Type[] { typeof(string), typeof(EncryptedChannelManager.EncryptedChannel) })]
@@ -79,16 +80,21 @@ public static class PlayerAuthenticationManagerPatch
             return true;
         }
 
-        // IL2CPP double-dispatch fires virtual-method prefixes twice per
-        // invocation. Without dedup here, every send goes out twice, the
-        // _txCounter increments twice, and the server sees gapped counters.
+        // Same IL2CPP double-dispatch shape as the receive path: the prefix
+        // fires 2–3 times per underlying send, and a naive frame-only dedup
+        // drops the second legitimate send that shares a frame with another.
+        // Fingerprint content + channel so repeat dispatches of the same
+        // send are squashed while two distinct sends in the same frame both
+        // go through.
         int frame = UnityEngine.Time.frameCount;
-        if (frame == _lastSendFrame)
+        long fp = ComputeSendFingerprint(content, channel);
+        if (frame == _lastSendFrame && fp == _lastSendFingerprint)
         {
             __result = true; // first call already handled it
             return false;
         }
         _lastSendFrame = frame;
+        _lastSendFingerprint = fp;
 
         if (__instance._txCounter == 4294967295U)
             __instance._txCounter = 0;
@@ -159,6 +165,7 @@ public static class PlayerAuthenticationManagerPatch
     }
 
     private static int _lastReceivePackedFrame = -1;
+    private static long _lastReceivePackedFingerprint;
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(EncryptedChannelManager), nameof(EncryptedChannelManager.ClientReceivePackedMessage))]
@@ -167,18 +174,25 @@ public static class PlayerAuthenticationManagerPatch
         if (!AuthHandler.UsingAnomalyAuth)
             return true;
 
-        // IL2CPP dispatches virtual-method prefixes twice per invocation (once
-        // for the derived slot, once for the base). Without dedup here, every
-        // encrypted message is processed twice: the first call increments
-        // _rxCounter and dispatches the channel handler; the second call sees
-        // its own counter == _rxCounter and logs "Received message with
-        // counter N ... Discarding" — half the messages appear "rejected"
-        // even though they were actually dispatched. Skip the second call in
-        // the same frame so the game sees the correct stream.
+        // IL2CPP re-marshals the byte[] field per Harmony prefix dispatch,
+        // so ReferenceEquals on packed.Data can't reliably catch the 2–3
+        // duplicate invocations of a single underlying receive — each gets
+        // a fresh byte[] with identical content. Vanilla channels paper
+        // over that via the _rxCounter check (duplicates get "counter <=
+        // rxCounter, Discarding"), but Anomaly channel messages skip the
+        // counter path entirely and were being processed multiple times
+        // (manifest counted twice, file-complete fired 3×).
+        //
+        // Fingerprint the packet contents (length + head + tail bytes)
+        // instead. Two distinct ciphertexts colliding on all three requires
+        // ~2^-64, essentially zero. Frame scopes the dedup so identical
+        // packets in different frames still run.
         int frame = UnityEngine.Time.frameCount;
-        if (frame == _lastReceivePackedFrame)
+        long fp = ComputePayloadFingerprint(packed.Data);
+        if (frame == _lastReceivePackedFrame && fp == _lastReceivePackedFingerprint)
             return false;
         _lastReceivePackedFrame = frame;
+        _lastReceivePackedFingerprint = fp;
 
         MelonLogger.Warning("Got message back.");
 
@@ -252,6 +266,37 @@ public static class PlayerAuthenticationManagerPatch
             Il2CppGameCore.Console.AddLog(ex.StackTrace, Color.red, false, ConsoleLogType.Log);
         }
         return false;
+    }
+
+    private static long ComputePayloadFingerprint(byte[] data)
+    {
+        if (data == null) return 0L;
+        int len = data.Length;
+        long fp = len;
+        // Head bytes
+        int headEnd = len < 4 ? len : 4;
+        for (int i = 0; i < headEnd; i++)
+            fp = unchecked(fp * 31L + data[i]);
+        // Tail bytes (skip if they'd overlap the head)
+        int tailStart = len < 8 ? headEnd : len - 4;
+        for (int i = tailStart; i < len; i++)
+            fp = unchecked(fp * 31L + data[i]);
+        return fp;
+    }
+
+    private static long ComputeSendFingerprint(string content, EncryptedChannelManager.EncryptedChannel channel)
+    {
+        long fp = (long)channel;
+        if (content == null) return fp;
+        int len = content.Length;
+        fp = unchecked(fp * 1315423911L + len);
+        int headEnd = len < 4 ? len : 4;
+        for (int i = 0; i < headEnd; i++)
+            fp = unchecked(fp * 31L + content[i]);
+        int tailStart = len < 8 ? headEnd : len - 4;
+        for (int i = tailStart; i < len; i++)
+            fp = unchecked(fp * 31L + content[i]);
+        return fp;
     }
 
     private static void QueuePendingClientMessage(

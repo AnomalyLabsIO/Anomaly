@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.IO;
 using Anomaly.Client.API.Features;
 using Anomaly.Client.Assets;
@@ -11,26 +10,18 @@ using UnityEngine.UI;
 namespace Anomaly.Client.Internal.UI;
 
 /// <summary>
-/// Swaps the boot loading-screen's logo and background with user-provided PNGs
-/// from <see cref="Paths.PreloaderSkinPath"/>. Fired from
-/// <c>Core.OnSceneWasLoaded</c>; targets a Canvas in PreLoader/Loader whose
-/// direct children are named "Background" and "Image" (the SCP:SL landing UI).
-/// Retries for a few seconds because the target Canvas starts inactive and
-/// gets enabled during async scene-load; the coroutine bails as soon as the
-/// scene unloads or a non-target scene is dispatched.
+/// Swaps the PreLoader scene's <c>Canvas/Background</c> and <c>Canvas/Image</c>
+/// sprites with user-provided PNGs (<c>logo.png</c>, <c>background.png</c>)
+/// from <see cref="Paths.SkinsPath"/>. Fired from <c>Core.OnSceneWasLoaded</c>.
 /// </summary>
 internal static class PreloaderSkinBootstrap
 {
     private const string LogoFileName = "logo.png";
     private const string BackgroundFileName = "background.png";
 
-    private const float RetryIntervalSec = 0.25f;
-    private const int RetryAttempts = 6; // ~1.5 seconds — pass 0 typically suffices
-
     private static bool _hooked;
     private static string _lastDispatchName;
     private static float _lastDispatchRealtime;
-    private static object _currentRoutine;
 
     internal static void Init()
     {
@@ -55,38 +46,28 @@ internal static class PreloaderSkinBootstrap
         string name = scene.name ?? string.Empty;
         string lowered = name.ToLowerInvariant();
 
-        // Dedup: OnSceneWasLoaded can double-fire within a frame.
         float now = Time.realtimeSinceStartup;
         if (_lastDispatchName == lowered && (now - _lastDispatchRealtime) < 1.0f)
             return;
         _lastDispatchName = lowered;
         _lastDispatchRealtime = now;
 
-        // Any in-flight routine belongs to a previous scene — cancel it so we
-        // don't keep polling the old scene's hierarchy while on the main menu.
-        if (_currentRoutine != null)
-        {
-            MelonCoroutines.Stop(_currentRoutine);
-            _currentRoutine = null;
-        }
-
-        if (!lowered.Contains("preloader") && lowered != "loader")
-            return;
+        if (lowered != "preloader") return;
 
         try
         {
-            StartSkinRoutine(scene);
+            ApplySkin(scene);
         }
         catch (Exception ex)
         {
-            MelonLogger.Error($"PreloaderSkinBootstrap: dispatch failed (scene='{name}'): {ex}");
+            MelonLogger.Error($"PreloaderSkinBootstrap: apply failed: {ex}");
         }
     }
 
-    private static void StartSkinRoutine(Scene scene)
+    private static void ApplySkin(Scene scene)
     {
-        string logoPath = Path.Combine(Paths.PreloaderSkinPath, LogoFileName);
-        string bgPath = Path.Combine(Paths.PreloaderSkinPath, BackgroundFileName);
+        string logoPath = Path.Combine(Paths.SkinsPath, LogoFileName);
+        string bgPath = Path.Combine(Paths.SkinsPath, BackgroundFileName);
         bool haveLogo = File.Exists(logoPath);
         bool haveBg = File.Exists(bgPath);
         if (!haveLogo && !haveBg) return;
@@ -97,36 +78,6 @@ internal static class PreloaderSkinBootstrap
         Sprite logoSprite = logoTex != null ? NamedSprite(logoTex, "AnomalyLogo") : null;
         Sprite bgSprite = bgTex != null ? NamedSprite(bgTex, "AnomalyBackground") : null;
 
-        _currentRoutine = MelonCoroutines.Start(SkinRoutine(scene, logoSprite, bgSprite));
-    }
-
-    private static IEnumerator SkinRoutine(Scene scene, Sprite logoSprite, Sprite bgSprite)
-    {
-        string expectedScene = scene.name;
-        SwapPass(scene, logoSprite, bgSprite, pass: 0);
-
-        for (int pass = 1; pass <= RetryAttempts; pass++)
-        {
-            yield return new WaitForSeconds(RetryIntervalSec);
-
-            // Fail-safe: bail if we're no longer on the scene we started on.
-            // Covers the case where MelonCoroutines.Stop doesn't catch us in
-            // time on a scene transition.
-            var active = SceneManager.GetActiveScene();
-            if (!scene.IsValid() || !scene.isLoaded || active.name != expectedScene)
-            {
-                _currentRoutine = null;
-                yield break;
-            }
-
-            SwapPass(scene, logoSprite, bgSprite, pass);
-        }
-
-        _currentRoutine = null;
-    }
-
-    private static void SwapPass(Scene scene, Sprite logoSprite, Sprite bgSprite, int pass)
-    {
         int canvasMatches = 0;
         int bgSwaps = 0, logoSwaps = 0;
 
@@ -139,16 +90,15 @@ internal static class PreloaderSkinBootstrap
 
                 Image bgChild = FindDirectChildImage(canvas.transform, "background");
                 Image logoChild = FindDirectChildImage(canvas.transform, "image");
-                if (bgChild == null || logoChild == null)
-                    continue;
+                if (bgChild == null || logoChild == null) continue;
 
                 canvasMatches++;
-                if (bgSprite != null && bgChild.sprite != bgSprite)
+                if (bgSprite != null)
                 {
                     bgChild.sprite = bgSprite;
                     bgSwaps++;
                 }
-                if (logoSprite != null && logoChild.sprite != logoSprite)
+                if (logoSprite != null)
                 {
                     logoChild.sprite = logoSprite;
                     logoSwaps++;
@@ -156,12 +106,7 @@ internal static class PreloaderSkinBootstrap
             }
         }
 
-        if (pass == 0 || bgSwaps > 0 || logoSwaps > 0)
-        {
-            MelonLogger.Msg(
-                $"PreloaderSkin[pass={pass}]: matched={canvasMatches} " +
-                $"bg={bgSwaps} logo={logoSwaps} scene='{scene.name}'");
-        }
+        MelonLogger.Msg($"PreloaderSkin: matched={canvasMatches} bg={bgSwaps} logo={logoSwaps}");
     }
 
     private static Image FindDirectChildImage(Transform parent, string childNameLower)
