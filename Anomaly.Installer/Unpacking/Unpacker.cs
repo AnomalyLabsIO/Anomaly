@@ -32,7 +32,7 @@ internal class Unpacker
         if (!File.Exists(_unpackerPath))
             throw new InstallerException($"Unpacker not found at: {_unpackerPath}");
 
-        int exitCode = ProcessRunner.RunExe(_unpackerPath, $"\"{_gameAssemblyPath}\"", _platform, _timeoutMs);
+        int exitCode = ProcessRunner.RunExe(_unpackerPath, new[] { _gameAssemblyPath }, _platform, _timeoutMs);
         if (exitCode != 0)
             throw new InstallerException($"Unpacker exited with code {exitCode}. See log for subprocess output.");
 

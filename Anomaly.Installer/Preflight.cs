@@ -1,4 +1,5 @@
 using Anomaly.Installer.Platform;
+using System.Runtime.InteropServices;
 
 namespace Anomaly.Installer;
 
@@ -16,7 +17,7 @@ internal static class Preflight
         CheckRuntime();
         CheckWritePermission(installerDir);
         CheckDiskSpace(installerDir, vanillaDir);
-        CheckWine(platform);
+        CheckLinuxWindowsRuntime(platform);
 
         if (dryRun)
             Console.WriteLine("  [dry-run] Preflight complete.");
@@ -60,15 +61,15 @@ internal static class Preflight
 
         try
         {
-            var drive = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(installerDir)) ?? installerDir);
-            long free = drive.AvailableFreeSpace;
+            DiskSpaceInfo space = GetDiskSpaceInfo(installerDir);
+            long free = space.AvailableFreeSpace;
             Console.WriteLine(
-                $"  Disk space: {ConsoleUI.FormatBytes(free)} free on {drive.Name}, " +
+                $"  Disk space: {ConsoleUI.FormatBytes(free)} free at {space.DisplayName}, " +
                 $"need ~{ConsoleUI.FormatBytes(totalNeeded)}");
 
             if (free < totalNeeded)
                 throw new InstallerException(
-                    $"Not enough free space on {drive.Name}. Need ~{ConsoleUI.FormatBytes(totalNeeded)}, " +
+                    $"Not enough free space at {space.DisplayName}. Need ~{ConsoleUI.FormatBytes(totalNeeded)}, " +
                     $"have {ConsoleUI.FormatBytes(free)}. Free up space and retry.");
         }
         catch (InstallerException) { throw; }
@@ -94,19 +95,108 @@ internal static class Preflight
         }
     }
 
-    private static void CheckWine(PlatformInfo platform)
+    private static DiskSpaceInfo GetDiskSpaceInfo(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+
+        if (OperatingSystem.IsLinux())
+        {
+            if (TryGetLinuxDiskSpace(fullPath, out long free))
+                return new DiskSpaceInfo(fullPath, free);
+        }
+
+        var drive = new DriveInfo(Path.GetPathRoot(fullPath) ?? fullPath);
+        return new DiskSpaceInfo(drive.Name, drive.AvailableFreeSpace);
+    }
+
+    private static bool TryGetLinuxDiskSpace(string path, out long free)
+    {
+        free = 0;
+
+        if (statvfs(path, out Statvfs stat) != 0)
+            return false;
+
+        ulong fragmentSize = stat.f_frsize != 0 ? stat.f_frsize : stat.f_bsize;
+        checked
+        {
+            free = (long)(stat.f_bavail * fragmentSize);
+        }
+
+        return true;
+    }
+
+    private readonly record struct DiskSpaceInfo(string DisplayName, long AvailableFreeSpace);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Statvfs
+    {
+        public ulong f_bsize;
+        public ulong f_frsize;
+        public ulong f_blocks;
+        public ulong f_bfree;
+        public ulong f_bavail;
+        public ulong f_files;
+        public ulong f_ffree;
+        public ulong f_favail;
+        public ulong f_fsid;
+        public ulong f_flag;
+        public ulong f_namemax;
+        private int _f_spare0;
+        private int _f_spare1;
+        private int _f_spare2;
+        private int _f_spare3;
+        private int _f_spare4;
+        private int _f_spare5;
+    }
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int statvfs(string path, out Statvfs buffer);
+
+    private static void CheckLinuxWindowsRuntime(PlatformInfo platform)
     {
         if (!platform.IsLinux) return;
 
-        if (platform.IsWineAvailable())
+        LinuxRuntimeInfo? runtime = platform.LinuxRuntime;
+        if (runtime == null)
+            return;
+
+        if (runtime.IsSteamOs)
+            Console.WriteLine("  SteamOS: detected");
+        else
+            Console.WriteLine("  SteamOS: not detected");
+
+        if (runtime.IsSteamDeckHardware)
+            Console.WriteLine("  Steam Deck hardware: detected");
+
+        if (!string.IsNullOrWhiteSpace(runtime.SteamRootPath))
+            Console.WriteLine($"  Steam root: {runtime.SteamRootPath}");
+        else
+            ConsoleUI.PrintWarning("Steam root could not be auto-detected. Manual vanilla path selection may still work.");
+
+        if (runtime.HasProton)
         {
-            Console.WriteLine("  Wine: available");
+            Console.WriteLine($"  Proton: {runtime.PreferredProton!.Name}");
         }
         else
         {
-            throw new InstallerException(
-                "Wine is required to run the embedded unlicense.exe on Linux but was not found. " +
-                "Install Wine (e.g. `sudo apt install wine`) and retry.");
+            ConsoleUI.PrintWarning(
+                "No Proton tool was found under Steam. If this build needs the unpacker, install or run a Proton-enabled Steam title first.");
+        }
+
+        if (runtime.HasWine)
+        {
+            Console.WriteLine($"  Wine: {runtime.WineCommand}");
+        }
+        else
+        {
+            ConsoleUI.PrintWarning("Wine: not found");
+        }
+
+        if (!runtime.HasWindowsRuntime)
+        {
+            ConsoleUI.PrintWarning(
+                "No Windows compatibility runtime was detected. Install may still succeed if GameAssembly.dll does not require the unpacker. " +
+                "Themida-protected builds will fail later unless Proton or Wine is available.");
         }
     }
 }

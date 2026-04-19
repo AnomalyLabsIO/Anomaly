@@ -2,7 +2,7 @@ namespace Anomaly.Installer;
 
 /// <summary>
 /// Tees everything written to Console.Out and Console.Error into a timestamped log file
-/// under %APPDATA%/Anomaly/Logs/. Enables "what happened during install?" forensics
+/// under the platform app-data directory's Anomaly/Logs/. Enables "what happened during install?" forensics
 /// without changing every ConsoleUI callsite.
 /// </summary>
 internal static class InstallLogger

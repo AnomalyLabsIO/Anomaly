@@ -7,6 +7,12 @@ internal static class MelonLoaderInstaller
 {
     private const string ConfigResource = "melonloader.json";
     private const string ZipFileName = "MelonLoader.x64.zip";
+    private static readonly string[] RequiredFiles =
+    {
+        Path.Combine("MelonLoader", "net6", "MelonLoader.dll"),
+        "version.dll",
+        "dobby.dll"
+    };
 
     /// <summary>
     /// Downloads and installs MelonLoader to the game directory, using the version and URL
@@ -17,12 +23,15 @@ internal static class MelonLoaderInstaller
     {
         MelonLoaderConfig config = LoadConfig();
 
-        string melonLoaderDir = Path.Combine(gameDir, "MelonLoader");
-        if (Directory.Exists(melonLoaderDir))
+        if (HasRequiredFiles(gameDir))
         {
-            Console.WriteLine("  MelonLoader directory already exists, skipping download.");
+            Console.WriteLine("  MelonLoader files already exist, skipping download.");
             return;
         }
+
+        string melonLoaderDir = Path.Combine(gameDir, "MelonLoader");
+        if (Directory.Exists(melonLoaderDir))
+            ConsoleUI.PrintWarning("Incomplete MelonLoader install detected. Re-installing required files.");
 
         string zipPath = Path.Combine(gameDir, ZipFileName);
 
@@ -46,6 +55,8 @@ internal static class MelonLoaderInstaller
         ZipFile.ExtractToDirectory(zipPath, gameDir, overwriteFiles: true);
 
         File.Delete(zipPath);
+
+        VerifyInstalledFiles(gameDir);
     }
 
     /// <summary>
@@ -64,6 +75,24 @@ internal static class MelonLoaderInstaller
         if (config == null || string.IsNullOrWhiteSpace(config.downloadUrl))
             throw new InstallerException("Embedded melonloader.json is missing or invalid.");
         return config;
+    }
+
+    private static bool HasRequiredFiles(string gameDir)
+    {
+        return RequiredFiles.All(relativePath => File.Exists(Path.Combine(gameDir, relativePath)));
+    }
+
+    private static void VerifyInstalledFiles(string gameDir)
+    {
+        string[] missing = RequiredFiles
+            .Where(relativePath => !File.Exists(Path.Combine(gameDir, relativePath)))
+            .ToArray();
+
+        if (missing.Length == 0)
+            return;
+
+        throw new InstallerException(
+            "MelonLoader install is incomplete. Missing files: " + string.Join(", ", missing));
     }
 
     private static async Task DownloadFileAsync(string url, string destPath, int timeoutMinutes)

@@ -120,9 +120,27 @@ internal static class GameDetector
         }
         else if (platform.IsLinux)
         {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            if (platform.LinuxRuntime != null)
+            {
+                foreach (string candidate in platform.LinuxRuntime.GetGameInstallCandidates(SteamFolderName))
+                {
+                    if (seen.Add(candidate))
+                        yield return candidate;
+                }
+            }
+
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            yield return Path.Combine(home, ".steam", "steam", "steamapps", "common", SteamFolderName);
-            yield return Path.Combine(home, ".local", "share", "Steam", "steamapps", "common", SteamFolderName);
+            foreach (string fallback in new[]
+                     {
+                         Path.Combine(home, ".steam", "steam", "steamapps", "common", SteamFolderName),
+                         Path.Combine(home, ".local", "share", "Steam", "steamapps", "common", SteamFolderName),
+                     })
+            {
+                if (seen.Add(fallback))
+                    yield return fallback;
+            }
         }
     }
 }

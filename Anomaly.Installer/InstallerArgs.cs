@@ -69,6 +69,10 @@ internal sealed class InstallerArgs
 
     public static void PrintHelp()
     {
+        string appDataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Anomaly");
+
         Console.WriteLine("Anomaly Client Installer");
         Console.WriteLine();
         Console.WriteLine("Patches a vanilla copy of SCP: Secret Laboratory and installs MelonLoader");
@@ -91,7 +95,7 @@ internal sealed class InstallerArgs
         Console.WriteLine("                         (default: 45). Increase on very slow machines.");
         Console.WriteLine("  --help, -h, /?         Show this help text and exit.");
         Console.WriteLine();
-        Console.WriteLine("Logs: %APPDATA%/Anomaly/Logs/install-{timestamp}.log");
-        Console.WriteLine("State: %APPDATA%/Anomaly/vanilla_path.txt (read by Anomaly.Launcher)");
+        Console.WriteLine($"Logs: {Path.Combine(appDataDir, "Logs", "install-{timestamp}.log")}");
+        Console.WriteLine($"State: {Path.Combine(appDataDir, "vanilla_path.txt")} (read by Anomaly.Launcher)");
     }
 }

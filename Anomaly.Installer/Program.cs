@@ -70,6 +70,7 @@ public static class Program
         string installerDir = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
 
         Console.WriteLine($"Platform: {(platform.IsWindows ? "Windows" : platform.IsLinux ? "Linux" : "Unknown")}");
+        PrintPlatformSummary(platform);
         Console.WriteLine($"Install directory: {installerDir}");
         Console.WriteLine();
 
@@ -84,8 +85,8 @@ public static class Program
         Console.WriteLine($"Vanilla game directory: {vanillaDir}");
         Console.WriteLine();
 
-        // Preflight before anything destructive — fail loud if we can't write,
-        // don't have disk space, or are missing Wine on Linux.
+        // Preflight before anything destructive — fail loud if we can't write or don't
+        // have disk space, and surface Linux runtime availability before patching begins.
         Preflight.Run(installerDir, vanillaDir, platform, args.DryRun);
 
         // Save vanilla path to the canonical Launcher-visible location (%APPDATA%/Anomaly/).
@@ -235,10 +236,49 @@ public static class Program
         ConsoleUI.PrintSuccess("  Installation complete!");
         ConsoleUI.PrintSuccess("========================================");
         Console.WriteLine();
-        Console.WriteLine("Please launch SCPSL.exe once to generate IL2CPP assemblies.");
-        Console.WriteLine("The first launch will take longer than usual.");
+        PrintPostInstallInstructions(platform, installerDir);
         Console.WriteLine();
         WaitForExit();
+    }
+
+    private static void PrintPlatformSummary(PlatformInfo platform)
+    {
+        if (!platform.IsLinux || platform.LinuxRuntime == null)
+            return;
+
+        LinuxRuntimeInfo runtime = platform.LinuxRuntime;
+
+        if (runtime.IsSteamOs)
+            Console.WriteLine("Linux environment: SteamOS detected");
+        else if (runtime.IsSteamDeckHardware)
+            Console.WriteLine("Linux environment: Steam Deck hardware detected");
+
+        if (runtime.HasProton)
+            Console.WriteLine($"Preferred Linux runtime: Proton ({runtime.PreferredProton!.Name})");
+        else if (runtime.HasWine)
+            Console.WriteLine($"Preferred Linux runtime: Wine ({runtime.WineCommand})");
+        else
+            Console.WriteLine("Preferred Linux runtime: none detected yet");
+    }
+
+    private static void PrintPostInstallInstructions(PlatformInfo platform, string installerDir)
+    {
+        string moddedExe = Path.Combine(installerDir, "SCPSL.exe");
+
+        if (platform.IsLinux)
+        {
+            Console.WriteLine("Linux next steps:");
+            Console.WriteLine($"  1. Add this modded build to Steam as a non-Steam game: {moddedExe}");
+            Console.WriteLine("  2. In the shortcut properties, force a Steam Play compatibility tool (Proton).");
+            Console.WriteLine("  3. Set Steam launch options to: WINEDLLOVERRIDES=\"version=n,b\" %command%");
+            Console.WriteLine("  4. Launch it once through Steam to let MelonLoader generate its files.");
+            Console.WriteLine("  5. If MelonLoader still does not start, install the Windows .NET 6 Desktop Runtime into the Proton prefix used by that shortcut.");
+            Console.WriteLine("  6. The first launch will take longer than usual.");
+            return;
+        }
+
+        Console.WriteLine("Please launch SCPSL.exe once to generate IL2CPP assemblies.");
+        Console.WriteLine("The first launch will take longer than usual.");
     }
 
     private static void WaitForExit()
