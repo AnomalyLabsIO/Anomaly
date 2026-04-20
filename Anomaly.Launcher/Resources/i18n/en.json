@@ -55,6 +55,8 @@
   "launcher.status.game_running_modded": "Game running (modded)",
   "launcher.status.failed_launch_vanilla": "Failed to launch vanilla game",
   "launcher.status.failed_launch_modded": "Failed to launch modded game",
+  "launcher.status.wine_missing": "Wine is required on Linux but was not found in PATH. Install Wine (e.g. `sudo apt install wine`) or use a Proton-based launch shortcut.",
+  "launcher.status.exe_missing": "SCPSL.exe is missing — run the installer first to create the modded copy.",
   "launcher.status.enter_path": "Please enter a path",
   "launcher.status.exe_not_in_dir": "SCPSL.exe not found in that directory",
   "launcher.status.invalid_path": "Invalid path — provide the SCPSL.exe or its directory",

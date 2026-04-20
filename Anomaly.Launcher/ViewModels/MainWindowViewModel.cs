@@ -429,7 +429,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         else
         {
-            GameStatusText = Tr.Get(TrKeys.Status_FailedLaunchVanilla);
+            GameStatusText = FormatLaunchFailure(TrKeys.Status_FailedLaunchVanilla);
         }
     }
 
@@ -444,9 +444,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         else
         {
-            GameStatusText = Tr.Get(TrKeys.Status_FailedLaunchModded);
+            GameStatusText = FormatLaunchFailure(TrKeys.Status_FailedLaunchModded);
         }
     }
+
+    private string FormatLaunchFailure(string fallbackKey) => _gameProcess.LastFailureReason switch
+    {
+        LaunchFailureReason.WineUnavailable => Tr.Get(TrKeys.Status_WineMissing),
+        LaunchFailureReason.ExeNotFound    => Tr.Get(TrKeys.Status_ExeMissing),
+        _                                   => Tr.Get(fallbackKey)
+    };
 
     [RelayCommand]
     private void KillGame()

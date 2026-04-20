@@ -71,6 +71,8 @@ internal static class TrKeys
     public const string Status_GameRunningModded = "launcher.status.game_running_modded";
     public const string Status_FailedLaunchVanilla = "launcher.status.failed_launch_vanilla";
     public const string Status_FailedLaunchModded = "launcher.status.failed_launch_modded";
+    public const string Status_WineMissing = "launcher.status.wine_missing";
+    public const string Status_ExeMissing = "launcher.status.exe_missing";
     public const string Status_EnterPath = "launcher.status.enter_path";
     public const string Status_ExeNotInDir = "launcher.status.exe_not_in_dir";
     public const string Status_InvalidPath = "launcher.status.invalid_path";

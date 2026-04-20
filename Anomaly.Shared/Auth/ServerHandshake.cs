@@ -19,6 +19,13 @@ public class ServerHandshake
 
     public static ServerHandshake Decode(byte[] buf)
     {
+        if (buf == null)
+            throw new ArgumentNullException(nameof(buf));
+        if (buf.Length < Size)
+            throw new ArgumentException(
+                $"ServerHandshake payload too short: expected >= {Size} bytes, got {buf.Length}.",
+                nameof(buf));
+
         var handshake = new ServerHandshake();
         handshake.sessionPublic = new byte[32];
         handshake.challenge = new byte[20];

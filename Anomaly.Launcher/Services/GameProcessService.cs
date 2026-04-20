@@ -3,6 +3,14 @@ using Anomaly.Launcher.Platform;
 
 namespace Anomaly.Launcher.Services;
 
+public enum LaunchFailureReason
+{
+    None,
+    ExeNotFound,
+    WineUnavailable,
+    ProcessStartFailed
+}
+
 public class GameProcessService
 {
     private readonly PathService _paths;
@@ -10,6 +18,11 @@ public class GameProcessService
     public Process? CurrentProcess { get; private set; }
     public bool IsRunning => CurrentProcess is { HasExited: false };
     public DateTime? GameStartTime { get; private set; }
+
+    /// <summary>
+    /// Reason the last Launch* call returned false. Reset to None on success.
+    /// </summary>
+    public LaunchFailureReason LastFailureReason { get; private set; }
 
     public event EventHandler<int>? GameExited;
 
@@ -22,7 +35,10 @@ public class GameProcessService
     {
         var vanillaPath = _paths.GetVanillaExePath();
         if (vanillaPath == null || !File.Exists(vanillaPath))
+        {
+            LastFailureReason = LaunchFailureReason.ExeNotFound;
             return false;
+        }
 
         return StartProcess(vanillaPath);
     }
@@ -31,7 +47,10 @@ public class GameProcessService
     {
         var moddedPath = _paths.GetModdedExePath();
         if (!File.Exists(moddedPath))
+        {
+            LastFailureReason = LaunchFailureReason.ExeNotFound;
             return false;
+        }
 
         return StartProcess(moddedPath, extraArgs);
     }
@@ -83,6 +102,12 @@ public class GameProcessService
         if (IsRunning)
             return false;
 
+        if (PlatformHelper.IsLinux && !PlatformHelper.IsWineAvailable())
+        {
+            LastFailureReason = LaunchFailureReason.WineUnavailable;
+            return false;
+        }
+
         try
         {
             var psi = new ProcessStartInfo();
@@ -105,16 +130,21 @@ public class GameProcessService
 
             var process = Process.Start(psi);
             if (process == null)
+            {
+                LastFailureReason = LaunchFailureReason.ProcessStartFailed;
                 return false;
+            }
 
             CurrentProcess = process;
             GameStartTime = DateTime.UtcNow;
             process.EnableRaisingEvents = true;
             process.Exited += OnProcessExited;
+            LastFailureReason = LaunchFailureReason.None;
             return true;
         }
         catch
         {
+            LastFailureReason = LaunchFailureReason.ProcessStartFailed;
             return false;
         }
     }

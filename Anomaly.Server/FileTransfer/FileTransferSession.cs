@@ -35,6 +35,13 @@ public class FileTransferSession
     public const int DefaultChunkIntervalMs = 5;
     public const int MaxRetries = 2;
 
+    /// <summary>
+    /// Upper bound on hashes per FileRequestMessage. Beyond this, the request is
+    /// treated as malformed/abusive and truncated. At 16 KB chunks this caps one
+    /// session's workload regardless of what the client claims to need.
+    /// </summary>
+    public const int MaxRequestedHashesPerMessage = 1024;
+
     private FileTransferSession(ReferenceHub hub)
     {
         _hub = hub;
@@ -93,8 +100,18 @@ public class FileTransferSession
             return;
         }
 
-        foreach (var hash in request.RequestedHashes)
+        int requestedCount = request.RequestedHashes.Count;
+        int effectiveCount = Math.Min(requestedCount, MaxRequestedHashesPerMessage);
+        if (requestedCount > MaxRequestedHashesPerMessage)
         {
+            Logger.Warn(
+                $"FileTransfer: {_hub.LoggedNameFromRefHub()} requested {requestedCount} hashes; " +
+                $"capping at {MaxRequestedHashesPerMessage} to avoid overload.");
+        }
+
+        for (int i = 0; i < effectiveCount; i++)
+        {
+            var hash = request.RequestedHashes[i];
             if (ServerAssetManager.TryGetAsset(hash, out var asset))
                 _pendingFiles.Enqueue(asset);
             else

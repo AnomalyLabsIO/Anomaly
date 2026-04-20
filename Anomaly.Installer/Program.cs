@@ -85,6 +85,15 @@ public static class Program
         Console.WriteLine($"Vanilla game directory: {vanillaDir}");
         Console.WriteLine();
 
+        // Refuse to patch the vanilla install in place — the installer's parent directory
+        // becomes the *modded* target, so if they're the same directory we'd overwrite the
+        // user's Steam-managed SCPSL.exe with the patched copy. Steam's file verification
+        // would later roll this back, but only after Anomaly has scrambled GameAssembly.dll.
+        if (PathsAreSame(installerDir, vanillaDir))
+            throw new InstallerException(
+                "Installer is running inside the vanilla SCP:SL directory. Move Anomaly.Installer " +
+                "into a separate folder (this will become the modded game directory) and rerun.");
+
         // Preflight before anything destructive — fail loud if we can't write or don't
         // have disk space, and surface Linux runtime availability before patching begins.
         Preflight.Run(installerDir, vanillaDir, platform, args.DryRun);
@@ -239,6 +248,26 @@ public static class Program
         PrintPostInstallInstructions(platform, installerDir);
         Console.WriteLine();
         WaitForExit();
+    }
+
+    private static bool PathsAreSame(string a, string b)
+    {
+        try
+        {
+            string normA = Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string normB = Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            // Case-insensitive on Windows; Linux filesystems are typically case-sensitive,
+            // but Steam installs live under paths that are usually canonical-cased so this
+            // comparison is still fine either way.
+            var cmp = OperatingSystem.IsLinux()
+                ? StringComparison.Ordinal
+                : StringComparison.OrdinalIgnoreCase;
+            return string.Equals(normA, normB, cmp);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void PrintPlatformSummary(PlatformInfo platform)

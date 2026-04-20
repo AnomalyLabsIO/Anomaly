@@ -33,8 +33,23 @@ public static class ProcessConnectionRequestPatch
                     $"[{DateTime.Now:HH:mm:ss.fff}] PREFIX EXCEPTION (likely JIT failure): {ex}\n");
             }
             catch { }
-            return true; // fall through to original
+            // Reject rather than fall through to vanilla. Vanilla preauth on an
+            // Anomaly server runs in offline mode and would accept unauthenticated
+            // clients, so silent fall-through is an auth bypass.
+            TryRejectOnException(request);
+            return false;
         }
+    }
+
+    private static void TryRejectOnException(ConnectionRequest request)
+    {
+        try
+        {
+            RequestWriter.Reset();
+            RequestWriter.Put((byte)RejectionReason.Error);
+            request.RejectForce(RequestWriter);
+        }
+        catch { /* best effort — connection is getting dropped either way */ }
     }
 
     private static bool OnConnectionRequestInner(ConnectionRequest request)
@@ -437,8 +452,9 @@ public static class ProcessConnectionRequestPatch
             {
                 System.Console.Error.WriteLine($"[Anomaly] ProcessConnectionRequest exception: {ex}");
             }
+            TryRejectOnException(request);
         }
-        return true;
+        return false;
     }
 
     private static NetDataWriter RequestWriter

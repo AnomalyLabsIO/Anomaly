@@ -47,6 +47,10 @@ public static class NetworkManagerRegisterClientMessages
                     OverrideRegistry.Clear();
                     SpawnedObjectRegistry.Clear();
                     AnomalyResources.UnloadAll();
+                    // Reset file-transfer state so a reconnect starts with a clean manifest
+                    // and chunk buffer instead of leaking partially-received data or
+                    // double-counting progress.
+                    FileTransferClient.Reset();
                 };
             }
 

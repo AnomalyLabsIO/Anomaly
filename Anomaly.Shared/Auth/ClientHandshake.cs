@@ -22,6 +22,13 @@ public class ClientHandshake
 
     public static ClientHandshake Decode(byte[] buf)
     {
+        if (buf == null)
+            throw new ArgumentNullException(nameof(buf));
+        if (buf.Length < Size)
+            throw new ArgumentException(
+                $"ClientHandshake payload too short: expected >= {Size} bytes, got {buf.Length}.",
+                nameof(buf));
+
         var handshake = new ClientHandshake();
         var identityPublic = new byte[65];
         var sessionPublic = new byte[32];
