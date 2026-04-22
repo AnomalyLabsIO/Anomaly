@@ -1,13 +1,13 @@
 using System;
-using Anomaly.Client.API.Features;
-using Anomaly.Client.API.Scheduling;
-using Anomaly.Client.Events.Args;
-using Anomaly.Client.Events.Handlers;
+using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Scheduling;
+using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Internal.Effects;
-using Anomaly.Client.Internal.Input;
-using Anomaly.Client.Internal.Scheduling;
+using Anomaly.Client.Api.Internal.Input;
+using Anomaly.Client.Api.Internal.Scheduling;
 using Anomaly.Client.Internal.Stats;
-using Anomaly.Client.Internal.Wrappers;
+using Anomaly.Client.Api.Internal.Wrappers;
 using Il2CppAdminToys;
 using Il2CppCustomPlayerEffects;
 using Il2Cpp;
@@ -21,8 +21,8 @@ using Il2CppPlayerStatsSystem;
 using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine.SceneManagement;
-using ClientApi = global::Anomaly.Client.API.Features.Client;
-using PlayerWrapper = global::Anomaly.Client.API.Features.Player;
+using ClientApi = global::Anomaly.Client.Api.Features.Client;
+using PlayerWrapper = global::Anomaly.Client.Api.Features.Player;
 
 namespace Anomaly.Client.Internal.Bootstrap;
 
@@ -31,7 +31,6 @@ internal static class ClientRuntime
     private static bool _initialized;
 
     internal static bool IsInitialized => _initialized;
-    internal static bool IsClientReady { get; private set; }
 
     internal static void Initialize()
     {
@@ -50,7 +49,7 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
-            IsClientReady = false;
+            ClientApi.IsClientReady = false;
             EffectStateTracker.Clear();
             HealthStateTracker.Clear();
             PlayerRegistry.Resync();
@@ -66,7 +65,7 @@ internal static class ClientRuntime
         {
             (string serverIp, ushort serverPort) = GetServerEndpoint();
 
-            IsClientReady = false;
+            ClientApi.IsClientReady = false;
             // Dispatch disconnect before clearing so subscribers see the final state.
             // Scheduler.ClearAll runs last so tasks scheduled during disconnect
             // handlers (short-lived server-session work) still get cancelled.
@@ -82,7 +81,7 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
-            IsClientReady = false;
+            ClientApi.IsClientReady = false;
             EffectStateTracker.Clear();
             HealthStateTracker.Clear();
             PlayerRegistry.Resync();
@@ -93,7 +92,7 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
-            IsClientReady = true;
+            ClientApi.IsClientReady = true;
             PlayerRegistry.Resync();
             HealthStateTracker.Update();
             ClientEvents.OnReady(new ClientReadyEventArgs(ClientApi.CurrentSceneName));

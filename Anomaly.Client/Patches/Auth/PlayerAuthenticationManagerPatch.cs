@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
-using Anomaly.Client.API.Features;
-using Anomaly.Client.API.Networking;
+using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Auth;
 using Anomaly.Client.Components;
-using Anomaly.Client.Internal.Wrappers;
+using Anomaly.Client.Api.Internal.Wrappers;
 using Anomaly.Shared.Networking;
 using HarmonyLib;
 using Il2Cpp;

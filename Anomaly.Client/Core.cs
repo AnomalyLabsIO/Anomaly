@@ -1,12 +1,13 @@
 using System.Reflection;
-using Anomaly.Client.API.Commands;
-using Anomaly.Client.API.Config;
-using Anomaly.Client.API.Localization;
-using Anomaly.Client.API.Persistence;
+using Anomaly.Client.Api.Commands;
+using Anomaly.Client.Api.Config;
+using Anomaly.Client.Api.Localization;
+using Anomaly.Client.Api.Persistence;
 using Anomaly.Client.Auth;
 using Anomaly.Client.Commands;
 using Anomaly.Client.Diagnostics;
 using Anomaly.Client.Internal.Bootstrap;
+using Anomaly.Client.Api.Internal.UI;
 using Anomaly.Client.Internal.UI;
 using Il2Cpp;
 using Il2CppCentralAuth;

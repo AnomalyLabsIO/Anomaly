@@ -43,7 +43,7 @@ Prerequisites:
 2. Follow the instructions for setting up a [Melon Loader](https://melonwiki.xyz/#/modders/quickstart) project. Targeting IL2Cpp and the latest version.
    3. The easiest way is the Visual Studio template, select the SCPSL.exe from the MODDED directory.
    4. Once the template project is created you can any IDE you'd like. I prefer JetBrains Rider.
-5. Add a reference to Anomaly.Client.dll from the MODDED directory to your project. As well as Anomaly.Shared.dll from the UserLibs directory.
+5. Add references to `Anomaly.Client.Api.dll` and `Anomaly.Shared.dll` from the MODDED directory's `UserLibs/` folder. You do not need to reference `Anomaly.Client.dll` — it loads as a peer mod from `Mods/` at runtime, and declaring `[assembly: MelonAdditionalDependencies("Anomaly")]` in your mod enforces the load order.
 6. Follow any guides on creating a IL2Cpp Melon mod, and use the Anomaly API documentation to learn how to use the Anomaly features.
 
 If you would like to add a server component to your mod, create a LabAPI plugin and reference Anomaly.Server.dll and Anomaly.Shared.dll. EXILED should work as well, but note that Anomaly uses LabAPI types you may need to unwrap.

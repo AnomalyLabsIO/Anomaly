@@ -1,10 +1,9 @@
 using System.Diagnostics;
-using Anomaly.Client.API.Features;
-using Anomaly.Client.Internal.Bootstrap;
-using Anomaly.Client.Internal.Wrappers;
+using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Internal.Wrappers;
 using MelonLoader;
 using UnityEngine;
-using ClientApi = Anomaly.Client.API.Features.Client;
+using ClientApi = Anomaly.Client.Api.Features.Client;
 
 namespace Anomaly.Client.Diagnostics;
 
@@ -51,7 +50,7 @@ public static class DiagnosticCollector
                 IsConnected = ClientApi.IsConnected,
                 ServerIp = ClientApi.IsConnected ? ClientApi.ServerIp : null,
                 PlayerCount = PlayerRegistry.PlayerList?.Count ?? 0,
-                IsClientReady = ClientRuntime.IsClientReady
+                IsClientReady = ClientApi.IsClientReady
             };
         }
         catch

@@ -1,7 +1,8 @@
-using Anomaly.Client.API.Assets;
-using Anomaly.Client.API.Networking;
+using Anomaly.Client.Api.Assets;
+using Anomaly.Client.Api.FileTransfer;
+using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Assets;
-using Anomaly.Client.Events.Handlers;
+using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.FileTransfer;
 using Anomaly.Client.Internal.Map;
 using Anomaly.Client.Internal.Round;

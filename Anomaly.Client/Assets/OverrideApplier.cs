@@ -1,4 +1,4 @@
-using Anomaly.Client.API.Assets;
+using Anomaly.Client.Api.Assets;
 using Il2CppMirror;
 using MelonLoader;
 using UnityEngine;

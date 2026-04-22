@@ -1,4 +1,4 @@
-﻿using Anomaly.Client.Components;
+﻿using Anomaly.Client.Api.Components;
 using HarmonyLib;
 using Il2Cpp;
 using UnityEngine;

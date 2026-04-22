@@ -1,7 +1,7 @@
-using Anomaly.Client.API.Features;
-using Anomaly.Client.Events.Args;
-using Anomaly.Client.Events.Handlers;
-using Anomaly.Client.Internal.Wrappers;
+using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Events.Handlers;
+using Anomaly.Client.Api.Internal.Wrappers;
 using HarmonyLib;
 using Il2Cpp;
 using Il2CppVoiceChat;

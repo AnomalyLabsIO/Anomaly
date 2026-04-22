@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="Anomaly.Client/Anomaly.Client.csproj" Id="305945be-80b7-4120-a40c-df8a56f9aad4" />
+  <Project Path="Anomaly.Client.Api/Anomaly.Client.Api.csproj" />
   <Project Path="Anomaly.Installer/Anomaly.Installer.csproj" />
   <Project Path="Anomaly.InstallerCore/Anomaly.InstallerCore.csproj" />
   <Project Path="Anomaly.Server/Anomaly.Server.csproj" Id="5b1bd184-cf04-444a-ad8b-9e00cac92ab5" />

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using Anomaly.Client.API.Commands;
-using Anomaly.Client.API.Features;
+using Anomaly.Client.Api.Commands;
+using Anomaly.Client.Api.Features;
 
 namespace Anomaly.Client.Commands;
 

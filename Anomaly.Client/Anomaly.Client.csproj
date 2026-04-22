@@ -363,70 +363,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="Internal\ModNamespace.cs" />
-		<Compile Include="API\Scheduling\ScheduledTask.cs" />
-		<Compile Include="API\Scheduling\Scheduler.cs" />
-		<Compile Include="Internal\Scheduling\SchedulerTick.cs" />
-		<Compile Include="API\Input\InputBindingDefinition.cs" />
-		<Compile Include="API\Input\InputKey.cs" />
-		<Compile Include="API\Input\InputRegistry.cs" />
-		<Compile Include="Internal\Input\InputConfigLoader.cs" />
-		<Compile Include="Internal\Input\InputPoller.cs" />
-		<Compile Include="Events\Handlers\RoundEvents.cs" />
-		<Compile Include="Events\Args\RoundPhaseChangedEventArgs.cs" />
-		<Compile Include="Internal\Round\RoundStateReceiver.cs" />
-		<Compile Include="API\Config\IConfigSource.cs" />
-		<Compile Include="API\Config\ClientConfig.cs" />
-		<Compile Include="Internal\Config\JsonConfigSource.cs" />
-		<Compile Include="Internal\Config\ConfigFileWatcher.cs" />
-		<Compile Include="API\Commands\ICommand.cs" />
-		<Compile Include="API\Commands\CommandContext.cs" />
-		<Compile Include="API\Commands\CommandRegistry.cs" />
-		<Compile Include="Patches\Command\ConsoleTypeCommandPatch.cs" />
-		<Compile Include="API\Persistence\IPersistenceStore.cs" />
-		<Compile Include="API\Persistence\ClientPersistence.cs" />
-		<Compile Include="Internal\Persistence\JsonPersistenceStore.cs" />
-		<Compile Include="API\UI\UiAnchor.cs" />
-		<Compile Include="API\UI\SafeArea.cs" />
-		<Compile Include="API\UI\UiCanvas.cs" />
-		<Compile Include="API\UI\UiPrefabValidator.cs" />
-		<Compile Include="API\UI\UiParameterBinder.cs" />
-		<Compile Include="Internal\UI\UiBootstrap.cs" />
-		<Compile Include="Internal\UI\PreloaderSkinBootstrap.cs" />
-		<Compile Include="API\Localization\LocalizationService.cs" />
-		<Compile Include="API\Localization\Tr.cs" />
-		<Compile Include="Internal\Localization\RegistryTxtReader.cs" />
-		<Compile Include="Internal\Localization\TrKeys.cs" />
-		<Compile Include="API\Enum\SceneType.cs" />
-		<Compile Include="API\Features\Client.cs" />
-		<Compile Include="API\Features\Computer.cs" />
-		<Compile Include="API\Features\Coroutines.cs" />
-		<Compile Include="API\Features\AdminToy.cs" />
-		<Compile Include="API\Features\Door.cs" />
-		<Compile Include="API\Features\Item.cs" />
-		<Compile Include="API\Features\LightAdminToy.cs" />
-		<Compile Include="API\Features\LocalPlayer.cs" />
-		<Compile Include="API\Features\Paths.cs" />
-		<Compile Include="API\Features\Player.cs" />
-		<Compile Include="API\Features\PlayerEffect.cs" />
-		<Compile Include="API\Features\PlayerEffects.cs" />
-		<Compile Include="API\Features\PlayerInventory.cs" />
-		<Compile Include="API\Features\PlayerStat.cs" />
-		<Compile Include="API\Features\PlayerStatsWrapper.cs" />
-		<Compile Include="API\Features\Pickup.cs" />
-		<Compile Include="API\Features\PrimitiveAdminToy.cs" />
-		<Compile Include="API\Features\Projectile.cs" />
-		<Compile Include="API\Features\Role.cs" />
-		<Compile Include="API\Features\Room.cs" />
-		<Compile Include="API\Features\ShootingTargetAdminToy.cs" />
-		<Compile Include="API\Features\SpeakerAdminToy.cs" />
-		<Compile Include="API\Features\VoiceMessagePacket.cs" />
-		<Compile Include="API\Assets\AnomalyResources.cs" />
-		<Compile Include="API\Assets\AssetEvents.cs" />
-		<Compile Include="API\Networking\AnomalyMessaging.cs" />
-		<Compile Include="API\Networking\SilentRoleChangeHandler.cs" />
+		<Compile Include="Core.cs" />
 		<Compile Include="Assets\LocalTextures.cs" />
-		<Compile Include="Assets\PngLoader.cs" />
 		<Compile Include="Assets\OverrideApplier.cs" />
 		<Compile Include="Assets\OverrideRegistry.cs" />
 		<Compile Include="Assets\ScriptStripper.cs" />
@@ -437,9 +375,7 @@
 		<Compile Include="Auth\ServerConnection.cs" />
 		<Compile Include="Commands\NameCommand.cs" />
 		<Compile Include="Components\AuthStatusOverrideComponent.cs" />
-		<Compile Include="Components\CreditsHookComponent.cs" />
 		<Compile Include="Components\FileTransferOverlayComponent.cs" />
-		<Compile Include="Core.cs" />
 		<Compile Include="Diagnostics\CircularLogBuffer.cs" />
 		<Compile Include="Diagnostics\CrashHooks.cs" />
 		<Compile Include="Diagnostics\CrashReport.cs" />
@@ -448,79 +384,28 @@
 		<Compile Include="Diagnostics\DiagnosticCollector.cs" />
 		<Compile Include="Diagnostics\HangWatchdog.cs" />
 		<Compile Include="Diagnostics\NativeMethods.cs" />
-		<Compile Include="Events\AnomalyEventHandler.cs" />
-		<Compile Include="Events\EventInvoker.cs" />
-		<Compile Include="Events\Args\CanvasReadyEventArgs.cs" />
-		<Compile Include="Events\Args\ClientConnectedEventArgs.cs" />
-		<Compile Include="Events\Args\ClientDisconnectedEventArgs.cs" />
-		<Compile Include="Events\Args\ClientReadyEventArgs.cs" />
-		<Compile Include="Events\Args\CreditHookEventArgs.cs" />
-		<Compile Include="Events\Args\CurrentItemChangedEventArgs.cs" />
-		<Compile Include="Events\Args\AdminToyAddedEventArgs.cs" />
-		<Compile Include="Events\Args\AdminToyRemovedEventArgs.cs" />
-		<Compile Include="Events\Args\FirearmShotEventArgs.cs" />
-		<Compile Include="Events\Args\EffectDisabledEventArgs.cs" />
-		<Compile Include="Events\Args\EffectEnabledEventArgs.cs" />
-		<Compile Include="Events\Args\EffectIntensityChangedEventArgs.cs" />
-		<Compile Include="Events\Args\InventoryChangedEventArgs.cs" />
-		<Compile Include="Events\Args\PlayerAddedEventArgs.cs" />
-		<Compile Include="Events\Args\PlayerDamagedEventArgs.cs" />
-		<Compile Include="Events\Args\PlayerDiedEventArgs.cs" />
-		<Compile Include="Events\Args\PlayerEventArgs.cs" />
-		<Compile Include="Events\Args\PlayerHealedEventArgs.cs" />
-		<Compile Include="Events\Args\PlayerRemovedEventArgs.cs" />
-		<Compile Include="Events\Args\PlayerRoleChangedEventArgs.cs" />
-		<Compile Include="Events\Args\PickupAddedEventArgs.cs" />
-		<Compile Include="Events\Args\PickupRemovedEventArgs.cs" />
-		<Compile Include="Events\Args\ProjectileRemovedEventArgs.cs" />
-		<Compile Include="Events\Args\ProjectileSpawnedEventArgs.cs" />
-		<Compile Include="Events\Args\SceneLoadedEventArgs.cs" />
-		<Compile Include="Events\Args\VoiceMessageEventArgs.cs" />
-		<Compile Include="Events\Args\VoiceMessageReceivedEventArgs.cs" />
-		<Compile Include="Events\Args\VoiceMessageReceivingEventArgs.cs" />
-		<Compile Include="Events\Args\VoiceMessageSendingEventArgs.cs" />
-		<Compile Include="Events\Args\VoiceMessageSentEventArgs.cs" />
-		<Compile Include="Events\Handlers\AdminToyEvents.cs" />
-		<Compile Include="Events\Handlers\ClientEvents.cs" />
-		<Compile Include="Events\Handlers\FirearmEvents.cs" />
-		<Compile Include="Events\Handlers\EffectEvents.cs" />
-		<Compile Include="Events\Handlers\InventoryEvents.cs" />
-		<Compile Include="Events\Handlers\PlayerEvents.cs" />
-		<Compile Include="Events\Handlers\PickupEvents.cs" />
-		<Compile Include="Events\Handlers\ProjectileEvents.cs" />
-		<Compile Include="Events\Handlers\RoleEvents.cs" />
-		<Compile Include="Events\Handlers\StatsEvents.cs" />
-		<Compile Include="Events\Args\AnomalyMessageReceivedEventArgs.cs" />
-		<Compile Include="Events\Args\AssetDespawnedEventArgs.cs" />
-		<Compile Include="Events\Args\AssetOverrideAppliedEventArgs.cs" />
-		<Compile Include="Events\Args\AssetOverrideClearedEventArgs.cs" />
-		<Compile Include="Events\Args\AssetReloadedEventArgs.cs" />
-		<Compile Include="Events\Args\AssetSpawnedEventArgs.cs" />
-		<Compile Include="Events\Args\FileTransferProgressEventArgs.cs" />
-		<Compile Include="Events\Args\FileTransferCompleteEventArgs.cs" />
-		<Compile Include="Events\Handlers\FileTransferEvents.cs" />
-		<Compile Include="Events\Handlers\NetworkMessageEvents.cs" />
-		<Compile Include="Events\Handlers\VoiceEvents.cs" />
 		<Compile Include="FileTransfer\ChunkBuffer.cs" />
-		<Compile Include="FileTransfer\FileCache.cs" />
 		<Compile Include="FileTransfer\FileTransferClient.cs" />
 		<Compile Include="Internal\Bootstrap\ClientRuntime.cs" />
+		<Compile Include="Internal\Effects\EffectStateTracker.cs" />
 		<Compile Include="Internal\Map\FacilityBootstrapMessages.cs" />
 		<Compile Include="Internal\Map\FacilityRecipeClient.cs" />
+		<Compile Include="Internal\UI\PreloaderSkinBootstrap.cs" />
+		<Compile Include="Internal\Networking\SilentRoleChangeHandler.cs" />
+		<Compile Include="Internal\Round\RoundStateReceiver.cs" />
 		<Compile Include="Internal\SilentRoleChange.cs" />
-		<Compile Include="Internal\Effects\EffectStateTracker.cs" />
 		<Compile Include="Internal\Stats\HealthStateTracker.cs" />
-		<Compile Include="Internal\Wrappers\PlayerRegistry.cs" />
 		<Compile Include="Patches\PatchInvocationGuard.cs" />
 		<Compile Include="Patches\Auth\NetDataWriterPut.cs" />
 		<Compile Include="Patches\Auth\PlayerAuthenticationManagerPatch.cs" />
+		<Compile Include="Patches\Command\ConsoleTypeCommandPatch.cs" />
 		<Compile Include="Patches\Credits\NewCreditsPatch.cs" />
+		<Compile Include="Patches\Diagnostics\MirrorDiagnosticPatches.cs" />
 		<Compile Include="Patches\Loader\LoaderPatch.cs" />
 		<Compile Include="Patches\Loader\LauncherVersionPatch.cs" />
 		<Compile Include="Patches\Menu\CanvasPatch.cs" />
 		<Compile Include="Patches\Menu\NewServerBrowserOnEnablePatch.cs" />
 		<Compile Include="Patches\Menu\NewsLoaderStartPatch.cs" />
-		<Compile Include="Patches\Diagnostics\MirrorDiagnosticPatches.cs" />
 		<Compile Include="Patches\Mirror\EncryptedChannelHandlerFix.cs" />
 		<Compile Include="Patches\Mirror\NetworkIdentityOnStartClientPatch.cs" />
 		<Compile Include="Patches\Mirror\NetworkManagerRegisterClientMessages.cs" />
@@ -542,16 +427,13 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj" />
+	  <ProjectReference Include="..\Anomaly.Client.Api\Anomaly.Client.Api.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <!-- Pure-managed PNG decoder. Zero native deps, ~20KB, MIT. Required because
-	       both UnityEngine.ImageConversion.LoadImage and MelonLoader's shipped
-	       UnityEngine.Il2CppImageConversionManager shim ultimately route through
-	       Il2CppSystem.ReadOnlySpan<byte>.GetPinnableReference — a method this
-	       Il2CppInterop build doesn't export, causing MissingMethodException at
-	       runtime. See Anomaly.Client.Assets.PngLoader. -->
-	  <PackageReference Include="BigGustave" Version="1.0.3" />
+	  <!-- BigGustave + PngLoader have moved to Anomaly.Client.Api; this project
+	       only needs HarmonyX for patches, MelonLoader for MelonMod lifecycle,
+	       and Newtonsoft.Json for diagnostic/crash report serialization. -->
 	  <PackageReference Include="HarmonyX" Version="2.16.0" />
 	  <PackageReference Include="LavaGang.MelonLoader" Version="0.7.2" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1" />
@@ -573,7 +455,5 @@
 		<Message Importance="high" Text="Anomaly.Client: copying $(TargetFileName) -&gt; $(AnomalyClientModsDir)" Condition="Exists('$(AnomalyClientModsDir)')" />
 		<Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientModsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientModsDir)')" />
 		<Warning Text="Anomaly.Client: AnomalyClientModsDir does not exist: $(AnomalyClientModsDir)" Condition="!Exists('$(AnomalyClientModsDir)')" />
-		<Message Importance="high" Text="Anomaly.Client: copying BigGustave.dll -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)BigGustave.dll')" />
-		<Copy SourceFiles="$(OutputPath)BigGustave.dll" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)BigGustave.dll')" />
 	</Target>
 </Project>

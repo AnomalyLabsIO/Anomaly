@@ -1,7 +1,8 @@
 using System;
 using System.IO;
-using Anomaly.Client.API.Features;
+using Anomaly.Client.Api.Features;
 using Anomaly.Client.Assets;
+using Anomaly.Client.Api.Assets;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.SceneManagement;

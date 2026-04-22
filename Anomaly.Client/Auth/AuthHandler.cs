@@ -11,7 +11,7 @@ using System.Reflection.Metadata;
 using Il2CppLiteNetLib.Utils;
 using Il2CppLiteNetLib;
 using System.Collections;
-using Anomaly.Client.API.Features;
+using Anomaly.Client.Api.Features;
 using Anomaly.Client.Components;
 using Anomaly.Shared.Auth;
 using Il2CppMEC;

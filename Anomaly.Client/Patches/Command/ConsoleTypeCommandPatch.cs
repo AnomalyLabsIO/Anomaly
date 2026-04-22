@@ -1,5 +1,5 @@
 using System;
-using Anomaly.Client.API.Commands;
+using Anomaly.Client.Api.Commands;
 using HarmonyLib;
 using Il2Cpp;
 using Il2CppGameCore;

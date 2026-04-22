@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.ExceptionServices;
-using Anomaly.Client.API.Features;
+using Anomaly.Client.Api.Features;
 using MelonLoader;
 using UnityEngine;
 

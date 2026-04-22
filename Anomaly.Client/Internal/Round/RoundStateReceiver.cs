@@ -1,6 +1,6 @@
-using Anomaly.Client.API.Networking;
-using Anomaly.Client.Events.Args;
-using Anomaly.Client.Events.Handlers;
+using Anomaly.Client.Api.Networking;
+using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
 

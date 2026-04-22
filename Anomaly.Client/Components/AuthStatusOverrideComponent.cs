@@ -1,11 +1,11 @@
-using Anomaly.Client.API.Features;
-using Anomaly.Client.API.Localization;
-using Anomaly.Client.Internal.Localization;
+using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Localization;
+using Anomaly.Client.Api.Internal.Localization;
 using Il2CppInterop.Runtime.Attributes;
 using Il2CppTMPro;
 using MelonLoader;
 using UnityEngine;
-using ClientFeature = Anomaly.Client.API.Features.Client;
+using ClientFeature = Anomaly.Client.Api.Features.Client;
 
 namespace Anomaly.Client.Components;
 

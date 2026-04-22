@@ -1,5 +1,5 @@
-using Anomaly.Client.API.Localization;
-using Anomaly.Client.Internal.Localization;
+using Anomaly.Client.Api.Localization;
+using Anomaly.Client.Api.Internal.Localization;
 using HarmonyLib;
 using Il2Cpp;
 using UnityEngine;

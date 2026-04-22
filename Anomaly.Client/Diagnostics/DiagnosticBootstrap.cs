@@ -1,4 +1,4 @@
-using Anomaly.Client.API.Features;
+using Anomaly.Client.Api.Features;
 using MelonLoader;
 
 namespace Anomaly.Client.Diagnostics;
