@@ -174,10 +174,14 @@
                         </DockPanel>
 
                         <!-- Install Game button -->
-                        <Button Content="{l:Tr launcher.state1.install_game}"
-                                Command="{Binding InstallGameCommand}"
-                                Padding="16,8" FontSize="13"
-                                HorizontalAlignment="Left" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="{l:Tr launcher.state1.install_game}"
+                                    Command="{Binding InstallGameCommand}"
+                                    Padding="16,8" FontSize="13" />
+                            <Button Content="{l:Tr launcher.steamdl.entry.game_not_installed}"
+                                    Command="{Binding OpenSteamDownloadDialogCommand}"
+                                    Padding="16,8" FontSize="13" />
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- ========== State 2: Vanilla Updated ========== -->
@@ -212,10 +216,14 @@
                                     <Run Text="{Binding OnlineBuildId}" FontWeight="SemiBold" />
                                 </TextBlock>
                             </StackPanel>
-                            <Button Content="{l:Tr launcher.state3.update}"
-                                    Command="{Binding UpdateScpslCommand}"
-                                    Padding="16,8" Classes="accent"
-                                    HorizontalAlignment="Left" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="{l:Tr launcher.state3.update}"
+                                        Command="{Binding UpdateScpslCommand}"
+                                        Padding="16,8" Classes="accent" />
+                                <Button Content="{l:Tr launcher.steamdl.entry.pin_older_build}"
+                                        Command="{Binding OpenSteamDownloadDialogCommand}"
+                                        Padding="16,8" />
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
@@ -280,6 +288,11 @@
                                            Text="{Binding ModdedGaDate}"
                                            FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
                             </Grid>
+
+                            <Button Content="{l:Tr launcher.steamdl.entry.change_version}"
+                                    Command="{Binding OpenSteamDownloadDialogCommand}"
+                                    Padding="12,6" Margin="0,8,0,0"
+                                    HorizontalAlignment="Left" FontSize="11" />
                         </StackPanel>
                     </Border>
 

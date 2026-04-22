@@ -14,14 +14,14 @@ internal class Patcher
     private readonly Il2CppManager _il2CppManager;
     private readonly string _gameAssemblyPath;
     private readonly byte[] _gameAssemblyData;
-    private readonly PatchInfo _patchInfo;
+    private readonly VersionRange _range;
 
-    public Patcher(string gameAssemblyPath, byte[] gameAssemblyData, Il2CppManager il2CppManager, PatchInfo patchInfo)
+    public Patcher(string gameAssemblyPath, byte[] gameAssemblyData, Il2CppManager il2CppManager, VersionRange range)
     {
         _gameAssemblyPath = gameAssemblyPath;
         _gameAssemblyData = gameAssemblyData;
         _il2CppManager = il2CppManager;
-        _patchInfo = patchInfo;
+        _range = range;
     }
 
     /// <summary>
@@ -134,7 +134,7 @@ internal class Patcher
     /// </summary>
     public void PatchGameAssembly()
     {
-        PatchMethodInfo[] patchMethods = _patchInfo.patchMethods;
+        PatchMethodInfo[] patchMethods = _range.patchMethods;
 
         for (int i = 0; i < patchMethods.Length; i++)
         {
@@ -274,6 +274,37 @@ internal class Patcher
     }
 
     // --- Bundle Version Fix ---
+
+    /// <summary>
+    /// Reads the current bundleVersion string from globalgamemanagers and parses it as a
+    /// <see cref="GameVersion"/>. Returns null if the file is missing or the string can't be
+    /// located or parsed. Used for pre-patch version detection so the installer can pick the
+    /// correct <see cref="VersionRange"/> before loading IL2CPP.
+    /// </summary>
+    public static GameVersion? TryReadBundleVersionString(string ggmPath)
+    {
+        if (!File.Exists(ggmPath))
+            return null;
+
+        try
+        {
+            byte[] data = File.ReadAllBytes(ggmPath);
+            int offset = FindBundleVersionOffset(data);
+            if (offset < 0)
+                return null;
+
+            int length = BitConverter.ToInt32(data, offset);
+            if (length <= 0 || offset + 4 + length > data.Length)
+                return null;
+
+            string versionString = Encoding.UTF8.GetString(data, offset + 4, length);
+            return GameVersion.TryParse(versionString, out var v) ? v : (GameVersion?)null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Patches the bundleVersion string in SCPSL_Data/globalgamemanagers to match the real game version.

@@ -114,4 +114,80 @@ internal static class TrKeys
     // Mod item
     public const string ModItem_VersionWarning = "launcher.mod_item.version_warning";
     public const string ModItem_UnknownVersion = "launcher.mod_item.unknown_version";
+
+    // Steam download dialog — entry points
+    public const string SteamDl_Entry_GameNotInstalled = "launcher.steamdl.entry.game_not_installed";
+    public const string SteamDl_Entry_PinOlderBuild = "launcher.steamdl.entry.pin_older_build";
+    public const string SteamDl_Entry_ChangeVersion = "launcher.steamdl.entry.change_version";
+
+    // Steam download dialog — window
+    public const string SteamDl_Dialog_Title = "launcher.steamdl.dialog.title";
+
+    // Steam download dialog — page 1 (pick version)
+    public const string SteamDl_Page1_Header = "launcher.steamdl.page1.header";
+    public const string SteamDl_Page1_PrivacyBanner = "launcher.steamdl.page1.privacy_banner";
+    public const string SteamDl_Page1_PrivacyLinkText = "launcher.steamdl.page1.privacy_link_text";
+    public const string SteamDl_Page1_PickFromCatalog = "launcher.steamdl.page1.pick_from_catalog";
+    public const string SteamDl_Page1_PasteManifest = "launcher.steamdl.page1.paste_manifest";
+    public const string SteamDl_Page1_ManifestIdWatermark = "launcher.steamdl.page1.manifest_id_watermark";
+    public const string SteamDl_Page1_OpenSteamDb = "launcher.steamdl.page1.open_steamdb";
+    public const string SteamDl_Page1_ShowAllBuilds = "launcher.steamdl.page1.show_all_builds";
+    public const string SteamDl_Page1_CompatibleBadge = "launcher.steamdl.page1.compatible_badge";
+    public const string SteamDl_Page1_IncompatibleBadge = "launcher.steamdl.page1.incompatible_badge";
+    public const string SteamDl_Page1_SignInAndDownload = "launcher.steamdl.page1.sign_in_and_download";
+    public const string SteamDl_Page1_Cancel = "launcher.steamdl.page1.cancel";
+    public const string SteamDl_Page1_EmptyCatalog = "launcher.steamdl.page1.empty_catalog";
+
+    // Steam download dialog — page 2 (QR sign-in)
+    public const string SteamDl_Page2_Header = "launcher.steamdl.page2.header";
+    public const string SteamDl_Page2_Instructions = "launcher.steamdl.page2.instructions";
+    public const string SteamDl_Page2_RememberMe = "launcher.steamdl.page2.remember_me";
+    public const string SteamDl_Page2_Cancel = "launcher.steamdl.page2.cancel";
+
+    // Steam download dialog — page 3 (progress)
+    public const string SteamDl_Page3_Header = "launcher.steamdl.page3.header";
+    public const string SteamDl_Page3_Cancel = "launcher.steamdl.page3.cancel";
+
+    // Steam download dialog — done
+    public const string SteamDl_Done_Header = "launcher.steamdl.done.header";
+    public const string SteamDl_Done_Body = "launcher.steamdl.done.body";
+    public const string SteamDl_Done_UseBuild = "launcher.steamdl.done.use_build";
+
+    // Steam download dialog — error
+    public const string SteamDl_Error_Header = "launcher.steamdl.error.header";
+    public const string SteamDl_Error_TryAgain = "launcher.steamdl.error.try_again";
+    public const string SteamDl_Error_Close = "launcher.steamdl.error.close";
+
+    // Steam download dialog — status messages
+    public const string SteamDl_SignIn_RefreshingToken = "launcher.steamdl.signin.refreshing_token";
+    public const string SteamDl_SignIn_WaitingForChallenge = "launcher.steamdl.signin.waiting_for_challenge";
+    public const string SteamDl_SignIn_WaitingForScan = "launcher.steamdl.signin.waiting_for_scan";
+    public const string SteamDl_SignIn_Success = "launcher.steamdl.signin.success";
+    public const string SteamDl_Download_Starting = "launcher.steamdl.download.starting";
+    public const string SteamDl_Download_Progress = "launcher.steamdl.download.progress";
+    public const string SteamDl_Download_Speed = "launcher.steamdl.download.speed";
+
+    // Steam download dialog — error messages
+    public const string SteamDl_Error_NoVersionSelected = "launcher.steamdl.error.no_version_selected";
+    public const string SteamDl_Error_QrExpired = "launcher.steamdl.error.qr_expired";
+    public const string SteamDl_Error_UserDeclined = "launcher.steamdl.error.user_declined";
+    public const string SteamDl_Error_Network = "launcher.steamdl.error.network";
+    public const string SteamDl_Error_TokenExpired = "launcher.steamdl.error.token_expired";
+    public const string SteamDl_Error_Unexpected = "launcher.steamdl.error.unexpected";
+    public const string SteamDl_Error_NotOwned = "launcher.steamdl.error.not_owned";
+    public const string SteamDl_Error_DiskSpace = "launcher.steamdl.error.disk_space";
+    public const string SteamDl_Error_IncompatibleConfirm = "launcher.steamdl.error.incompatible_confirm";
+
+    // Steam download dialog — version table
+    public const string SteamDl_Column_Date = "launcher.steamdl.column.date";
+    public const string SteamDl_Column_ManifestId = "launcher.steamdl.column.manifest_id";
+    public const string SteamDl_Column_GameVersion = "launcher.steamdl.column.game_version";
+    public const string SteamDl_Column_Supported = "launcher.steamdl.column.supported";
+    public const string SteamDl_Status_Supported = "launcher.steamdl.status.supported";
+    public const string SteamDl_Status_Patchable = "launcher.steamdl.status.patchable";
+    public const string SteamDl_Status_Unsupported = "launcher.steamdl.status.unsupported";
+    public const string SteamDl_Status_Unknown = "launcher.steamdl.status.unknown";
+    public const string SteamDl_Catalog_Loading = "launcher.steamdl.catalog.loading";
+    public const string SteamDl_Catalog_Empty = "launcher.steamdl.catalog.empty";
+    public const string SteamDl_Catalog_Refresh = "launcher.steamdl.catalog.refresh";
 }

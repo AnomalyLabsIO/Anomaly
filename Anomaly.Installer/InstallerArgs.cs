@@ -13,6 +13,32 @@ internal sealed class InstallerArgs
     /// <summary>Unpacker timeout in milliseconds. Null means "use Unpacker default".</summary>
     public int? UnpackTimeoutMs { get; init; }
 
+    /// <summary>
+    /// Explicit game version override. When set, the installer skips detection and goes straight
+    /// to patchinfo.json lookup. Useful when the launcher knows what manifest was downloaded.
+    /// </summary>
+    public string? TargetVersion { get; init; }
+
+    /// <summary>
+    /// Skip MelonLoader installation. Combine with <see cref="NoAnomaly"/> to produce a bare
+    /// vanilla install where the user brings their own mod loader.
+    /// </summary>
+    public bool NoMelon { get; init; }
+
+    /// <summary>
+    /// Skip anything that adds Anomaly-specific content on top of a patched vanilla install —
+    /// currently just the Mods/UserLibs verification step; later, any Anomaly.Client download.
+    /// This flag does NOT affect IL2CPP patches; use <see cref="SkipPatches"/> for that.
+    /// </summary>
+    public bool NoAnomaly { get; init; }
+
+    /// <summary>
+    /// Skip the IL2CPP patch stage and the bundle-version fix. The installer still copies game
+    /// files, places the clean launcher, and installs MelonLoader. Intended for cases where the
+    /// downloaded game version isn't in patchinfo.json's supported ranges.
+    /// </summary>
+    public bool SkipPatches { get; init; }
+
     public static InstallerArgs Parse(string[] args)
     {
         bool showHelp = false;
@@ -20,6 +46,10 @@ internal sealed class InstallerArgs
         bool uninstall = false;
         string? vanillaPath = null;
         int? unpackTimeoutMs = null;
+        string? targetVersion = null;
+        bool noMelon = false;
+        bool noAnomaly = false;
+        bool skipPatches = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -48,6 +78,22 @@ internal sealed class InstallerArgs
                     throw new InstallerException($"--unpack-timeout expects a positive integer (seconds). Got: {args[i]}");
                 unpackTimeoutMs = seconds * 1000;
             }
+            else if (string.Equals(a, "--target-version", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                targetVersion = args[++i];
+            }
+            else if (string.Equals(a, "--no-melon", StringComparison.OrdinalIgnoreCase))
+            {
+                noMelon = true;
+            }
+            else if (string.Equals(a, "--no-anomaly", StringComparison.OrdinalIgnoreCase))
+            {
+                noAnomaly = true;
+            }
+            else if (string.Equals(a, "--skip-patches", StringComparison.OrdinalIgnoreCase))
+            {
+                skipPatches = true;
+            }
             else if (vanillaPath is null
                      && File.Exists(a)
                      && a.EndsWith("SCPSL.exe", StringComparison.OrdinalIgnoreCase))
@@ -64,6 +110,10 @@ internal sealed class InstallerArgs
             Uninstall = uninstall,
             VanillaPath = vanillaPath,
             UnpackTimeoutMs = unpackTimeoutMs,
+            TargetVersion = targetVersion,
+            NoMelon = noMelon,
+            NoAnomaly = noAnomaly,
+            SkipPatches = skipPatches,
         };
     }
 
@@ -80,6 +130,7 @@ internal sealed class InstallerArgs
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  Anomaly.Installer [--vanilla-path <path>] [--dry-run] [--unpack-timeout <s>] [--help]");
+        Console.WriteLine("  Anomaly.Installer [--target-version X.Y.Z] [--no-anomaly] [--no-melon]");
         Console.WriteLine("  Anomaly.Installer --uninstall");
         Console.WriteLine("  Anomaly.Installer <path-to-SCPSL.exe>");
         Console.WriteLine();
@@ -93,6 +144,19 @@ internal sealed class InstallerArgs
         Console.WriteLine("                         Mods/, UserLibs/, and the patched launcher.");
         Console.WriteLine("  --unpack-timeout <s>   Seconds to wait for Themida unpacker before aborting");
         Console.WriteLine("                         (default: 45). Increase on very slow machines.");
+        Console.WriteLine("  --target-version X.Y.Z Skip version auto-detection and look up patches for");
+        Console.WriteLine("                         this version directly. Useful when the launcher knows");
+        Console.WriteLine("                         which manifest was downloaded.");
+        Console.WriteLine("  --no-anomaly           Skip Anomaly-specific content (Mods/UserLibs");
+        Console.WriteLine("                         verification, and any future Anomaly.Client install).");
+        Console.WriteLine("                         Does NOT skip patches — use --skip-patches for that.");
+        Console.WriteLine("  --skip-patches         Skip the IL2CPP patches and bundle-version fix. Still");
+        Console.WriteLine("                         copies game files, places the clean launcher, and");
+        Console.WriteLine("                         installs MelonLoader. Use when the downloaded game");
+        Console.WriteLine("                         version isn't in patchinfo.json's supported ranges.");
+        Console.WriteLine("  --no-melon             Skip MelonLoader installation. Combine with");
+        Console.WriteLine("                         --skip-patches --no-anomaly for a bare vanilla install");
+        Console.WriteLine("                         that accepts a different modloader (e.g. BepInEx).");
         Console.WriteLine("  --help, -h, /?         Show this help text and exit.");
         Console.WriteLine();
         Console.WriteLine($"Logs: {Path.Combine(appDataDir, "Logs", "install-{timestamp}.log")}");

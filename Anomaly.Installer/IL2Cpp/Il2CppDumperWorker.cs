@@ -5,13 +5,13 @@ namespace Anomaly.Installer.IL2Cpp;
 
 public class Il2CppDumperWorker
 {
-    public static void Init(byte[] il2cppBytes, string metadataPath, Config config, out Metadata metadata, out Il2Cpp il2Cpp)
+    public static void Init(byte[] il2cppBytes, string metadataPath, Config config, out Metadata metadata, out Il2Cpp il2Cpp, bool skipProtectionCheck = false)
     {
         var metadataBytes = File.ReadAllBytes(metadataPath);
-        Init(il2cppBytes, metadataBytes, config, out metadata, out il2Cpp);
+        Init(il2cppBytes, metadataBytes, config, out metadata, out il2Cpp, skipProtectionCheck);
     }
 
-    public static void Init(byte[] il2cppBytes, byte[] metadataBytes, Config config, out Metadata metadata, out Il2Cpp il2Cpp)
+    public static void Init(byte[] il2cppBytes, byte[] metadataBytes, Config config, out Metadata metadata, out Il2Cpp il2Cpp, bool skipProtectionCheck = false)
     {
         Console.WriteLine("Initializing metadata...");
         metadata = new Metadata(new MemoryStream(metadataBytes));
@@ -100,13 +100,20 @@ public class Il2CppDumperWorker
         Console.WriteLine("Searching...");
 
         var flag = il2Cpp.PlusSearch(metadata.methodDefs.Count(x => x.methodIndex >= 0), metadata.typeDefs.Length, metadata.imageDefs.Length);
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+
+        // The original protection-detection heuristic: if PlusSearch can't locate CodeRegistration
+        // on a Windows PE, assume the DLL is still Themida-wrapped. Only apply this shortcut on
+        // the first (pre-unpack) attempt — after the unpacker has run, PlusSearch can still fail
+        // on older Unity versions whose IL2CPP layout doesn't match the signatures, and in that
+        // case we want to fall through to the Search/SymbolSearch code paths.
+        if (!skipProtectionCheck
+            && RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            && !flag
+            && il2Cpp is PE)
         {
-            if (!flag && il2Cpp is PE)
-            {
-                throw new FileIsProtectedException();
-            }
+            throw new FileIsProtectedException();
         }
+
         if (!flag)
         {
             flag = il2Cpp.Search();
@@ -117,12 +124,12 @@ public class Il2CppDumperWorker
         }
         if (!flag)
         {
-            Console.WriteLine("ERROR: Can't use auto mode to process file, try manual mode.");
-            Console.Write("Input CodeRegistration: ");
-            var codeRegistration = Convert.ToUInt64(Console.ReadLine(), 16);
-            Console.Write("Input MetadataRegistration: ");
-            var metadataRegistration = Convert.ToUInt64(Console.ReadLine(), 16);
-            il2Cpp.Init(codeRegistration, metadataRegistration);
+            // The upstream sample code prompts the console here. We never want an interactive
+            // prompt mid-install — fail loudly so the caller can surface a proper error.
+            throw new Il2CppInitException(
+                "Could not locate CodeRegistration/MetadataRegistration in GameAssembly.dll. " +
+                "PlusSearch, Search, and SymbolSearch all failed. " +
+                "The game's IL2CPP layout may have changed, or the DLL is still packed.");
         }
         if (il2Cpp.Version >= 27 && il2Cpp.IsDumped)
         {

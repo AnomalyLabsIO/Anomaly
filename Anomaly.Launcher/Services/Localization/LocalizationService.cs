@@ -26,6 +26,13 @@ internal class LocalizationService
         EnsureExtracted(anomalyDataDir);
         ActiveLocale = ResolveLocale();
         LoadTranslations();
+
+        // Authoritative English fallback lives inside the assembly, not on disk. Ensures new
+        // keys added to Resources/i18n/en.json are picked up on the very next run, regardless
+        // of whether the extracted copy at %APPDATA%/Anomaly/i18n/en.json has been refreshed.
+        var embeddedEn = LoadEmbedded("en");
+        if (embeddedEn != null)
+            _fallback = embeddedEn;
     }
 
     public string Get(string key)
@@ -63,12 +70,6 @@ internal class LocalizationService
             if (!Directory.Exists(_i18nDir))
                 Directory.CreateDirectory(_i18nDir);
 
-            var versionMarker = Path.Combine(_i18nDir, ".version");
-            var currentVersion = GetAssemblyVersion();
-            var lastVersion = File.Exists(versionMarker) ? File.ReadAllText(versionMarker).Trim() : string.Empty;
-
-            var needsExtraction = lastVersion != currentVersion;
-
             var assembly = Assembly.GetExecutingAssembly();
             foreach (var resourceName in assembly.GetManifestResourceNames())
             {
@@ -79,20 +80,16 @@ internal class LocalizationService
                 var fileName = ExtractFileName(resourceName);
                 var destPath = Path.Combine(_i18nDir, fileName);
 
-                // Always overwrite bundled files when version marker changes.
-                // Leave non-bundled user files alone.
-                if (needsExtraction || !File.Exists(destPath))
-                {
-                    using var stream = assembly.GetManifestResourceStream(resourceName);
-                    if (stream == null) continue;
+                // Always overwrite bundled files — the embedded resource is authoritative, and
+                // stale extracted copies would hide newly-added keys. Users who want to
+                // customize translations should add their own locale file (e.g., pt_BR.json)
+                // rather than editing the bundled ones.
+                using var stream = assembly.GetManifestResourceStream(resourceName);
+                if (stream == null) continue;
 
-                    using var file = File.Create(destPath);
-                    stream.CopyTo(file);
-                }
+                using var file = File.Create(destPath);
+                stream.CopyTo(file);
             }
-
-            if (needsExtraction)
-                File.WriteAllText(versionMarker, currentVersion);
         }
         catch (Exception ex)
         {
@@ -188,6 +185,26 @@ internal class LocalizationService
                 return null;
 
             var json = File.ReadAllText(path);
+            return JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static Dictionary<string, string>? LoadEmbedded(string locale)
+    {
+        try
+        {
+            var resourceName = $"Anomaly.Launcher.Resources.i18n.{locale}.json";
+            var assembly = Assembly.GetExecutingAssembly();
+            using var stream = assembly.GetManifestResourceStream(resourceName);
+            if (stream == null)
+                return null;
+
+            using var reader = new StreamReader(stream);
+            var json = reader.ReadToEnd();
             return JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
         }
         catch

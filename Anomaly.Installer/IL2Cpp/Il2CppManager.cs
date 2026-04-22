@@ -65,7 +65,7 @@ internal class Il2CppManager
         _il2cppFolder = Path.Combine(workingDirectory, "il2cppdumper");
     }
 
-    public void LoadIl2Cpp(string metadataPath, double? metadataVersion = null)
+    public void LoadIl2Cpp(string metadataPath, double? metadataVersion = null, bool skipProtectionCheck = false)
     {
         if (_gameAssemblyData == null || _gameAssemblyData.Length == 0)
             throw new ArgumentException("GameAssembly data is null or empty.");
@@ -83,7 +83,7 @@ internal class Il2CppManager
 
         try
         {
-            Il2CppDumperWorker.Init(_gameAssemblyData, metadataPath, il2cppConfig, out _metadata, out _il2Cpp);
+            Il2CppDumperWorker.Init(_gameAssemblyData, metadataPath, il2cppConfig, out _metadata, out _il2Cpp, skipProtectionCheck);
         }
         catch (FileIsProtectedException)
         {

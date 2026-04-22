@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Anomaly.Launcher.Models;
 using Anomaly.Launcher.Services;
 using Anomaly.Launcher.Services.Localization;
+using Anomaly.Launcher.Services.Steam;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -17,6 +18,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly CrashReportService _crashReport;
     private readonly VersionCheckService _versionCheck;
     private readonly SystemInfoService _systemInfo;
+    private readonly SteamDownloadService _steamDownload;
+    private readonly BuildCatalogService _buildCatalog;
     private readonly SynchronizationContext? _syncContext;
 
     private FileSystemWatcher? _acfWatcher;
@@ -105,6 +108,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private CrashReportDialogViewModel? _crashDialogViewModel;
 
+    // --- Steam download dialog ---
+
+    [ObservableProperty]
+    private bool _showSteamDownloadDialog;
+
+    [ObservableProperty]
+    private SteamDownloadDialogViewModel? _steamDownloadDialogViewModel;
+
     // --- Computed ---
 
     public bool CanLaunch => !IsGameRunning && IsGameInstalled;
@@ -133,7 +144,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         GameProcessService gameProcess,
         CrashReportService crashReport,
         VersionCheckService versionCheck,
-        SystemInfoService systemInfo)
+        SystemInfoService systemInfo,
+        SteamDownloadService steamDownload,
+        BuildCatalogService buildCatalog)
     {
         _paths = paths;
         _userProfile = userProfile;
@@ -142,6 +155,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _crashReport = crashReport;
         _versionCheck = versionCheck;
         _systemInfo = systemInfo;
+        _steamDownload = steamDownload;
+        _buildCatalog = buildCatalog;
         _syncContext = SynchronizationContext.Current;
 
         Username = userProfile.GetUsername();
@@ -578,6 +593,66 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         var vanillaExe = _paths.GetVanillaExePath();
         if (_gameProcess.LaunchInstaller(installerPath, vanillaExe))
+            GameStatusText = Tr.Get(TrKeys.Status_InstallerLaunched);
+        else
+            GameStatusText = Tr.Get(TrKeys.Status_FailedInstaller);
+    }
+
+    // ===================== Steam download dialog =====================
+
+    [RelayCommand]
+    private void OpenSteamDownloadDialog()
+    {
+        var vm = new SteamDownloadDialogViewModel(_steamDownload, _buildCatalog, _paths);
+        vm.BuildActivated += OnSteamBuildActivated;
+        SteamDownloadDialogViewModel = vm;
+        ShowSteamDownloadDialog = true;
+    }
+
+    [RelayCommand]
+    private void CloseSteamDownloadDialog()
+    {
+        if (SteamDownloadDialogViewModel != null)
+            SteamDownloadDialogViewModel.BuildActivated -= OnSteamBuildActivated;
+        ShowSteamDownloadDialog = false;
+        SteamDownloadDialogViewModel = null;
+    }
+
+    private void OnSteamBuildActivated(string installPath, bool isPatchCompatible, string? gameVersion)
+    {
+        // The Steam download lands files directly in the launcher directory (same location the
+        // installer's normal Steam copy stage would deposit them). Point vanilla_path at it and
+        // invoke the existing Sync flow so the installer patches in place.
+        _paths.SaveVanillaPath(installPath);
+
+        var argParts = new List<string>();
+
+        // Pass the catalog's authoritative game version so the installer doesn't have to read
+        // the unreliable globalgamemanagers bundle-version field.
+        if (!string.IsNullOrWhiteSpace(gameVersion))
+            argParts.Add($"--target-version {gameVersion}");
+
+        // --no-anomaly currently only skips the Anomaly-specific Mods/UserLibs check. For
+        // incompatible builds patches will still be attempted — the installer will throw a
+        // clear "no range for X.Y.Z" error unless --skip-patches is also added (not wired yet).
+        if (!isPatchCompatible)
+            argParts.Add("--no-anomaly");
+
+        var extraArgs = argParts.Count > 0 ? string.Join(' ', argParts) : null;
+        SyncAnomalyWithExtraArgs(extraArgs);
+    }
+
+    private void SyncAnomalyWithExtraArgs(string? extraArgs)
+    {
+        var installerPath = _systemInfo.GetInstallerPath();
+        if (installerPath == null)
+        {
+            GameStatusText = Tr.Get(TrKeys.Status_InstallerNotFound);
+            return;
+        }
+
+        var vanillaExe = _paths.GetVanillaExePath();
+        if (_gameProcess.LaunchInstaller(installerPath, vanillaExe, extraArgs))
             GameStatusText = Tr.Get(TrKeys.Status_InstallerLaunched);
         else
             GameStatusText = Tr.Get(TrKeys.Status_FailedInstaller);

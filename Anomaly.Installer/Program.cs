@@ -10,6 +10,8 @@ public static class Program
 {
     private const int TotalSteps = 7;
 
+    private const string BundleVersionRelativePath = @"SCPSL_Data\globalgamemanagers";
+
     [STAThread]
     public static int Main(string[] args)
     {
@@ -76,7 +78,13 @@ public static class Program
 
         // Load patch config from embedded resource
         PatchInfo patchInfo = LoadPatchInfo();
-        Console.WriteLine($"Patch config loaded (metadata version: {patchInfo.metadataVersion}, {patchInfo.patchMethods.Length} patch methods)");
+        Console.WriteLine($"Patch config loaded ({patchInfo.versionRanges.Length} version range(s) defined)");
+        if (args.SkipPatches)
+            Console.WriteLine("  --skip-patches: IL2CPP patches and bundle-version fix will be skipped.");
+        if (args.NoAnomaly)
+            Console.WriteLine("  --no-anomaly: Anomaly-specific content (Mods/UserLibs check) will be skipped.");
+        if (args.NoMelon)
+            Console.WriteLine("  --no-melon: MelonLoader installation will be skipped.");
         Console.WriteLine();
 
         // Get vanilla game path
@@ -89,10 +97,21 @@ public static class Program
         // becomes the *modded* target, so if they're the same directory we'd overwrite the
         // user's Steam-managed SCPSL.exe with the patched copy. Steam's file verification
         // would later roll this back, but only after Anomaly has scrambled GameAssembly.dll.
+        //
+        // Exception: the launcher's SteamCMD download lands files directly in the installer
+        // directory on purpose, then points --vanilla-path here. We detect that flow by the
+        // .anomaly_source.json sidecar the launcher writes on successful download.
         if (PathsAreSame(installerDir, vanillaDir))
-            throw new InstallerException(
-                "Installer is running inside the vanilla SCP:SL directory. Move Anomaly.Installer " +
-                "into a separate folder (this will become the modded game directory) and rerun.");
+        {
+            string sidecar = Path.Combine(installerDir, ".anomaly_source.json");
+            if (!File.Exists(sidecar))
+                throw new InstallerException(
+                    "Installer is running inside the vanilla SCP:SL directory. Move Anomaly.Installer " +
+                    "into a separate folder (this will become the modded game directory) and rerun.");
+
+            Console.WriteLine("Same-path install: files were downloaded into this directory by the launcher.");
+            Console.WriteLine();
+        }
 
         // Preflight before anything destructive — fail loud if we can't write or don't
         // have disk space, and surface Linux runtime availability before patching begins.
@@ -128,19 +147,15 @@ public static class Program
         }
         Console.WriteLine();
 
-        // Step 2: Extract clean launcher from embedded resources
-        ConsoleUI.PrintStep(2, TotalSteps, "Extracting clean launcher...");
-        string cleanLauncherPath = Path.Combine(installerDir, "SCPSL.exe");
-        if (!args.DryRun)
-        {
-            EmbeddedResources.ExtractToFile("SCPSL.exe", cleanLauncherPath);
-            ConsoleUI.PrintSuccess("Clean SCPSL.exe extracted.");
-        }
-        else
-        {
-            Console.WriteLine($"[dry-run] Would extract embedded SCPSL.exe to {cleanLauncherPath}");
-        }
+        // Step 2: Place the clean launcher matching the selected Unity version. Resolved below
+        // once we've picked a VersionRange. For now, defer — we need the range first.
+        // (We also want to skip this entirely in --no-anomaly mode and keep the vanilla SCPSL.exe.)
         Console.WriteLine();
+
+        // Resolve the VersionRange to patch against. When --no-anomaly is set we don't need one;
+        // otherwise we detect the game version (from the bundleVersion in globalgamemanagers or
+        // from --target-version) and look it up in patchinfo.json.
+        VersionRange? selectedRange = ResolveVersionRange(args, installerDir, patchInfo);
 
         // In dry-run we stop before the destructive steps (we can't load IL2CPP without a
         // real GameAssembly.dll in place, and users just want a path sanity check).
@@ -148,7 +163,7 @@ public static class Program
         // surface here rather than mid-install.
         if (args.DryRun)
         {
-            DryRunRemainingSteps(installerDir, vanillaDir, patchInfo);
+            DryRunRemainingSteps(installerDir, vanillaDir, patchInfo, selectedRange, args);
             Console.WriteLine();
             Console.WriteLine("[dry-run] Dry run complete. Re-run without --dry-run to install.");
             Console.WriteLine();
@@ -156,88 +171,136 @@ public static class Program
             return;
         }
 
-        // Step 3: Unpack (if Themida-protected) and load IL2CPP
-        ConsoleUI.PrintStep(3, TotalSteps, "Loading IL2CPP...");
+        // Step 2 (deferred): Place the clean (Themida-free) launcher. This always runs when we
+        // have a matching Unity version — MelonLoader and any other modloader need a Themida-free
+        // exe. Only skipped when we have no VersionRange at all to source one from.
+        ConsoleUI.PrintStep(2, TotalSteps, "Placing clean launcher...");
+        if (selectedRange != null)
+        {
+            CleanLauncherResolver.PlaceCleanLauncher(selectedRange, installerDir);
+            ConsoleUI.PrintSuccess("Clean SCPSL.exe in place.");
+        }
+        else
+        {
+            ConsoleUI.PrintWarning("No VersionRange resolved — keeping the vanilla SCPSL.exe. The original exe may be Themida-protected and incompatible with mod loaders.");
+        }
+        Console.WriteLine();
+
         string gameAssemblyPath = Path.Combine(installerDir, "GameAssembly.dll");
         string metadataPath = Path.Combine(installerDir, "SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat");
         string bundleVersionPath = Path.Combine(installerDir, "SCPSL_Data", "globalgamemanagers");
 
-        // Backup vanilla-copies of files we're about to mutate. First successful install
-        // captures the vanilla snapshot; subsequent re-runs reuse the existing .bak.
-        // On failure further down this method, we restore from these backups.
-        BackupManager.BackupFile(gameAssemblyPath);
-        BackupManager.BackupFile(metadataPath);
-        BackupManager.BackupFile(bundleVersionPath);
-
-        Il2CppManager il2CppManager;
-        byte[] gameAssemblyData;
-        try
+        if (!args.SkipPatches && selectedRange != null)
         {
-            // Fix metadata version BEFORE IL2CPP loading
-            Patcher.FixMetadataVersion(patchInfo.metadataVersion, installerDir);
+            // Step 3: Unpack (if Themida-protected) and load IL2CPP
+            ConsoleUI.PrintStep(3, TotalSteps, "Loading IL2CPP...");
 
-            gameAssemblyData = LoadAndUnpackGameAssembly(
-                gameAssemblyPath, metadataPath, platform, installerDir, patchInfo.metadataVersion, args.UnpackTimeoutMs);
+            // Backup vanilla-copies of files we're about to mutate. First successful install
+            // captures the vanilla snapshot; subsequent re-runs reuse the existing .bak.
+            // On failure further down this method, we restore from these backups.
+            BackupManager.BackupFile(gameAssemblyPath);
+            BackupManager.BackupFile(metadataPath);
+            BackupManager.BackupFile(bundleVersionPath);
 
-            il2CppManager = new Il2CppManager(gameAssemblyData, installerDir);
-            il2CppManager.LoadIl2Cpp(metadataPath, patchInfo.metadataVersion);
-
-            Console.WriteLine("  Dumping IL2CPP...");
-            il2CppManager.DumpIl2Cpp();
-            il2CppManager.GetScriptJson();
-            il2CppManager.GetMethodsDictionary();
-            ConsoleUI.PrintSuccess("IL2CPP loaded and parsed.");
-            Console.WriteLine();
-
-            // Step 4: Patch GameAssembly
-            ConsoleUI.PrintStep(4, TotalSteps, "Applying patches...");
-            var patcher = new Patcher(gameAssemblyPath, gameAssemblyData, il2CppManager, patchInfo);
-            patcher.PatchGameAssembly();
-            patcher.SaveGameAssembly();
-            patcher.VerifySavedAssembly();
-            Console.WriteLine("  Re-parsing patched GameAssembly to verify structure...");
-            patcher.VerifyPatchedStructure(metadataPath, patchInfo.metadataVersion, installerDir);
-            ConsoleUI.PrintSuccess("GameAssembly.dll patched.");
-            Console.WriteLine();
-
-            // Step 5: Fix game version in Unity metadata
-            ConsoleUI.PrintStep(5, TotalSteps, "Fixing game version...");
-            var version = Patcher.ReadGameVersion(gameAssemblyData, il2CppManager);
-            if (version.HasValue)
+            Il2CppManager il2CppManager;
+            byte[] gameAssemblyData;
+            try
             {
-                var (major, minor, revision) = version.Value;
-                Console.WriteLine($"  Detected game version: {major}.{minor}.{revision}");
-                Patcher.FixBundleVersion(installerDir, major, minor, revision);
-                ConsoleUI.PrintSuccess("Game version fixed.");
+                // Fix metadata version BEFORE IL2CPP loading
+                Patcher.FixMetadataVersion(selectedRange.metadataVersion, installerDir);
+
+                var (unpackResult, wasUnpacked) = LoadAndUnpackGameAssembly(
+                    gameAssemblyPath, metadataPath, platform, installerDir, selectedRange.metadataVersion, args.UnpackTimeoutMs);
+                gameAssemblyData = unpackResult;
+
+                il2CppManager = new Il2CppManager(gameAssemblyData, installerDir);
+
+                // After an unpack, PlusSearch may still fail on older Unity versions even though
+                // the DLL is no longer packed. Skip the protection-check shortcut so Il2CppDumper
+                // falls through to Search/SymbolSearch instead of re-throwing FileIsProtectedException.
+                il2CppManager.LoadIl2Cpp(metadataPath, selectedRange.metadataVersion, skipProtectionCheck: wasUnpacked);
+
+                Console.WriteLine("  Dumping IL2CPP...");
+                il2CppManager.DumpIl2Cpp();
+                il2CppManager.GetScriptJson();
+                il2CppManager.GetMethodsDictionary();
+                ConsoleUI.PrintSuccess("IL2CPP loaded and parsed.");
+                Console.WriteLine();
+
+                // Step 4: Patch GameAssembly
+                ConsoleUI.PrintStep(4, TotalSteps, $"Applying patches for {selectedRange.versionLabel}...");
+                var patcher = new Patcher(gameAssemblyPath, gameAssemblyData, il2CppManager, selectedRange);
+                patcher.PatchGameAssembly();
+                patcher.SaveGameAssembly();
+                patcher.VerifySavedAssembly();
+                Console.WriteLine("  Re-parsing patched GameAssembly to verify structure...");
+                patcher.VerifyPatchedStructure(metadataPath, selectedRange.metadataVersion, installerDir);
+                ConsoleUI.PrintSuccess("GameAssembly.dll patched.");
+                Console.WriteLine();
+
+                // Step 5: Fix game version in Unity metadata
+                ConsoleUI.PrintStep(5, TotalSteps, "Fixing game version...");
+                var version = Patcher.ReadGameVersion(gameAssemblyData, il2CppManager);
+                if (version.HasValue)
+                {
+                    var (major, minor, revision) = version.Value;
+                    Console.WriteLine($"  Detected game version: {major}.{minor}.{revision}");
+                    Patcher.FixBundleVersion(installerDir, major, minor, revision);
+                    ConsoleUI.PrintSuccess("Game version fixed.");
+                }
+                else
+                {
+                    ConsoleUI.PrintWarning("Could not detect game version — bundle version unchanged.");
+                }
+                Console.WriteLine();
             }
-            else
+            catch
             {
-                ConsoleUI.PrintWarning("Could not detect game version — bundle version unchanged.");
+                ConsoleUI.PrintError("Patching failed — restoring vanilla files from backup.");
+                SafeRestore(gameAssemblyPath);
+                SafeRestore(metadataPath);
+                SafeRestore(bundleVersionPath);
+                throw;
             }
-            Console.WriteLine();
+
+            // Cleanup dumper scratch
+            il2CppManager.RemoveDumpFolder();
         }
-        catch
+        else
         {
-            ConsoleUI.PrintError("Patching failed — restoring vanilla files from backup.");
-            SafeRestore(gameAssemblyPath);
-            SafeRestore(metadataPath);
-            SafeRestore(bundleVersionPath);
-            throw;
+            var reason = args.SkipPatches ? "--skip-patches" : "no version range resolved";
+            ConsoleUI.PrintStep(3, TotalSteps, $"Skipping IL2CPP load ({reason}).");
+            ConsoleUI.PrintStep(4, TotalSteps, $"Skipping patches ({reason}).");
+            ConsoleUI.PrintStep(5, TotalSteps, $"Skipping bundle-version fix ({reason}).");
+            Console.WriteLine();
         }
 
         // Step 6: Install MelonLoader
-        ConsoleUI.PrintStep(6, TotalSteps, $"Installing MelonLoader {MelonLoaderInstaller.PinnedVersion()}...");
-        MelonLoaderInstaller.Install(installerDir);
-        ConsoleUI.PrintSuccess("MelonLoader installed.");
+        if (!args.NoMelon)
+        {
+            ConsoleUI.PrintStep(6, TotalSteps, $"Installing MelonLoader {MelonLoaderInstaller.PinnedVersion()}...");
+            MelonLoaderInstaller.Install(installerDir);
+            ConsoleUI.PrintSuccess("MelonLoader installed.");
+        }
+        else
+        {
+            ConsoleUI.PrintStep(6, TotalSteps, "Skipping MelonLoader (--no-melon).");
+        }
         Console.WriteLine();
 
-        // Step 7: Verify mod files
-        ConsoleUI.PrintStep(7, TotalSteps, "Verifying mod files...");
-        VerifyModFiles(installerDir);
+        // Step 7: Verify mod files. Anomaly-specific — the Mods/ and UserLibs/ directories are
+        // dropped in by the Anomaly build process, not by the installer. In --no-anomaly the user
+        // is bringing their own modloader/content so there's nothing for us to verify.
+        if (!args.NoAnomaly)
+        {
+            ConsoleUI.PrintStep(7, TotalSteps, "Verifying mod files...");
+            VerifyModFiles(installerDir);
+        }
+        else
+        {
+            ConsoleUI.PrintStep(7, TotalSteps, "Skipping mod-file check (--no-anomaly).");
+        }
         Console.WriteLine();
-
-        // Cleanup
-        il2CppManager.RemoveDumpFolder();
 
         // Done
         Console.WriteLine();
@@ -387,10 +450,12 @@ public static class Program
 
     private static void CopyGameFiles(string sourceDir, string targetDir)
     {
+        // SL-AC.dll is Valve's anti-cheat: it would defeat our patches and is not needed in the
+        // modded install. SCPSL.exe IS copied — the patch flow's Step 2 overwrites it with the
+        // clean launcher, and --no-anomaly keeps it as vanilla (we need some SCPSL.exe either way).
         var skipFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "SL-AC.dll",
-            "SCPSL.exe"
         };
 
         var sourceInfo = new DirectoryInfo(sourceDir);
@@ -431,7 +496,13 @@ public static class Program
             // reuse Length/LastWriteTimeUtc from the same snapshot instead of issuing
             // a fresh stat call per property.
             bool destExists = destFile.Exists;
-            if (destExists && destFile.Length == file.Length && destFile.LastWriteTimeUtc == file.LastWriteTimeUtc)
+
+            // Source == destination happens when the launcher's SteamCMD download lands
+            // files directly in the installer directory; nothing to copy in that case.
+            bool samePath = destExists &&
+                string.Equals(destFile.FullName, file.FullName, StringComparison.OrdinalIgnoreCase);
+
+            if (samePath || (destExists && destFile.Length == file.Length && destFile.LastWriteTimeUtc == file.LastWriteTimeUtc))
             {
                 copiedFiles++;
                 copiedBytes += file.Length;
@@ -455,7 +526,7 @@ public static class Program
     /// Attempts to load GameAssembly.dll via Il2CppDumper to check for Themida protection.
     /// If protected, extracts unlicense.exe from embedded resources, unpacks, and returns fresh bytes.
     /// </summary>
-    private static byte[] LoadAndUnpackGameAssembly(string gameAssemblyPath, string metadataPath, PlatformInfo platform, string workingDir, int metadataVersion, int? unpackTimeoutMs)
+    private static (byte[] data, bool wasUnpacked) LoadAndUnpackGameAssembly(string gameAssemblyPath, string metadataPath, PlatformInfo platform, string workingDir, int metadataVersion, int? unpackTimeoutMs)
     {
         if (!File.Exists(gameAssemblyPath))
             throw new InstallerException("GameAssembly.dll not found. Game files may not have copied correctly.");
@@ -467,7 +538,7 @@ public static class Program
         {
             testManager.LoadIl2Cpp(metadataPath, metadataVersion);
             testManager.RemoveDumpFolder();
-            return data;
+            return (data, wasUnpacked: false);
         }
         catch (FileIsProtectedException)
         {
@@ -484,7 +555,7 @@ public static class Program
                     : new Unpacker(tempUnlicense, gameAssemblyPath, platform);
                 unpacker.UnpackGameAssembly();
 
-                return Patcher.GetGameAssemblyData(gameAssemblyPath);
+                return (Patcher.GetGameAssemblyData(gameAssemblyPath), wasUnpacked: true);
             }
             finally
             {
@@ -499,9 +570,73 @@ public static class Program
     {
         string json = EmbeddedResources.ReadText("patchinfo.json");
         PatchInfo? patchInfo = JsonConvert.DeserializeObject<PatchInfo>(json);
-        if (patchInfo == null || patchInfo.patchMethods.Length == 0)
-            throw new InstallerException("Failed to load embedded patchinfo.json or no patch methods defined.");
+        if (patchInfo == null || patchInfo.versionRanges.Length == 0)
+            throw new InstallerException("Failed to load embedded patchinfo.json or no version ranges defined.");
         return patchInfo;
+    }
+
+    /// <summary>
+    /// Picks the <see cref="VersionRange"/> to apply. Uses --target-version if given, otherwise
+    /// reads the bundleVersion string from globalgamemanagers. Returns null when --no-anomaly is
+    /// set (no range needed) or when detection failed but the user opted out of patching.
+    /// Throws when a range is required but can't be resolved.
+    /// </summary>
+    private static VersionRange? ResolveVersionRange(InstallerArgs args, string installerDir, PatchInfo patchInfo)
+    {
+        GameVersion? detected = null;
+
+        if (!string.IsNullOrWhiteSpace(args.TargetVersion))
+        {
+            if (!GameVersion.TryParse(args.TargetVersion, out var v))
+                throw new InstallerException($"Invalid --target-version value: '{args.TargetVersion}' (expected X.Y.Z).");
+            detected = v;
+            Console.WriteLine($"Target version (from --target-version): {v}");
+        }
+        else
+        {
+            string bundleVersionPath = Path.Combine(installerDir, BundleVersionRelativePath);
+            detected = Patcher.TryReadBundleVersionString(bundleVersionPath);
+            if (detected.HasValue)
+                Console.WriteLine($"Detected game version (from globalgamemanagers): {detected.Value}");
+            else
+                Console.WriteLine("Could not detect game version from globalgamemanagers.");
+        }
+
+        if (!detected.HasValue)
+        {
+            if (args.SkipPatches)
+            {
+                ConsoleUI.PrintWarning("Version unknown and --skip-patches set. Skipping clean-launcher placement too.");
+                return null;
+            }
+            throw new InstallerException(
+                "Could not detect the game version. Pass --target-version X.Y.Z, or re-run with " +
+                "--skip-patches for an unsupported build.");
+        }
+
+        var range = patchInfo.versionRanges.FirstOrDefault(r => r.Contains(detected.Value));
+        if (range == null)
+        {
+            var known = string.Join(", ", patchInfo.versionRanges.Select(r => r.versionLabel));
+            if (args.SkipPatches)
+            {
+                ConsoleUI.PrintWarning(
+                    $"No VersionRange brackets {detected.Value}. Known ranges: {known}. " +
+                    "Clean-launcher placement will be skipped as well.");
+                return null;
+            }
+            throw new InstallerException(
+                $"No Anomaly patches available for game version {detected.Value}. " +
+                $"Supported ranges: {known}. " +
+                "Re-run with --skip-patches to keep the game files and clean launcher without patching.");
+        }
+
+        if (args.SkipPatches)
+            Console.WriteLine($"Matched range: {range.versionLabel} (Unity {range.unityVersion}) — using its clean launcher, skipping patches.");
+        else
+            Console.WriteLine($"Selected patch range: {range.versionLabel} (metadata {range.metadataVersion}, {range.patchMethods.Length} patches)");
+        Console.WriteLine();
+        return range;
     }
 
     /// <summary>
@@ -510,7 +645,7 @@ public static class Program
     /// dir and that the MelonLoader download URL resolves. Anything that would fail during
     /// a real run here is better caught now.
     /// </summary>
-    private static void DryRunRemainingSteps(string installerDir, string vanillaDir, PatchInfo patchInfo)
+    private static void DryRunRemainingSteps(string installerDir, string vanillaDir, PatchInfo patchInfo, VersionRange? selectedRange, InstallerArgs args)
     {
         string gaPreview = Path.Combine(vanillaDir, "GameAssembly.dll");
         string mdPreview = Path.Combine(vanillaDir, "SCPSL_Data", "il2cpp_data", "Metadata", "global-metadata.dat");
@@ -521,7 +656,12 @@ public static class Program
         DryRunCheckFile("  global-metadata.dat", mdPreview);
         DryRunCheckFile("  globalgamemanagers", ggmPreview);
 
-        Console.WriteLine($"[dry-run]   Patch config: metadataVersion={patchInfo.metadataVersion}, {patchInfo.patchMethods.Length} methods");
+        if (selectedRange != null)
+            Console.WriteLine($"[dry-run]   Selected range: {selectedRange.versionLabel} (metadata {selectedRange.metadataVersion}, {selectedRange.patchMethods.Length} methods)");
+        else if (args.NoAnomaly)
+            Console.WriteLine("[dry-run]   --no-anomaly: patching would be skipped.");
+        else
+            Console.WriteLine("[dry-run]   (no range resolved; would fail a real run)");
 
         MelonLoaderConfig mlConfig;
         try

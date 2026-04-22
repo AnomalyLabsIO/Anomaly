@@ -35,6 +35,12 @@ public partial class MainWindow : Window
                     ShowCrashReportDialog(vm);
                 }
 
+                if (args.PropertyName == nameof(MainWindowViewModel.ShowSteamDownloadDialog)
+                    && vm.ShowSteamDownloadDialog && vm.SteamDownloadDialogViewModel != null)
+                {
+                    ShowSteamDownloadDialog(vm);
+                }
+
                 // Focus the username textbox when entering edit mode
                 if (args.PropertyName == nameof(MainWindowViewModel.IsEditingUsername)
                     && vm.IsEditingUsername)
@@ -108,6 +114,16 @@ public partial class MainWindow : Window
         };
         await dialog.ShowDialog(this);
         vm.CloseCrashDialogCommand.Execute(null);
+    }
+
+    private async void ShowSteamDownloadDialog(MainWindowViewModel vm)
+    {
+        var dialog = new SteamDownloadDialog
+        {
+            DataContext = vm.SteamDownloadDialogViewModel
+        };
+        await dialog.ShowDialog(this);
+        vm.CloseSteamDownloadDialogCommand.Execute(null);
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)

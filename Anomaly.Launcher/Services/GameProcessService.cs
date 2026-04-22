@@ -70,7 +70,7 @@ public class GameProcessService
         }
     }
 
-    public bool LaunchInstaller(string installerPath, string? vanillaExePath)
+    public bool LaunchInstaller(string installerPath, string? vanillaExePath, string? extraArgs = null)
     {
         if (IsRunning) return false;
 
@@ -83,10 +83,12 @@ public class GameProcessService
                 WorkingDirectory = Path.GetDirectoryName(installerPath)
             };
 
+            var argBuilder = new List<string>();
             if (vanillaExePath != null)
-            {
-                psi.Arguments = $"--vanilla-path \"{vanillaExePath}\"";
-            }
+                argBuilder.Add($"--vanilla-path \"{vanillaExePath}\"");
+            if (!string.IsNullOrWhiteSpace(extraArgs))
+                argBuilder.Add(extraArgs);
+            psi.Arguments = string.Join(' ', argBuilder);
 
             Process.Start(psi);
             return true;
