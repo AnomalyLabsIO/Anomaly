@@ -193,8 +193,7 @@
                                     <Button Classes="al small" Content="Validate files"
                                             Command="{Binding ValidateGameFilesCommand}" />
                                     <Button Classes="al small" Content="Sync all"
-                                            Command="{Binding SyncAnomalyCommand}"
-                                            IsEnabled="{Binding HasInstallerAvailable}" />
+                                            Command="{Binding SyncAnomalyCommand}" />
                                 </StackPanel>
                             </Grid>
 
@@ -349,8 +348,7 @@
                                                    FontSize="11" Foreground="{StaticResource TextDim}"
                                                    TextWrapping="Wrap" />
                                         <Button Classes="al small primary" Content="Sync Anomaly"
-                                                Command="{Binding SyncAnomalyCommand}"
-                                                IsEnabled="{Binding HasInstallerAvailable}" />
+                                                Command="{Binding SyncAnomalyCommand}" />
                                     </StackPanel>
                                 </Border>
 

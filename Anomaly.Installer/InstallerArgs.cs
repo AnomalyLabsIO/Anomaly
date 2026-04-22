@@ -1,3 +1,5 @@
+using Anomaly.InstallerCore;
+
 namespace Anomaly.Installer;
 
 /// <summary>

@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -14,51 +14,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="System.IO.Hashing" Version="8.0.0" />
-    <!-- Needed for Windows Steam registry auto-detect. Safe to reference from net6.0 —
-         API throws PlatformNotSupportedException on Linux, which we catch in GameDetector. -->
-    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="Il2CppDumper">
-      <HintPath>Il2CppDumper\Il2CppDumper.dll</HintPath>
-    </Reference>
-    <Reference Include="Mono.Cecil">
-      <HintPath>Il2CppDumper\Mono.Cecil.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Resources\patchinfo.json" />
-    <EmbeddedResource Include="Resources\melonloader.json" />
-    <EmbeddedResource Include="Resources\unlicense.exe" />
-    <EmbeddedResource Include="Resources\SCPSL.exe" />
-    <EmbeddedResource Remove="publish\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="Il2CppDumper\Il2CppDumper.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Il2CppDumper\Mono.Cecil.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Il2CppDumper\Mono.Cecil.Mdb.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Il2CppDumper\Mono.Cecil.Pdb.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Il2CppDumper\Mono.Cecil.Rocks.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Remove="publish\**" />
+    <ProjectReference Include="..\Anomaly.InstallerCore\Anomaly.InstallerCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Remove="publish\**" />
+    <None Remove="publish\**" />
+    <EmbeddedResource Remove="publish\**" />
   </ItemGroup>
 
 </Project>

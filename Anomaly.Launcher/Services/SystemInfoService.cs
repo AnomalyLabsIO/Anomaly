@@ -80,25 +80,6 @@ public class SystemInfoService
         return null;
     }
 
-    /// <summary>
-    /// Gets the path to the installer exe. Looks for Anomaly.Installer.exe alongside the launcher.
-    /// </summary>
-    public string? GetInstallerPath()
-    {
-        var candidates = new[]
-        {
-            Path.Combine(_paths.LauncherDir, "Anomaly.Installer.exe"),
-            Path.Combine(_paths.LauncherDir, "Anomaly.Installer"),
-        };
-
-        foreach (var path in candidates)
-        {
-            if (File.Exists(path))
-                return path;
-        }
-
-        return null;
-    }
 }
 
 public class GameAssemblyComparison

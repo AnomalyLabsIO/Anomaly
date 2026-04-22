@@ -41,6 +41,12 @@ public partial class MainWindow : Window
                     ShowSteamDownloadDialog(vm);
                 }
 
+                if (args.PropertyName == nameof(MainWindowViewModel.ShowInstallProgressDialog)
+                    && vm.ShowInstallProgressDialog && vm.InstallProgressDialogViewModel != null)
+                {
+                    ShowInstallProgressDialog(vm);
+                }
+
                 // Focus the username textbox when entering edit mode
                 if (args.PropertyName == nameof(MainWindowViewModel.IsEditingUsername)
                     && vm.IsEditingUsername)
@@ -124,6 +130,16 @@ public partial class MainWindow : Window
         };
         await dialog.ShowDialog(this);
         vm.CloseSteamDownloadDialogCommand.Execute(null);
+    }
+
+    private async void ShowInstallProgressDialog(MainWindowViewModel vm)
+    {
+        var dialog = new InstallProgressDialog
+        {
+            DataContext = vm.InstallProgressDialogViewModel
+        };
+        await dialog.ShowDialog(this);
+        vm.CloseInstallProgressDialogCommand.Execute(null);
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)

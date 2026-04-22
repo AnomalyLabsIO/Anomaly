@@ -1,0 +1,112 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Anomaly.Launcher.ViewModels"
+        xmlns:ic="using:Anomaly.InstallerCore"
+        x:Class="Anomaly.Launcher.Views.InstallProgressDialog"
+        x:DataType="vm:InstallProgressDialogViewModel"
+        Title="Installing Anomaly"
+        Width="760" Height="560"
+        MinWidth="640" MinHeight="440"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Spacing="4">
+            <TextBlock Text="Installing Anomaly"
+                       FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Opacity="0.7" FontSize="12">
+                <Run Text="Step" />
+                <Run Text="{Binding CurrentStep}" />
+                <Run Text=" of " />
+                <Run Text="{Binding TotalSteps}" />
+                <Run Text=" — " />
+                <Run Text="{Binding StepDescription}" />
+            </TextBlock>
+        </StackPanel>
+
+        <!-- Progress bar -->
+        <ProgressBar Grid.Row="1" Margin="0,16,0,0"
+                     Value="{Binding ProgressPercent}"
+                     Minimum="0" Maximum="100" Height="14" />
+
+        <!-- Progress label -->
+        <Grid Grid.Row="2" Margin="0,6,0,0" ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="{Binding ProgressLabel}"
+                       FontSize="11" Opacity="0.8" />
+            <TextBlock Grid.Column="1" Text="{Binding ProgressSuffix}"
+                       FontSize="11" Opacity="0.6"
+                       FontFamily="Cascadia Mono,Consolas,Courier New,monospace" />
+        </Grid>
+
+        <!-- Log -->
+        <Border Grid.Row="3" Margin="0,12,0,0"
+                Background="#14000000" CornerRadius="4"
+                BorderBrush="#33FFFFFF" BorderThickness="1">
+            <ScrollViewer x:Name="LogScroller"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto"
+                          Padding="8">
+                <ItemsControl ItemsSource="{Binding LogEntries}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LogEntry">
+                            <TextBlock Text="{Binding Message}"
+                                       FontFamily="Cascadia Mono,Consolas,Courier New,monospace"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Foreground="{Binding Level, Converter={StaticResource LogLevelToBrush}}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Footer -->
+        <Grid Grid.Row="4" Margin="0,14,0,0" ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                       FontSize="12" FontWeight="SemiBold"
+                       IsVisible="{Binding IsDone}">
+                <TextBlock.Text>
+                    <MultiBinding StringFormat="{}{0}">
+                        <Binding Path="Phase" />
+                    </MultiBinding>
+                </TextBlock.Text>
+            </TextBlock>
+
+            <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                       FontSize="12"
+                       Text="{Binding ErrorMessage}"
+                       Foreground="#FF5252"
+                       IsVisible="{Binding IsFailed}"
+                       TextWrapping="Wrap" />
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Right">
+                <Button Content="Cancel"
+                        Command="{Binding CancelCommand}"
+                        IsVisible="{Binding IsRunning}"
+                        Padding="16,8" Classes="danger" />
+                <Button Content="Close"
+                        Command="{Binding CloseCommand}"
+                        IsVisible="{Binding IsDone}"
+                        Padding="16,8" Classes="accent" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+
+    <Window.Resources>
+        <vm:LogLevelToBrushConverter x:Key="LogLevelToBrush" />
+    </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="Button.accent">
+            <Setter Property="Background" Value="#4CAF50" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.danger">
+            <Setter Property="Background" Value="#E53935" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+    </Window.Styles>
+</Window>

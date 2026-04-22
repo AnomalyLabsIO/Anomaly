@@ -11,6 +11,8 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- Required so Il2CppDumper + Mono.Cecil (reflection-heavy) extract fully at startup. -->
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <Company>AnomalyLabs</Company>
     <NeutralLanguage>en-US</NeutralLanguage>
   </PropertyGroup>
@@ -23,6 +25,10 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\i18n\*.json" />
     <EmbeddedResource Include="Resources\Catalog\*.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Anomaly.InstallerCore\Anomaly.InstallerCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

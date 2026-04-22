@@ -1,4 +1,5 @@
 using Avalonia;
+using Anomaly.InstallerCore.Platform;
 using Anomaly.Launcher.Services;
 
 namespace Anomaly.Launcher;
@@ -24,7 +25,8 @@ public static class Program
     private static int LaunchModdedHeadless()
     {
         var paths = new PathService();
-        var gameProcess = new GameProcessService(paths);
+        var platform = new PlatformInfo();
+        var gameProcess = new GameProcessService(paths, platform);
 
         Console.WriteLine("Launching modded game...");
         gameProcess.LaunchModded();

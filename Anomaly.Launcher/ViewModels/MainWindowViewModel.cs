@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using Anomaly.InstallerCore;
 using Anomaly.Launcher.Models;
 using Anomaly.Launcher.Models.Steam;
 using Anomaly.Launcher.Services;
+using Anomaly.Launcher.Services.Install;
 using Anomaly.Launcher.Services.Localization;
 using Anomaly.Launcher.Services.Steam;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -111,9 +113,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string? _moddedGaDate;
-
-    [ObservableProperty]
-    private bool _hasInstallerAvailable;
 
     // --- Username ---
 
@@ -238,6 +237,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private SteamDownloadDialogViewModel? _steamDownloadDialogViewModel;
+
+    // --- Install progress dialog ---
+
+    [ObservableProperty]
+    private bool _showInstallProgressDialog;
+
+    [ObservableProperty]
+    private InstallProgressDialogViewModel? _installProgressDialogViewModel;
 
     // --- Sync state (for titlebar) ---
 
@@ -451,7 +458,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void LoadStaticInfo()
     {
         MelonLoaderVersion = _systemInfo.GetMelonLoaderVersion() ?? Tr.Get(TrKeys.InfoPanel_NotInstalled);
-        HasInstallerAvailable = _systemInfo.GetInstallerPath() != null;
     }
 
     // ===================== State Machine =====================
@@ -876,23 +882,47 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    // ===================== Sync Anomaly (Installer) =====================
+    // ===================== Sync Anomaly (in-process installer) =====================
 
     [RelayCommand]
     private void SyncAnomaly()
     {
-        var installerPath = _systemInfo.GetInstallerPath();
-        if (installerPath == null)
-        {
-            GameStatusText = Tr.Get(TrKeys.Status_InstallerNotFound);
-            return;
-        }
+        StartInstall(targetVersion: null, skipAnomalyContent: false);
+    }
+
+    private void StartInstall(string? targetVersion, bool skipAnomalyContent)
+    {
+        if (ShowInstallProgressDialog) return; // Already running
 
         var vanillaExe = _paths.GetVanillaExePath();
-        if (_gameProcess.LaunchInstaller(installerPath, vanillaExe))
-            GameStatusText = Tr.Get(TrKeys.Status_InstallerLaunched);
-        else
-            GameStatusText = Tr.Get(TrKeys.Status_FailedInstaller);
+
+        var options = new InstallOptions
+        {
+            InstallerDir = _paths.LauncherDir,
+            VanillaPath = vanillaExe,
+            TargetVersion = targetVersion,
+            NoAnomaly = skipAnomalyContent,
+        };
+
+        var coordinator = new InstallerCoordinator();
+        var dialogVm = new InstallProgressDialogViewModel(coordinator);
+        InstallProgressDialogViewModel = dialogVm;
+        ShowInstallProgressDialog = true;
+
+        var installTask = coordinator.RunInstallAsync(options);
+        _ = dialogVm.TrackAsync(installTask).ContinueWith(_ =>
+        {
+            RefreshStateCommand.Execute(null);
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+
+        GameStatusText = Tr.Get(TrKeys.Status_InstallerLaunched);
+    }
+
+    [RelayCommand]
+    private void CloseInstallProgressDialog()
+    {
+        ShowInstallProgressDialog = false;
+        InstallProgressDialogViewModel = null;
     }
 
     // ===================== Steam download dialog =====================
@@ -919,40 +949,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         // The Steam download lands files directly in the launcher directory (same location the
         // installer's normal Steam copy stage would deposit them). Point vanilla_path at it and
-        // invoke the existing Sync flow so the installer patches in place.
+        // kick off the in-process installer so it patches in place.
         _paths.SaveVanillaPath(installPath);
-
-        var argParts = new List<string>();
-
-        // Pass the catalog's authoritative game version so the installer doesn't have to read
-        // the unreliable globalgamemanagers bundle-version field.
-        if (!string.IsNullOrWhiteSpace(gameVersion))
-            argParts.Add($"--target-version {gameVersion}");
-
-        // --no-anomaly currently only skips the Anomaly-specific Mods/UserLibs check. For
-        // incompatible builds patches will still be attempted — the installer will throw a
-        // clear "no range for X.Y.Z" error unless --skip-patches is also added (not wired yet).
-        if (!isPatchCompatible)
-            argParts.Add("--no-anomaly");
-
-        var extraArgs = argParts.Count > 0 ? string.Join(' ', argParts) : null;
-        SyncAnomalyWithExtraArgs(extraArgs);
-    }
-
-    private void SyncAnomalyWithExtraArgs(string? extraArgs)
-    {
-        var installerPath = _systemInfo.GetInstallerPath();
-        if (installerPath == null)
-        {
-            GameStatusText = Tr.Get(TrKeys.Status_InstallerNotFound);
-            return;
-        }
-
-        var vanillaExe = _paths.GetVanillaExePath();
-        if (_gameProcess.LaunchInstaller(installerPath, vanillaExe, extraArgs))
-            GameStatusText = Tr.Get(TrKeys.Status_InstallerLaunched);
-        else
-            GameStatusText = Tr.Get(TrKeys.Status_FailedInstaller);
+        StartInstall(targetVersion: gameVersion, skipAnomalyContent: !isPatchCompatible);
     }
 
     // ===================== Crash dialog =====================

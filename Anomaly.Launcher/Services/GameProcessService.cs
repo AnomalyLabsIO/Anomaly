@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Anomaly.Launcher.Platform;
+using Anomaly.InstallerCore.Platform;
 
 namespace Anomaly.Launcher.Services;
 
@@ -14,6 +14,7 @@ public enum LaunchFailureReason
 public class GameProcessService
 {
     private readonly PathService _paths;
+    private readonly PlatformInfo _platform;
 
     public Process? CurrentProcess { get; private set; }
     public bool IsRunning => CurrentProcess is { HasExited: false };
@@ -26,9 +27,10 @@ public class GameProcessService
 
     public event EventHandler<int>? GameExited;
 
-    public GameProcessService(PathService paths)
+    public GameProcessService(PathService paths, PlatformInfo platform)
     {
         _paths = paths;
+        _platform = platform;
     }
 
     public bool LaunchVanilla()
@@ -70,41 +72,12 @@ public class GameProcessService
         }
     }
 
-    public bool LaunchInstaller(string installerPath, string? vanillaExePath, string? extraArgs = null)
-    {
-        if (IsRunning) return false;
-
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = installerPath,
-                UseShellExecute = true,
-                WorkingDirectory = Path.GetDirectoryName(installerPath)
-            };
-
-            var argBuilder = new List<string>();
-            if (vanillaExePath != null)
-                argBuilder.Add($"--vanilla-path \"{vanillaExePath}\"");
-            if (!string.IsNullOrWhiteSpace(extraArgs))
-                argBuilder.Add(extraArgs);
-            psi.Arguments = string.Join(' ', argBuilder);
-
-            Process.Start(psi);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private bool StartProcess(string exePath, string? extraArgs = null)
     {
         if (IsRunning)
             return false;
 
-        if (PlatformHelper.IsLinux && !PlatformHelper.IsWineAvailable())
+        if (_platform.IsLinux && !_platform.IsWineAvailable())
         {
             LastFailureReason = LaunchFailureReason.WineUnavailable;
             return false;
@@ -114,7 +87,7 @@ public class GameProcessService
         {
             var psi = new ProcessStartInfo();
 
-            if (PlatformHelper.IsLinux)
+            if (_platform.IsLinux)
             {
                 psi.FileName = "wine";
                 psi.ArgumentList.Add(exePath);

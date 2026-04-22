@@ -1,0 +1,251 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Anomaly.Launcher.ViewModels"
+        xmlns:mdl="using:Anomaly.Launcher.Models.Steam"
+        xmlns:conv="using:Anomaly.Launcher.Converters"
+        xmlns:l="using:Anomaly.Launcher.Markup"
+        x:Class="Anomaly.Launcher.Views.SteamDownloadDialog"
+        x:DataType="vm:SteamDownloadDialogViewModel"
+        Title="{l:Tr launcher.steamdl.dialog.title}"
+        Width="820" Height="680"
+        MinWidth="720" MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <Window.Resources>
+        <conv:SupportStatusToBrushConverter x:Key="StatusToBrush" />
+        <conv:SupportStatusToLabelConverter x:Key="StatusToLabel" />
+    </Window.Resources>
+
+    <Grid Margin="24">
+
+        <!-- ============ Page 1: Pick Version ============ -->
+        <StackPanel IsVisible="{Binding IsPickVersion}" Spacing="14">
+            <TextBlock Text="{l:Tr launcher.steamdl.page1.header}"
+                       FontSize="20" FontWeight="SemiBold" />
+
+            <Border Background="#1A1A2E" CornerRadius="6" Padding="14">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="{l:Tr launcher.steamdl.page1.privacy_banner}"
+                               FontSize="12" TextWrapping="Wrap" Opacity="0.85" />
+                    <Button Content="{l:Tr launcher.steamdl.page1.privacy_link_text}"
+                            x:Name="PrivacyLinkButton"
+                            Background="Transparent" Foreground="#4FC3F7"
+                            Padding="0" FontSize="11" HorizontalAlignment="Left"
+                            Cursor="Hand" />
+                </StackPanel>
+            </Border>
+
+            <StackPanel Spacing="6">
+                <RadioButton Content="{l:Tr launcher.steamdl.page1.pick_from_catalog}"
+                             IsChecked="{Binding !UseManifestPaste}"
+                             GroupName="VersionMode" />
+
+                <StackPanel Margin="24,4,0,0" Spacing="6"
+                            IsVisible="{Binding !UseManifestPaste}">
+
+                    <!-- Header row -->
+                    <Grid ColumnDefinitions="110,180,120,*" Background="#22FFFFFF">
+                        <TextBlock Grid.Column="0" Text="{l:Tr launcher.steamdl.column.date}"
+                                   FontWeight="SemiBold" FontSize="11" Margin="10,6" />
+                        <TextBlock Grid.Column="1" Text="{l:Tr launcher.steamdl.column.manifest_id}"
+                                   FontWeight="SemiBold" FontSize="11" Margin="10,6" />
+                        <TextBlock Grid.Column="2" Text="{l:Tr launcher.steamdl.column.game_version}"
+                                   FontWeight="SemiBold" FontSize="11" Margin="10,6" />
+                        <TextBlock Grid.Column="3" Text="{l:Tr launcher.steamdl.column.supported}"
+                                   FontWeight="SemiBold" FontSize="11" Margin="10,6"
+                                   HorizontalAlignment="Center" />
+                    </Grid>
+
+                    <!-- Scrollable list -->
+                    <Border BorderBrush="#444" BorderThickness="1" CornerRadius="4" MaxHeight="280">
+                        <Panel>
+                            <ListBox ItemsSource="{Binding AvailableBuilds}"
+                                     SelectedItem="{Binding SelectedBuild}"
+                                     Background="Transparent" BorderThickness="0"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemContainerTheme>
+                                    <ControlTheme TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                        <Setter Property="Padding" Value="0" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    </ControlTheme>
+                                </ListBox.ItemContainerTheme>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="mdl:SteamBuildCatalogEntry">
+                                        <Grid ColumnDefinitions="110,180,120,*"
+                                              Background="{Binding Status, Converter={StaticResource StatusToBrush}}">
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding ReleasedAt, StringFormat='{}{0:yyyy-MM-dd}', TargetNullValue='—'}"
+                                                       FontSize="11" Margin="10,6" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding ManifestId}"
+                                                       FontSize="11" Margin="10,6"
+                                                       FontFamily="Cascadia Mono,Consolas,Courier New,monospace" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding GameVersion, TargetNullValue='—'}"
+                                                       FontSize="11" Margin="10,6" />
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding Status, Converter={StaticResource StatusToLabel}}"
+                                                       FontSize="11" Margin="10,6"
+                                                       HorizontalAlignment="Center" FontWeight="Medium" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- Loading overlay -->
+                            <Border Background="#99000000" IsVisible="{Binding IsCatalogLoading}">
+                                <TextBlock Text="{l:Tr launcher.steamdl.catalog.loading}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           FontSize="12" Opacity="0.9" />
+                            </Border>
+                        </Panel>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Button Content="{l:Tr launcher.steamdl.catalog.refresh}"
+                                Command="{Binding RefreshCatalogCommand}"
+                                Padding="10,4" FontSize="11" />
+                        <CheckBox Content="{l:Tr launcher.steamdl.page1.show_all_builds}"
+                                  IsChecked="{Binding ShowAllBuilds}"
+                                  FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Text="{l:Tr launcher.steamdl.catalog.empty}"
+                                   IsVisible="{Binding !AvailableBuilds.Count}"
+                                   FontSize="11" Opacity="0.7" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+
+                <RadioButton Content="{l:Tr launcher.steamdl.page1.paste_manifest}"
+                             IsChecked="{Binding UseManifestPaste}"
+                             GroupName="VersionMode" Margin="0,6,0,0" />
+
+                <StackPanel Margin="24,4,0,0" Spacing="6"
+                            IsVisible="{Binding UseManifestPaste}">
+                    <TextBox Text="{Binding PastedManifestId}"
+                             Watermark="{l:Tr launcher.steamdl.page1.manifest_id_watermark}" />
+                    <Button Content="{l:Tr launcher.steamdl.page1.open_steamdb}"
+                            x:Name="OpenSteamDbButton"
+                            Background="Transparent" Foreground="#4FC3F7"
+                            Padding="0" FontSize="11" HorizontalAlignment="Left"
+                            Cursor="Hand" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom" Margin="0,12,0,0">
+                <Button Content="{l:Tr launcher.steamdl.page1.cancel}"
+                        Command="{Binding CancelCommand}" Padding="16,8" />
+                <Button Content="{l:Tr launcher.steamdl.page1.sign_in_and_download}"
+                        Command="{Binding StartDownloadCommand}" Padding="16,8"
+                        Classes="accent" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ============ Page 2: QR Sign-In ============ -->
+        <StackPanel IsVisible="{Binding IsSignIn}" Spacing="14"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Text="{l:Tr launcher.steamdl.page2.header}"
+                       FontSize="20" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+
+            <Border Background="White" CornerRadius="6" Padding="16"
+                    HorizontalAlignment="Center">
+                <Image Source="{Binding QrImage}" Width="256" Height="256" />
+            </Border>
+
+            <TextBlock Text="{l:Tr launcher.steamdl.page2.instructions}"
+                       FontSize="12" TextWrapping="Wrap"
+                       TextAlignment="Center" MaxWidth="440"
+                       HorizontalAlignment="Center" Opacity="0.85" />
+
+            <TextBlock Text="{Binding SignInStatus}"
+                       FontSize="11" Opacity="0.7"
+                       HorizontalAlignment="Center" />
+
+            <CheckBox Content="{l:Tr launcher.steamdl.page2.remember_me}"
+                      IsChecked="{Binding RememberMe}"
+                      HorizontalAlignment="Center" FontSize="11" />
+
+            <Button Content="{l:Tr launcher.steamdl.page2.cancel}"
+                    Command="{Binding CancelCommand}"
+                    HorizontalAlignment="Center" Padding="16,8" />
+        </StackPanel>
+
+        <!-- ============ Page 3: Downloading ============ -->
+        <StackPanel IsVisible="{Binding IsDownloading}" Spacing="16"
+                    VerticalAlignment="Center">
+            <TextBlock Text="{l:Tr launcher.steamdl.page3.header}"
+                       FontSize="20" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+
+            <ProgressBar Value="{Binding DownloadProgressPercent}"
+                         Minimum="0" Maximum="100" Height="20" />
+
+            <TextBlock Text="{Binding DownloadStatusText}"
+                       HorizontalAlignment="Center" FontSize="13" />
+
+            <TextBlock Text="{Binding DownloadSpeedText}"
+                       HorizontalAlignment="Center" FontSize="11" Opacity="0.7" />
+
+            <TextBlock Text="{Binding CurrentFileName}"
+                       HorizontalAlignment="Center" FontSize="10" Opacity="0.5"
+                       TextTrimming="CharacterEllipsis" MaxWidth="500" />
+
+            <Button Content="{l:Tr launcher.steamdl.page3.cancel}"
+                    Command="{Binding CancelCommand}"
+                    HorizontalAlignment="Center" Padding="16,8" Classes="danger" />
+        </StackPanel>
+
+        <!-- ============ Done ============ -->
+        <StackPanel IsVisible="{Binding IsDone}" Spacing="16"
+                    VerticalAlignment="Center">
+            <TextBlock Text="{l:Tr launcher.steamdl.done.header}"
+                       FontSize="20" FontWeight="SemiBold"
+                       Foreground="#4CAF50" HorizontalAlignment="Center" />
+
+            <Border Background="#334CAF50" CornerRadius="6" Padding="16">
+                <SelectableTextBlock Text="{Binding CompletedPath}"
+                                     FontFamily="Cascadia Mono,Consolas,Courier New,monospace"
+                                     FontSize="11" TextWrapping="Wrap" />
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Content="{l:Tr launcher.steamdl.error.close}"
+                        Command="{Binding CancelCommand}" Padding="16,8" />
+                <Button Content="{l:Tr launcher.steamdl.done.use_build}"
+                        Command="{Binding UseBuildCommand}" Padding="16,8" Classes="accent" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ============ Error ============ -->
+        <StackPanel IsVisible="{Binding IsError}" Spacing="16"
+                    VerticalAlignment="Center">
+            <TextBlock Text="{l:Tr launcher.steamdl.error.header}"
+                       FontSize="20" FontWeight="SemiBold"
+                       Foreground="#FF5252" HorizontalAlignment="Center" />
+
+            <Border Background="#33FF5252" CornerRadius="6" Padding="16">
+                <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" FontSize="12" />
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Content="{l:Tr launcher.steamdl.error.close}"
+                        Command="{Binding CancelCommand}" Padding="16,8" />
+                <Button Content="{l:Tr launcher.steamdl.error.try_again}"
+                        Command="{Binding DismissErrorCommand}" Padding="16,8" Classes="accent" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+
+    <Window.Styles>
+        <Style Selector="Button.accent">
+            <Setter Property="Background" Value="#4CAF50" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.danger">
+            <Setter Property="Background" Value="#E53935" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+    </Window.Styles>
+</Window>

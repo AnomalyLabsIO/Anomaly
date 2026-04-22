@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Anomaly.InstallerCore.Platform;
 using Anomaly.Launcher.Services;
 using Anomaly.Launcher.Services.Localization;
 using Anomaly.Launcher.Services.Steam;
@@ -27,7 +28,8 @@ public class App : Application
 
             var userProfile = new UserProfileService(paths);
             var modManager = new ModManagerService(paths);
-            var gameProcess = new GameProcessService(paths);
+            var platform = new PlatformInfo();
+            var gameProcess = new GameProcessService(paths, platform);
             var crashReport = new CrashReportService(paths);
             var versionCheck = new VersionCheckService(paths);
             var systemInfo = new SystemInfoService(paths);
