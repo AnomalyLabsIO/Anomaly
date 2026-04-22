@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Anomaly.Launcher.Models;
+using Anomaly.Launcher.Models.Steam;
 using Anomaly.Launcher.Services;
 using Anomaly.Launcher.Services.Localization;
 using Anomaly.Launcher.Services.Steam;
@@ -8,6 +9,14 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace Anomaly.Launcher.ViewModels;
+
+public enum LauncherTab
+{
+    Installed,
+    PublicRepo,
+    GameVersions,
+    Settings,
+}
 
 public partial class MainWindowViewModel : ObservableObject, IDisposable
 {
@@ -25,6 +34,46 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private FileSystemWatcher? _acfWatcher;
     private FileSystemWatcher? _gaWatcher;
     private DateTime _lastWatcherEvent = DateTime.MinValue;
+
+    // --- Active tab ---
+
+    [ObservableProperty]
+    private LauncherTab _activeTab = LauncherTab.Installed;
+
+    public bool IsInstalledTab => ActiveTab == LauncherTab.Installed;
+    public bool IsPublicRepoTab => ActiveTab == LauncherTab.PublicRepo;
+    public bool IsGameVersionsTab => ActiveTab == LauncherTab.GameVersions;
+    public bool IsSettingsTab => ActiveTab == LauncherTab.Settings;
+
+    public bool InstalledTabActive => IsInstalledTab;
+    public bool PublicRepoTabActive => IsPublicRepoTab;
+    public bool GameVersionsTabActive => IsGameVersionsTab;
+    public bool SettingsTabActive => IsSettingsTab;
+
+    partial void OnActiveTabChanged(LauncherTab value)
+    {
+        OnPropertyChanged(nameof(IsInstalledTab));
+        OnPropertyChanged(nameof(IsPublicRepoTab));
+        OnPropertyChanged(nameof(IsGameVersionsTab));
+        OnPropertyChanged(nameof(IsSettingsTab));
+        OnPropertyChanged(nameof(InstalledTabActive));
+        OnPropertyChanged(nameof(PublicRepoTabActive));
+        OnPropertyChanged(nameof(GameVersionsTabActive));
+        OnPropertyChanged(nameof(SettingsTabActive));
+    }
+
+    [RelayCommand]
+    private void SelectTab(string tab)
+    {
+        ActiveTab = tab switch
+        {
+            "installed" => LauncherTab.Installed,
+            "public" => LauncherTab.PublicRepo,
+            "versions" => LauncherTab.GameVersions,
+            "settings" => LauncherTab.Settings,
+            _ => ActiveTab,
+        };
+    }
 
     // --- Launcher state ---
 
@@ -82,6 +131,80 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private ObservableCollection<ModItemViewModel> _mods = new();
 
+    [ObservableProperty]
+    private ModItemViewModel? _selectedMod;
+
+    public int EnabledModCount => Mods.Count(m => m.IsActive);
+
+    public string ModCountHeader => $"{Mods.Count} mods · {EnabledModCount} active";
+
+    partial void OnSelectedModChanged(ModItemViewModel? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedMod));
+        OnPropertyChanged(nameof(NoSelectedMod));
+    }
+
+    public bool HasSelectedMod => SelectedMod != null;
+    public bool NoSelectedMod => SelectedMod == null;
+
+    // --- Public repository (stub catalogue) ---
+
+    [ObservableProperty]
+    private ObservableCollection<RepoModItemViewModel> _repoMods = new();
+
+    [ObservableProperty]
+    private ObservableCollection<RepoModItemViewModel> _filteredRepoMods = new();
+
+    [ObservableProperty]
+    private RepoModItemViewModel? _selectedRepoMod;
+
+    [ObservableProperty]
+    private string _repoSearchQuery = string.Empty;
+
+    partial void OnRepoSearchQueryChanged(string value) => RefreshRepoFilter();
+
+    private void RefreshRepoFilter()
+    {
+        var query = RepoSearchQuery?.Trim() ?? string.Empty;
+        FilteredRepoMods.Clear();
+        foreach (var m in RepoMods)
+        {
+            if (string.IsNullOrEmpty(query)
+                || m.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || m.Id.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                FilteredRepoMods.Add(m);
+            }
+        }
+        if (SelectedRepoMod == null || !FilteredRepoMods.Contains(SelectedRepoMod))
+            SelectedRepoMod = FilteredRepoMods.FirstOrDefault();
+    }
+
+    partial void OnSelectedRepoModChanged(RepoModItemViewModel? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedRepoMod));
+    }
+
+    public bool HasSelectedRepoMod => SelectedRepoMod != null;
+
+    // --- Game versions ---
+
+    [ObservableProperty]
+    private ObservableCollection<GameVersionItemViewModel> _gameVersions = new();
+
+    [ObservableProperty]
+    private GameVersionItemViewModel? _selectedGameVersion;
+
+    [ObservableProperty]
+    private bool _isLoadingGameVersions;
+
+    partial void OnSelectedGameVersionChanged(GameVersionItemViewModel? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedGameVersion));
+    }
+
+    public bool HasSelectedGameVersion => SelectedGameVersion != null;
+
     // --- Launch args ---
 
     [ObservableProperty]
@@ -116,9 +239,27 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private SteamDownloadDialogViewModel? _steamDownloadDialogViewModel;
 
+    // --- Sync state (for titlebar) ---
+
+    [ObservableProperty]
+    private string _syncStatusText = "SYNCED";
+
+    [ObservableProperty]
+    private bool _isBuildNominal = true;
+
     // --- Computed ---
 
     public bool CanLaunch => !IsGameRunning && IsGameInstalled;
+
+    public string GameVersionLabel => IsGameInstalled
+        ? (GameVersionFromBuild() ?? LocalBuildId ?? "—")
+        : "—";
+
+    private string? GameVersionFromBuild()
+    {
+        if (LocalBuildId == null) return null;
+        return GameVersions.FirstOrDefault(v => v.BuildId == LocalBuildId)?.GameVersion;
+    }
 
     partial void OnCurrentStateChanged(LauncherState value)
     {
@@ -128,6 +269,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsAllGood));
         OnPropertyChanged(nameof(IsGameInstalled));
         OnPropertyChanged(nameof(CanLaunch));
+        OnPropertyChanged(nameof(GameVersionLabel));
+        IsBuildNominal = value == LauncherState.AllGood;
+    }
+
+    partial void OnLocalBuildIdChanged(string? value)
+    {
+        OnPropertyChanged(nameof(GameVersionLabel));
+        UpdateInstalledFlag();
     }
 
     partial void OnIsGameRunningChanged(bool value)
@@ -163,10 +312,107 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         LaunchArgs = LoadLaunchArgs();
         LoadMods();
         LoadStaticInfo();
+        LoadGameVersions();
+        LoadSampleRepoMods();
 
         _gameProcess.GameExited += OnGameExited;
 
         _ = RefreshStateAsync();
+    }
+
+    // ===================== Game Versions =====================
+
+    public void LoadGameVersions()
+    {
+        IsLoadingGameVersions = true;
+        try
+        {
+            var entries = _buildCatalog.Merge(Array.Empty<SteamBuildCatalogEntry>(), includeAll: false);
+            GameVersions.Clear();
+            foreach (var entry in entries)
+                GameVersions.Add(new GameVersionItemViewModel(entry, isInstalled: false));
+            UpdateInstalledFlag();
+            if (SelectedGameVersion == null || !GameVersions.Contains(SelectedGameVersion))
+                SelectedGameVersion = GameVersions.FirstOrDefault(v => v.IsInstalled) ?? GameVersions.FirstOrDefault();
+        }
+        finally
+        {
+            IsLoadingGameVersions = false;
+        }
+    }
+
+    private void UpdateInstalledFlag()
+    {
+        foreach (var v in GameVersions)
+            v.IsInstalled = !string.IsNullOrEmpty(LocalBuildId) && v.BuildId == LocalBuildId;
+        OnPropertyChanged(nameof(GameVersionLabel));
+    }
+
+    [RelayCommand]
+    private void InstallGameVersion(GameVersionItemViewModel? entry)
+    {
+        entry ??= SelectedGameVersion;
+        if (entry == null) return;
+
+        // Delegate into existing Steam download dialog flow; the dialog already handles
+        // authentication + download + installer handoff.
+        OpenSteamDownloadDialog();
+
+        // Seed selection if the dialog VM is ready
+        if (SteamDownloadDialogViewModel is { } dlg)
+        {
+            var match = dlg.AvailableBuilds.FirstOrDefault(b => b.ManifestId == entry.ManifestId);
+            if (match != null)
+                dlg.SelectedBuild = match;
+        }
+    }
+
+    // ===================== Public Repository (stub) =====================
+
+    private void LoadSampleRepoMods()
+    {
+        // Stub data matching the design mock. Will be replaced by a real
+        // repo.anomaly.scp/v1 catalogue client.
+        var items = new[]
+        {
+            new RepoModItemViewModel("gamemode.hideandseek", "Hide & Seek", "gamemode", "silverfox",
+                "2.1.0", "14.2.6", 12483, true,
+                "Asymmetric 1-vs-many round variant with custom win conditions.",
+                "3d ago", false),
+            new RepoModItemViewModel("gamemode.speedrun", "Speedrun Mode", "gamemode", "anomaly-team",
+                "0.5.2", "14.2.6", 3214, true,
+                "Timed escape objectives with per-route leaderboards.",
+                "1w ago", false),
+            new RepoModItemViewModel("cosmetic.helmets", "Helmet Skins Pack", "cosmetic", "community",
+                "1.4.0", "14.2.x", 8012, false,
+                "16 new helmet cosmetics for MTF and Chaos Insurgency.",
+                "2d ago", false),
+            new RepoModItemViewModel("utility.roundreports", "RoundReports", "utility", "TayTayModded",
+                "2.3.0", "14.2.x", 932, false,
+                "Per-round statistics export to JSON / CSV.",
+                "5h ago", false),
+            new RepoModItemViewModel("utility.spectatorfx", "SpectatorFX", "utility", "community",
+                "0.4.2", "14.2.6", 4201, true,
+                "Enhanced spectator camera, pings, and nameplate overlays.",
+                "6h ago", false),
+            new RepoModItemViewModel("map.undergroundex", "Underground Expanded", "map", "mapmakers-guild",
+                "1.0.0", "14.2.6", 1890, true,
+                "Expands HCZ with 4 additional rooms and new routes.",
+                "2w ago", false),
+        };
+
+        RepoMods.Clear();
+        foreach (var i in items)
+            RepoMods.Add(i);
+
+        // Mark installed state by id match against locally loaded mods
+        foreach (var repo in RepoMods)
+        {
+            if (Mods.Any(m => string.Equals(m.DisplayName, repo.Name, StringComparison.OrdinalIgnoreCase)))
+                repo.IsInstalled = true;
+        }
+
+        RefreshRepoFilter();
     }
 
     partial void OnLaunchArgsChanged(string value)
@@ -377,10 +623,61 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void LoadMods()
     {
+        foreach (var old in Mods)
+            old.PropertyChanged -= OnModItemPropertyChanged;
+
         Mods.Clear();
         foreach (var mod in _modManager.GetMods())
         {
-            Mods.Add(new ModItemViewModel(mod, _modManager, null));
+            var vm = new ModItemViewModel(mod, _modManager, null);
+            vm.PropertyChanged += OnModItemPropertyChanged;
+            Mods.Add(vm);
+        }
+        OnPropertyChanged(nameof(EnabledModCount));
+        OnPropertyChanged(nameof(ModCountHeader));
+    }
+
+    private void OnModItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ModItemViewModel.IsActive))
+        {
+            OnPropertyChanged(nameof(EnabledModCount));
+            OnPropertyChanged(nameof(ModCountHeader));
+        }
+    }
+
+    [RelayCommand]
+    private void SelectMod(ModItemViewModel? mod)
+    {
+        SelectedMod = mod;
+    }
+
+    [RelayCommand]
+    private void OpenModsFolder()
+    {
+        try
+        {
+            if (Directory.Exists(_paths.ModsDir))
+                Process.Start(new ProcessStartInfo { FileName = _paths.ModsDir, UseShellExecute = true });
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    [RelayCommand]
+    private void OpenVanillaFolder()
+    {
+        try
+        {
+            var dir = _paths.VanillaDir;
+            if (dir != null && Directory.Exists(dir))
+                Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+        }
+        catch
+        {
+            // ignore
         }
     }
 

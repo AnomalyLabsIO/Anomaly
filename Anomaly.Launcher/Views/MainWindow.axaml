@@ -4,311 +4,1041 @@
         xmlns:conv="using:Anomaly.Launcher.Converters"
         xmlns:l="using:Anomaly.Launcher.Markup"
         x:Class="Anomaly.Launcher.Views.MainWindow"
+        x:Name="Root"
         x:DataType="vm:MainWindowViewModel"
+        x:CompileBindings="True"
         Title="Anomaly Launcher"
         Icon="/Assets/AnomalyLogo.png"
-        Width="900" Height="600"
-        MinWidth="700" MinHeight="450"
+        Width="960" Height="640"
+        MinWidth="880" MinHeight="600"
         WindowStartupLocation="CenterScreen"
+        SystemDecorations="BorderOnly"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        Background="{StaticResource Bg0}"
         DragDrop.AllowDrop="True">
 
     <Window.Resources>
-        <conv:BoolToColorConverter x:Key="RunningColorConverter"
-                                   TrueBrush="#4CAF50" FalseBrush="#616161" />
+        <conv:EnabledToOpacityConverter x:Key="EnabledOpacity" />
+        <conv:TabEqualsConverter x:Key="TabEquals" />
     </Window.Resources>
 
-    <DockPanel>
-        <!-- Top Bar -->
-        <Border DockPanel.Dock="Top" Padding="16,10" Background="#1E1E2E">
-            <DockPanel>
-                <!-- Username: display mode -->
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal"
-                            IsVisible="{Binding !IsEditingUsername}">
-                    <TextBlock Text="{l:Tr launcher.mainwindow.welcome_prefix}" FontSize="16" FontWeight="SemiBold"
-                               VerticalAlignment="Center" Opacity="0.7" />
-                    <Button Content="{Binding Username}"
-                            Command="{Binding BeginEditUsernameCommand}"
-                            FontSize="16" FontWeight="SemiBold"
-                            Padding="4,0" Margin="-4,0,0,0"
-                            Background="Transparent"
-                            Cursor="Hand"
-                            ToolTip.Tip="{l:Tr launcher.mainwindow.username_tooltip}">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="{l:Tr launcher.mainwindow.username_copy_user_id}"
-                                          Command="{Binding CopyUserIdCommand}" />
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
+    <!-- Root grid: titlebar / tabbar / content / launchbar -->
+    <Grid RowDefinitions="32,44,*,Auto">
+
+        <!-- ============================================================
+             1. TITLEBAR
+             ============================================================ -->
+        <Border Grid.Row="0"
+                Background="{StaticResource Bg1}"
+                BorderBrush="{StaticResource Line}"
+                BorderThickness="0,0,0,1"
+                PointerPressed="OnTitleBarPointerPressed">
+            <DockPanel Margin="14,0">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Ellipse Width="8" Height="8" Fill="{StaticResource Accent}" />
+                    <TextBlock Text="ANOMALY"
+                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                               Foreground="{StaticResource TextDim}" LetterSpacing="1"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="//" FontFamily="{StaticResource FontMono}" FontSize="11"
+                               Foreground="{StaticResource TextMute}" VerticalAlignment="Center" />
+                    <TextBlock Text="LAUNCHER"
+                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                               Foreground="{StaticResource TextDim}" LetterSpacing="1"
+                               VerticalAlignment="Center" />
                 </StackPanel>
 
-                <!-- Username: edit mode -->
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6"
-                            IsVisible="{Binding IsEditingUsername}"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="{l:Tr launcher.mainwindow.username_label}" FontSize="14" VerticalAlignment="Center" Opacity="0.7" />
-                    <TextBox Text="{Binding EditingUsernameText}"
-                             Width="180" FontSize="14"
-                             Watermark="{l:Tr launcher.mainwindow.username_watermark}"
-                             x:Name="UsernameTextBox" />
-                    <Button Content="{l:Tr launcher.mainwindow.username_save}" Command="{Binding SaveUsernameCommand}"
-                            Padding="10,4" FontSize="12" Classes="accent" />
-                    <Button Content="{l:Tr launcher.mainwindow.username_cancel}" Command="{Binding CancelEditUsernameCommand}"
-                            Padding="10,4" FontSize="12" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <!-- Username (click to edit) -->
+                    <StackPanel Orientation="Horizontal" Spacing="0" IsVisible="{Binding !IsEditingUsername}">
+                        <Button Command="{Binding BeginEditUsernameCommand}"
+                                Background="Transparent" BorderThickness="0" Padding="2,0"
+                                FontFamily="{StaticResource FontMono}" FontSize="11"
+                                Foreground="{StaticResource TextMute}" Cursor="Hand"
+                                ToolTip.Tip="{l:Tr launcher.mainwindow.username_tooltip}">
+                            <TextBlock Text="{Binding Username}" />
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="{l:Tr launcher.mainwindow.username_copy_user_id}"
+                                              Command="{Binding CopyUserIdCommand}" />
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                    </StackPanel>
+                    <!-- Username edit -->
+                    <StackPanel Orientation="Horizontal" Spacing="4"
+                                IsVisible="{Binding IsEditingUsername}" VerticalAlignment="Center">
+                        <TextBox x:Name="UsernameTextBox" Classes="al"
+                                 Text="{Binding EditingUsernameText}"
+                                 Watermark="{l:Tr launcher.mainwindow.username_watermark}"
+                                 Width="140" />
+                        <Button Classes="al small" Content="{l:Tr launcher.mainwindow.username_save}"
+                                Command="{Binding SaveUsernameCommand}" />
+                        <Button Classes="al small ghost" Content="{l:Tr launcher.mainwindow.username_cancel}"
+                                Command="{Binding CancelEditUsernameCommand}" />
+                    </StackPanel>
+
+                    <TextBlock Text="·" Foreground="{StaticResource TextMute}" FontFamily="{StaticResource FontMono}" FontSize="11"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding !IsEditingUsername}" />
+
+                    <TextBlock Text="{Binding SyncStatusText}"
+                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                               LetterSpacing="1"
+                               Foreground="{StaticResource Ok}"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding !IsEditingUsername}" />
+
+                    <!-- Window control buttons (minimal) -->
+                    <Button Classes="al small ghost" Content="—" Width="28" Padding="0"
+                            Click="OnMinimizeClick" ToolTip.Tip="Minimize" />
+                    <Button Classes="al small ghost" Content="✕" Width="28" Padding="0"
+                            Click="OnCloseClick" ToolTip.Tip="Close" />
                 </StackPanel>
 
-                <Panel /> <!-- Spacer -->
+                <Panel />
             </DockPanel>
         </Border>
 
-        <!-- Bottom Bar -->
-        <Border DockPanel.Dock="Bottom" Padding="12,8" Background="#1E1E2E">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8">
-                    <Button Content="{l:Tr launcher.mainwindow.launch_vanilla}"
-                            Command="{Binding LaunchVanillaCommand}"
-                            IsEnabled="{Binding CanLaunch}"
-                            Padding="16,8" />
-                    <Button Content="{l:Tr launcher.mainwindow.launch_modded}"
-                            Command="{Binding LaunchModdedCommand}"
-                            IsEnabled="{Binding CanLaunch}"
-                            Padding="16,8"
-                            Classes="accent" />
-                    <Button Content="{l:Tr launcher.mainwindow.kill_game}"
-                            Command="{Binding KillGameCommand}"
-                            IsVisible="{Binding IsGameRunning}"
-                            Padding="16,8"
-                            Classes="danger" />
-                    <Button Content="{l:Tr launcher.mainwindow.refresh}"
-                            Command="{Binding RefreshStateCommand}"
-                            Padding="16,8" />
-                </StackPanel>
+        <!-- ============================================================
+             2. TAB BAR
+             ============================================================ -->
+        <Border Grid.Row="1"
+                Background="{StaticResource Bg0}"
+                BorderBrush="{StaticResource Line}"
+                BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
 
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8"
-                            VerticalAlignment="Center">
-                    <Ellipse Width="10" Height="10"
-                             Fill="{Binding IsGameRunning, Converter={StaticResource RunningColorConverter}}" />
-                    <TextBlock Text="{Binding GameStatusText}"
-                               FontSize="12" VerticalAlignment="Center" Opacity="0.8" />
-                </StackPanel>
+                <!-- Installed tab -->
+                <Button Grid.Column="0" Classes="tab"
+                        Classes.active="{Binding InstalledTabActive}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="installed">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="▣ INSTALLED" />
+                        <TextBlock Text="{Binding Mods.Count}" Foreground="{StaticResource TextMute}" />
+                    </StackPanel>
+                </Button>
 
-                <!-- Launch Args -->
-                <TextBox Text="{Binding LaunchArgs}"
-                         Watermark="{l:Tr launcher.mainwindow.launch_args_watermark}"
-                         FontSize="11" Margin="8,0"
-                         VerticalAlignment="Center"
-                         ToolTip.Tip="{l:Tr launcher.mainwindow.launch_args_tooltip}" />
-            </DockPanel>
+                <!-- Public repo tab -->
+                <Button Grid.Column="1" Classes="tab"
+                        Classes.active="{Binding PublicRepoTabActive}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="public">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="⛬ PUBLIC REPOSITORY" />
+                        <Border Classes="chip auth small">
+                            <TextBlock Text="AUTH" />
+                        </Border>
+                    </StackPanel>
+                </Button>
+
+                <!-- Game versions tab (our addition) -->
+                <Button Grid.Column="2" Classes="tab"
+                        Classes.active="{Binding GameVersionsTabActive}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="versions">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="◈ GAME VERSIONS" />
+                        <TextBlock Text="{Binding GameVersions.Count}" Foreground="{StaticResource TextMute}" />
+                    </StackPanel>
+                </Button>
+
+                <!-- Settings tab -->
+                <Button Grid.Column="3" Classes="tab"
+                        Classes.active="{Binding SettingsTabActive}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="settings">
+                    <TextBlock Text="⚙ SETTINGS" />
+                </Button>
+
+                <!-- Build pill -->
+                <Border Grid.Column="5" Padding="16,0" BorderBrush="{StaticResource LineSoft}" BorderThickness="1,0,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <TextBlock Text="BUILD" FontFamily="{StaticResource FontMono}" FontSize="10"
+                                   Foreground="{StaticResource TextMute}" LetterSpacing="1" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding GameVersionLabel}"
+                                   FontFamily="{StaticResource FontMono}" FontSize="11"
+                                   Foreground="{StaticResource Text}" VerticalAlignment="Center" />
+                        <Border Classes="chip ok" IsVisible="{Binding IsBuildNominal}">
+                            <TextBlock Text="NOMINAL" />
+                        </Border>
+                        <Border Classes="chip err" IsVisible="{Binding !IsBuildNominal}">
+                            <TextBlock Text="ATTENTION" />
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Border>
 
-        <!-- Main Content -->
-        <Grid ColumnDefinitions="280,*">
-            <!-- Left Panel: Mod List -->
-            <Border Grid.Column="0" BorderBrush="#333" BorderThickness="0,0,1,0">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="{l:Tr launcher.mainwindow.mods_header}" FontSize="14" FontWeight="SemiBold"
-                               Margin="12,10" />
-                    <ScrollViewer>
-                        <ItemsControl ItemsSource="{Binding Mods}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:ModItemViewModel">
-                                    <Border Padding="12,6" BorderBrush="#333" BorderThickness="0,0,0,1">
-                                        <DockPanel>
-                                            <CheckBox DockPanel.Dock="Left"
-                                                      IsChecked="{Binding IsActive}"
-                                                      IsEnabled="{Binding CanToggle}"
-                                                      VerticalAlignment="Center" />
-                                            <StackPanel Margin="8,0,0,0">
-                                                <DockPanel>
-                                                    <TextBlock Text="{Binding DisplayName}"
-                                                               FontSize="13" FontWeight="Medium" />
-                                                    <TextBlock Text="{Binding VersionText, StringFormat=' v{0}'}"
-                                                               FontSize="11" Opacity="0.6"
-                                                               VerticalAlignment="Center" />
-                                                </DockPanel>
-                                                <TextBlock Text="{Binding TargetGameVersion, StringFormat='Target: {0}'}"
-                                                           FontSize="10" Opacity="0.5"
-                                                           IsVisible="{Binding TargetGameVersion, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                                                <TextBlock Text="{Binding VersionWarningText}"
-                                                           FontSize="10" Foreground="#FF9800"
-                                                           IsVisible="{Binding IsVersionMismatch}" />
-                                            </StackPanel>
-                                        </DockPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+        <!-- ============================================================
+             3. CONTENT AREA
+             ============================================================ -->
+        <Grid Grid.Row="2">
+
+            <!-- ========= Tab: Installed ========= -->
+            <Grid IsVisible="{Binding IsInstalledTab}" ColumnDefinitions="*,300">
+
+                <!-- Blueprint grid area -->
+                <Border Grid.Column="0" Background="{StaticResource Bg0}">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="18" Spacing="14">
+
+                            <!-- Header row -->
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="SECTOR · INSTALLED"
+                                               FontFamily="{StaticResource FontMono}" FontSize="10"
+                                               Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                    <TextBlock Text="{Binding ModCountHeader}" FontSize="18" FontWeight="Bold" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <Button Classes="al small" Content="Validate files"
+                                            Command="{Binding ValidateGameFilesCommand}" />
+                                    <Button Classes="al small" Content="Sync all"
+                                            Command="{Binding SyncAnomalyCommand}"
+                                            IsEnabled="{Binding HasInstallerAvailable}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 2-column mod card grid -->
+                            <ItemsControl ItemsSource="{Binding Mods}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="2" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ModItemViewModel">
+                                        <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="5"
+                                                HorizontalContentAlignment="Stretch"
+                                                VerticalContentAlignment="Stretch"
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Stretch"
+                                                Click="OnModCardClick">
+                                            <Border Background="{StaticResource Bg1}"
+                                                    BorderBrush="{StaticResource Line}"
+                                                    BorderThickness="1"
+                                                    Padding="16" CornerRadius="2"
+                                                    MinHeight="110"
+                                                    HorizontalAlignment="Stretch"
+                                                    VerticalAlignment="Stretch"
+                                                    Opacity="{Binding IsActive, Converter={StaticResource EnabledOpacity}}">
+                                                <Grid>
+                                                    <!-- Corner L-markers -->
+                                                    <Canvas>
+                                                        <Path Stroke="{StaticResource TextMute}" StrokeThickness="1"
+                                                              Data="M 4 10 L 4 4 L 10 4" />
+                                                    </Canvas>
+                                                    <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Top">
+                                                        <CheckBox Grid.Column="0" Classes="chk"
+                                                                  IsChecked="{Binding IsActive, Mode=TwoWay}"
+                                                                  IsEnabled="{Binding CanToggle}"
+                                                                  Margin="0,3,12,0" VerticalAlignment="Top" />
+                                                        <StackPanel Grid.Column="1" Spacing="6">
+                                                            <TextBlock Text="{Binding DisplayName}"
+                                                                       FontSize="15" FontWeight="SemiBold"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                                       Foreground="{StaticResource TextMute}">
+                                                                <Run Text="v" /><Run Text="{Binding VersionText}" />
+                                                                <Run Text=" · tgt " />
+                                                                <Run Text="{Binding TargetGameVersion}" />
+                                                            </TextBlock>
+                                                            <TextBlock Text="{Binding VersionWarningText}"
+                                                                       FontSize="10"
+                                                                       Foreground="{StaticResource Warn}"
+                                                                       IsVisible="{Binding IsVersionMismatch}" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Empty state -->
+                            <Border IsVisible="{Binding !Mods.Count}"
+                                    Padding="32" HorizontalAlignment="Center"
+                                    Background="Transparent">
+                                <StackPanel Spacing="10" HorizontalAlignment="Center">
+                                    <TextBlock Text="▣" FontSize="32" Foreground="{StaticResource TextMute}"
+                                               HorizontalAlignment="Center" />
+                                    <TextBlock Text="No mods installed" FontSize="16" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" />
+                                    <TextBlock Text="Browse the Anomaly public repository and install your first mod."
+                                               Foreground="{StaticResource TextDim}" FontSize="12"
+                                               HorizontalAlignment="Center" />
+                                    <Button Classes="al primary" Content="Browse Repository →"
+                                            Command="{Binding SelectTabCommand}" CommandParameter="public"
+                                            HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+
+                        </StackPanel>
                     </ScrollViewer>
-                </DockPanel>
-            </Border>
+                </Border>
 
-            <!-- Right Panel: State + Info -->
-            <ScrollViewer Grid.Column="1">
-                <StackPanel Margin="16,10" Spacing="16">
+                <!-- Right detail sidebar -->
+                <Border Grid.Column="1"
+                        Background="{StaticResource Bg1}"
+                        BorderBrush="{StaticResource Line}"
+                        BorderThickness="1,0,0,0">
+                    <ScrollViewer Padding="16">
+                        <!-- Swap between "selected mod manifest" and "game status" -->
+                        <Grid>
 
-                    <!-- ========== State 1: Game Not Installed ========== -->
-                    <StackPanel Spacing="12" IsVisible="{Binding IsGameNotInstalled}">
-                        <TextBlock Text="{l:Tr launcher.state1.header}" FontSize="16" FontWeight="SemiBold" />
+                            <!-- No selection: Game Status -->
+                            <StackPanel IsVisible="{Binding NoSelectedMod}" Spacing="14">
+                                <TextBlock Text="GAME STATUS"
+                                           FontFamily="{StaticResource FontMono}" FontSize="10"
+                                           Foreground="{StaticResource TextDim}" LetterSpacing="1" />
 
-                        <!-- Drop zone -->
-                        <Border Background="#1A1A2E" CornerRadius="6" Padding="24"
-                                BorderBrush="#555" BorderThickness="2"
-                                x:Name="DropZone"
-                                MinHeight="100">
-                            <StackPanel Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="{l:Tr launcher.state1.drop_zone_primary}"
-                                           FontSize="14" HorizontalAlignment="Center" Opacity="0.7" />
-                                <TextBlock Text="{l:Tr launcher.state1.drop_zone_secondary}"
-                                           FontSize="11" HorizontalAlignment="Center" Opacity="0.5" />
+                                <!-- OK panel -->
+                                <Border IsVisible="{Binding IsAllGood}"
+                                        BorderBrush="#404ADE80" BorderThickness="1"
+                                        Background="#0A4ADE80" Padding="12" CornerRadius="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Ellipse Width="8" Height="8" Fill="{StaticResource Ok}" />
+                                        <StackPanel>
+                                            <TextBlock Text="UP TO DATE"
+                                                       FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource Ok}" />
+                                            <TextBlock FontFamily="{StaticResource FontMono}" FontSize="10"
+                                                       Foreground="{StaticResource TextDim}">
+                                                <Run Text="local = online · " />
+                                                <Run Text="{Binding LocalBuildId}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Out of date panel -->
+                                <Border IsVisible="{Binding IsOnlineBuildMismatch}"
+                                        BorderBrush="#4DE23B3B" BorderThickness="1"
+                                        Background="#14E23B3B" Padding="12" CornerRadius="2">
+                                    <StackPanel Spacing="8">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <Ellipse Width="8" Height="8" Fill="{StaticResource Accent}" />
+                                            <StackPanel>
+                                                <TextBlock Text="OUT OF DATE"
+                                                           FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource Accent}" />
+                                                <TextBlock FontFamily="{StaticResource FontMono}" FontSize="10"
+                                                           Foreground="{StaticResource TextDim}">
+                                                    <Run Text="local " /><Run Text="{Binding LocalBuildId}" />
+                                                    <Run Text=" ≠ " /><Run Text="{Binding OnlineBuildId}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <Button Classes="al small primary" Content="Update now"
+                                                Command="{Binding UpdateScpslCommand}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Vanilla updated (needs sync) -->
+                                <Border IsVisible="{Binding IsVanillaUpdated}"
+                                        BorderBrush="#40F59E0B" BorderThickness="1"
+                                        Background="#0FF59E0B" Padding="12" CornerRadius="2">
+                                    <StackPanel Spacing="8">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <Ellipse Width="8" Height="8" Fill="{StaticResource Warn}" />
+                                            <TextBlock Text="NEEDS RESYNC"
+                                                       FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource Warn}" />
+                                        </StackPanel>
+                                        <TextBlock Text="{l:Tr launcher.state2.body}"
+                                                   FontSize="11" Foreground="{StaticResource TextDim}"
+                                                   TextWrapping="Wrap" />
+                                        <Button Classes="al small primary" Content="Sync Anomaly"
+                                                Command="{Binding SyncAnomalyCommand}"
+                                                IsEnabled="{Binding HasInstallerAvailable}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Not installed panel -->
+                                <Border IsVisible="{Binding IsGameNotInstalled}"
+                                        BorderBrush="{StaticResource Line}" BorderThickness="1"
+                                        Background="{StaticResource Bg2}" Padding="12" CornerRadius="2">
+                                    <StackPanel Spacing="8">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <Ellipse Width="8" Height="8" Fill="{StaticResource TextMute}" />
+                                            <TextBlock Text="NOT INSTALLED"
+                                                       FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextDim}" />
+                                        </StackPanel>
+                                        <TextBlock Text="Select a version to install from the Game Versions tab."
+                                                   FontSize="11" Foreground="{StaticResource TextDim}"
+                                                   TextWrapping="Wrap" />
+                                        <Button Classes="al small" Content="Game Versions →"
+                                                Command="{Binding SelectTabCommand}" CommandParameter="versions" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Build KV -->
+                                <StackPanel Spacing="6" IsVisible="{Binding IsGameInstalled}">
+                                    <TextBlock Text="BUILD"
+                                               FontFamily="{StaticResource FontMono}" FontSize="10"
+                                               Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                    <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="branch"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                   Foreground="{StaticResource TextDim}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Branch}"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="version"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                   Foreground="{StaticResource TextDim}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GameVersionLabel}"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="local"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                   Foreground="{StaticResource TextDim}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LocalBuildId}"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="online"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                   Foreground="{StaticResource TextDim}" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding OnlineBuildId}"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="loader"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                   Foreground="{StaticResource TextDim}" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding MelonLoaderVersion}"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="vanilla"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                   Foreground="{StaticResource TextDim}" />
+                                        <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding VanillaGaDate}"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                        <TextBlock Grid.Row="6" Grid.Column="0" Text="modded"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                   Foreground="{StaticResource TextDim}" />
+                                        <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding ModdedGaDate}"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                    </Grid>
+                                </StackPanel>
+
+                                <!-- Actions -->
+                                <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsGameInstalled}">
+                                    <Button Classes="al small" Content="Change version…"
+                                            Command="{Binding OpenSteamDownloadDialogCommand}" />
+                                    <Button Classes="al small ghost" Content="Open folder"
+                                            Command="{Binding OpenVanillaFolderCommand}" />
+                                </StackPanel>
+
+                                <Border BorderBrush="{StaticResource LineSoft}" BorderThickness="0,1,0,0"
+                                        Padding="0,12,0,0" Margin="0,6,0,0">
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Text="TIP"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="10"
+                                                   Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                        <TextBlock Text="Select a mod to inspect its manifest. Toggle the checkbox to include it in the next modded launch."
+                                                   FontSize="12" Foreground="{StaticResource TextDim}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- Selected mod -->
+                            <ContentControl IsVisible="{Binding HasSelectedMod}" Content="{Binding SelectedMod}">
+                            <ContentControl.ContentTemplate>
+                            <DataTemplate x:DataType="vm:ModItemViewModel">
+                            <StackPanel Spacing="14">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="MOD MANIFEST"
+                                               FontFamily="{StaticResource FontMono}" FontSize="10"
+                                               Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                    <TextBlock Text="{Binding DisplayName}" FontSize="16" FontWeight="Bold" />
+                                    <TextBlock FontFamily="{StaticResource FontMono}" FontSize="11"
+                                               Foreground="{StaticResource TextDim}">
+                                        <Run Text="v" /><Run Text="{Binding VersionText}" />
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Classes="chip ok" IsVisible="{Binding IsActive}">
+                                        <TextBlock Text="ENABLED" />
+                                    </Border>
+                                    <Border Classes="chip dim" IsVisible="{Binding !IsActive}">
+                                        <TextBlock Text="DISABLED" />
+                                    </Border>
+                                </StackPanel>
+
+                                <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto"
+>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="target"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                                               Foreground="{StaticResource TextDim}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding TargetGameVersion}"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="version"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                                               Foreground="{StaticResource TextDim}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding VersionText}"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                </Grid>
+                            </StackPanel>
+                            </DataTemplate>
+                            </ContentControl.ContentTemplate>
+                            </ContentControl>
+                        </Grid>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <!-- ========= Tab: Public Repository ========= -->
+            <Grid IsVisible="{Binding IsPublicRepoTab}" ColumnDefinitions="320,*">
+
+                <!-- Left list -->
+                <Border Grid.Column="0" Background="{StaticResource Bg1}"
+                        BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Padding="12"
+                                BorderBrush="{StaticResource LineSoft}" BorderThickness="0,0,0,1">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="PUBLIC REPOSITORY"
+                                           FontFamily="{StaticResource FontMono}" FontSize="10"
+                                           Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                <TextBlock Text="repo.anomaly.scp/v1" FontSize="11"
+                                           Foreground="{StaticResource TextMute}" />
+                                <TextBox Classes="al" Text="{Binding RepoSearchQuery, Mode=TwoWay}"
+                                         Watermark="› search catalogue…" />
                             </StackPanel>
                         </Border>
 
-                        <!-- Manual path entry -->
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="{l:Tr launcher.state1.set_path}"
-                                    Command="{Binding SetVanillaPathCommand}"
-                                    Padding="12,6" Margin="8,0,0,0" />
-                            <TextBox Text="{Binding ManualVanillaPath}"
-                                     Watermark="{l:Tr launcher.state1.path_watermark}"
-                                     FontSize="12" />
-                        </DockPanel>
+                        <ListBox Classes="al" ItemsSource="{Binding FilteredRepoMods}"
+                                 SelectedItem="{Binding SelectedRepoMod, Mode=TwoWay}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RepoModItemViewModel">
+                                    <Border Padding="14,10" BorderBrush="{StaticResource LineSoft}" BorderThickness="0,0,0,1">
+                                        <StackPanel Spacing="3">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" />
+                                                <TextBlock Text="✓" Foreground="{StaticResource Accent}" FontSize="10"
+                                                           IsVisible="{Binding Verified}" VerticalAlignment="Center" />
+                                                <Border Classes="chip dim small" IsVisible="{Binding IsInstalled}">
+                                                    <TextBlock Text="✓ INSTALLED" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock FontFamily="{StaticResource FontMono}" FontSize="10"
+                                                       Foreground="{StaticResource TextMute}">
+                                                <Run Text="{Binding Category}" />
+                                                <Run Text=" · @" /><Run Text="{Binding Author}" />
+                                            </TextBlock>
+                                            <TextBlock FontFamily="{StaticResource FontMono}" FontSize="10"
+                                                       Foreground="{StaticResource TextDim}">
+                                                <Run Text="{Binding DownloadsText}" />
+                                                <Run Text=" dl · " /><Run Text="{Binding Updated}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Border>
 
-                        <!-- Install Game button -->
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Content="{l:Tr launcher.state1.install_game}"
-                                    Command="{Binding InstallGameCommand}"
-                                    Padding="16,8" FontSize="13" />
-                            <Button Content="{l:Tr launcher.steamdl.entry.game_not_installed}"
-                                    Command="{Binding OpenSteamDownloadDialogCommand}"
-                                    Padding="16,8" FontSize="13" />
-                        </StackPanel>
-                    </StackPanel>
+                <!-- Detail -->
+                <ScrollViewer Grid.Column="1" IsVisible="{Binding HasSelectedRepoMod}">
+                    <StackPanel DataContext="{Binding SelectedRepoMod}" x:DataType="vm:RepoModItemViewModel">
+                        <!-- Screenshot gallery placeholder -->
+                        <Grid Height="220" Background="{StaticResource Bg0}" ColumnDefinitions="2*,*,*">
+                            <Border Grid.Column="0" Background="{StaticResource Bg2}">
+                                <TextBlock Text="SCREENSHOT 01"
+                                           FontFamily="{StaticResource FontMono}" FontSize="9"
+                                           Foreground="{StaticResource TextMute}" LetterSpacing="2"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <Border Grid.Column="1" Background="{StaticResource Bg2}">
+                                <TextBlock Text="SCREENSHOT 02"
+                                           FontFamily="{StaticResource FontMono}" FontSize="9"
+                                           Foreground="{StaticResource TextMute}" LetterSpacing="2"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <Border Grid.Column="2" Background="{StaticResource Bg2}">
+                                <TextBlock Text="SCREENSHOT 03"
+                                           FontFamily="{StaticResource FontMono}" FontSize="9"
+                                           Foreground="{StaticResource TextMute}" LetterSpacing="2"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </Grid>
 
-                    <!-- ========== State 2: Vanilla Updated ========== -->
-                    <Border Background="#33FF9800" CornerRadius="6" Padding="16"
-                            IsVisible="{Binding IsVanillaUpdated}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="{l:Tr launcher.state2.header}" FontSize="14" FontWeight="SemiBold"
-                                       Foreground="#FF9800" />
-                            <TextBlock Text="{l:Tr launcher.state2.body}"
-                                       FontSize="12" TextWrapping="Wrap" Opacity="0.9" />
-                            <Button Content="{l:Tr launcher.state2.sync_anomaly}"
-                                    Command="{Binding SyncAnomalyCommand}"
-                                    IsEnabled="{Binding HasInstallerAvailable}"
-                                    Padding="16,8" Classes="accent"
-                                    HorizontalAlignment="Left" />
-                        </StackPanel>
-                    </Border>
-
-                    <!-- ========== State 3: Online Build Mismatch ========== -->
-                    <Border Background="#334FC3F7" CornerRadius="6" Padding="16"
-                            IsVisible="{Binding IsOnlineBuildMismatch}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="{l:Tr launcher.state3.header}" FontSize="14" FontWeight="SemiBold"
-                                       Foreground="#4FC3F7" />
-                            <StackPanel Spacing="2">
-                                <TextBlock FontSize="12" Opacity="0.9">
-                                    <Run Text="{l:Tr launcher.state3.your_build}" />
-                                    <Run Text="{Binding LocalBuildId}" FontWeight="SemiBold" />
-                                </TextBlock>
-                                <TextBlock FontSize="12" Opacity="0.9">
-                                    <Run Text="{l:Tr launcher.state3.latest_build}" />
-                                    <Run Text="{Binding OnlineBuildId}" FontWeight="SemiBold" />
-                                </TextBlock>
+                        <StackPanel Margin="20" Spacing="16">
+                            <StackPanel Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Classes="chip err" IsVisible="{Binding Verified}">
+                                        <TextBlock Text="● VERIFIED" />
+                                    </Border>
+                                    <Border Classes="chip dim">
+                                        <TextBlock Text="{Binding CategoryUpper}" />
+                                    </Border>
+                                    <Border Classes="chip dim">
+                                        <TextBlock>
+                                            <Run Text="v" /><Run Text="{Binding Version}" />
+                                        </TextBlock>
+                                    </Border>
+                                </StackPanel>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="22" FontWeight="Bold" />
+                                    <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                                               Foreground="{StaticResource TextDim}">
+                                        <Run Text="@" /><Run Text="{Binding Author}" />
+                                    </TextBlock>
+                                </Grid>
+                                <TextBlock Text="{Binding Tagline}" FontSize="13"
+                                           Foreground="{StaticResource TextDim}" TextWrapping="Wrap" />
                             </StackPanel>
+
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Content="{l:Tr launcher.state3.update}"
-                                        Command="{Binding UpdateScpslCommand}"
-                                        Padding="16,8" Classes="accent" />
-                                <Button Content="{l:Tr launcher.steamdl.entry.pin_older_build}"
-                                        Command="{Binding OpenSteamDownloadDialogCommand}"
-                                        Padding="16,8" />
+                                <Button Classes="al primary" Content="⤓ Install mod"
+                                        IsVisible="{Binding !IsInstalled}" />
+                                <Button Classes="al ghost" Content="↗ GitHub" />
+                                <Button Classes="al ghost" Content="Report" />
                             </StackPanel>
-                        </StackPanel>
-                    </Border>
 
-                    <!-- ========== State 4: All Good ========== -->
-                    <Border Background="#334CAF50" CornerRadius="6" Padding="16"
-                            IsVisible="{Binding IsAllGood}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="{l:Tr launcher.state4.header}" FontSize="14" FontWeight="SemiBold"
-                                       Foreground="#4CAF50" />
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Content="{l:Tr launcher.state4.validate_files}"
-                                        Command="{Binding ValidateGameFilesCommand}"
-                                        Padding="12,6" />
-                                <Button Content="{l:Tr launcher.state4.sync_anomaly}"
-                                        Command="{Binding SyncAnomalyCommand}"
-                                        IsEnabled="{Binding HasInstallerAvailable}"
-                                        Padding="12,6" />
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- ========== Info Panel (visible when game is installed) ========== -->
-                    <Border Background="#1A1A2E" CornerRadius="6" Padding="16"
-                            IsVisible="{Binding IsGameInstalled}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="{l:Tr launcher.info.header}" FontSize="13" FontWeight="SemiBold" Opacity="0.8" />
-
-                            <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="{l:Tr launcher.info.branch}"
-                                           FontSize="12" Opacity="0.6" />
-                                <TextBlock Grid.Row="0" Grid.Column="1"
-                                           Text="{Binding Branch}"
-                                           FontSize="12" FontWeight="Medium" />
-
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="{l:Tr launcher.info.local_build_id}"
-                                           FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
-                                <TextBlock Grid.Row="1" Grid.Column="1"
-                                           Text="{Binding LocalBuildId}"
-                                           FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
-
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="{l:Tr launcher.info.online_build_id}"
-                                           FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
-                                <TextBlock Grid.Row="2" Grid.Column="1"
-                                           Text="{Binding OnlineBuildId}"
-                                           FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
-
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="{l:Tr launcher.info.melonloader}"
-                                           FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
-                                <TextBlock Grid.Row="3" Grid.Column="1"
-                                           Text="{Binding MelonLoaderVersion}"
-                                           FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
-
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="{l:Tr launcher.info.vanilla_ga_date}"
-                                           FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
-                                <TextBlock Grid.Row="4" Grid.Column="1"
-                                           Text="{Binding VanillaGaDate}"
-                                           FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
-
-                                <TextBlock Grid.Row="5" Grid.Column="0" Text="{l:Tr launcher.info.modded_ga_date}"
-                                           FontSize="12" Opacity="0.6" Margin="0,6,0,0" />
-                                <TextBlock Grid.Row="5" Grid.Column="1"
-                                           Text="{Binding ModdedGaDate}"
-                                           FontSize="12" FontWeight="Medium" Margin="0,6,0,0" />
+                            <Grid ColumnDefinitions="*,14,*">
+                                <Border Grid.Column="0" Background="{StaticResource Bg1}"
+                                        BorderBrush="{StaticResource Line}" BorderThickness="1">
+                                    <StackPanel>
+                                        <Border Padding="14,10" BorderBrush="{StaticResource LineSoft}" BorderThickness="0,0,0,1">
+                                            <TextBlock Text="MANIFEST"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                        </Border>
+                                        <Grid Margin="14" ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto"
+        >
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="identifier"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Id}"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="target"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Target}"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="size"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Size}"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="license"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding License}"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Background="{StaticResource Bg1}"
+                                        BorderBrush="{StaticResource Line}" BorderThickness="1">
+                                    <StackPanel>
+                                        <Border Padding="14,10" BorderBrush="{StaticResource LineSoft}" BorderThickness="0,0,0,1">
+                                            <TextBlock Text="STATS"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                        </Border>
+                                        <Grid Margin="14" ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto"
+        >
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="downloads"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DownloadsText}"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="updated"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Updated}"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="deps"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="none"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
                             </Grid>
 
-                            <Button Content="{l:Tr launcher.steamdl.entry.change_version}"
-                                    Command="{Binding OpenSteamDownloadDialogCommand}"
-                                    Padding="12,6" Margin="0,8,0,0"
-                                    HorizontalAlignment="Left" FontSize="11" />
+                            <Border Background="{StaticResource Bg1}"
+                                    BorderBrush="{StaticResource Line}" BorderThickness="1">
+                                <StackPanel>
+                                    <Border Padding="14,10" BorderBrush="{StaticResource LineSoft}" BorderThickness="0,0,0,1">
+                                        <TextBlock Text="DESCRIPTION"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                   Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                    </Border>
+                                    <TextBlock Margin="14" Text="{Binding Description}"
+                                               FontSize="12" LineHeight="22"
+                                               Foreground="{StaticResource TextDim}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- ========= Tab: Game Versions ========= -->
+            <Grid IsVisible="{Binding IsGameVersionsTab}" ColumnDefinitions="*,320">
+
+                <!-- Left: version list -->
+                <Border Grid.Column="0" Background="{StaticResource Bg0}">
+                    <ScrollViewer>
+                        <StackPanel Margin="18" Spacing="14">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="SECTOR · BUILDS"
+                                               FontFamily="{StaticResource FontMono}" FontSize="10"
+                                               Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                    <TextBlock FontSize="18" FontWeight="Bold">
+                                        <Run Text="{Binding GameVersions.Count}" />
+                                        <Run Text=" game versions" />
+                                    </TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <Button Classes="al small" Content="Refresh catalogue"
+                                            Command="{Binding RefreshStateCommand}" />
+                                    <Button Classes="al small" Content="Paste manifest…"
+                                            Command="{Binding OpenSteamDownloadDialogCommand}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Column header -->
+                            <Grid ColumnDefinitions="110,10,Auto,10,*,10,120,10,Auto"
+                                  Margin="0,4,0,0">
+                                <TextBlock Grid.Column="0" Text="RELEASED"
+                                           FontFamily="{StaticResource FontMono}" FontSize="10"
+                                           Foreground="{StaticResource TextMute}" LetterSpacing="1" />
+                                <TextBlock Grid.Column="2" Text="VERSION"
+                                           FontFamily="{StaticResource FontMono}" FontSize="10"
+                                           Foreground="{StaticResource TextMute}" LetterSpacing="1" MinWidth="80" />
+                                <TextBlock Grid.Column="4" Text="MANIFEST"
+                                           FontFamily="{StaticResource FontMono}" FontSize="10"
+                                           Foreground="{StaticResource TextMute}" LetterSpacing="1" />
+                                <TextBlock Grid.Column="6" Text="STATUS"
+                                           FontFamily="{StaticResource FontMono}" FontSize="10"
+                                           Foreground="{StaticResource TextMute}" LetterSpacing="1" />
+                                <TextBlock Grid.Column="8" Text=""
+                                           FontFamily="{StaticResource FontMono}" FontSize="10"
+                                           Foreground="{StaticResource TextMute}" />
+                            </Grid>
+
+                            <ListBox Classes="al" ItemsSource="{Binding GameVersions}"
+                                     SelectedItem="{Binding SelectedGameVersion, Mode=TwoWay}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:GameVersionItemViewModel">
+                                        <Border Background="{StaticResource Bg1}"
+                                                BorderBrush="{StaticResource Line}" BorderThickness="1"
+                                                Padding="12,10" Margin="0,0,0,6" CornerRadius="2">
+                                            <Grid ColumnDefinitions="110,10,Auto,10,*,10,120,10,Auto">
+                                                <TextBlock Grid.Column="0" Text="{Binding ReleasedAtText}"
+                                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                           Foreground="{StaticResource TextDim}" VerticalAlignment="Center" />
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                                            MinWidth="80" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding VersionLabel}"
+                                                               FontFamily="{StaticResource FontMono}" FontSize="13"
+                                                               FontWeight="SemiBold" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="4" Text="{Binding ManifestIdText}"
+                                                           FontFamily="{StaticResource FontMono}" FontSize="10"
+                                                           Foreground="{StaticResource TextMute}"
+                                                           VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="4"
+                                                            VerticalAlignment="Center">
+                                                    <Border Classes="chip ok"
+                                                            IsVisible="{Binding IsInstalled}">
+                                                        <TextBlock Text="✓ INSTALLED" />
+                                                    </Border>
+                                                    <Border Classes="chip dim"
+                                                            IsVisible="{Binding !IsInstalled}">
+                                                        <TextBlock Text="{Binding StatusLabel}" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <Button Grid.Column="8" Classes="al small"
+                                                        Content="Install"
+                                                        Click="OnVersionRowInstallClick"
+                                                        Tag="{Binding}"
+                                                        IsVisible="{Binding !IsInstalled}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- Right: detail sidebar -->
+                <Border Grid.Column="1"
+                        Background="{StaticResource Bg1}"
+                        BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+                    <ScrollViewer Padding="16">
+                        <Grid>
+                            <StackPanel IsVisible="{Binding !HasSelectedGameVersion}" Spacing="10">
+                                <TextBlock Text="GAME VERSIONS"
+                                           FontFamily="{StaticResource FontMono}" FontSize="10"
+                                           Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                <TextBlock Text="Select a build from the list to see details and install options."
+                                           FontSize="12" Foreground="{StaticResource TextDim}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <ContentControl IsVisible="{Binding HasSelectedGameVersion}" Content="{Binding SelectedGameVersion}">
+                            <ContentControl.ContentTemplate>
+                            <DataTemplate x:DataType="vm:GameVersionItemViewModel">
+                            <StackPanel Spacing="14">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="BUILD MANIFEST"
+                                               FontFamily="{StaticResource FontMono}" FontSize="10"
+                                               Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                    <TextBlock Text="{Binding VersionLabel}" FontSize="18" FontWeight="Bold" />
+                                    <TextBlock Text="{Binding ReleasedAtText}"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                                               Foreground="{StaticResource TextDim}" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Classes="chip ok" IsVisible="{Binding IsInstalled}">
+                                        <TextBlock Text="✓ INSTALLED" />
+                                    </Border>
+                                    <Border Classes="chip">
+                                        <TextBlock Text="{Binding StatusLabel}" />
+                                    </Border>
+                                </StackPanel>
+
+                                <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto"
+>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="manifest"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                                               Foreground="{StaticResource TextDim}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ManifestIdText}"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="build"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                                               Foreground="{StaticResource TextDim}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding BuildId}"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="version"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11"
+                                               Foreground="{StaticResource TextDim}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GameVersion}"
+                                               FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                </Grid>
+
+                                <TextBlock Text="{Binding Notes}" FontSize="12"
+                                           Foreground="{StaticResource TextDim}"
+                                           TextWrapping="Wrap"
+                                           IsVisible="{Binding Notes, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button Classes="al primary" Content="⤓ Install"
+                                            IsVisible="{Binding !IsInstalled}"
+                                            Click="OnVersionSidebarInstallClick" />
+                                    <Button Classes="al ghost" Content="Active"
+                                            IsVisible="{Binding IsInstalled}"
+                                            IsEnabled="False" />
+                                </StackPanel>
+
+                                <Border BorderBrush="{StaticResource LineSoft}" BorderThickness="0,1,0,0"
+                                        Padding="0,12,0,0" Margin="0,6,0,0">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="NOTE"
+                                                   FontFamily="{StaticResource FontMono}" FontSize="10"
+                                                   Foreground="{StaticResource Warn}" LetterSpacing="1" />
+                                        <TextBlock TextWrapping="Wrap" FontSize="11"
+                                                   Foreground="{StaticResource TextDim}"
+                                                   Text="Installing a specific version downloads the build directly from Steam and re-applies Anomaly patches. Anti-cheat permitting only supported versions." />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            </DataTemplate>
+                            </ContentControl.ContentTemplate>
+                            </ContentControl>
+                        </Grid>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <!-- ========= Tab: Settings ========= -->
+            <ScrollViewer IsVisible="{Binding IsSettingsTab}">
+                <Grid Margin="20" ColumnDefinitions="*,14,*">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Paths panel -->
+                    <Border Grid.Row="0" Grid.Column="0" Background="{StaticResource Bg1}"
+                            BorderBrush="{StaticResource Line}" BorderThickness="1">
+                        <StackPanel>
+                            <Border Padding="14,10" BorderBrush="{StaticResource LineSoft}" BorderThickness="0,0,0,1">
+                                <TextBlock Text="⌂ PATHS"
+                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                           Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                            </Border>
+                            <StackPanel Margin="14" Spacing="10">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Vanilla game"
+                                               FontFamily="{StaticResource FontMono}" FontSize="10"
+                                               Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                    <Grid ColumnDefinitions="*,6,Auto">
+                                        <TextBox Grid.Column="0" Classes="al" Text="{Binding ManualVanillaPath}"
+                                                 Watermark="{l:Tr launcher.state1.path_watermark}" />
+                                        <Button Grid.Column="2" Classes="al small"
+                                                Content="{l:Tr launcher.state1.set_path}"
+                                                Command="{Binding SetVanillaPathCommand}" />
+                                    </Grid>
+                                </StackPanel>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Modded install"
+                                               FontFamily="{StaticResource FontMono}" FontSize="10"
+                                               Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                    <Button Classes="al small" Content="Open Mods folder"
+                                            Command="{Binding OpenModsFolderCommand}" HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
-                </StackPanel>
+                    <!-- Launch panel -->
+                    <Border Grid.Row="0" Grid.Column="2" Background="{StaticResource Bg1}"
+                            BorderBrush="{StaticResource Line}" BorderThickness="1">
+                        <StackPanel>
+                            <Border Padding="14,10" BorderBrush="{StaticResource LineSoft}" BorderThickness="0,0,0,1">
+                                <TextBlock Text="▶ LAUNCH"
+                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                           Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                            </Border>
+                            <StackPanel Margin="14" Spacing="10">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Default args"
+                                               FontFamily="{StaticResource FontMono}" FontSize="10"
+                                               Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                                    <TextBox Classes="al" Text="{Binding LaunchArgs, Mode=TwoWay}"
+                                             Watermark="{l:Tr launcher.mainwindow.launch_args_watermark}" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding GameStatusText}" FontSize="11"
+                                           Foreground="{StaticResource TextDim}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Repository panel (spans both cols) -->
+                    <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,14,0,0"
+                            Background="{StaticResource Bg1}"
+                            BorderBrush="{StaticResource Line}" BorderThickness="1">
+                        <StackPanel>
+                            <Border Padding="14,10" BorderBrush="{StaticResource LineSoft}" BorderThickness="0,0,0,1">
+                                <TextBlock Text="⛬ REPOSITORY · ANOMALY-PUBLIC"
+                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                           Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+                            </Border>
+                            <Grid Margin="14" ColumnDefinitions="160,16,*,16,140">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="10" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="10" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="10" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="URL"
+                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                           Foreground="{StaticResource TextDim}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="https://repo.anomaly.scp/v1/manifest.json"
+                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                           VerticalAlignment="Center" />
+                                <Border Grid.Row="0" Grid.Column="4" Classes="chip ok" HorizontalAlignment="Left">
+                                    <TextBlock Text="● ACTIVE" />
+                                </Border>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Maintainer"
+                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                           Foreground="{StaticResource TextDim}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="2" Grid.Column="2" Text="Anomaly Foundation Team"
+                                           FontSize="12" VerticalAlignment="Center" />
+                                <Border Grid.Row="2" Grid.Column="4" Classes="chip auth" HorizontalAlignment="Left">
+                                    <TextBlock Text="AUTHORITATIVE" />
+                                </Border>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Target version"
+                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                           Foreground="{StaticResource TextDim}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding GameVersionLabel}"
+                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                           VerticalAlignment="Center" />
+                                <Button Grid.Row="4" Grid.Column="4" Classes="al small" Content="Resync"
+                                        HorizontalAlignment="Left" Command="{Binding RefreshStateCommand}" />
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="Loader"
+                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                           Foreground="{StaticResource TextDim}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="6" Grid.Column="2" Text="{Binding MelonLoaderVersion}"
+                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Border Margin="14,0,14,14" Padding="10"
+                                    Background="{StaticResource Bg0}"
+                                    BorderBrush="{StaticResource Line}" BorderThickness="1">
+                                <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" TextWrapping="Wrap">
+                                    <Run Text="NOTE · " FontFamily="{StaticResource FontMono}" Foreground="{StaticResource Warn}" />
+                                    <Run Text="This launcher only connects to the single authoritative repository. Third-party mod sources are not supported for security reasons." />
+                                </TextBlock>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </ScrollViewer>
         </Grid>
-    </DockPanel>
 
-    <Window.Styles>
-        <Style Selector="Button.accent">
-            <Setter Property="Background" Value="#4CAF50" />
-            <Setter Property="Foreground" Value="White" />
-        </Style>
-        <Style Selector="Button.danger">
-            <Setter Property="Background" Value="#E53935" />
-            <Setter Property="Foreground" Value="White" />
-        </Style>
-    </Window.Styles>
+        <!-- ============================================================
+             4. LAUNCH BAR
+             ============================================================ -->
+        <Border Grid.Row="3"
+                Background="{StaticResource Bg1}"
+                BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0"
+                Padding="10">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8">
+                    <Button Classes="al" Content="Launch Vanilla"
+                            Command="{Binding LaunchVanillaCommand}"
+                            IsEnabled="{Binding CanLaunch}" />
+                    <Button Classes="al primary" Content="▶ LAUNCH MODDED"
+                            Command="{Binding LaunchModdedCommand}"
+                            IsEnabled="{Binding CanLaunch}" />
+                    <Button Classes="al danger" Content="KILL"
+                            Command="{Binding KillGameCommand}"
+                            IsVisible="{Binding IsGameRunning}" />
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="args:" FontFamily="{StaticResource FontMono}" FontSize="10"
+                               Foreground="{StaticResource TextMute}" VerticalAlignment="Center" />
+                    <TextBox Classes="al" Text="{Binding LaunchArgs, Mode=TwoWay}"
+                             Watermark="-nographics …" Width="240"
+                             ToolTip.Tip="{l:Tr launcher.mainwindow.launch_args_tooltip}" />
+                    <Border Classes="chip ok" IsVisible="{Binding CanLaunch}">
+                        <TextBlock Text="● READY" />
+                    </Border>
+                    <Border Classes="chip warn" IsVisible="{Binding IsGameRunning}">
+                        <TextBlock Text="● RUNNING" />
+                    </Border>
+                    <Border Classes="chip dim" IsVisible="{Binding IsGameNotInstalled}">
+                        <TextBlock Text="● NO GAME" />
+                    </Border>
+                </StackPanel>
+
+                <Panel />
+            </DockPanel>
+        </Border>
+
+    </Grid>
 </Window>

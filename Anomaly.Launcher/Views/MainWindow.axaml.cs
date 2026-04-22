@@ -130,4 +130,51 @@ public partial class MainWindow : Window
     {
         base.OnClosing(e);
     }
+
+    // ===================== Custom chrome =====================
+
+    private void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            BeginMoveDrag(e);
+        }
+    }
+
+    private void OnMinimizeClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    private void OnCloseClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private void OnModCardClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is Avalonia.Controls.Control { DataContext: ModItemViewModel mod }
+            && DataContext is MainWindowViewModel vm)
+        {
+            vm.SelectedMod = mod;
+        }
+    }
+
+    private void OnVersionRowInstallClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is Avalonia.Controls.Control ctl
+            && ctl.Tag is GameVersionItemViewModel entry
+            && DataContext is MainWindowViewModel vm)
+        {
+            vm.InstallGameVersionCommand.Execute(entry);
+        }
+    }
+
+    private void OnVersionSidebarInstallClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm && vm.SelectedGameVersion != null)
+        {
+            vm.InstallGameVersionCommand.Execute(vm.SelectedGameVersion);
+        }
+    }
 }
