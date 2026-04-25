@@ -66,7 +66,12 @@ public class Plugin : Plugin<Config>
 
             // Drop any in-flight session if the player disconnects between
             // chunks — otherwise ActiveSessions would leak an entry per drop.
-            PlayerEvents.Left += ev => FileTransferSession.CleanupPlayer(ev.Player.ReferenceHub);
+            // Also clear the per-hub replay state so a new session starts fresh.
+            PlayerEvents.Left += ev =>
+            {
+                FileTransferSession.CleanupPlayer(ev.Player.ReferenceHub);
+                AnomalyReplayTable.Remove(ev.Player.ReferenceHub);
+            };
 
             RoundStateBroadcaster.Init();
             RoundStartBridge.Init();

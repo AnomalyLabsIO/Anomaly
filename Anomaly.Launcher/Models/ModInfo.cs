@@ -8,4 +8,6 @@ public class ModInfo
     public string? AssemblyName { get; init; }
     public string? Version { get; init; }
     public string? TargetGameVersion { get; init; }
+    public IReadOnlyList<string> AssemblyReferences { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> MissingReferences { get; set; } = Array.Empty<string>();
 }

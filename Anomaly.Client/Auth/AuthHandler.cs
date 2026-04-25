@@ -14,6 +14,7 @@ using System.Collections;
 using Anomaly.Client.Api.Features;
 using Anomaly.Client.Components;
 using Anomaly.Shared.Auth;
+using Anomaly.Shared.Networking;
 using Il2CppMEC;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -161,7 +162,17 @@ public static class AuthHandler
 
         var encrypted = data.GetBytesWithLength();
         MelonLogger.Msg($"[Anomaly] ServerHandshake raw bytes ({encrypted.Length}): {BitConverter.ToString(encrypted, 0, Math.Min(encrypted.Length, 16))}...");
-        var handShake = ServerHandshake.Decode(encrypted);
+        ServerHandshake handShake;
+        try
+        {
+            handShake = ServerHandshake.Decode(encrypted);
+        }
+        catch (AnomalyProtocolVersionMismatchException pv)
+        {
+            AuthStatusOverlay.EndAuthenticating();
+            MelonLogger.Error($"Server speaks a different Anomaly protocol version. {pv.Message}");
+            return false;
+        }
         MelonLogger.Msg($"[Anomaly] ServerHandshake sessionPublic[0..3]: {BitConverter.ToString(handShake.sessionPublic, 0, 4)}, challenge[0..3]: {BitConverter.ToString(handShake.challenge, 0, 4)}");
         var server = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.clientAddress;
 

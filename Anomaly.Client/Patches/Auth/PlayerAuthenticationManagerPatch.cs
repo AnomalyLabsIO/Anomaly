@@ -164,9 +164,6 @@ public static class PlayerAuthenticationManagerPatch
         return result;
     }
 
-    private static int _lastReceivePackedFrame = -1;
-    private static long _lastReceivePackedFingerprint;
-
     [HarmonyPrefix]
     [HarmonyPatch(typeof(EncryptedChannelManager), nameof(EncryptedChannelManager.ClientReceivePackedMessage))]
     public static bool OnReceivePackedMessage(EncryptedChannelManager.EncryptedMessageOutside packed)
@@ -175,24 +172,12 @@ public static class PlayerAuthenticationManagerPatch
             return true;
 
         // IL2CPP re-marshals the byte[] field per Harmony prefix dispatch,
-        // so ReferenceEquals on packed.Data can't reliably catch the 2–3
-        // duplicate invocations of a single underlying receive — each gets
-        // a fresh byte[] with identical content. Vanilla channels paper
-        // over that via the _rxCounter check (duplicates get "counter <=
-        // rxCounter, Discarding"), but Anomaly channel messages skip the
-        // counter path entirely and were being processed multiple times
-        // (manifest counted twice, file-complete fired 3×).
-        //
-        // Fingerprint the packet contents (length + head + tail bytes)
-        // instead. Two distinct ciphertexts colliding on all three requires
-        // ~2^-64, essentially zero. Frame scopes the dedup so identical
-        // packets in different frames still run.
-        int frame = UnityEngine.Time.frameCount;
-        long fp = ComputePayloadFingerprint(packed.Data);
-        if (frame == _lastReceivePackedFrame && fp == _lastReceivePackedFingerprint)
-            return false;
-        _lastReceivePackedFrame = frame;
-        _lastReceivePackedFingerprint = fp;
+        // so the same underlying receive fires this prefix 2–3 times with a
+        // fresh byte[] of identical content each call. Both vanilla and
+        // Anomaly branches below gate on a strict-monotonic counter
+        // (vanilla: EncryptedChannelManager._rxCounter; Anomaly: per-channel
+        // state on AnomalyReplayTable), which naturally rejects the duplicate
+        // dispatches as replays.
 
         MelonLogger.Warning("Got message back.");
 
@@ -224,7 +209,9 @@ public static class PlayerAuthenticationManagerPatch
 
         var channel = (EncryptedChannelManager.EncryptedChannel)decryptedData[0];
 
-        // Anomaly custom messages use a separate dispatch path (no counter validation)
+        // Anomaly custom messages -- separate dispatch. Wire after stripping
+        // the 0xFE byte is [counter][hash][payload]; AnomalyMessaging.OnReceived
+        // parses the counter/hash and applies per-channel replay protection.
         if ((byte)channel == AnomalyChannel.ChannelId)
         {
             var anomalyPayload = new byte[decryptedData.Length - 1];
@@ -266,22 +253,6 @@ public static class PlayerAuthenticationManagerPatch
             Il2CppGameCore.Console.AddLog(ex.StackTrace, Color.red, false, ConsoleLogType.Log);
         }
         return false;
-    }
-
-    private static long ComputePayloadFingerprint(byte[] data)
-    {
-        if (data == null) return 0L;
-        int len = data.Length;
-        long fp = len;
-        // Head bytes
-        int headEnd = len < 4 ? len : 4;
-        for (int i = 0; i < headEnd; i++)
-            fp = unchecked(fp * 31L + data[i]);
-        // Tail bytes (skip if they'd overlap the head)
-        int tailStart = len < 8 ? headEnd : len - 4;
-        for (int i = tailStart; i < len; i++)
-            fp = unchecked(fp * 31L + data[i]);
-        return fp;
     }
 
     private static long ComputeSendFingerprint(string content, EncryptedChannelManager.EncryptedChannel channel)

@@ -21,6 +21,19 @@
     <Window.Resources>
         <conv:EnabledToOpacityConverter x:Key="EnabledOpacity" />
         <conv:TabEqualsConverter x:Key="TabEquals" />
+        <conv:BoolToBrushConverter x:Key="MissingDepsBorder"
+                                   TrueBrush="{StaticResource Err}"
+                                   FalseBrush="{StaticResource Line}" />
+        <!-- Diagonal hazard stripes for missing-dependency cards. Tile is 14x14 absolute px. -->
+        <LinearGradientBrush x:Key="HazardStripes"
+                             StartPoint="0,0"
+                             EndPoint="14,14"
+                             SpreadMethod="Repeat">
+            <GradientStop Offset="0.00" Color="Transparent" />
+            <GradientStop Offset="0.50" Color="Transparent" />
+            <GradientStop Offset="0.50" Color="#33E23B3B" />
+            <GradientStop Offset="1.00" Color="#33E23B3B" />
+        </LinearGradientBrush>
     </Window.Resources>
 
     <!-- Root grid: titlebar / tabbar / content / launchbar -->
@@ -213,7 +226,7 @@
                                                 VerticalAlignment="Stretch"
                                                 Click="OnModCardClick">
                                             <Border Background="{StaticResource Bg1}"
-                                                    BorderBrush="{StaticResource Line}"
+                                                    BorderBrush="{Binding HasMissingDependencies, Converter={StaticResource MissingDepsBorder}}"
                                                     BorderThickness="1"
                                                     Padding="16" CornerRadius="2"
                                                     MinHeight="110"
@@ -221,6 +234,11 @@
                                                     VerticalAlignment="Stretch"
                                                     Opacity="{Binding IsActive, Converter={StaticResource EnabledOpacity}}">
                                                 <Grid>
+                                                    <!-- Hazard stripe overlay for missing-dependency cards -->
+                                                    <Border Background="{StaticResource HazardStripes}"
+                                                            IsVisible="{Binding HasMissingDependencies}"
+                                                            IsHitTestVisible="False"
+                                                            Margin="-16" />
                                                     <!-- Corner L-markers -->
                                                     <Canvas>
                                                         <Path Stroke="{StaticResource TextMute}" StrokeThickness="1"
@@ -245,6 +263,11 @@
                                                                        FontSize="10"
                                                                        Foreground="{StaticResource Warn}"
                                                                        IsVisible="{Binding IsVersionMismatch}" />
+                                                            <Border Classes="chip err small"
+                                                                    IsVisible="{Binding HasMissingDependencies}"
+                                                                    HorizontalAlignment="Left">
+                                                                <TextBlock Text="{Binding MissingDependenciesSummary}" />
+                                                            </Border>
                                                         </StackPanel>
                                                     </Grid>
                                                 </Grid>
@@ -475,6 +498,22 @@
                                     <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding VersionText}"
                                                FontFamily="{StaticResource FontMono}" FontSize="11" />
                                 </Grid>
+
+                                <StackPanel Spacing="6" IsVisible="{Binding HasMissingDependencies}">
+                                    <TextBlock Text="{Binding MissingDependenciesHeader}"
+                                               FontFamily="{StaticResource FontMono}" FontSize="10"
+                                               Foreground="{StaticResource Err}" LetterSpacing="1" />
+                                    <ItemsControl ItemsSource="{Binding MissingDependencies}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}"
+                                                           FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                           Foreground="{StaticResource Err}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
                             </StackPanel>
                             </DataTemplate>
                             </ContentControl.ContentTemplate>
@@ -590,7 +629,20 @@
 
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button Classes="al primary" Content="⤓ Install mod"
+                                        Command="{Binding InstallCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsEnabled="{Binding !IsBusy}"
                                         IsVisible="{Binding !IsInstalled}" />
+                                <Button Classes="al primary" Content="↻ Update"
+                                        Command="{Binding InstallCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsEnabled="{Binding !IsBusy}"
+                                        IsVisible="{Binding HasUpdate}" />
+                                <Button Classes="al ghost" Content="✕ Uninstall"
+                                        Command="{Binding UninstallCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsEnabled="{Binding !IsBusy}"
+                                        IsVisible="{Binding IsInstalled}" />
                                 <Button Classes="al ghost" Content="↗ GitHub" />
                                 <Button Classes="al ghost" Content="Report" />
                             </StackPanel>

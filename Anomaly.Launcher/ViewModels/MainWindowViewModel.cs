@@ -6,6 +6,7 @@ using Anomaly.Launcher.Models.Steam;
 using Anomaly.Launcher.Services;
 using Anomaly.Launcher.Services.Install;
 using Anomaly.Launcher.Services.Localization;
+using Anomaly.Launcher.Services.Platform;
 using Anomaly.Launcher.Services.Steam;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -31,6 +32,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly SystemInfoService _systemInfo;
     private readonly SteamDownloadService _steamDownload;
     private readonly BuildCatalogService _buildCatalog;
+    private readonly PlatformApiClient _platform;
+    private readonly ModInstaller _modInstaller;
+    private readonly InstalledModsService _installedMods;
     private readonly SynchronizationContext? _syncContext;
 
     private FileSystemWatcher? _acfWatcher;
@@ -302,7 +306,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         VersionCheckService versionCheck,
         SystemInfoService systemInfo,
         SteamDownloadService steamDownload,
-        BuildCatalogService buildCatalog)
+        BuildCatalogService buildCatalog,
+        PlatformApiClient platform,
+        ModInstaller modInstaller,
+        InstalledModsService installedMods)
     {
         _paths = paths;
         _userProfile = userProfile;
@@ -313,6 +320,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _systemInfo = systemInfo;
         _steamDownload = steamDownload;
         _buildCatalog = buildCatalog;
+        _platform = platform;
+        _modInstaller = modInstaller;
+        _installedMods = installedMods;
         _syncContext = SynchronizationContext.Current;
 
         Username = userProfile.GetUsername();
@@ -320,7 +330,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         LoadMods();
         LoadStaticInfo();
         LoadGameVersions();
-        LoadSampleRepoMods();
+        _ = LoadOnlineRepoModsAsync();
 
         _gameProcess.GameExited += OnGameExited;
 
@@ -329,12 +339,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     // ===================== Game Versions =====================
 
-    public void LoadGameVersions()
+    public void LoadGameVersions() => _ = LoadGameVersionsAsync();
+
+    public async Task LoadGameVersionsAsync(CancellationToken ct = default)
     {
         IsLoadingGameVersions = true;
         try
         {
-            var entries = _buildCatalog.Merge(Array.Empty<SteamBuildCatalogEntry>(), includeAll: false);
+            var live = await _buildCatalog.FetchLiveAsync(_platform, _paths.GameBuildsCacheFile, ct);
+            var entries = _buildCatalog.Merge(live, includeAll: false);
             GameVersions.Clear();
             foreach (var entry in entries)
                 GameVersions.Add(new GameVersionItemViewModel(entry, isInstalled: false));
@@ -374,52 +387,154 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    // ===================== Public Repository (stub) =====================
+    // ===================== Public Repository =====================
 
-    private void LoadSampleRepoMods()
+    [ObservableProperty]
+    private bool _isLoadingRepo;
+
+    [ObservableProperty]
+    private string? _repoErrorMessage;
+
+    [RelayCommand]
+    private Task RefreshRepoMods() => LoadOnlineRepoModsAsync();
+
+    public async Task LoadOnlineRepoModsAsync(CancellationToken ct = default)
     {
-        // Stub data matching the design mock. Will be replaced by a real
-        // repo.anomaly.scp/v1 catalogue client.
-        var items = new[]
+        IsLoadingRepo = true;
+        RepoErrorMessage = null;
+        try
         {
-            new RepoModItemViewModel("gamemode.hideandseek", "Hide & Seek", "gamemode", "silverfox",
-                "2.1.0", "14.2.6", 12483, true,
-                "Asymmetric 1-vs-many round variant with custom win conditions.",
-                "3d ago", false),
-            new RepoModItemViewModel("gamemode.speedrun", "Speedrun Mode", "gamemode", "anomaly-team",
-                "0.5.2", "14.2.6", 3214, true,
-                "Timed escape objectives with per-route leaderboards.",
-                "1w ago", false),
-            new RepoModItemViewModel("cosmetic.helmets", "Helmet Skins Pack", "cosmetic", "community",
-                "1.4.0", "14.2.x", 8012, false,
-                "16 new helmet cosmetics for MTF and Chaos Insurgency.",
-                "2d ago", false),
-            new RepoModItemViewModel("utility.roundreports", "RoundReports", "utility", "TayTayModded",
-                "2.3.0", "14.2.x", 932, false,
-                "Per-round statistics export to JSON / CSV.",
-                "5h ago", false),
-            new RepoModItemViewModel("utility.spectatorfx", "SpectatorFX", "utility", "community",
-                "0.4.2", "14.2.6", 4201, true,
-                "Enhanced spectator camera, pings, and nameplate overlays.",
-                "6h ago", false),
-            new RepoModItemViewModel("map.undergroundex", "Underground Expanded", "map", "mapmakers-guild",
-                "1.0.0", "14.2.6", 1890, true,
-                "Expands HCZ with 4 additional rooms and new routes.",
-                "2w ago", false),
-        };
+            var gameVersion = GameVersionFromBuild();
+            var response = await _platform.ListModsAsync(gameVersion: gameVersion, ct: ct);
+            if (response == null)
+            {
+                RepoErrorMessage = "Couldn't reach the mods catalog. Showing nothing for now.";
+                return;
+            }
 
-        RepoMods.Clear();
-        foreach (var i in items)
-            RepoMods.Add(i);
+            var installed = _installedMods.Load();
+            var byInstalledId = installed.Mods.ToDictionary(m => m.Id, StringComparer.OrdinalIgnoreCase);
 
-        // Mark installed state by id match against locally loaded mods
-        foreach (var repo in RepoMods)
-        {
-            if (Mods.Any(m => string.Equals(m.DisplayName, repo.Name, StringComparison.OrdinalIgnoreCase)))
-                repo.IsInstalled = true;
+            RepoMods.Clear();
+            foreach (var dto in response.Items)
+            {
+                var latest = dto.LatestVersion;
+                if (latest == null) continue;
+                var installedEntry = byInstalledId.TryGetValue(dto.Id, out var inst) ? inst : null;
+
+                var item = new RepoModItemViewModel(
+                    id: dto.Id,
+                    name: dto.Name,
+                    category: dto.Tags.FirstOrDefault() ?? "general",
+                    author: dto.Author?.Username ?? "anonymous",
+                    version: latest.Semver,
+                    target: string.Join(", ", latest.GameVersions),
+                    gameVersions: latest.GameVersions,
+                    downloads: dto.Downloads,
+                    verified: false,
+                    tagline: dto.Description ?? "",
+                    updated: FormatRelative(dto.UpdatedAt),
+                    isInstalled: installedEntry != null,
+                    installedVersion: installedEntry?.Version,
+                    installCommand: new AsyncRelayCommand<RepoModItemViewModel>(InstallRepoModAsync),
+                    uninstallCommand: new AsyncRelayCommand<RepoModItemViewModel>(UninstallRepoModAsync));
+                RepoMods.Add(item);
+            }
+
+            RefreshRepoFilter();
         }
+        catch (Exception ex)
+        {
+            RepoErrorMessage = $"Catalog fetch failed: {ex.Message}";
+        }
+        finally
+        {
+            IsLoadingRepo = false;
+        }
+    }
 
-        RefreshRepoFilter();
+    private async Task InstallRepoModAsync(RepoModItemViewModel? item)
+    {
+        if (item == null || item.IsBusy) return;
+        item.IsBusy = true;
+        try
+        {
+            var result = await _modInstaller.InstallAsync(item.Id, GameVersionFromBuild());
+            var match = result.Installed.FirstOrDefault(m => string.Equals(m.Id, item.Id, StringComparison.OrdinalIgnoreCase));
+            item.IsInstalled = true;
+            item.InstalledVersion = match?.Version ?? item.Version;
+            // The local Mods/ folder now has new DLLs — re-scan so the Installed tab reflects them.
+            LoadMods();
+        }
+        catch (Exception ex)
+        {
+            RepoErrorMessage = $"Install of {item.Id} failed: {ex.Message}";
+        }
+        finally
+        {
+            item.IsBusy = false;
+        }
+    }
+
+    private async Task UninstallRepoModAsync(RepoModItemViewModel? item)
+    {
+        if (item == null || item.IsBusy) return;
+        item.IsBusy = true;
+        try
+        {
+            await _modInstaller.UninstallAsync(item.Id);
+            item.IsInstalled = false;
+            item.InstalledVersion = null;
+            LoadMods();
+        }
+        catch (Exception ex)
+        {
+            RepoErrorMessage = $"Uninstall of {item.Id} failed: {ex.Message}";
+        }
+        finally
+        {
+            item.IsBusy = false;
+        }
+    }
+
+    public void HandleDeepLinkInstall(UrlProtocolService.InstallRequest request)
+    {
+        ActiveTab = LauncherTab.PublicRepo;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await LoadOnlineRepoModsAsync();
+                await _modInstaller.InstallAsync(request.ModId, GameVersionFromBuild());
+                PostToUI(() =>
+                {
+                    LoadMods();
+                    var item = RepoMods.FirstOrDefault(m => string.Equals(m.Id, request.ModId, StringComparison.OrdinalIgnoreCase));
+                    if (item != null)
+                    {
+                        item.IsInstalled = true;
+                        item.InstalledVersion = item.Version;
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                PostToUI(() => RepoErrorMessage = $"Deep-link install of {request.ModId} failed: {ex.Message}");
+            }
+        });
+    }
+
+    private static string FormatRelative(long unixSeconds)
+    {
+        if (unixSeconds <= 0) return "—";
+        var when = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+        var span = DateTimeOffset.UtcNow - when;
+        if (span.TotalMinutes < 1) return "just now";
+        if (span.TotalHours < 1) return $"{(int)span.TotalMinutes}m ago";
+        if (span.TotalDays < 1) return $"{(int)span.TotalHours}h ago";
+        if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
+        if (span.TotalDays < 30) return $"{(int)(span.TotalDays / 7)}w ago";
+        return when.ToString("yyyy-MM-dd");
     }
 
     partial void OnLaunchArgsChanged(string value)

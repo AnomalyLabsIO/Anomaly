@@ -24,6 +24,14 @@ public partial class ModItemViewModel : ObservableObject
 
     public string? VersionWarningText { get; }
 
+    public bool HasMissingDependencies { get; }
+
+    public IReadOnlyList<string> MissingDependencies { get; }
+
+    public string? MissingDependenciesSummary { get; }
+
+    public string MissingDependenciesHeader => Tr.Get(TrKeys.ModItem_MissingDepsHeader);
+
     /// <summary>
     /// True for core mods (e.g., Anomaly.Client) whose checkbox should be disabled when active.
     /// </summary>
@@ -44,6 +52,13 @@ public partial class ModItemViewModel : ObservableObject
         {
             IsVersionMismatch = true;
             VersionWarningText = Tr.Get(TrKeys.ModItem_VersionWarning, mod.TargetGameVersion, currentGameVersion);
+        }
+
+        MissingDependencies = mod.MissingReferences;
+        HasMissingDependencies = mod.MissingReferences.Count > 0;
+        if (HasMissingDependencies)
+        {
+            MissingDependenciesSummary = Tr.Get(TrKeys.ModItem_MissingDepsSummary, mod.MissingReferences.Count);
         }
     }
 

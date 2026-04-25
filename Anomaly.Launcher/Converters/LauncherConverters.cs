@@ -1,6 +1,7 @@
 using System.Globalization;
 using Anomaly.Launcher.ViewModels;
 using Avalonia.Data.Converters;
+using Avalonia.Media;
 
 namespace Anomaly.Launcher.Converters;
 
@@ -12,6 +13,19 @@ public sealed class EnabledToOpacityConverter : IValueConverter
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         => value is true ? EnabledOpacity : DisabledOpacity;
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>Returns <c>TrueBrush</c> when bound bool is true, else <c>FalseBrush</c>.</summary>
+public sealed class BoolToBrushConverter : IValueConverter
+{
+    public IBrush? TrueBrush { get; set; }
+    public IBrush? FalseBrush { get; set; }
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is true ? TrueBrush : FalseBrush;
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();

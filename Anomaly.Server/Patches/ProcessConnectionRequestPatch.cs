@@ -2,6 +2,7 @@
 using Anomaly.Server.Auth;
 using Anomaly.Server.Utils;
 using Anomaly.Shared.Auth;
+using Anomaly.Shared.Networking;
 using GameCore;
 using HarmonyLib;
 using LabApi.Events;
@@ -178,7 +179,19 @@ public static class ProcessConnectionRequestPatch
             {
                 case 3: // Handshake/Preauth
                     var serverEnv = ServerAuthSession.Generate();
-                    var clientHandshake = ClientHandshake.Decode(authData);
+                    ClientHandshake clientHandshake;
+                    try
+                    {
+                        clientHandshake = ClientHandshake.Decode(authData);
+                    }
+                    catch (AnomalyProtocolVersionMismatchException pv)
+                    {
+                        OffThreadLogger.Warn($"Rejecting {ip}: {pv.Message}");
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.VersionMismatch);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
                     userId = clientHandshake.GetUserId();
                     var serverIden = AuthHandler.AddConnection(serverEnv, clientHandshake);
 

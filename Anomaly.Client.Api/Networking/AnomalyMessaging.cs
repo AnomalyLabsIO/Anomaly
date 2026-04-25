@@ -35,24 +35,26 @@ public static class AnomalyMessaging
             return;
         }
 
-        // Serialize: [4 bytes hash][message payload]
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        writer.Write(AnomalyMessageRegistry.GetHash(msg.MessageName));
-        msg.Serialize(writer);
-        writer.Flush();
-        var payload = ms.ToArray();
+        uint counter = AnomalyReplayTable.Instance.NextTxCounter(msg.TransportChannel);
+        uint hash = AnomalyMessageRegistry.GetHash(msg.MessageName);
 
-        // Build encrypted data: [0xFE channel][payload]
-        var data = new byte[1 + payload.Length];
+        // Serialize the inner payload: [hash][message payload]
+        using var innerMs = new MemoryStream();
+        using var innerWriter = new BinaryWriter(innerMs);
+        innerWriter.Write(hash);
+        msg.Serialize(innerWriter);
+        innerWriter.Flush();
+        var inner = innerMs.ToArray();
+
+        // Build the full envelope: [0xFE][4:counter][inner]
+        var data = new byte[5 + inner.Length];
         data[0] = AnomalyChannel.ChannelId;
-        Array.Copy(payload, 0, data, 1, payload.Length);
+        BitConverter.GetBytes(counter).CopyTo(data, 1);
+        Array.Copy(inner, 0, data, 5, inner.Length);
 
-        // Encrypt with AES-GCM
         EncryptedChannelManager.EncryptedMessageOutside packed;
         if (NetworkServer.active)
         {
-            // Local host -- no encryption needed
             packed = new EncryptedChannelManager.EncryptedMessageOutside(
                 EncryptedChannelManager.SecurityLevel.Unsecured, data);
         }
@@ -68,23 +70,39 @@ public static class AnomalyMessaging
 
     internal static void OnReceived(byte[] anomalyPayload)
     {
-        if (anomalyPayload.Length < 4)
+        // Wire (after stripping 0xFE): [4:counter][4:hash][N:payload]
+        if (anomalyPayload.Length < 8)
         {
-            MelonLogger.Warning("AnomalyMessaging.OnReceived: Payload too short for message hash.");
+            MelonLogger.Warning("AnomalyMessaging.OnReceived: Payload too short for counter + message hash.");
             return;
         }
 
-        uint hash = BitConverter.ToUInt32(anomalyPayload, 0);
+        uint counter = BitConverter.ToUInt32(anomalyPayload, 0);
+        uint hash = BitConverter.ToUInt32(anomalyPayload, 4);
 
-        if (!AnomalyMessageRegistry.TryCreate(hash, out var message))
+        if (!AnomalyMessageRegistry.TryGetChannel(hash, out var channel))
         {
             MelonLogger.Warning($"AnomalyMessaging.OnReceived: Unknown message hash 0x{hash:X8}.");
             return;
         }
 
+        var rx = AnomalyReplayTable.Instance.TryAcceptRx(channel, counter, out bool shouldLog);
+        if (rx != AnomalyReplayState.RxResult.Accepted)
+        {
+            if (shouldLog)
+                MelonLogger.Warning($"AnomalyMessaging.OnReceived: Dropping packet (hash=0x{hash:X8}, counter={counter}, channel={channel}, reason={rx}).");
+            return;
+        }
+
+        if (!AnomalyMessageRegistry.TryCreate(hash, out var message))
+        {
+            MelonLogger.Warning($"AnomalyMessaging.OnReceived: No factory for hash 0x{hash:X8}.");
+            return;
+        }
+
         try
         {
-            using var ms = new MemoryStream(anomalyPayload, 4, anomalyPayload.Length - 4);
+            using var ms = new MemoryStream(anomalyPayload, 8, anomalyPayload.Length - 8);
             using var reader = new BinaryReader(ms);
             message.Deserialize(reader);
         }

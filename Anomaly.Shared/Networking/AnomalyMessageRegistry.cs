@@ -30,6 +30,7 @@ namespace Anomaly.Shared.Networking
         private static readonly Dictionary<uint, Func<IAnomalyMessage>> Factories = new Dictionary<uint, Func<IAnomalyMessage>>();
         private static readonly Dictionary<uint, string> HashToName = new Dictionary<uint, string>();
         private static readonly Dictionary<string, uint> NameToHash = new Dictionary<string, uint>();
+        private static readonly Dictionary<uint, MessageChannel> HashToChannel = new Dictionary<uint, MessageChannel>();
 
         public static void Register<T>(string name, Func<T> factory) where T : IAnomalyMessage
         {
@@ -46,11 +47,16 @@ namespace Anomaly.Shared.Networking
                     $"AnomalyMessageRegistry: FNV-1a hash collision between '{existing}' and '{name}' (hash=0x{hash:X8}). Rename one of them.");
             }
 
+            // Sample one instance so the receive path can read TransportChannel from a
+            // static lookup rather than allocating a fresh message per packet (which an
+            // attacker could exploit via replay-before-validation GC pressure).
+            var sample = factory();
             Factories[hash] = () => factory();
             HashToName[hash] = name;
             NameToHash[name] = hash;
+            HashToChannel[hash] = sample.TransportChannel;
 
-            Log($"AnomalyMessageRegistry: Registered '{name}' (hash=0x{hash:X8})");
+            Log($"AnomalyMessageRegistry: Registered '{name}' (hash=0x{hash:X8}, channel={sample.TransportChannel})");
         }
 
         public static bool TryCreate(uint hash, out IAnomalyMessage message)
@@ -62,6 +68,11 @@ namespace Anomaly.Shared.Networking
             }
             message = null;
             return false;
+        }
+
+        public static bool TryGetChannel(uint hash, out MessageChannel channel)
+        {
+            return HashToChannel.TryGetValue(hash, out channel);
         }
 
         public static uint GetHash(string name)

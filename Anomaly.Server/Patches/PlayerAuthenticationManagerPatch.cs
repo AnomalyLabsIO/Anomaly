@@ -169,7 +169,9 @@ public static class PlayerAuthenticationManagerPatch
         {
             channel = (EncryptedChannelManager.EncryptedChannel)packed.Data[0];
 
-            // Anomaly custom messages -- separate dispatch, no counter
+            // Anomaly custom messages -- separate dispatch. Wire is
+            // [0xFE][counter][hash][payload]; AnomalyMessaging.OnReceived
+            // parses the counter/hash and applies replay protection.
             if ((byte)channel == AnomalyChannel.ChannelId)
             {
                 var anomalyPayload = new byte[packed.Data.Length - 1];
@@ -194,7 +196,9 @@ public static class PlayerAuthenticationManagerPatch
 
             channel = (EncryptedChannelManager.EncryptedChannel)decryptedData[0];
 
-            // Anomaly custom messages -- separate dispatch, no counter
+            // Anomaly custom messages -- separate dispatch. Wire is
+            // [0xFE][counter][hash][payload]; AnomalyMessaging.OnReceived
+            // parses the counter/hash and applies replay protection.
             if ((byte)channel == AnomalyChannel.ChannelId)
             {
                 var anomalyPayload = new byte[decryptedData.Length - 1];

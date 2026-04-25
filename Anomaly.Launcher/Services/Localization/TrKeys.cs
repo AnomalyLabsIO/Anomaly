@@ -114,6 +114,8 @@ internal static class TrKeys
     // Mod item
     public const string ModItem_VersionWarning = "launcher.mod_item.version_warning";
     public const string ModItem_UnknownVersion = "launcher.mod_item.unknown_version";
+    public const string ModItem_MissingDepsSummary = "launcher.mod_item.missing_deps_summary";
+    public const string ModItem_MissingDepsHeader = "launcher.mod_item.missing_deps_header";
 
     // Steam download dialog — entry points
     public const string SteamDl_Entry_GameNotInstalled = "launcher.steamdl.entry.game_not_installed";

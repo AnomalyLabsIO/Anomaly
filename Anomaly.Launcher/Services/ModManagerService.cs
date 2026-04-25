@@ -19,6 +19,8 @@ public class ModManagerService
         if (!Directory.Exists(_paths.ModsDir))
             return mods;
 
+        var available = BuildAvailableAssemblySet();
+
         var files = Directory.GetFiles(_paths.ModsDir, "*.dll")
             .Concat(Directory.GetFiles(_paths.ModsDir, "*.dll.DISABLED"));
 
@@ -28,16 +30,22 @@ public class ModManagerService
             var isActive = file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
                            && !file.EndsWith(".dll.DISABLED", StringComparison.OrdinalIgnoreCase);
 
-            var (assemblyName, version, targetGameVersion) = ReadModMetadata(file);
+            var meta = ReadModMetadata(file);
+
+            var missing = meta.AssemblyReferences
+                .Where(r => !IsRuntimeProvided(r) && !available.Contains(r))
+                .ToArray();
 
             mods.Add(new ModInfo
             {
                 FileName = fileName,
                 FilePath = file,
                 IsActive = isActive,
-                AssemblyName = assemblyName,
-                Version = version,
-                TargetGameVersion = targetGameVersion
+                AssemblyName = meta.AssemblyName,
+                Version = meta.Version,
+                TargetGameVersion = meta.TargetGameVersion,
+                AssemblyReferences = meta.AssemblyReferences,
+                MissingReferences = missing
             });
         }
 
@@ -63,7 +71,66 @@ public class ModManagerService
         mod.IsActive = !mod.IsActive;
     }
 
-    private static (string? assemblyName, string? version, string? targetGameVersion) ReadModMetadata(string dllPath)
+    // Core BCL assemblies ship with the .NET runtime that MelonLoader hosts
+    // (resolved via MelonLoader/net6/MelonLoader.runtimeconfig.json → Microsoft.NETCore.App).
+    // They live outside the game dir, so the recursive folder scan won't find them.
+    private static bool IsRuntimeProvided(string assemblyName)
+    {
+        return assemblyName.StartsWith("System.", StringComparison.OrdinalIgnoreCase)
+            || assemblyName.StartsWith("Microsoft.", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(assemblyName, "System", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(assemblyName, "mscorlib", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(assemblyName, "netstandard", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(assemblyName, "WindowsBase", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private HashSet<string> BuildAvailableAssemblySet()
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        ScanInto(set, _paths.ModsDir, includeDisabled: true);
+        ScanInto(set, _paths.UserLibsDir, includeDisabled: false);
+        ScanInto(set, _paths.MelonLoaderDir, includeDisabled: false);
+        return set;
+    }
+
+    private static void ScanInto(HashSet<string> set, string dir, bool includeDisabled)
+    {
+        if (!Directory.Exists(dir))
+            return;
+
+        var files = Directory.EnumerateFiles(dir, "*.dll", SearchOption.AllDirectories);
+        if (includeDisabled)
+            files = files.Concat(Directory.EnumerateFiles(dir, "*.dll.DISABLED", SearchOption.AllDirectories));
+
+        foreach (var file in files)
+        {
+            var name = TryReadAssemblyName(file);
+            if (name != null)
+                set.Add(name);
+        }
+    }
+
+    private static string? TryReadAssemblyName(string dllPath)
+    {
+        try
+        {
+            using var stream = new FileStream(dllPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var peReader = new PEReader(stream);
+
+            if (!peReader.HasMetadata)
+                return null;
+
+            var metadata = peReader.GetMetadataReader();
+            var assemblyDef = metadata.GetAssemblyDefinition();
+            return metadata.GetString(assemblyDef.Name);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static ModMetadata ReadModMetadata(string dllPath)
     {
         try
         {
@@ -72,7 +139,7 @@ public class ModManagerService
             using var peReader = new PEReader(stream);
 
             if (!peReader.HasMetadata)
-                return (null, null, null);
+                return new ModMetadata(null, null, null, Array.Empty<string>());
 
             var metadata = peReader.GetMetadataReader();
             var assemblyDef = metadata.GetAssemblyDefinition();
@@ -111,11 +178,24 @@ public class ModManagerService
                 }
             }
 
-            return (assemblyName, version, targetGameVersion);
+            var references = new List<string>();
+            foreach (var refHandle in metadata.AssemblyReferences)
+            {
+                var asmRef = metadata.GetAssemblyReference(refHandle);
+                references.Add(metadata.GetString(asmRef.Name));
+            }
+
+            return new ModMetadata(assemblyName, version, targetGameVersion, references);
         }
         catch
         {
-            return (null, null, null);
+            return new ModMetadata(null, null, null, Array.Empty<string>());
         }
     }
+
+    private sealed record ModMetadata(
+        string? AssemblyName,
+        string? Version,
+        string? TargetGameVersion,
+        IReadOnlyList<string> AssemblyReferences);
 }

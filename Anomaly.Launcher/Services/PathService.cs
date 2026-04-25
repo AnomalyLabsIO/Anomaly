@@ -4,21 +4,34 @@ public class PathService
 {
     public string LauncherDir { get; }
     public string ModsDir { get; }
+    public string UserLibsDir { get; }
+    public string UserDataDir { get; }
+    public string MelonLoaderDir { get; }
     public string AnomalyDataDir { get; }
     public string CrashReportsDir { get; }
     public string UserJsonPath { get; }
     public string VanillaPathFile { get; }
+    public string InstalledModsFile { get; }
+    public string CatalogCacheFile { get; }
+    public string GameBuildsCacheFile { get; }
     public string GameLogPath { get; }
 
     public PathService()
     {
         LauncherDir = AppContext.BaseDirectory;
         ModsDir = Path.Combine(LauncherDir, "Mods");
+        UserLibsDir = Path.Combine(LauncherDir, "UserLibs");
+        MelonLoaderDir = Path.Combine(LauncherDir, "MelonLoader");
+        // Per-mod runtime data (config, assets) lives under MelonLoader's per-namespace UserData root.
+        UserDataDir = Path.Combine(MelonLoaderDir, "UserData", "Anomaly");
         AnomalyDataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Anomaly");
         CrashReportsDir = Path.Combine(AnomalyDataDir, "CrashReports");
         UserJsonPath = Path.Combine(AnomalyDataDir, "user.json");
         VanillaPathFile = Path.Combine(AnomalyDataDir, "vanilla_path.txt");
+        InstalledModsFile = Path.Combine(AnomalyDataDir, "installed_mods.json");
+        CatalogCacheFile = Path.Combine(AnomalyDataDir, "catalog_cache.json");
+        GameBuildsCacheFile = Path.Combine(AnomalyDataDir, "game_builds_cache.json");
         GameLogPath = Path.Combine(LauncherDir, "Latest.log");
 
         MigrateLegacyVanillaPath();

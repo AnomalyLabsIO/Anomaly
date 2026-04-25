@@ -175,6 +175,7 @@
         <Compile Include="Plugin.cs" />
         <Compile Include="Properties\AssemblyInfo.cs"/>
         <Compile Include="Networking\AnomalyMessaging.cs" />
+        <Compile Include="Networking\AnomalyReplayTable.cs" />
         <Compile Include="Assets\AssetFileWatcher.cs" />
         <Compile Include="Assets\AssetOverrides.cs" />
         <Compile Include="Assets\AssetRegistry.cs" />

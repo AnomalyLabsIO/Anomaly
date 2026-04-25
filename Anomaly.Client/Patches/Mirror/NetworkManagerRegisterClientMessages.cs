@@ -52,6 +52,9 @@ public static class NetworkManagerRegisterClientMessages
                     // and chunk buffer instead of leaking partially-received data or
                     // double-counting progress.
                     FileTransferClient.Reset();
+                    // Drop per-channel replay state so the new session's counters
+                    // start from zero instead of inheriting the old highWater.
+                    AnomalyReplayTable.Reset();
                 };
             }
 

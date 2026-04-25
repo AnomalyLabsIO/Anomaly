@@ -1,10 +1,12 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace Anomaly.Launcher.ViewModels;
 
 /// <summary>
-/// One mod shown in the Public Repository tab. Populated from stub data today; a real
-/// <c>repo.anomaly.scp</c> catalogue service will replace the source later.
+/// One mod shown on the Public Repository tab. Backed by the live Anomaly mods platform —
+/// see <see cref="MainWindowViewModel.LoadOnlineRepoModsAsync"/>. Install/Uninstall commands
+/// delegate to the main view-model so a single <c>ModInstaller</c> instance handles staging.
 /// </summary>
 public partial class RepoModItemViewModel : ObservableObject
 {
@@ -13,7 +15,8 @@ public partial class RepoModItemViewModel : ObservableObject
     public string Category { get; }
     public string Author { get; }
     public string Version { get; }
-    public string Target { get; }
+    public string Target { get; }              // e.g. "14.2.6, 14.3.0"
+    public IReadOnlyList<string> GameVersions { get; }
     public int Downloads { get; }
     public string DownloadsText => Downloads.ToString("N0");
     public bool Verified { get; }
@@ -27,7 +30,19 @@ public partial class RepoModItemViewModel : ObservableObject
     [ObservableProperty]
     private bool _isInstalled;
 
+    [ObservableProperty]
+    private bool _isBusy;
+
+    [ObservableProperty]
+    private string? _installedVersion;
+
+    public bool HasUpdate =>
+        IsInstalled && !string.IsNullOrEmpty(InstalledVersion) && InstalledVersion != Version;
+
     public string CategoryUpper => Category.ToUpperInvariant();
+
+    public IRelayCommand InstallCommand { get; }
+    public IRelayCommand UninstallCommand { get; }
 
     public RepoModItemViewModel(
         string id,
@@ -36,13 +51,17 @@ public partial class RepoModItemViewModel : ObservableObject
         string author,
         string version,
         string target,
+        IReadOnlyList<string> gameVersions,
         int downloads,
         bool verified,
         string tagline,
         string updated,
         bool isInstalled,
-        string license = "MIT",
-        string size = "1.8 MB",
+        string? installedVersion,
+        IRelayCommand installCommand,
+        IRelayCommand uninstallCommand,
+        string license = "—",
+        string size = "—",
         string sha256Short = "—",
         string? description = null)
     {
@@ -52,6 +71,7 @@ public partial class RepoModItemViewModel : ObservableObject
         Author = author;
         Version = version;
         Target = target;
+        GameVersions = gameVersions;
         Downloads = downloads;
         Verified = verified;
         Tagline = tagline;
@@ -61,5 +81,11 @@ public partial class RepoModItemViewModel : ObservableObject
         Sha256Short = sha256Short;
         Description = description ?? tagline;
         _isInstalled = isInstalled;
+        _installedVersion = installedVersion;
+        InstallCommand = installCommand;
+        UninstallCommand = uninstallCommand;
     }
+
+    partial void OnIsInstalledChanged(bool value) => OnPropertyChanged(nameof(HasUpdate));
+    partial void OnInstalledVersionChanged(string? value) => OnPropertyChanged(nameof(HasUpdate));
 }

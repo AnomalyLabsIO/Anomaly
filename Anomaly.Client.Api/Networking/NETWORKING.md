@@ -119,11 +119,25 @@ For data that updates every frame (blend shapes, bone transforms), use channel *
 ## Wire Format
 
 ```
-EncryptedMessageOutside envelope (AES-GCM encrypted):
+EncryptedMessageOutside envelope (AES-GCM encrypted, except for local-host Unsecured):
   [1 byte: 0xFE]                        Anomaly channel marker (AnomalyChannel.ChannelId)
+  [4 bytes: uint counter]               Per-(hub × TransportChannel) monotonic replay counter
   [4 bytes: uint FNV-1a hash]           Message type identifier
   [N bytes: message-specific payload]   Output of Serialize()
 ```
+
+### Replay protection
+
+The counter is maintained per `(hub, MessageChannel)` pair on both sides. On receive,
+it's validated against a strict monotonic check (for ordered channels) or a 128-bit
+sliding window (for `ReliableUnordered` and `Unreliable`). Counter starts at 1 per
+channel per session and wraps cleanly at `uint.MaxValue`; session counters are
+cleared on disconnect.
+
+Mods using the public `AnomalyMessaging.Send` / `MessageReceived` API need no
+changes — the counter is written and validated at the transport layer. Custom
+wire-format parsers must account for the 4 extra bytes and assume protocol
+version `AnomalyProtocol.CurrentVersion` (currently `1`).
 
 ## Naming Convention
 

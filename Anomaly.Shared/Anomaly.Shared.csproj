@@ -55,6 +55,7 @@
         <Compile Include="Assets\AssetKind.cs" />
         <Compile Include="Networking\AnomalyChannel.cs" />
         <Compile Include="Networking\AnomalyMessageRegistry.cs" />
+        <Compile Include="Networking\AnomalyReplayState.cs" />
         <Compile Include="Networking\HalfHelper.cs" />
         <Compile Include="Networking\IAnomalyMessage.cs" />
         <Compile Include="Networking\MessageChannel.cs" />

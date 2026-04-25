@@ -35,7 +35,9 @@ public static class AnomalyMessaging
     public static void SendToClient(ReferenceHub hub, IAnomalyMessage msg)
     {
         var ecm = hub.encryptedChannelManager;
-        var data = BuildPayload(msg);
+        var state = AnomalyReplayTable.GetOrCreate(hub);
+        uint counter = state.NextTxCounter(msg.TransportChannel);
+        var data = BuildPayload(msg, counter);
 
         EncryptedChannelManager.EncryptedMessageOutside packed;
         if (ecm.isLocalPlayer)
@@ -79,23 +81,41 @@ public static class AnomalyMessaging
 
     internal static void OnReceived(ReferenceHub sender, byte[] anomalyPayload)
     {
-        if (anomalyPayload.Length < 4)
+        // Wire: [4:counter][4:hash][N:payload]
+        if (anomalyPayload.Length < 8)
         {
-            Logger.Warn("AnomalyMessaging.OnReceived: Payload too short for message hash.");
+            Logger.Warn("AnomalyMessaging.OnReceived: Payload too short for counter + message hash.");
             return;
         }
 
-        uint hash = BitConverter.ToUInt32(anomalyPayload, 0);
+        uint counter = BitConverter.ToUInt32(anomalyPayload, 0);
+        uint hash = BitConverter.ToUInt32(anomalyPayload, 4);
 
-        if (!AnomalyMessageRegistry.TryCreate(hash, out var message))
+        if (!AnomalyMessageRegistry.TryGetChannel(hash, out var channel))
         {
             Logger.Warn($"AnomalyMessaging.OnReceived: Unknown message hash 0x{hash:X8}.");
             return;
         }
 
+        var state = AnomalyReplayTable.GetOrCreate(sender);
+        var rx = state.TryAcceptRx(channel, counter, out bool shouldLog);
+        if (rx != AnomalyReplayState.RxResult.Accepted)
+        {
+            if (shouldLog)
+                Logger.Warn($"AnomalyMessaging.OnReceived: Dropping packet from {sender.LoggedNameFromRefHub()} (hash=0x{hash:X8}, counter={counter}, channel={channel}, reason={rx}).");
+            return;
+        }
+
+        if (!AnomalyMessageRegistry.TryCreate(hash, out var message))
+        {
+            // Registered in HashToChannel but not in Factories would be a bug in Register.
+            Logger.Warn($"AnomalyMessaging.OnReceived: No factory for hash 0x{hash:X8}.");
+            return;
+        }
+
         try
         {
-            using (var ms = new MemoryStream(anomalyPayload, 4, anomalyPayload.Length - 4))
+            using (var ms = new MemoryStream(anomalyPayload, 8, anomalyPayload.Length - 8))
             using (var reader = new BinaryReader(ms))
             {
                 message.Deserialize(reader);
@@ -117,14 +137,14 @@ public static class AnomalyMessaging
         }
     }
 
-    private static byte[] BuildPayload(IAnomalyMessage msg)
+    private static byte[] BuildPayload(IAnomalyMessage msg, uint counter)
     {
         using (var ms = new MemoryStream())
         using (var writer = new BinaryWriter(ms))
         {
-            // Anomaly channel byte
+            // [channel byte][counter][hash][serialized data]
             writer.Write(AnomalyChannel.ChannelId);
-            // Message hash + serialized data
+            writer.Write(counter);
             writer.Write(AnomalyMessageRegistry.GetHash(msg.MessageName));
             msg.Serialize(writer);
             writer.Flush();
