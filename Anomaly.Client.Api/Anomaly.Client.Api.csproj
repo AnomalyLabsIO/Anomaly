@@ -358,6 +358,9 @@
 		     Required because UnityEngine.ImageConversion.LoadImage throws
 		     MissingMethodException in this Il2CppInterop build. -->
 		<PackageReference Include="BigGustave" Version="1.0.3" />
+		<!-- Pure-managed OGG Vorbis decoder used by OggLoader. AOT-safe, MIT.
+		     Used to materialize user/server-supplied .ogg overrides into AudioClip. -->
+		<PackageReference Include="NVorbis" Version="0.10.5" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1" />
 	</ItemGroup>
 
@@ -383,5 +386,7 @@
 		<Warning Text="Anomaly.Client.Api: AnomalyClientUserLibsDir does not exist: $(AnomalyClientUserLibsDir)" Condition="!Exists('$(AnomalyClientUserLibsDir)')" />
 		<Message Importance="high" Text="Anomaly.Client.Api: copying BigGustave.dll -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)BigGustave.dll')" />
 		<Copy SourceFiles="$(OutputPath)BigGustave.dll" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)BigGustave.dll')" />
+		<Message Importance="high" Text="Anomaly.Client.Api: copying NVorbis.dll -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)NVorbis.dll')" />
+		<Copy SourceFiles="$(OutputPath)NVorbis.dll" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)NVorbis.dll')" />
 	</Target>
 </Project>

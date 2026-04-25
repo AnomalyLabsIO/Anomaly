@@ -364,9 +364,11 @@
 
 	<ItemGroup>
 		<Compile Include="Core.cs" />
+		<Compile Include="Assets\LocalAudio.cs" />
 		<Compile Include="Assets\LocalTextures.cs" />
 		<Compile Include="Assets\OverrideApplier.cs" />
 		<Compile Include="Assets\OverrideRegistry.cs" />
+		<Compile Include="Assets\PathOverrideRegistry.cs" />
 		<Compile Include="Assets\ScriptStripper.cs" />
 		<Compile Include="Assets\ShaderRemapper.cs" />
 		<Compile Include="Assets\SpawnedObjectRegistry.cs" />
@@ -396,6 +398,7 @@
 		<Compile Include="Internal\SilentRoleChange.cs" />
 		<Compile Include="Internal\Stats\HealthStateTracker.cs" />
 		<Compile Include="Patches\PatchInvocationGuard.cs" />
+		<Compile Include="Patches\Audio\CassieLineSourceSchedulePatch.cs" />
 		<Compile Include="Patches\Auth\NetDataWriterPut.cs" />
 		<Compile Include="Patches\Auth\PlayerAuthenticationManagerPatch.cs" />
 		<Compile Include="Patches\Command\ConsoleTypeCommandPatch.cs" />
@@ -404,6 +407,7 @@
 		<Compile Include="Patches\Loader\LoaderPatch.cs" />
 		<Compile Include="Patches\Loader\LauncherVersionPatch.cs" />
 		<Compile Include="Patches\Menu\CanvasPatch.cs" />
+		<Compile Include="Patches\Menu\MainMenuCustomizer.cs" />
 		<Compile Include="Patches\Menu\NewServerBrowserOnEnablePatch.cs" />
 		<Compile Include="Patches\Menu\NewsLoaderStartPatch.cs" />
 		<Compile Include="Patches\Mirror\EncryptedChannelHandlerFix.cs" />

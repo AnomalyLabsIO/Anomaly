@@ -6,6 +6,7 @@ using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.FileTransfer;
 using Anomaly.Client.Internal.Map;
 using Anomaly.Client.Internal.Round;
+using Anomaly.Client.Patches.Audio;
 using Anomaly.Shared.Networking;
 using HarmonyLib;
 using Il2CppMirror;
@@ -37,6 +38,7 @@ public static class NetworkManagerRegisterClientMessages
 
                 SpawnedObjectRegistry.Init();
                 OverrideRegistry.Init();
+                PathOverrideRegistry.Init();
                 RoundStateReceiver.Init();
 
                 // Clean up everything the asset pipeline created so reconnecting to a
@@ -47,6 +49,8 @@ public static class NetworkManagerRegisterClientMessages
                     FacilityRecipeClient.Clear();
                     OverrideRegistry.Clear();
                     SpawnedObjectRegistry.Clear();
+                    PathOverrideRegistry.Shutdown();
+                    CassieLineSourceSchedulePatch.RestoreAll();
                     AnomalyResources.UnloadAll();
                     // Reset file-transfer state so a reconnect starts with a clean manifest
                     // and chunk buffer instead of leaking partially-received data or

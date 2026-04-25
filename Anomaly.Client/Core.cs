@@ -9,6 +9,7 @@ using Anomaly.Client.Diagnostics;
 using Anomaly.Client.Internal.Bootstrap;
 using Anomaly.Client.Api.Internal.UI;
 using Anomaly.Client.Internal.UI;
+using Anomaly.Client.Patches.Menu;
 using Il2Cpp;
 using Il2CppCentralAuth;
 using MelonLoader;
@@ -30,7 +31,7 @@ public class Core : MelonMod
 
         // Initialize localization first so subsequent init can use Tr.Get()
         // and third-party mods loading after us can register their own namespaces.
-        Tr.Register(new LocalizationService(MelonEnvironment.UserDataDirectory));
+        Tr.Register(new LocalizationService(MelonEnvironment.UserDataDirectory, typeof(Core).Assembly));
 
         HarmonyInstance.PatchAll();
 
@@ -42,6 +43,7 @@ public class Core : MelonMod
         DiagnosticBootstrap.Initialize();
         UiBootstrap.Init();
         PreloaderSkinBootstrap.Init();
+        MainMenuCustomizer.Init();
 
         CommandRegistry.Register("anomaly", new NameCommand());
 

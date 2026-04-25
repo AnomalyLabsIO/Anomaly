@@ -4,6 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using Anomaly.Client.Api.Internal.Localization;
 using MelonLoader;
@@ -23,6 +25,7 @@ public class LocalizationService
     private readonly string _anomalyI18nDir;
     private readonly string _configPath;
     private readonly string _userDataDir;
+    private readonly Assembly _resourceAssembly;
     private readonly Dictionary<string, string> _active = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _fallback = new(StringComparer.Ordinal);
 
@@ -34,9 +37,15 @@ public class LocalizationService
 
     public string ActiveLocale { get; private set; } = "en";
 
-    internal LocalizationService(string userDataDir)
+    /// <param name="resourceAssembly">
+    /// The assembly that owns the embedded i18n resources to extract. Must be passed
+    /// explicitly because <c>Assembly.GetExecutingAssembly()</c> here would return
+    /// Anomaly.Client.Api, but the resources live in Anomaly.Client.
+    /// </param>
+    internal LocalizationService(string userDataDir, Assembly resourceAssembly)
     {
         _userDataDir = userDataDir;
+        _resourceAssembly = resourceAssembly ?? throw new ArgumentNullException(nameof(resourceAssembly));
         _anomalyI18nDir = Path.Combine(userDataDir, "Anomaly", "i18n");
         _configPath = Path.Combine(userDataDir, "Anomaly", "config.json");
 
@@ -149,12 +158,7 @@ public class LocalizationService
             if (!Directory.Exists(_anomalyI18nDir))
                 Directory.CreateDirectory(_anomalyI18nDir);
 
-            var versionMarker = Path.Combine(_anomalyI18nDir, ".version");
-            var currentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0.0";
-            var lastVersion = File.Exists(versionMarker) ? File.ReadAllText(versionMarker).Trim() : string.Empty;
-            var needsExtraction = lastVersion != currentVersion;
-
-            var assembly = Assembly.GetExecutingAssembly();
+            var assembly = _resourceAssembly;
             foreach (var resourceName in assembly.GetManifestResourceNames())
             {
                 if (resourceName.IndexOf(".Resources.i18n.", StringComparison.Ordinal) < 0) continue;
@@ -163,23 +167,43 @@ public class LocalizationService
                 var fileName = ExtractFileName(resourceName);
                 var destPath = Path.Combine(_anomalyI18nDir, fileName);
 
-                if (needsExtraction || !File.Exists(destPath))
+                using var stream = assembly.GetManifestResourceStream(resourceName);
+                if (stream == null) continue;
+
+                // Hash both sides; only overwrite when the embedded payload differs from
+                // what's on disk. This keeps user edits in place when the shipped file
+                // hasn't changed, and forces re-extraction whenever a build ships new
+                // translations (the assembly-version marker we used before missed
+                // dev rebuilds that didn't bump the version).
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                var embeddedBytes = ms.ToArray();
+
+                if (File.Exists(destPath))
                 {
-                    using var stream = assembly.GetManifestResourceStream(resourceName);
-                    if (stream == null) continue;
-
-                    using var file = File.Create(destPath);
-                    stream.CopyTo(file);
+                    var diskBytes = File.ReadAllBytes(destPath);
+                    if (HashEquals(embeddedBytes, diskBytes))
+                        continue;
                 }
-            }
 
-            if (needsExtraction)
-                File.WriteAllText(versionMarker, currentVersion);
+                File.WriteAllBytes(destPath, embeddedBytes);
+            }
         }
         catch (Exception ex)
         {
             MelonLogger.Warning($"[Anomaly i18n] Extract failed: {ex.Message}");
         }
+    }
+
+    private static bool HashEquals(byte[] a, byte[] b)
+    {
+        using var sha = SHA256.Create();
+        var ha = sha.ComputeHash(a);
+        var hb = sha.ComputeHash(b);
+        if (ha.Length != hb.Length) return false;
+        for (int i = 0; i < ha.Length; i++)
+            if (ha[i] != hb[i]) return false;
+        return true;
     }
 
     private static string ExtractFileName(string resourceName)
