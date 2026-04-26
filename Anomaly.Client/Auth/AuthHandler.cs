@@ -12,6 +12,8 @@ using Il2CppLiteNetLib.Utils;
 using Il2CppLiteNetLib;
 using System.Collections;
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Components;
 using Anomaly.Shared.Auth;
 using Anomaly.Shared.Networking;
@@ -155,6 +157,7 @@ public static class AuthHandler
         if (requestType != 100)
         {
             AuthStatusOverlay.EndAuthenticating();
+            ConnectionInfoOverlay.EndOverride();
             MelonLogger.Warning($"Server rejected with code {requestType} (expected 100 for handshake). Passing to base handler.");
             info.AdditionalData._position = pos;
             return true; // Not our rejection, let original handler process it
@@ -170,6 +173,7 @@ public static class AuthHandler
         catch (AnomalyProtocolVersionMismatchException pv)
         {
             AuthStatusOverlay.EndAuthenticating();
+            ConnectionInfoOverlay.EndOverride();
             MelonLogger.Error($"Server speaks a different Anomaly protocol version. {pv.Message}");
             return false;
         }
@@ -185,6 +189,7 @@ public static class AuthHandler
         connection.ServerIdentifier = data.GetString();
         MelonLogger.Msg($"[Anomaly] Stored handshake for server {server}, identifier: {connection.ServerIdentifier}");
 
+        ConnectionInfoOverlay.BeginOverride(Tr.Get(TrKeys.Overlay_ConnectionAuthenticating));
         MelonCoroutines.Start(ConnectAgain(server, Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.port.ToString()));
         return false; // We handled it, skip original handler
     }
@@ -230,12 +235,17 @@ public static class AuthHandler
         // server rejects the phase-1 packet on purpose to push the handshake
         // back in the rejection data. We need to preserve _connections and
         // _connectionGeneration so ConnectAgain can use the stored handshake.
+        // The ConnectionInfoOverlay must ALSO stay active across the transient
+        // — vanilla SCPSL's OnClientDisconnect runs right after this prefix
+        // and writes its kick text into ReasonContent; the LateUpdate-based
+        // override only wins if it's still active when that write happens.
         //
         // A disconnect AFTER phase-2 was sent ends the session (success or
         // failure); the cached handshake is single-use server-side, so drop
         // it and bump the generation to cancel any stale ConnectAgain.
         if (_phase2Sent)
         {
+            ConnectionInfoOverlay.EndOverride();
             _connections.Clear();
             _connectionGeneration++;
             _phase2Sent = false;

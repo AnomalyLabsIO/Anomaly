@@ -377,6 +377,7 @@
 		<Compile Include="Auth\ServerConnection.cs" />
 		<Compile Include="Commands\NameCommand.cs" />
 		<Compile Include="Components\AuthStatusOverrideComponent.cs" />
+		<Compile Include="Components\ConnectionInfoOverrideComponent.cs" />
 		<Compile Include="Components\FileTransferOverlayComponent.cs" />
 		<Compile Include="Diagnostics\CircularLogBuffer.cs" />
 		<Compile Include="Diagnostics\CrashHooks.cs" />

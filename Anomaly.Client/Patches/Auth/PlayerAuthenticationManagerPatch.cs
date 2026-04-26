@@ -42,6 +42,7 @@ public static class PlayerAuthenticationManagerPatch
         if (!__instance.isLocalPlayer) return;
         if (!AuthHandler.UsingAnomalyAuth) return;
         AuthStatusOverlay.EndAuthenticating();
+        ConnectionInfoOverlay.EndOverride();
         __instance._hub.encryptedChannelManager.EncryptionKey = AuthHandler.CurrentKey;
         MelonLogger.Warning("Starting player authentication manager");
         FlushPendingClientMessages();

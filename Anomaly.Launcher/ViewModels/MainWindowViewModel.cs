@@ -28,6 +28,19 @@ public enum InstallSource
     Unknown,
 }
 
+/// <summary>
+/// Top-right pill state. Compares the installed manifest/gameVersion against the latest catalog
+/// entry. Drives whether the pill shows NOMINAL (green), UPDATE (red, same gameVersion but newer
+/// manifest), or UPGRADE (orange, newer gameVersion available).
+/// </summary>
+public enum CatalogStatus
+{
+    Unknown,
+    Nominal,
+    Update,
+    Upgrade,
+}
+
 public partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly PathService _paths;
@@ -255,8 +268,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _syncStatusText = "SYNCED";
 
+    // --- Catalog status (drives top-right NOMINAL/UPDATE/UPGRADE pill) ---
+
     [ObservableProperty]
-    private bool _isBuildNominal = true;
+    private CatalogStatus _catalogStatus = CatalogStatus.Unknown;
+
+    public bool IsCatalogNominal => CatalogStatus == CatalogStatus.Nominal;
+    public bool IsCatalogUpdate  => CatalogStatus == CatalogStatus.Update;
+    public bool IsCatalogUpgrade => CatalogStatus == CatalogStatus.Upgrade;
+
+    partial void OnCatalogStatusChanged(CatalogStatus value)
+    {
+        OnPropertyChanged(nameof(IsCatalogNominal));
+        OnPropertyChanged(nameof(IsCatalogUpdate));
+        OnPropertyChanged(nameof(IsCatalogUpgrade));
+    }
 
     // --- Computed ---
 
@@ -281,7 +307,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsGameInstalled));
         OnPropertyChanged(nameof(CanLaunch));
         OnPropertyChanged(nameof(GameVersionLabel));
-        IsBuildNominal = value == LauncherState.AllGood;
     }
 
     partial void OnLocalBuildIdChanged(string? value)
@@ -324,6 +349,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _modInstaller = modInstaller;
         _installedMods = installedMods;
         _syncContext = SynchronizationContext.Current;
+
+        // Read the install-state sidecar synchronously so the initial tab + state are stable
+        // before any async work runs. RefreshStateAsync() will reconcile to OnlineBuildMismatch
+        // or VanillaUpdated later if the Steam buildId or vanilla files have drifted.
+        InstalledState.Reload(_paths);
+        if (!InstalledState.IsInstalled)
+        {
+            CurrentState = LauncherState.GameNotInstalled;
+            _activeTab = LauncherTab.GameVersions;
+        }
+        else
+        {
+            CurrentState = LauncherState.AllGood;
+        }
 
         Username = userProfile.GetUsername();
         LaunchArgs = LoadLaunchArgs();
@@ -372,6 +411,52 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 || (!string.IsNullOrEmpty(installedBuild) && v.BuildId == installedBuild);
         }
         OnPropertyChanged(nameof(GameVersionLabel));
+        UpdateCatalogStatus();
+    }
+
+    /// <summary>
+    /// Compares the installed sidecar against the latest catalog entry. Catalog is sorted
+    /// newest-first by BuildCatalogService.Merge, so GameVersions[0] is the latest known build.
+    /// </summary>
+    private void UpdateCatalogStatus()
+    {
+        if (!InstalledState.IsInstalled || GameVersions.Count == 0
+            || string.IsNullOrEmpty(InstalledState.ManifestId)
+            || string.IsNullOrEmpty(InstalledState.GameVersion))
+        {
+            CatalogStatus = CatalogStatus.Unknown;
+            return;
+        }
+
+        var latest = GameVersions[0];
+        if (!string.IsNullOrEmpty(latest.GameVersion)
+            && !string.Equals(latest.GameVersion, InstalledState.GameVersion, StringComparison.Ordinal))
+        {
+            CatalogStatus = CatalogStatus.Upgrade;
+        }
+        else if (latest.ManifestId.ToString() != InstalledState.ManifestId)
+        {
+            CatalogStatus = CatalogStatus.Update;
+        }
+        else
+        {
+            CatalogStatus = CatalogStatus.Nominal;
+        }
+    }
+
+    [RelayCommand]
+    private void TriggerCatalogUpdate()
+    {
+        if (CatalogStatus != CatalogStatus.Update || GameVersions.Count == 0) return;
+        OpenSteamDownloadDialogInternal(preSelectedManifestId: GameVersions[0].ManifestId);
+    }
+
+    [RelayCommand]
+    private void TriggerCatalogUpgrade()
+    {
+        if (CatalogStatus != CatalogStatus.Upgrade || GameVersions.Count == 0) return;
+        ActiveTab = LauncherTab.GameVersions;
+        SelectedGameVersion = GameVersions[0];
     }
 
     [RelayCommand]
@@ -380,17 +465,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         entry ??= SelectedGameVersion;
         if (entry == null) return;
 
-        // Delegate into existing Steam download dialog flow; the dialog already handles
-        // authentication + download + installer handoff.
-        OpenSteamDownloadDialog();
-
-        // Seed selection if the dialog VM is ready
-        if (SteamDownloadDialogViewModel is { } dlg)
-        {
-            var match = dlg.AvailableBuilds.FirstOrDefault(b => b.ManifestId == entry.ManifestId);
-            if (match != null)
-                dlg.SelectedBuild = match;
-        }
+        // Use the preselected-manifest flow so the dialog signs in, then jumps straight
+        // to the download — the previous code opened the generic picker and tried to set
+        // SelectedBuild before the catalog finished loading, which always lost the race.
+        OpenSteamDownloadDialogInternal(preSelectedManifestId: entry.ManifestId);
     }
 
     // ===================== Public Repository =====================
@@ -657,16 +735,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         foreach (var old in Mods)
             old.PropertyChanged -= OnModItemPropertyChanged;
 
+        var currentVersion = InstalledState.GameVersion;
+
         Mods.Clear();
         foreach (var mod in _modManager.GetMods())
         {
-            var vm = new ModItemViewModel(mod, _modManager, null);
+            var vm = new ModItemViewModel(mod, _modManager, currentVersion);
             vm.PropertyChanged += OnModItemPropertyChanged;
             Mods.Add(vm);
         }
         OnPropertyChanged(nameof(EnabledModCount));
         OnPropertyChanged(nameof(ModCountHeader));
     }
+
+    [RelayCommand]
+    private void RefreshMods() => LoadMods();
 
     private void OnModItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -861,6 +944,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         await dialogVm.TrackAsync(installTask);
 
         await RefreshStateAsync();
+        LoadMods();
     }
 
     [RelayCommand]
@@ -971,6 +1055,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         await dialogVm.TrackAsync(task);
 
         await RefreshStateAsync();
+        LoadMods();
     }
 
     // ===================== Crash dialog =====================

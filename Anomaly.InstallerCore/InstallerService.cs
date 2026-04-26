@@ -246,6 +246,7 @@ public static class InstallerService
         // Skipped when MelonLoader isn't installed (--no-melon) or when patches are off
         // (--skip-patches), since neither path can produce a clean boot to a scene.
         ct.ThrowIfCancellationRequested();
+        bool firstRunGenerated = false;
         if (options.NoMelon)
         {
             ConsoleUI.PrintStep(8, TotalSteps, "Skipping first-run assembly dump (--no-melon).");
@@ -257,7 +258,7 @@ public static class InstallerService
         else
         {
             ConsoleUI.PrintStep(8, TotalSteps, "Generating Il2Cpp managed assemblies (first-run)...");
-            TriggerFirstRun(installerDir, ct);
+            firstRunGenerated = TriggerFirstRun(installerDir, ct);
         }
         ConsoleUI.PrintInfo("");
 
@@ -268,7 +269,7 @@ public static class InstallerService
         ConsoleUI.PrintSuccess("  Installation complete!");
         ConsoleUI.PrintSuccess("========================================");
         ConsoleUI.PrintInfo("");
-        PrintPostInstallInstructions(platform, installerDir);
+        PrintPostInstallInstructions(platform, installerDir, firstRunGenerated);
         ConsoleUI.PrintInfo("");
     }
 
@@ -458,12 +459,14 @@ public static class InstallerService
             ConsoleUI.PrintInfo("Preferred Linux runtime: none detected yet");
     }
 
-    private static void PrintPostInstallInstructions(PlatformInfo platform, string installerDir)
+    private static void PrintPostInstallInstructions(PlatformInfo platform, string installerDir, bool firstRunGenerated)
     {
         string moddedExe = Path.Combine(installerDir, "SCPSL.exe");
 
         if (platform.IsLinux)
         {
+            // Linux still requires the Steam-shortcut + Proton dance regardless of whether
+            // first-run completed: MelonLoader needs to be primed in the Proton prefix.
             ConsoleUI.PrintInfo("Linux next steps:");
             ConsoleUI.PrintInfo($"  1. Add this modded build to Steam as a non-Steam game: {moddedExe}");
             ConsoleUI.PrintInfo("  2. In the shortcut properties, force a Steam Play compatibility tool (Proton).");
@@ -471,6 +474,12 @@ public static class InstallerService
             ConsoleUI.PrintInfo("  4. Launch it once through Steam to let MelonLoader generate its files.");
             ConsoleUI.PrintInfo("  5. If MelonLoader still does not start, install the Windows .NET 6 Desktop Runtime into the Proton prefix used by that shortcut.");
             ConsoleUI.PrintInfo("  6. The first launch will take longer than usual.");
+            return;
+        }
+
+        if (firstRunGenerated)
+        {
+            ConsoleUI.PrintInfo("Ready to launch — IL2CPP assemblies are already generated.");
             return;
         }
 
@@ -884,7 +893,12 @@ public static class InstallerService
     /// isn't in Mods/ — without it the game would boot to the menu and the installer would
     /// hang until the timeout. Times out at <see cref="FirstRunTimeout"/>.
     /// </summary>
-    private static void TriggerFirstRun(string installerDir, CancellationToken ct)
+    /// <summary>
+    /// Returns true when the game process exited cleanly (code 0) and assemblies are presumed
+    /// generated. False on any skip/failure/timeout path — callers use this to decide whether
+    /// to instruct the user to launch the game manually.
+    /// </summary>
+    private static bool TriggerFirstRun(string installerDir, CancellationToken ct)
     {
         string clientDll = Path.Combine(installerDir, "Mods", "Anomaly.Client.dll");
         if (!File.Exists(clientDll))
@@ -892,14 +906,14 @@ public static class InstallerService
             ConsoleUI.PrintWarning(
                 "  Anomaly.Client.dll not found in Mods/ — skipping first-run. " +
                 "MelonLoader will dump assemblies on the user's first manual launch instead.");
-            return;
+            return false;
         }
 
         string moddedExe = Path.Combine(installerDir, "SCPSL.exe");
         if (!File.Exists(moddedExe))
         {
             ConsoleUI.PrintWarning("  SCPSL.exe missing — cannot trigger first-run.");
-            return;
+            return false;
         }
 
         ConsoleUI.PrintInfo($"  Launching SCPSL.exe {FirstRunArg} (game exits automatically once dumped)");
@@ -921,13 +935,13 @@ public static class InstallerService
         catch (Exception ex)
         {
             ConsoleUI.PrintWarning($"  Failed to launch SCPSL.exe: {ex.Message}");
-            return;
+            return false;
         }
 
         if (proc == null)
         {
             ConsoleUI.PrintWarning("  Could not start SCPSL.exe — assemblies will dump on the user's next launch.");
-            return;
+            return false;
         }
 
         using (proc)
@@ -950,7 +964,7 @@ public static class InstallerService
                         $"  First-run did not exit within {FirstRunTimeout.TotalMinutes:0} min — terminating. " +
                         "Generation may have failed; check MelonLoader/Latest.log.");
                     TryKill(proc);
-                    return;
+                    return false;
                 }
 
                 if ((DateTime.UtcNow - lastTick).TotalSeconds >= 30)
@@ -965,9 +979,13 @@ public static class InstallerService
 
             int totalSec = (int)(DateTime.UtcNow - startedAt).TotalSeconds;
             if (proc.ExitCode == 0)
+            {
                 ConsoleUI.PrintSuccess($"First-run complete in {totalSec}s.");
-            else
-                ConsoleUI.PrintWarning($"First-run exited with code {proc.ExitCode} after {totalSec}s — verify MelonLoader/Il2CppAssemblies/.");
+                return true;
+            }
+
+            ConsoleUI.PrintWarning($"First-run exited with code {proc.ExitCode} after {totalSec}s — verify MelonLoader/Il2CppAssemblies/.");
+            return false;
         }
     }
 

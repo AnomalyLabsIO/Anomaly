@@ -19,18 +19,21 @@ namespace Anomaly.Client.Patches.Menu;
 /// <summary>
 /// Brands the stock <c>NewMainMenu</c> scene: personalized welcome line,
 /// version (MODDED) suffix, custom logo, authenticated-user auth status,
-/// and removes the vestigial loading spinner. Subscribes to
-/// <see cref="ClientEvents.CanvasReady"/> so it inherits the same timing
-/// the rest of the UI bootstrap uses.
+/// reparents the auth-status spinner into the cross-scene connection-info
+/// popup, and swaps the server-browser loading panel to host the nicer
+/// ConnectPopup body. Subscribes to <see cref="ClientEvents.CanvasReady"/>
+/// so it inherits the same timing the rest of the UI bootstrap uses.
 /// </summary>
 internal static class MainMenuCustomizer
 {
     private const string LogoFileName = "logo.png";
     private const string WelcomePath = "News/Welcome";
-    private const string AuthLoadingPath = "Servers/Auth Status/Loading";
+    private const string ServerBrowserLoadingPath = "Servers/ServerBrowser/Loading";
+    private const string ConnectPopupRootPath = "ConnectPopup/root";
     private const string DefaultUsername = "Player";
 
     private static bool _hooked;
+    private static int _connectPopupMenuId;
 
     internal static void Init()
     {
@@ -60,7 +63,8 @@ internal static class MainMenuCustomizer
         TryApplyVersion(menu);
         TryApplyLogo();
         TryApplyAuthStatus(menu);
-        TryDisableAuthLoading(menu);
+        TryRelocateAuthSpinner();
+        TryRelocateConnectPopup(menu);
     }
 
     private static void TryApplyWelcome(Il2Cpp.NewMainMenu menu)
@@ -176,21 +180,86 @@ internal static class MainMenuCustomizer
         }
     }
 
-    private static void TryDisableAuthLoading(Il2Cpp.NewMainMenu menu)
+    private static void TryRelocateAuthSpinner()
+    {
+        try
+        {
+            ConnectionInfoOverlay.RelocateSpinner();
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"MainMenuCustomizer: relocate auth spinner failed: {ex.Message}");
+        }
+    }
+
+    private static void TryRelocateConnectPopup(Il2Cpp.NewMainMenu menu)
     {
         try
         {
             if (menu == null) return;
 
-            var t = menu.transform.Find(AuthLoadingPath);
-            if (t == null) return;
+            // After a game ends and the player returns to menu, a fresh
+            // NewMainMenu is instantiated with original ConnectPopup/root
+            // children and an enabled LoadingText on ServerBrowser/Loading —
+            // we have to redo the relocation per instance. CanvasReady fires
+            // once per Start(), so the instance-ID guard only blocks the rare
+            // case where Start runs twice on the same GameObject (would
+            // otherwise re-disable our reparented children).
+            int currentId = menu.GetInstanceID();
+            if (_connectPopupMenuId == currentId) return;
 
-            var go = t.gameObject;
-            if (go.activeSelf) go.SetActive(false);
+            var loading = menu.transform.Find(ServerBrowserLoadingPath);
+            if (loading == null)
+            {
+                MelonLogger.Warning($"MainMenuCustomizer: server browser loading not found at '{ServerBrowserLoadingPath}'.");
+                return;
+            }
+
+            var root = menu.transform.Find(ConnectPopupRootPath);
+            if (root == null)
+            {
+                MelonLogger.Warning($"MainMenuCustomizer: connect popup root not found at '{ConnectPopupRootPath}'.");
+                return;
+            }
+
+            // Snapshot child lists before mutating — reparenting changes the live counts.
+            int loadingChildCount = loading.childCount;
+            var existingChildren = new Transform[loadingChildCount];
+            for (int i = 0; i < loadingChildCount; i++)
+                existingChildren[i] = loading.GetChild(i);
+
+            int rootChildCount = root.childCount;
+            var migrated = new Transform[rootChildCount];
+            for (int i = 0; i < rootChildCount; i++)
+                migrated[i] = root.GetChild(i);
+
+            // The Loading GameObject itself renders a loading text/graphic
+            // (NewServerBrowser.LoadingText is a Text on this object). The
+            // GameObject must stay active so reparented ConnectPopup children
+            // render — disable the Graphic components on it instead.
+            foreach (var graphic in loading.GetComponents<Graphic>())
+            {
+                if (graphic != null && graphic.enabled)
+                    graphic.enabled = false;
+            }
+
+            foreach (var child in existingChildren)
+            {
+                if (child != null && child.gameObject.activeSelf)
+                    child.gameObject.SetActive(false);
+            }
+
+            foreach (var child in migrated)
+            {
+                if (child == null) continue;
+                child.SetParent(loading, worldPositionStays: false);
+            }
+
+            _connectPopupMenuId = currentId;
         }
         catch (Exception ex)
         {
-            MelonLogger.Warning($"MainMenuCustomizer: disable loading failed: {ex.Message}");
+            MelonLogger.Warning($"MainMenuCustomizer: relocate connect popup failed: {ex.Message}");
         }
     }
 
