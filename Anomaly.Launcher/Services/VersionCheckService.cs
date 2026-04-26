@@ -1,3 +1,4 @@
+using Anomaly.InstallerCore;
 using Anomaly.Launcher.Models;
 using Newtonsoft.Json.Linq;
 
@@ -6,6 +7,8 @@ namespace Anomaly.Launcher.Services;
 public class VersionCheckService
 {
     private const int ScpSlAppId = 700330;
+    private const string DefaultBranch = "public";
+
     private readonly PathService _paths;
 
     public VersionCheckService(PathService paths)
@@ -15,42 +18,16 @@ public class VersionCheckService
 
     public async Task<SteamBuildInfo> CheckBuildAsync()
     {
-        // 1. Read local build info from appmanifest ACF
-        string? localBuildId = null;
-        string branch = "public";
-        int stateFlags = 0;
+        // Local build comes from the install-state sidecar written by InstallerService at the
+        // end of a successful install. We no longer scrape Steam's appmanifest_700330.acf — the
+        // launcher doesn't track a user-side Steam library anymore.
+        var state = InstallStateSidecar.TryRead(_paths.LauncherDir);
+        string? localBuildId = state?.BuildId;
+        string branch = DefaultBranch;
 
-        var acfPath = _paths.AppManifestPath;
-        if (acfPath != null)
-        {
-            try
-            {
-                var data = AcfParser.ParseFile(acfPath);
-
-                data.TryGetValue("AppState.buildid", out localBuildId);
-
-                if (data.TryGetValue("AppState.UserConfig.betakey", out var betaKey)
-                    && !string.IsNullOrEmpty(betaKey))
-                {
-                    branch = betaKey;
-                }
-
-                if (data.TryGetValue("AppState.StateFlags", out var flagsStr)
-                    && int.TryParse(flagsStr, out var flags))
-                {
-                    stateFlags = flags;
-                }
-            }
-            catch
-            {
-                // ACF unreadable — continue with null local data
-            }
-        }
-
-        // 2. Fetch remote build info from steamcmd.net API
+        // Online build comes from the public steamcmd.net mirror.
         string? onlineBuildId = null;
         string? errorMessage = null;
-
         try
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -71,8 +48,8 @@ public class VersionCheckService
             LocalBuildId = localBuildId,
             OnlineBuildId = onlineBuildId,
             Branch = branch,
-            StateFlags = stateFlags,
-            ErrorMessage = errorMessage
+            StateFlags = 0,
+            ErrorMessage = errorMessage,
         };
     }
 }

@@ -426,11 +426,6 @@
                                                    Foreground="{StaticResource TextDim}" />
                                         <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding MelonLoaderVersion}"
                                                    FontFamily="{StaticResource FontMono}" FontSize="11" />
-                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="vanilla"
-                                                   FontFamily="{StaticResource FontMono}" FontSize="11"
-                                                   Foreground="{StaticResource TextDim}" />
-                                        <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding VanillaGaDate}"
-                                                   FontFamily="{StaticResource FontMono}" FontSize="11" />
                                         <TextBlock Grid.Row="6" Grid.Column="0" Text="modded"
                                                    FontFamily="{StaticResource FontMono}" FontSize="11"
                                                    Foreground="{StaticResource TextDim}" />
@@ -443,8 +438,6 @@
                                 <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsGameInstalled}">
                                     <Button Classes="al small" Content="Change version…"
                                             Command="{Binding OpenSteamDownloadDialogCommand}" />
-                                    <Button Classes="al small ghost" Content="Open folder"
-                                            Command="{Binding OpenVanillaFolderCommand}" />
                                 </StackPanel>
 
                                 <Border BorderBrush="{StaticResource LineSoft}" BorderThickness="0,1,0,0"
@@ -733,10 +726,71 @@
             <!-- ========= Tab: Game Versions ========= -->
             <Grid IsVisible="{Binding IsGameVersionsTab}" ColumnDefinitions="*,320">
 
-                <!-- Left: version list -->
+                <!-- Left: currently installed + version list -->
                 <Border Grid.Column="0" Background="{StaticResource Bg0}">
                     <ScrollViewer>
                         <StackPanel Margin="18" Spacing="14">
+
+                            <!-- Currently installed panel -->
+                            <Border Background="{StaticResource Bg1}"
+                                    BorderBrush="{StaticResource Line}" BorderThickness="1"
+                                    Padding="14" CornerRadius="2">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="INSTALLED · MANIFEST"
+                                               FontFamily="{StaticResource FontMono}" FontSize="10"
+                                               Foreground="{StaticResource TextDim}" LetterSpacing="1" />
+
+                                    <!-- Installed state -->
+                                    <StackPanel IsVisible="{Binding InstalledState.IsInstalled}" Spacing="10">
+                                        <TextBlock Text="{Binding InstalledState.GameVersion, FallbackValue='—'}"
+                                                   FontSize="22" FontWeight="Bold" />
+                                        <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="source"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1"
+                                                       Text="{Binding InstalledState.Source}"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="manifest"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1"
+                                                       Text="{Binding InstalledState.ManifestId, FallbackValue='—'}"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       TextWrapping="Wrap" />
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="build"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1"
+                                                       Text="{Binding InstalledState.BuildId, FallbackValue='—'}"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="installed"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11"
+                                                       Foreground="{StaticResource TextDim}" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1"
+                                                       Text="{Binding InstalledState.InstalledAtDisplay, FallbackValue='—'}"
+                                                       FontFamily="{StaticResource FontMono}" FontSize="11" />
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Button Classes="al small primary" Content="Reinstall"
+                                                    Command="{Binding ReinstallCommand}"
+                                                    IsEnabled="{Binding InstalledState.CanReinstall}" />
+                                            <Button Classes="al small danger" Content="Uninstall"
+                                                    Command="{Binding UninstallCommand}" />
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- Not-installed state -->
+                                    <StackPanel IsVisible="{Binding !InstalledState.IsInstalled}" Spacing="6">
+                                        <TextBlock Text="NOT INSTALLED" FontSize="14" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextDim}" />
+                                        <TextBlock Text="Pick a build below or use a local copy."
+                                                   FontSize="12" Foreground="{StaticResource TextDim}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
                             <Grid ColumnDefinitions="*,Auto">
                                 <StackPanel Grid.Column="0" Spacing="2">
                                     <TextBlock Text="SECTOR · BUILDS"
@@ -752,6 +806,8 @@
                                             Command="{Binding RefreshStateCommand}" />
                                     <Button Classes="al small" Content="Paste manifest…"
                                             Command="{Binding OpenSteamDownloadDialogCommand}" />
+                                    <Button Classes="al small" Content="Use local directory…"
+                                            Command="{Binding OpenLocalDirectoryInstallCommand}" />
                                 </StackPanel>
                             </Grid>
 
@@ -933,18 +989,6 @@
                             </Border>
                             <StackPanel Margin="14" Spacing="10">
                                 <StackPanel Spacing="4">
-                                    <TextBlock Text="Vanilla game"
-                                               FontFamily="{StaticResource FontMono}" FontSize="10"
-                                               Foreground="{StaticResource TextDim}" LetterSpacing="1" />
-                                    <Grid ColumnDefinitions="*,6,Auto">
-                                        <TextBox Grid.Column="0" Classes="al" Text="{Binding ManualVanillaPath}"
-                                                 Watermark="{l:Tr launcher.state1.path_watermark}" />
-                                        <Button Grid.Column="2" Classes="al small"
-                                                Content="{l:Tr launcher.state1.set_path}"
-                                                Command="{Binding SetVanillaPathCommand}" />
-                                    </Grid>
-                                </StackPanel>
-                                <StackPanel Spacing="4">
                                     <TextBlock Text="Modded install"
                                                FontFamily="{StaticResource FontMono}" FontSize="10"
                                                Foreground="{StaticResource TextDim}" LetterSpacing="1" />
@@ -1058,9 +1102,6 @@
                 Padding="10">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8">
-                    <Button Classes="al" Content="Launch Vanilla"
-                            Command="{Binding LaunchVanillaCommand}"
-                            IsEnabled="{Binding CanLaunch}" />
                     <Button Classes="al primary" Content="▶ LAUNCH MODDED"
                             Command="{Binding LaunchModdedCommand}"
                             IsEnabled="{Binding CanLaunch}" />

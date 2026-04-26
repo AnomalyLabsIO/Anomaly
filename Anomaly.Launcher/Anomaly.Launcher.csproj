@@ -11,7 +11,10 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <!-- Required so Il2CppDumper + Mono.Cecil (reflection-heavy) extract fully at startup. -->
+    <!-- Required so Il2CppDumper + Mono.Cecil (reflection-heavy) extract fully at startup.
+         Large binaries (unlicense.exe, clean SCPSL.exe per Unity version) are no longer
+         embedded — they're downloaded on demand from AnomalyLabsIO/anomaly-resources, so
+         this flag's footprint is dominated by Il2CppDumper + Mono.Cecil now (~750 KB). -->
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <Company>AnomalyLabs</Company>
     <NeutralLanguage>en-US</NeutralLanguage>
@@ -35,7 +38,6 @@
     <PackageReference Include="Avalonia" Version="11.2.3" />
     <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="QRCoder" Version="1.8.0" />

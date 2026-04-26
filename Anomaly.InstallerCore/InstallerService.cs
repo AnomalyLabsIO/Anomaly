@@ -1,7 +1,10 @@
+using System.Diagnostics;
+using System.Text;
 using Anomaly.InstallerCore.IL2Cpp;
 using Anomaly.InstallerCore.MelonLoader;
 using Anomaly.InstallerCore.Patching;
 using Anomaly.InstallerCore.Platform;
+using Anomaly.InstallerCore.Resources;
 using Anomaly.InstallerCore.Unpacking;
 using Newtonsoft.Json;
 
@@ -14,8 +17,16 @@ namespace Anomaly.InstallerCore;
 /// </summary>
 public static class InstallerService
 {
-    public const int TotalSteps = 7;
+    public const int TotalSteps = 8;
     private const string BundleVersionRelativePath = @"SCPSL_Data\globalgamemanagers";
+
+    // Mirror of Anomaly.Client.Core.FirstRunArg. The final install step launches SCPSL.exe
+    // with this arg so MelonLoader runs the Il2Cpp Assembly Generator — Anomaly.Client sees
+    // the arg and Environment.Exits before doing real init. Installer-only; do not surface
+    // through the Launcher's normal Launch flow.
+    private const string FirstRunArg = "--anomaly-firstrun";
+
+    private static readonly TimeSpan FirstRunTimeout = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// Runs the full install flow end to end. Throws <see cref="InstallerException"/> for
@@ -37,7 +48,9 @@ public static class InstallerService
         ConsoleUI.PrintInfo($"Install directory: {installerDir}");
         ConsoleUI.PrintInfo("");
 
-        PatchInfo patchInfo = LoadPatchInfo();
+        var resourcesClient = new AnomalyResourcesClient();
+        RemoteManifest manifest = RemoteManifest.LoadAsync(resourcesClient, ct).GetAwaiter().GetResult();
+        PatchInfo patchInfo = LoadPatchInfo(resourcesClient, manifest, ct);
         ConsoleUI.PrintInfo($"Patch config loaded ({patchInfo.versionRanges.Length} version range(s) defined)");
         if (options.SkipPatches)
             ConsoleUI.PrintInfo("  --skip-patches: IL2CPP patches and bundle-version fix will be skipped.");
@@ -74,23 +87,6 @@ public static class InstallerService
 
         Preflight.Run(installerDir, vanillaDir, platform, options.DryRun);
 
-        // Save vanilla path to the canonical Launcher-visible location (%APPDATA%/Anomaly/).
-        // Shared schema: the Launcher reads this same file via PathService.VanillaPathFile.
-        string anomalyDataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Anomaly");
-        string vanillaPathFile = Path.Combine(anomalyDataDir, "vanilla_path.txt");
-        if (!options.DryRun)
-        {
-            Directory.CreateDirectory(anomalyDataDir);
-            File.WriteAllText(vanillaPathFile, vanillaDir);
-            ConsoleUI.PrintInfo($"Vanilla path saved to {vanillaPathFile}");
-        }
-        else
-        {
-            ConsoleUI.PrintInfo($"[dry-run] Would write vanilla path to {vanillaPathFile}");
-        }
-        ConsoleUI.PrintInfo("");
-
         // Step 1: Copy game files
         ct.ThrowIfCancellationRequested();
         ConsoleUI.PrintStep(1, TotalSteps, "Copying game files...");
@@ -105,7 +101,11 @@ public static class InstallerService
         }
         ConsoleUI.PrintInfo("");
 
-        VersionRange? selectedRange = ResolveVersionRange(options, installerDir, patchInfo);
+        VersionRange? selectedRange = ResolveVersionRange(options, installerDir, patchInfo, out var resolvedGameVersion);
+
+        // Final detected game version (X.Y.Z), captured for the post-install sidecar.
+        // Set in step 5; remains null when patches are skipped or version detection fails.
+        GameVersion? finalGameVersion = null;
 
         if (options.DryRun)
         {
@@ -121,7 +121,7 @@ public static class InstallerService
         ConsoleUI.PrintStep(2, TotalSteps, "Placing clean launcher...");
         if (selectedRange != null)
         {
-            CleanLauncherResolver.PlaceCleanLauncher(selectedRange, installerDir);
+            CleanLauncherResolver.PlaceCleanLauncher(selectedRange, installerDir, resourcesClient, manifest, ct);
             ConsoleUI.PrintSuccess("Clean SCPSL.exe in place.");
         }
         else
@@ -151,7 +151,8 @@ public static class InstallerService
                 Patcher.FixMetadataVersion(selectedRange.metadataVersion, installerDir);
 
                 var (unpackResult, wasUnpacked) = LoadAndUnpackGameAssembly(
-                    gameAssemblyPath, metadataPath, platform, installerDir, selectedRange.metadataVersion, options.UnpackTimeoutMs);
+                    gameAssemblyPath, metadataPath, platform, installerDir, selectedRange.metadataVersion,
+                    options.UnpackTimeoutMs, resourcesClient, manifest, ct);
                 gameAssemblyData = unpackResult;
 
                 il2CppManager = new Il2CppManager(gameAssemblyData, installerDir);
@@ -183,6 +184,7 @@ public static class InstallerService
                     var (major, minor, revision) = version.Value;
                     ConsoleUI.PrintInfo($"  Detected game version: {major}.{minor}.{revision}");
                     Patcher.FixBundleVersion(installerDir, major, minor, revision);
+                    finalGameVersion = new GameVersion(major, minor, revision);
                     ConsoleUI.PrintSuccess("Game version fixed.");
                 }
                 else
@@ -211,6 +213,8 @@ public static class InstallerService
             ConsoleUI.PrintInfo("");
         }
 
+        WriteUnityBuiltinDataMarkerIfNeeded(installerDir, options, finalGameVersion ?? resolvedGameVersion);
+
         // Step 6: Install MelonLoader
         ct.ThrowIfCancellationRequested();
         if (!options.NoMelon)
@@ -238,6 +242,27 @@ public static class InstallerService
         }
         ConsoleUI.PrintInfo("");
 
+        // Step 8: Trigger first-run so MelonLoader dumps Il2Cpp managed assemblies.
+        // Skipped when MelonLoader isn't installed (--no-melon) or when patches are off
+        // (--skip-patches), since neither path can produce a clean boot to a scene.
+        ct.ThrowIfCancellationRequested();
+        if (options.NoMelon)
+        {
+            ConsoleUI.PrintStep(8, TotalSteps, "Skipping first-run assembly dump (--no-melon).");
+        }
+        else if (options.SkipPatches)
+        {
+            ConsoleUI.PrintStep(8, TotalSteps, "Skipping first-run assembly dump (--skip-patches).");
+        }
+        else
+        {
+            ConsoleUI.PrintStep(8, TotalSteps, "Generating Il2Cpp managed assemblies (first-run)...");
+            TriggerFirstRun(installerDir, ct);
+        }
+        ConsoleUI.PrintInfo("");
+
+        WriteInstallStateSidecar(installerDir, options, finalGameVersion);
+
         ConsoleUI.PrintInfo("");
         ConsoleUI.PrintSuccess("========================================");
         ConsoleUI.PrintSuccess("  Installation complete!");
@@ -245,6 +270,145 @@ public static class InstallerService
         ConsoleUI.PrintInfo("");
         PrintPostInstallInstructions(platform, installerDir);
         ConsoleUI.PrintInfo("");
+    }
+
+    private static void WriteInstallStateSidecar(string installerDir, InstallOptions options, GameVersion? gameVersion)
+    {
+        string? buildId = TryReadBuildIdFromAnomalySource(installerDir);
+        var state = new InstallState(
+            SchemaVersion: InstallStateSidecar.CurrentSchemaVersion,
+            Source: options.SourceKind ?? "unknown",
+            ManifestId: options.SourceManifestId,
+            BuildId: buildId,
+            GameVersion: gameVersion?.ToString(),
+            InstalledAt: DateTime.UtcNow.ToString("O"));
+
+        try
+        {
+            InstallStateSidecar.Write(installerDir, state);
+            ConsoleUI.PrintInfo($"Wrote install-state sidecar ({InstallStateSidecar.FileName}).");
+        }
+        catch (Exception ex)
+        {
+            ConsoleUI.PrintWarning($"Could not write {InstallStateSidecar.FileName}: {ex.Message}");
+        }
+    }
+
+    private static string? TryReadBuildIdFromAnomalySource(string installerDir)
+    {
+        var path = Path.Combine(installerDir, ".anomaly_source.json");
+        if (!File.Exists(path))
+            return null;
+        try
+        {
+            var json = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(File.ReadAllText(path));
+            var buildId = (string?)json?["buildId"];
+            return string.IsNullOrEmpty(buildId) ? null : buildId;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Launcher-side teardown: removes game files (SCPSL.exe, GameAssembly.dll, SCPSL_Data,
+    /// MelonLoader runtime + Il2Cpp assemblies) but PRESERVES Mods/, UserLibs/, and
+    /// MelonLoader/UserData/ so the user's mod setup and configs survive across reinstalls.
+    /// Idempotent and best-effort: locked files are skipped, others continue.
+    /// </summary>
+    public static int RemoveGameFiles(string installerDir)
+    {
+        ConsoleUI.PrintInfo($"Removing game files from: {installerDir}");
+        ConsoleUI.PrintInfo("");
+
+        int failures = 0;
+
+        string[] filesToDelete = {
+            Path.Combine(installerDir, "SCPSL.exe"),
+            Path.Combine(installerDir, "GameAssembly.dll"),
+            Path.Combine(installerDir, "UnityCrashHandler64.exe"),
+            Path.Combine(installerDir, "UnityPlayer.dll"),
+            Path.Combine(installerDir, "baselib.dll"),
+            Path.Combine(installerDir, "MelonLoader", "version.dll"),
+            Path.Combine(installerDir, ".anomaly_source.json"),
+            InstallStateSidecar.PathFor(installerDir),
+        };
+
+        string[] dirsToDelete = {
+            Path.Combine(installerDir, "SCPSL_Data"),
+            Path.Combine(installerDir, "MelonLoader", "Dependencies"),
+            Path.Combine(installerDir, "MelonLoader", "net6"),
+            Path.Combine(installerDir, "MelonLoader", "Documentation"),
+            Path.Combine(installerDir, "MelonLoader", "Il2CppAssemblies"),
+            Path.Combine(installerDir, "il2cppdumper"),
+        };
+
+        foreach (var f in filesToDelete)
+            failures += DeleteFileBestEffort(f);
+
+        foreach (var d in dirsToDelete)
+            failures += DeleteDirectoryBestEffort(d);
+
+        // Restore .bak files in case the user later wants to layer a fresh install on top of
+        // the same source. Then sweep stale .bak files left behind.
+        foreach (var bak in EnumerateBackups(installerDir))
+            failures += DeleteFileBestEffort(bak);
+
+        ConsoleUI.PrintInfo("");
+        if (failures == 0)
+            ConsoleUI.PrintSuccess("Game files removed. Mods/, UserLibs/, and MelonLoader/UserData/ kept.");
+        else
+            ConsoleUI.PrintWarning($"Removed game files with {failures} warning(s). See above.");
+        return failures == 0 ? 0 : 1;
+    }
+
+    private static int DeleteFileBestEffort(string path)
+    {
+        if (!File.Exists(path))
+            return 0;
+        try
+        {
+            File.Delete(path);
+            ConsoleUI.PrintInfo($"  Deleted {path}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            ConsoleUI.PrintWarning($"  Could not delete {path}: {ex.Message}");
+            return 1;
+        }
+    }
+
+    private static int DeleteDirectoryBestEffort(string path)
+    {
+        if (!Directory.Exists(path))
+            return 0;
+        try
+        {
+            Directory.Delete(path, recursive: true);
+            ConsoleUI.PrintInfo($"  Deleted {path}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            ConsoleUI.PrintWarning($"  Could not delete {path}: {ex.Message}");
+            return 1;
+        }
+    }
+
+    private static IEnumerable<string> EnumerateBackups(string installerDir)
+    {
+        if (!Directory.Exists(installerDir))
+            return Array.Empty<string>();
+        try
+        {
+            return Directory.GetFiles(installerDir, "*.bak", SearchOption.AllDirectories);
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
     }
 
     /// <summary>
@@ -437,7 +601,16 @@ public static class InstallerService
         }
     }
 
-    private static (byte[] data, bool wasUnpacked) LoadAndUnpackGameAssembly(string gameAssemblyPath, string metadataPath, PlatformInfo platform, string workingDir, int metadataVersion, int? unpackTimeoutMs)
+    private static (byte[] data, bool wasUnpacked) LoadAndUnpackGameAssembly(
+        string gameAssemblyPath,
+        string metadataPath,
+        PlatformInfo platform,
+        string workingDir,
+        int metadataVersion,
+        int? unpackTimeoutMs,
+        AnomalyResourcesClient resourcesClient,
+        RemoteManifest manifest,
+        CancellationToken ct)
     {
         if (!File.Exists(gameAssemblyPath))
             throw new InstallerException("GameAssembly.dll not found. Game files may not have copied correctly.");
@@ -453,30 +626,60 @@ public static class InstallerService
         }
         catch (FileIsProtectedException)
         {
-            ConsoleUI.PrintInfo("  Themida protection detected. Extracting unpacker...");
+            ConsoleUI.PrintInfo("  Themida protection detected. Resolving unpacker...");
 
-            string tempUnlicense = Path.Combine(Path.GetTempPath(), "anomaly_unlicense.exe");
-            try
-            {
-                EmbeddedResources.ExtractToFile("unlicense.exe", tempUnlicense);
+            // unlicense.exe lives in the AnomalyLabs resource repo and is downloaded on demand.
+            // The cache (%APPDATA%/Anomaly/cache/patching/unlicense.exe) means we only pay the
+            // 49 MB transfer once, even across multiple installs.
+            string unlicensePath = UnlicenseResolver.GetOrDownload(resourcesClient, manifest, ct);
 
-                Unpacker unpacker = unpackTimeoutMs is int ms
-                    ? new Unpacker(tempUnlicense, gameAssemblyPath, platform, ms)
-                    : new Unpacker(tempUnlicense, gameAssemblyPath, platform);
-                unpacker.UnpackGameAssembly();
+            Unpacker unpacker = unpackTimeoutMs is int ms
+                ? new Unpacker(unlicensePath, gameAssemblyPath, platform, ms)
+                : new Unpacker(unlicensePath, gameAssemblyPath, platform);
+            unpacker.UnpackGameAssembly();
 
-                return (Patcher.GetGameAssemblyData(gameAssemblyPath), wasUnpacked: true);
-            }
-            finally
-            {
-                try { if (File.Exists(tempUnlicense)) File.Delete(tempUnlicense); }
-                catch { /* best effort cleanup */ }
-            }
+            return (Patcher.GetGameAssemblyData(gameAssemblyPath), wasUnpacked: true);
         }
     }
 
-    private static PatchInfo LoadPatchInfo()
+    private const string PatchInfoRelativePath = "patching/patchinfo.json";
+
+    /// <summary>
+    /// Loads the active <see cref="PatchInfo"/>. Tries the live copy from anomaly-resources
+    /// first (so we can ship patch hotfixes without releasing a new launcher); on any failure
+    /// — no network, hash mismatch, malformed JSON — falls back to the embedded copy.
+    /// </summary>
+    private static PatchInfo LoadPatchInfo(AnomalyResourcesClient client, RemoteManifest manifest, CancellationToken ct)
     {
+        string? expectedSha = manifest.GetSha256(PatchInfoRelativePath);
+
+        try
+        {
+            string livePath = client.GetOrDownloadAsync(
+                    PatchInfoRelativePath,
+                    expectedSha,
+                    timeout: TimeSpan.FromSeconds(10),
+                    progressLabel: null,
+                    ct)
+                .GetAwaiter().GetResult();
+
+            string liveJson = File.ReadAllText(livePath);
+            var live = JsonConvert.DeserializeObject<PatchInfo>(liveJson);
+            if (live != null && live.versionRanges.Length > 0)
+            {
+                ConsoleUI.PrintInfo("  Patch config: using live copy from anomaly-resources.");
+                return live;
+            }
+
+            ConsoleUI.PrintWarning("Live patchinfo.json was empty. Falling back to embedded copy.");
+        }
+        catch (Exception ex)
+        {
+            ConsoleUI.PrintWarning(
+                $"Could not fetch live patchinfo.json ({ex.Message}). " +
+                "Falling back to the patch set this launcher was built with.");
+        }
+
         string json = EmbeddedResources.ReadText("patchinfo.json");
         PatchInfo? patchInfo = JsonConvert.DeserializeObject<PatchInfo>(json);
         if (patchInfo == null || patchInfo.versionRanges.Length == 0)
@@ -484,9 +687,9 @@ public static class InstallerService
         return patchInfo;
     }
 
-    private static VersionRange? ResolveVersionRange(InstallOptions options, string installerDir, PatchInfo patchInfo)
+    private static VersionRange? ResolveVersionRange(InstallOptions options, string installerDir, PatchInfo patchInfo, out GameVersion? detected)
     {
-        GameVersion? detected = null;
+        detected = null;
 
         if (!string.IsNullOrWhiteSpace(options.TargetVersion))
         {
@@ -517,7 +720,8 @@ public static class InstallerService
                 "--skip-patches for an unsupported build.");
         }
 
-        var range = patchInfo.versionRanges.FirstOrDefault(r => r.Contains(detected.Value));
+        var detectedVersion = detected.Value;
+        var range = patchInfo.versionRanges.FirstOrDefault(r => r.Contains(detectedVersion));
         if (range == null)
         {
             var known = string.Join(", ", patchInfo.versionRanges.Select(r => r.versionLabel));
@@ -540,6 +744,46 @@ public static class InstallerService
             ConsoleUI.PrintInfo($"Selected patch range: {range.versionLabel} (metadata {range.metadataVersion}, {range.patchMethods.Length} patches)");
         ConsoleUI.PrintInfo("");
         return range;
+    }
+
+    private static void WriteUnityBuiltinDataMarkerIfNeeded(string installerDir, InstallOptions options, GameVersion? gameVersion)
+    {
+        if (!options.SourceSteamId.HasValue || options.SourceSteamId.Value == 0 || !gameVersion.HasValue)
+            return;
+
+        if (gameVersion.Value == GameVersion.Max)
+            return;
+
+        try
+        {
+            string markerPath = Path.Combine(installerDir, "SCPSL_Data", "Resources", "unity_builtin_data");
+            string plain = $"{gameVersion.Value};{options.SourceSteamId.Value};-";
+            string base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(plain));
+            string encoded = InsertDashEveryFiveChars(base64);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(markerPath)!);
+            File.WriteAllBytes(markerPath, Encoding.UTF8.GetBytes(encoded));
+            ConsoleUI.PrintInfo("Wrote Steam Unity bootstrap marker (unity_builtin_data).");
+            ConsoleUI.PrintInfo("");
+        }
+        catch (Exception ex)
+        {
+            ConsoleUI.PrintWarning($"Could not write unity_builtin_data marker: {ex.Message}");
+            ConsoleUI.PrintInfo("");
+        }
+    }
+
+    private static string InsertDashEveryFiveChars(string value)
+    {
+        var sb = new StringBuilder(value.Length + value.Length / 5);
+        for (int i = 0; i < value.Length; i++)
+        {
+            sb.Append(value[i]);
+            if ((i + 1) % 5 == 0 && i + 1 < value.Length)
+                sb.Append('-');
+        }
+
+        return sb.ToString();
     }
 
     private static void DryRunRemainingSteps(string installerDir, string vanillaDir, PatchInfo patchInfo, VersionRange? selectedRange, InstallOptions options)
@@ -586,6 +830,7 @@ public static class InstallerService
         ConsoleUI.PrintInfo($"[dry-run]   5. Fix bundle version in globalgamemanagers");
         ConsoleUI.PrintInfo($"[dry-run]   6. Download MelonLoader {mlConfig.version} into {installerDir}");
         ConsoleUI.PrintInfo($"[dry-run]   7. Verify Mods/ and UserLibs/");
+        ConsoleUI.PrintInfo($"[dry-run]   8. Launch SCPSL.exe {FirstRunArg} to dump Il2Cpp assemblies (skipped if --no-melon, --skip-patches, or Mods/Anomaly.Client.dll is missing)");
     }
 
     private static void DryRunCheckFile(string label, string path)
@@ -628,6 +873,113 @@ public static class InstallerService
         else
         {
             ConsoleUI.PrintWarning("UserLibs directory not found.");
+        }
+    }
+
+    /// <summary>
+    /// Launches the modded SCPSL.exe with <c>--anomaly-firstrun</c> so MelonLoader's Il2Cpp
+    /// Assembly Generator runs and writes the managed assemblies to disk. Anomaly.Client
+    /// detects the arg in OnInitializeMelon and Environment.Exits before doing real init,
+    /// which is the exit signal we wait on. Skipped (with a warning) when Anomaly.Client.dll
+    /// isn't in Mods/ — without it the game would boot to the menu and the installer would
+    /// hang until the timeout. Times out at <see cref="FirstRunTimeout"/>.
+    /// </summary>
+    private static void TriggerFirstRun(string installerDir, CancellationToken ct)
+    {
+        string clientDll = Path.Combine(installerDir, "Mods", "Anomaly.Client.dll");
+        if (!File.Exists(clientDll))
+        {
+            ConsoleUI.PrintWarning(
+                "  Anomaly.Client.dll not found in Mods/ — skipping first-run. " +
+                "MelonLoader will dump assemblies on the user's first manual launch instead.");
+            return;
+        }
+
+        string moddedExe = Path.Combine(installerDir, "SCPSL.exe");
+        if (!File.Exists(moddedExe))
+        {
+            ConsoleUI.PrintWarning("  SCPSL.exe missing — cannot trigger first-run.");
+            return;
+        }
+
+        ConsoleUI.PrintInfo($"  Launching SCPSL.exe {FirstRunArg} (game exits automatically once dumped)");
+        ConsoleUI.PrintInfo($"  Typically 30-60 seconds; timeout {FirstRunTimeout.TotalMinutes:0} min.");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = moddedExe,
+            Arguments = FirstRunArg,
+            WorkingDirectory = installerDir,
+            UseShellExecute = false,
+        };
+
+        Process? proc;
+        try
+        {
+            proc = Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            ConsoleUI.PrintWarning($"  Failed to launch SCPSL.exe: {ex.Message}");
+            return;
+        }
+
+        if (proc == null)
+        {
+            ConsoleUI.PrintWarning("  Could not start SCPSL.exe — assemblies will dump on the user's next launch.");
+            return;
+        }
+
+        using (proc)
+        {
+            DateTime startedAt = DateTime.UtcNow;
+            DateTime deadline = startedAt + FirstRunTimeout;
+            DateTime lastTick = startedAt;
+
+            while (!proc.HasExited)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    TryKill(proc);
+                    ct.ThrowIfCancellationRequested();
+                }
+
+                if (DateTime.UtcNow > deadline)
+                {
+                    ConsoleUI.PrintWarning(
+                        $"  First-run did not exit within {FirstRunTimeout.TotalMinutes:0} min — terminating. " +
+                        "Generation may have failed; check MelonLoader/Latest.log.");
+                    TryKill(proc);
+                    return;
+                }
+
+                if ((DateTime.UtcNow - lastTick).TotalSeconds >= 30)
+                {
+                    int elapsed = (int)(DateTime.UtcNow - startedAt).TotalSeconds;
+                    ConsoleUI.PrintInfo($"  ...still running ({elapsed}s elapsed)");
+                    lastTick = DateTime.UtcNow;
+                }
+
+                Thread.Sleep(500);
+            }
+
+            int totalSec = (int)(DateTime.UtcNow - startedAt).TotalSeconds;
+            if (proc.ExitCode == 0)
+                ConsoleUI.PrintSuccess($"First-run complete in {totalSec}s.");
+            else
+                ConsoleUI.PrintWarning($"First-run exited with code {proc.ExitCode} after {totalSec}s — verify MelonLoader/Il2CppAssemblies/.");
+        }
+    }
+
+    private static void TryKill(Process proc)
+    {
+        try
+        {
+            proc.Kill(entireProcessTree: true);
+        }
+        catch
+        {
+            // Process may have already exited or be inaccessible — best-effort.
         }
     }
 }

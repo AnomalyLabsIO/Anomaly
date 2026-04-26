@@ -59,7 +59,7 @@ internal class LocalizationService
         }
     }
 
-    // ==================== Extraction (first-run + upgrades) ====================
+    // ==================== Extraction (initial launcher run + upgrades) ====================
 
     private void EnsureExtracted(string anomalyDataDir)
     {

@@ -21,6 +21,13 @@ public enum LauncherTab
     Settings,
 }
 
+public enum InstallSource
+{
+    Steam,
+    Local,
+    Unknown,
+}
+
 public partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly PathService _paths;
@@ -36,10 +43,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly ModInstaller _modInstaller;
     private readonly InstalledModsService _installedMods;
     private readonly SynchronizationContext? _syncContext;
-
-    private FileSystemWatcher? _acfWatcher;
-    private FileSystemWatcher? _gaWatcher;
-    private DateTime _lastWatcherEvent = DateTime.MinValue;
 
     // --- Active tab ---
 
@@ -113,10 +116,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private string? _melonLoaderVersion;
 
     [ObservableProperty]
-    private string? _vanillaGaDate;
+    private string? _moddedGaDate;
+
+    // --- Currently installed game (drives Game Versions tab "Currently Installed" panel) ---
 
     [ObservableProperty]
-    private string? _moddedGaDate;
+    private InstalledGameStateViewModel _installedState = new();
 
     // --- Username ---
 
@@ -220,11 +225,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string _gameStatusText = Tr.Get(TrKeys.Status_Ready);
-
-    // --- State 1: manual path entry ---
-
-    [ObservableProperty]
-    private string _manualVanillaPath = string.Empty;
 
     // --- Crash dialog ---
 
@@ -363,8 +363,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void UpdateInstalledFlag()
     {
+        var installedManifest = InstalledState.ManifestId;
+        var installedBuild = InstalledState.BuildId;
         foreach (var v in GameVersions)
-            v.IsInstalled = !string.IsNullOrEmpty(LocalBuildId) && v.BuildId == LocalBuildId;
+        {
+            v.IsInstalled =
+                (!string.IsNullOrEmpty(installedManifest) && v.ManifestId.ToString() == installedManifest)
+                || (!string.IsNullOrEmpty(installedBuild) && v.BuildId == installedBuild);
+        }
         OnPropertyChanged(nameof(GameVersionLabel));
     }
 
@@ -592,43 +598,29 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            // 1. Check if game is installed
-            var moddedExe = _paths.GetModdedExePath();
-            var vanillaExe = _paths.GetVanillaExePath();
+            InstalledState.Reload(_paths);
+            UpdateInstalledFlag();
 
-            if (!File.Exists(moddedExe) && vanillaExe == null)
+            var moddedExe = _paths.GetModdedExePath();
+            if (!InstalledState.IsInstalled || !File.Exists(moddedExe))
             {
                 CurrentState = LauncherState.GameNotInstalled;
                 ClearBuildInfo();
                 return;
             }
 
-            // 2. Load GameAssembly comparison
             LoadGameAssemblyInfo();
-
-            // 3. Check GameAssembly dates — vanilla updated?
-            var comparison = _systemInfo.CompareGameAssembly();
-            if (comparison is { VanillaIsNewer: true })
-            {
-                CurrentState = LauncherState.VanillaUpdated;
-                await LoadBuildInfoAsync();
-                SetupWatchers();
-                return;
-            }
-
-            // 4. Check build IDs
             await LoadBuildInfoAsync();
 
-            if (LocalBuildId != null && OnlineBuildId != null && LocalBuildId != OnlineBuildId)
+            if (!string.IsNullOrEmpty(LocalBuildId)
+                && !string.IsNullOrEmpty(OnlineBuildId)
+                && LocalBuildId != OnlineBuildId)
             {
                 CurrentState = LauncherState.OnlineBuildMismatch;
-                SetupWatchers();
                 return;
             }
 
-            // 5. All good
             CurrentState = LauncherState.AllGood;
-            SetupWatchers();
         }
         finally
         {
@@ -646,17 +638,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void LoadGameAssemblyInfo()
     {
-        var comparison = _systemInfo.CompareGameAssembly();
-        if (comparison != null)
-        {
-            VanillaGaDate = comparison.VanillaLastModified.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-            ModdedGaDate = comparison.ModdedLastModified.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-        }
-        else
-        {
-            VanillaGaDate = null;
-            ModdedGaDate = null;
-        }
+        var ts = _systemInfo.GetModdedGameAssemblyTimestamp();
+        ModdedGaDate = ts?.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
     }
 
     private void ClearBuildInfo()
@@ -664,80 +647,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Branch = null;
         LocalBuildId = null;
         OnlineBuildId = null;
-        VanillaGaDate = null;
         ModdedGaDate = null;
-    }
-
-    // ===================== FileSystemWatchers =====================
-
-    private void SetupWatchers()
-    {
-        DisposeWatchers();
-
-        // Watch appmanifest for build ID changes
-        var steamapps = _paths.SteamappsDir;
-        if (steamapps != null && Directory.Exists(steamapps))
-        {
-            try
-            {
-                _acfWatcher = new FileSystemWatcher(steamapps, "appmanifest_700330.acf")
-                {
-                    NotifyFilter = NotifyFilters.LastWrite,
-                    EnableRaisingEvents = true
-                };
-                _acfWatcher.Changed += OnWatchedFileChanged;
-            }
-            catch
-            {
-                // Watcher setup failed — rely on manual refresh
-            }
-        }
-
-        // Watch vanilla GameAssembly.dll for modification
-        var vanillaDir = _paths.VanillaDir;
-        if (vanillaDir != null && Directory.Exists(vanillaDir))
-        {
-            try
-            {
-                _gaWatcher = new FileSystemWatcher(vanillaDir, "GameAssembly.dll")
-                {
-                    NotifyFilter = NotifyFilters.LastWrite,
-                    EnableRaisingEvents = true
-                };
-                _gaWatcher.Changed += OnWatchedFileChanged;
-            }
-            catch
-            {
-                // Watcher setup failed — rely on manual refresh
-            }
-        }
-    }
-
-    private void OnWatchedFileChanged(object sender, FileSystemEventArgs e)
-    {
-        var now = DateTime.UtcNow;
-        if ((now - _lastWatcherEvent).TotalSeconds < 1)
-            return;
-        _lastWatcherEvent = now;
-
-        PostToUI(() => _ = RefreshStateAsync());
-    }
-
-    private void DisposeWatchers()
-    {
-        if (_acfWatcher != null)
-        {
-            _acfWatcher.Changed -= OnWatchedFileChanged;
-            _acfWatcher.Dispose();
-            _acfWatcher = null;
-        }
-
-        if (_gaWatcher != null)
-        {
-            _gaWatcher.Changed -= OnWatchedFileChanged;
-            _gaWatcher.Dispose();
-            _gaWatcher = null;
-        }
     }
 
     // ===================== Mod list =====================
@@ -780,21 +690,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (Directory.Exists(_paths.ModsDir))
                 Process.Start(new ProcessStartInfo { FileName = _paths.ModsDir, UseShellExecute = true });
-        }
-        catch
-        {
-            // ignore
-        }
-    }
-
-    [RelayCommand]
-    private void OpenVanillaFolder()
-    {
-        try
-        {
-            var dir = _paths.VanillaDir;
-            if (dir != null && Directory.Exists(dir))
-                Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
         }
         catch
         {
@@ -853,20 +748,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     // ===================== Launch / Kill =====================
 
     [RelayCommand]
-    private void LaunchVanilla()
-    {
-        if (_gameProcess.LaunchVanilla())
-        {
-            IsGameRunning = true;
-            GameStatusText = Tr.Get(TrKeys.Status_GameRunningVanilla);
-        }
-        else
-        {
-            GameStatusText = FormatLaunchFailure(TrKeys.Status_FailedLaunchVanilla);
-        }
-    }
-
-    [RelayCommand]
     private void LaunchModded()
     {
         var args = string.IsNullOrWhiteSpace(LaunchArgs) ? null : LaunchArgs.Trim();
@@ -892,74 +773,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void KillGame()
     {
         _gameProcess.KillGame();
-    }
-
-    // ===================== State 1: Set vanilla path =====================
-
-    [RelayCommand]
-    private async Task SetVanillaPath()
-    {
-        var path = ManualVanillaPath.Trim();
-        if (string.IsNullOrEmpty(path))
-        {
-            GameStatusText = Tr.Get(TrKeys.Status_EnterPath);
-            return;
-        }
-
-        // Accept either the exe or its parent directory
-        if (Directory.Exists(path))
-        {
-            var exeInDir = Path.Combine(path, "SCPSL.exe");
-            if (!File.Exists(exeInDir))
-            {
-                GameStatusText = Tr.Get(TrKeys.Status_ExeNotInDir);
-                return;
-            }
-        }
-        else if (File.Exists(path) && path.EndsWith("SCPSL.exe", StringComparison.OrdinalIgnoreCase))
-        {
-            // Good — it's the exe directly
-        }
-        else
-        {
-            GameStatusText = Tr.Get(TrKeys.Status_InvalidPath);
-            return;
-        }
-
-        _paths.SaveVanillaPath(path);
-        GameStatusText = Tr.Get(TrKeys.Status_VanillaPathSet);
-
-        // Launch installer to set up
-        SyncAnomaly();
-
-        await RefreshStateAsync();
-    }
-
-    public void HandleFileDrop(string[] files)
-    {
-        foreach (var file in files)
-        {
-            if (file.EndsWith("SCPSL.exe", StringComparison.OrdinalIgnoreCase) && File.Exists(file))
-            {
-                ManualVanillaPath = file;
-                _ = SetVanillaPathCommand.ExecuteAsync(null);
-                return;
-            }
-
-            // If they dropped a directory, check inside
-            if (Directory.Exists(file))
-            {
-                var exe = Path.Combine(file, "SCPSL.exe");
-                if (File.Exists(exe))
-                {
-                    ManualVanillaPath = file;
-                    _ = SetVanillaPathCommand.ExecuteAsync(null);
-                    return;
-                }
-            }
-        }
-
-        GameStatusText = Tr.Get(TrKeys.Status_NoExeInDrop);
     }
 
     // ===================== Steam URI commands =====================
@@ -997,40 +810,57 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    // ===================== Sync Anomaly (in-process installer) =====================
+    // ===================== Install orchestration =====================
+
+    /// <summary>
+    /// Set by MainWindow.axaml.cs so the launcher can show an Avalonia folder picker for the
+    /// "Use local directory…" flow. Returns the selected directory path or null if cancelled.
+    /// </summary>
+    public Func<Task<string?>>? _pickLocalGameDirectory;
 
     [RelayCommand]
     private void SyncAnomaly()
     {
-        StartInstall(targetVersion: null, skipAnomalyContent: false);
+        // Re-run the patch pipeline against the existing files in LauncherDir. Used when the
+        // game files are already in place but need (re)patching.
+        _ = StartInstallAsync(InstallSource.Unknown, sourceManifestId: null,
+            sourceSteamId: null,
+            vanillaPath: _paths.LauncherDir,
+            targetVersion: InstalledState.GameVersion,
+            skipAnomalyContent: false);
     }
 
-    private void StartInstall(string? targetVersion, bool skipAnomalyContent)
+    private async Task StartInstallAsync(
+        InstallSource source,
+        string? sourceManifestId,
+        ulong? sourceSteamId,
+        string vanillaPath,
+        string? targetVersion,
+        bool skipAnomalyContent)
     {
         if (ShowInstallProgressDialog) return; // Already running
-
-        var vanillaExe = _paths.GetVanillaExePath();
 
         var options = new InstallOptions
         {
             InstallerDir = _paths.LauncherDir,
-            VanillaPath = vanillaExe,
+            VanillaPath = vanillaPath,
             TargetVersion = targetVersion,
             NoAnomaly = skipAnomalyContent,
+            SourceKind = source.ToString().ToLowerInvariant(),
+            SourceManifestId = sourceManifestId,
+            SourceSteamId = sourceSteamId,
         };
 
         var coordinator = new InstallerCoordinator();
         var dialogVm = new InstallProgressDialogViewModel(coordinator);
         InstallProgressDialogViewModel = dialogVm;
         ShowInstallProgressDialog = true;
+        GameStatusText = Tr.Get(TrKeys.Status_InstallerLaunched);
 
         var installTask = coordinator.RunInstallAsync(options);
-        _ = dialogVm.TrackAsync(installTask).ContinueWith(_ =>
-        {
-            RefreshStateCommand.Execute(null);
-        }, TaskScheduler.FromCurrentSynchronizationContext());
+        await dialogVm.TrackAsync(installTask);
 
-        GameStatusText = Tr.Get(TrKeys.Status_InstallerLaunched);
+        await RefreshStateAsync();
     }
 
     [RelayCommand]
@@ -1045,7 +875,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void OpenSteamDownloadDialog()
     {
-        var vm = new SteamDownloadDialogViewModel(_steamDownload, _buildCatalog, _paths);
+        OpenSteamDownloadDialogInternal(preSelectedManifestId: null);
+    }
+
+    private void OpenSteamDownloadDialogInternal(ulong? preSelectedManifestId)
+    {
+        var vm = new SteamDownloadDialogViewModel(_steamDownload, _buildCatalog, _paths, preSelectedManifestId);
         vm.BuildActivated += OnSteamBuildActivated;
         SteamDownloadDialogViewModel = vm;
         ShowSteamDownloadDialog = true;
@@ -1060,13 +895,82 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SteamDownloadDialogViewModel = null;
     }
 
-    private void OnSteamBuildActivated(string installPath, bool isPatchCompatible, string? gameVersion)
+    private void OnSteamBuildActivated(string installPath, bool isPatchCompatible, string? gameVersion, ulong manifestId, ulong steamId)
     {
-        // The Steam download lands files directly in the launcher directory (same location the
-        // installer's normal Steam copy stage would deposit them). Point vanilla_path at it and
-        // kick off the in-process installer so it patches in place.
-        _paths.SaveVanillaPath(installPath);
-        StartInstall(targetVersion: gameVersion, skipAnomalyContent: !isPatchCompatible);
+        // Steam download lands files directly in LauncherDir (same place InstallerCore would
+        // copy them to). Run the patch in-place — installerDir == vanillaDir is fine because
+        // SteamDownloadService wrote the .anomaly_source.json sidecar that gates that mode.
+        _ = StartInstallAsync(
+            source: InstallSource.Steam,
+            sourceManifestId: manifestId.ToString(),
+            sourceSteamId: steamId == 0 ? null : steamId,
+            vanillaPath: installPath,
+            targetVersion: gameVersion,
+            skipAnomalyContent: !isPatchCompatible);
+    }
+
+    // ===================== Local-directory install / Reinstall / Uninstall =====================
+
+    [RelayCommand]
+    private async Task OpenLocalDirectoryInstall()
+    {
+        if (_pickLocalGameDirectory == null)
+        {
+            GameStatusText = "Folder picker is not available in this build.";
+            return;
+        }
+
+        var picked = await _pickLocalGameDirectory();
+        if (string.IsNullOrEmpty(picked))
+            return;
+
+        var exe = Path.Combine(picked, "SCPSL.exe");
+        if (!File.Exists(exe))
+        {
+            GameStatusText = Tr.Get(TrKeys.Status_ExeNotInDir);
+            return;
+        }
+
+        await StartInstallAsync(
+            source: InstallSource.Local,
+            sourceManifestId: null,
+            sourceSteamId: null,
+            vanillaPath: picked,
+            targetVersion: null,
+            skipAnomalyContent: false);
+    }
+
+    [RelayCommand]
+    private async Task Reinstall()
+    {
+        if (!InstalledState.IsInstalled) return;
+
+        if (InstalledState.IsSteamSource && !string.IsNullOrEmpty(InstalledState.ManifestId)
+            && ulong.TryParse(InstalledState.ManifestId, out var manifestId))
+        {
+            OpenSteamDownloadDialogInternal(preSelectedManifestId: manifestId);
+            return;
+        }
+
+        // Local source (or unknown): fall back to the directory picker.
+        await OpenLocalDirectoryInstall();
+    }
+
+    [RelayCommand]
+    private async Task Uninstall()
+    {
+        if (!InstalledState.IsInstalled) return;
+        if (ShowInstallProgressDialog) return;
+
+        var coordinator = new InstallerCoordinator();
+        var dialogVm = new InstallProgressDialogViewModel(coordinator);
+        InstallProgressDialogViewModel = dialogVm;
+        ShowInstallProgressDialog = true;
+
+        var task = coordinator.RunRemoveGameFilesAsync(_paths.LauncherDir);
+        await dialogVm.TrackAsync(task);
+
+        await RefreshStateAsync();
     }
 
     // ===================== Crash dialog =====================
@@ -1136,7 +1040,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _gameProcess.GameExited -= OnGameExited;
-        DisposeWatchers();
         _crashReport.Dispose();
     }
 }

@@ -36,11 +36,8 @@ public static class Uninstaller
         // Our copy of the clean launcher (the original is under .bak handling above).
         DeleteFile(Path.Combine(installerDir, "SCPSL.exe"));
 
-        // Clear the Launcher-visible vanilla-path pointer so a fresh install starts clean.
-        string vanillaPathFile = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Anomaly", "vanilla_path.txt");
-        DeleteFile(vanillaPathFile);
+        // Clear the launcher-visible install state.
+        DeleteFile(InstallStateSidecar.PathFor(installerDir));
 
         Console.WriteLine();
         if (failures == 0)

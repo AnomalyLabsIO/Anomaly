@@ -8,7 +8,8 @@
       "unityVersion": "2019.4.16f1",
       "metadataVersion": 24,
       "compatibleBuildIds": [],
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2019.4.16f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/anomaly-resources/main/clean_launchers/2019.4.16f1/SCPSL.exe",
+      "cleanLauncherSha256": "754DD9EB549ABCB70C7B5BDB59C65E5C8672D8F2D259B3AAAEFBBFF305F80B22",
       "patchMethods": [
         {
           "name": "CentralAuthManager$$Authentication",
@@ -28,7 +29,8 @@
       "unityVersion": "2019.4.16f1",
       "metadataVersion": 24,
       "compatibleBuildIds": [],
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2019.4.16f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/anomaly-resources/main/clean_launchers/2019.4.16f1/SCPSL.exe",
+      "cleanLauncherSha256": "754DD9EB549ABCB70C7B5BDB59C65E5C8672D8F2D259B3AAAEFBBFF305F80B22",
       "patchMethods": [
         {
           "name": "LauncherCommunicator$$.cctor",
@@ -66,7 +68,8 @@
       "unityVersion": "2021.3.17f1",
       "metadataVersion": 29,
       "compatibleBuildIds": [],
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2021.3.17f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/anomaly-resources/main/clean_launchers/2021.3.17f1/SCPSL.exe",
+      "cleanLauncherSha256": "90BEEDA10F5676C3051CFD17AB9A777745B788AAAF3AE8C5A01B7DB6B4E84D7D",
       "patchMethods": [
         {
           "name": "LauncherCommunicator$$.cctor",
@@ -112,7 +115,8 @@
       "unityVersion": "2021.3.17f1",
       "metadataVersion": 29,
       "compatibleBuildIds": [],
-      "cleanLauncherUrl": "https://raw.githubusercontent.com/hopperlopip/SCPSL-ModPatch/refs/heads/master/Shared_Files/clean_launchers/2021.3.17f1/SCPSL.exe",
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/anomaly-resources/main/clean_launchers/2021.3.17f1/SCPSL.exe",
+      "cleanLauncherSha256": "90BEEDA10F5676C3051CFD17AB9A777745B788AAAF3AE8C5A01B7DB6B4E84D7D",
       "patchMethods": [
         {
           "name": "LauncherCommunicator$$.cctor",
@@ -150,7 +154,8 @@
       "unityVersion": "6000.0.43f1",
       "metadataVersion": 31,
       "compatibleBuildIds": [],
-      "cleanLauncherUrl": null,
+      "cleanLauncherUrl": "https://raw.githubusercontent.com/AnomalyLabsIO/anomaly-resources/main/clean_launchers/6000.0.43f1/SCPSL.exe",
+      "cleanLauncherSha256": "CE5F2C48D93B6C8A6A7375A3085D7B55DE8C4BF5D6E454D3190FA6D395A817AD",
       "patchMethods": [
         {
           "name": "LauncherCommunicator$$.cctor",

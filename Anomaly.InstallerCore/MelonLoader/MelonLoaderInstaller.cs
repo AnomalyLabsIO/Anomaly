@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Anomaly.InstallerCore.Resources;
 using Newtonsoft.Json;
 
 namespace Anomaly.InstallerCore.MelonLoader;
@@ -10,8 +11,7 @@ public static class MelonLoaderInstaller
     private static readonly string[] RequiredFiles =
     {
         Path.Combine("MelonLoader", "net6", "MelonLoader.dll"),
-        "version.dll",
-        "dobby.dll"
+        "version.dll"
     };
 
     /// <summary>
@@ -35,7 +35,11 @@ public static class MelonLoaderInstaller
 
         string zipPath = Path.Combine(gameDir, ZipFileName);
 
-        DownloadFileAsync(config.downloadUrl, zipPath, config.downloadTimeoutMinutes)
+        HttpDownloader.DownloadFileAsync(
+                config.downloadUrl,
+                zipPath,
+                TimeSpan.FromMinutes(config.downloadTimeoutMinutes),
+                progressLabel: "Downloading")
             .GetAwaiter().GetResult();
 
         if (!string.IsNullOrWhiteSpace(config.sha256))
@@ -95,35 +99,4 @@ public static class MelonLoaderInstaller
             "MelonLoader install is incomplete. Missing files: " + string.Join(", ", missing));
     }
 
-    private static async Task DownloadFileAsync(string url, string destPath, int timeoutMinutes)
-    {
-        using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(timeoutMinutes) };
-
-        using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
-            .ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        long? totalBytes = response.Content.Headers.ContentLength;
-        await using var contentStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
-        await using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, useAsync: true);
-
-        byte[] buffer = new byte[8192];
-        long totalRead = 0;
-        int bytesRead;
-
-        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
-        {
-            await fileStream.WriteAsync(buffer, 0, bytesRead).ConfigureAwait(false);
-            totalRead += bytesRead;
-            if (totalBytes.HasValue)
-            {
-                ConsoleUI.PrintProgressBar("Downloading",
-                    totalRead, totalBytes.Value,
-                    ConsoleUI.FormatBytes(totalRead));
-            }
-        }
-
-        if (!totalBytes.HasValue)
-            Console.WriteLine($"  Downloaded {ConsoleUI.FormatBytes(totalRead)}");
-    }
 }

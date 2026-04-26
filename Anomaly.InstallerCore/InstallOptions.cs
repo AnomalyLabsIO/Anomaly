@@ -22,4 +22,24 @@ public sealed record InstallOptions
 
     /// <summary>Themida unpacker timeout in milliseconds. Null uses Unpacker's default.</summary>
     public int? UnpackTimeoutMs { get; init; }
+
+    /// <summary>
+    /// Where the vanilla source came from, recorded in the post-install sidecar. The launcher
+    /// passes "steam" or "local"; the standalone CLI leaves this null and the sidecar records
+    /// "unknown".
+    /// </summary>
+    public string? SourceKind { get; init; }
+
+    /// <summary>
+    /// Steam manifest ID (depot 700331) the source files came from. Only set when
+    /// <see cref="SourceKind"/> is "steam". Persisted into the sidecar so Reinstall can
+    /// re-pin the same manifest.
+    /// </summary>
+    public string? SourceManifestId { get; init; }
+
+    /// <summary>
+    /// Steam user ID that authenticated the depot download. SteamKit-downloaded installs need
+    /// this to generate the same Unity bootstrap marker the official install script creates.
+    /// </summary>
+    public ulong? SourceSteamId { get; init; }
 }

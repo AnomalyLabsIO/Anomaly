@@ -1,38 +1,28 @@
-using System.Net.Http;
+using Anomaly.InstallerCore.Resources;
 
 namespace Anomaly.InstallerCore.Patching;
 
 /// <summary>
 /// Places the correct clean (Themida-free) SCPSL.exe into the installer directory based on the
-/// selected <see cref="VersionRange"/>'s Unity version. For the Unity version matching the
-/// embedded launcher, the installer's own <c>SCPSL.exe</c> resource is extracted. For any other
-/// Unity version, the clean launcher is downloaded from <see cref="VersionRange.cleanLauncherUrl"/>
-/// and cached under <c>%APPDATA%/Anomaly/clean_launchers/&lt;unityVersion&gt;/SCPSL.exe</c> so
-/// repeat installs don't hit the network.
+/// selected <see cref="VersionRange"/>'s Unity version. Always pulls through the shared
+/// <see cref="AnomalyResourcesClient"/> cache at
+/// <c>%APPDATA%/Anomaly/cache/clean_launchers/&lt;unityVersion&gt;/SCPSL.exe</c>; SHA-256 is verified
+/// against the active <see cref="RemoteManifest"/> when available, then against the per-range
+/// <see cref="VersionRange.cleanLauncherSha256"/> as a secondary check.
 /// </summary>
 public static class CleanLauncherResolver
 {
     /// <summary>
-    /// Unity version the installer's embedded SCPSL.exe was built against. Keep in sync with
-    /// the actual resource under <c>Anomaly.Installer/Resources/SCPSL.exe</c>.
-    /// </summary>
-    public const string EmbeddedUnityVersion = "6000.0.43f1";
-
-    /// <summary>
     /// Writes the correct clean SCPSL.exe to <paramref name="installerDir"/>. Returns the path
     /// written to (for logging).
     /// </summary>
-    public static string PlaceCleanLauncher(VersionRange range, string installerDir)
+    public static string PlaceCleanLauncher(
+        VersionRange range,
+        string installerDir,
+        AnomalyResourcesClient client,
+        RemoteManifest manifest,
+        CancellationToken ct = default)
     {
-        string destPath = Path.Combine(installerDir, "SCPSL.exe");
-
-        if (string.Equals(range.unityVersion, EmbeddedUnityVersion, StringComparison.OrdinalIgnoreCase))
-        {
-            EmbeddedResources.ExtractToFile("SCPSL.exe", destPath);
-            Console.WriteLine($"  Using embedded clean launcher (Unity {EmbeddedUnityVersion}).");
-            return destPath;
-        }
-
         if (string.IsNullOrWhiteSpace(range.cleanLauncherUrl))
         {
             throw new InstallerException(
@@ -41,58 +31,69 @@ public static class CleanLauncherResolver
                 "this version — re-run with --no-anomaly to skip clean-launcher substitution.");
         }
 
-        string cachePath = GetCachePath(range.unityVersion);
+        string relativePath = $"clean_launchers/{range.unityVersion}/SCPSL.exe";
+        string? expectedSha = manifest.GetSha256(relativePath) ?? range.cleanLauncherSha256;
 
-        if (!TryUseCache(cachePath, range.cleanLauncherSha256))
+        string cachePath;
+        if (LooksLikeAnomalyResourcesUrl(range.cleanLauncherUrl, client.BaseUrl))
         {
-            DownloadToCache(range.cleanLauncherUrl!, cachePath, range.cleanLauncherSha256, range.unityVersion);
+            cachePath = client.GetOrDownloadAsync(
+                    relativePath,
+                    expectedSha,
+                    timeout: TimeSpan.FromSeconds(60),
+                    progressLabel: "Downloading SCPSL",
+                    ct)
+                .GetAwaiter().GetResult();
         }
         else
         {
-            Console.WriteLine($"  Using cached clean launcher (Unity {range.unityVersion}): {cachePath}");
+            // Custom mirror in patchinfo.json — bypass the AnomalyResources base URL but
+            // still cache the result and verify the hash if one is pinned.
+            cachePath = DownloadCustomUrl(range.cleanLauncherUrl, range.unityVersion, expectedSha, ct);
         }
 
+        string destPath = Path.Combine(installerDir, "SCPSL.exe");
         File.Copy(cachePath, destPath, overwrite: true);
         return destPath;
     }
 
-    private static string GetCachePath(string unityVersion)
+    /// <summary>
+    /// True when <paramref name="url"/> would resolve to the same file the AnomalyResources
+    /// client serves for <c>clean_launchers/&lt;unityVersion&gt;/SCPSL.exe</c>. Lets us route
+    /// AnomalyLabs URLs through the shared cache while still honouring custom mirrors.
+    /// </summary>
+    private static bool LooksLikeAnomalyResourcesUrl(string url, string baseUrl) =>
+        url.StartsWith(baseUrl, StringComparison.OrdinalIgnoreCase);
+
+    private static string DownloadCustomUrl(string url, string unityVersion, string? expectedSha, CancellationToken ct)
     {
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, "Anomaly", "clean_launchers", unityVersion);
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "SCPSL.exe");
-    }
+        string cacheDir = Path.Combine(appData, "Anomaly", "cache", "clean_launchers", unityVersion);
+        Directory.CreateDirectory(cacheDir);
+        string cachePath = Path.Combine(cacheDir, "SCPSL.exe");
 
-    private static bool TryUseCache(string cachePath, string? expectedSha256)
-    {
-        if (!File.Exists(cachePath))
-            return false;
+        if (File.Exists(cachePath) && !string.IsNullOrWhiteSpace(expectedSha))
+        {
+            try
+            {
+                string actual = ResourceIntegrity.ComputeFileSha256(cachePath);
+                if (string.Equals(actual, expectedSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"  Using cached clean launcher (Unity {unityVersion}): {cachePath}");
+                    return cachePath;
+                }
+            }
+            catch
+            {
+                // fall through and re-download
+            }
+        }
 
-        if (string.IsNullOrWhiteSpace(expectedSha256))
-            return true;  // No hash to verify against — trust the cache.
-
+        Console.WriteLine($"  Downloading clean launcher for Unity {unityVersion} from {url}");
         try
         {
-            string actualHash = ResourceIntegrity.ComputeFileSha256(cachePath);
-            return string.Equals(actualHash, expectedSha256, StringComparison.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static void DownloadToCache(string url, string cachePath, string? expectedSha256, string unityVersion)
-    {
-        Console.WriteLine($"  Downloading clean launcher for Unity {unityVersion}...");
-        Console.WriteLine($"    {url}");
-
-        byte[] bytes;
-        try
-        {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
-            bytes = http.GetByteArrayAsync(url).GetAwaiter().GetResult();
+            HttpDownloader.DownloadFileAsync(url, cachePath, TimeSpan.FromSeconds(60), "Downloading SCPSL", ct)
+                .GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
@@ -101,20 +102,10 @@ public static class CleanLauncherResolver
                 $"Check your connection, or download {url} manually into {cachePath}.");
         }
 
-        if (!string.IsNullOrWhiteSpace(expectedSha256))
+        if (!string.IsNullOrWhiteSpace(expectedSha))
         {
-            string actualHash;
-            using (var sha = System.Security.Cryptography.SHA256.Create())
-                actualHash = Convert.ToHexString(sha.ComputeHash(bytes));
-
-            if (!string.Equals(actualHash, expectedSha256, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InstallerException(
-                    $"Clean launcher hash mismatch (Unity {unityVersion}).\n" +
-                    $"  Expected: {expectedSha256}\n" +
-                    $"  Actual:   {actualHash}\n" +
-                    "Refusing to use the downloaded binary.");
-            }
+            string actual = ResourceIntegrity.ComputeFileSha256(cachePath);
+            ResourceIntegrity.VerifyHash($"clean launcher (Unity {unityVersion})", expectedSha, actual);
         }
         else
         {
@@ -123,7 +114,6 @@ public static class CleanLauncherResolver
                 "Using the download as-is; consider pinning a hash in patchinfo.json.");
         }
 
-        File.WriteAllBytes(cachePath, bytes);
-        Console.WriteLine($"  Cached at {cachePath} ({ConsoleUI.FormatBytes(bytes.Length)}).");
+        return cachePath;
     }
 }

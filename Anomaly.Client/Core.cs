@@ -23,11 +23,28 @@ namespace Anomaly.Client;
 
 public class Core : MelonMod
 {
+    // Mirror of Anomaly.InstallerCore.InstallerService.FirstRunArg. Duplicated rather than
+    // shared via Anomaly.Shared because Shared targets net4.8 and InstallerCore targets net8.0.
+    // The installer passes this on its final step to make MelonLoader generate the Il2Cpp
+    // managed assemblies; we exit before any real init so the install completes cleanly.
+    // Never passed by the user during normal play — installer-only.
+    private const string FirstRunArg = "--anomaly-firstrun";
+
     public static Core Instance { get; private set; }
 
     public override void OnInitializeMelon()
     {
         Instance = this;
+
+        foreach (var arg in Environment.GetCommandLineArgs())
+        {
+            if (string.Equals(arg, FirstRunArg, StringComparison.Ordinal))
+            {
+                LoggerInstance.Msg("First-run arg detected; managed assemblies are now generated. Exiting.");
+                Environment.Exit(0);
+                return;
+            }
+        }
 
         // Initialize localization first so subsequent init can use Tr.Get()
         // and third-party mods loading after us can register their own namespaces.

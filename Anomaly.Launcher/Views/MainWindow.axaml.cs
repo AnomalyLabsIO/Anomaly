@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Platform.Storage;
 using Anomaly.Launcher.ViewModels;
 
 namespace Anomaly.Launcher.Views;
@@ -9,9 +10,6 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-
-        AddHandler(DragDrop.DragOverEvent, OnDragOver);
-        AddHandler(DragDrop.DropEvent, OnDrop);
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -26,6 +24,9 @@ public partial class MainWindow : Window
                 if (Clipboard != null)
                     await Clipboard.SetTextAsync(text);
             };
+
+            // Wire folder picker for "Use local directory…" install flow.
+            vm._pickLocalGameDirectory = PickLocalGameDirectoryAsync;
 
             vm.PropertyChanged += (_, args) =>
             {
@@ -80,36 +81,18 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnDragOver(object? sender, DragEventArgs e)
+    private async Task<string?> PickLocalGameDirectoryAsync()
     {
-        if (DataContext is MainWindowViewModel { IsGameNotInstalled: true }
-            && e.Data.Contains(DataFormats.Files))
-        {
-            e.DragEffects = DragDropEffects.Copy;
-        }
-        else
-        {
-            e.DragEffects = DragDropEffects.None;
-        }
-    }
+        var provider = StorageProvider;
+        if (provider is null) return null;
 
-    private void OnDrop(object? sender, DragEventArgs e)
-    {
-        if (DataContext is MainWindowViewModel vm && vm.IsGameNotInstalled
-            && e.Data.Contains(DataFormats.Files))
+        var folders = await provider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            var files = e.Data.GetFiles();
-            if (files != null)
-            {
-                var paths = files
-                    .Select(f => f.Path.LocalPath)
-                    .Where(p => !string.IsNullOrEmpty(p))
-                    .ToArray();
-
-                if (paths.Length > 0)
-                    vm.HandleFileDrop(paths);
-            }
-        }
+            Title = "Pick the SCP:SL game directory (must contain SCPSL.exe)",
+            AllowMultiple = false,
+        });
+        var first = folders.Count > 0 ? folders[0] : null;
+        return first?.Path.LocalPath;
     }
 
     private async void ShowCrashReportDialog(MainWindowViewModel vm)

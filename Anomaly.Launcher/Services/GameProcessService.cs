@@ -33,18 +33,6 @@ public class GameProcessService
         _platform = platform;
     }
 
-    public bool LaunchVanilla()
-    {
-        var vanillaPath = _paths.GetVanillaExePath();
-        if (vanillaPath == null || !File.Exists(vanillaPath))
-        {
-            LastFailureReason = LaunchFailureReason.ExeNotFound;
-            return false;
-        }
-
-        return StartProcess(vanillaPath);
-    }
-
     public bool LaunchModded(string? extraArgs = null)
     {
         var moddedPath = _paths.GetModdedExePath();

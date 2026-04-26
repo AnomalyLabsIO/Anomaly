@@ -35,56 +35,21 @@ public class SystemInfoService
     }
 
     /// <summary>
-    /// Returns the vanilla game directory path. Delegates to PathService.
+    /// Returns the modded GameAssembly.dll's last-modified timestamp, or null if not present.
+    /// Used by the Installed tab to surface "when did this install last get patched?".
     /// </summary>
-    public string? GetVanillaDir() => _paths.VanillaDir;
-
-    /// <summary>
-    /// Compares GameAssembly.dll last-modified dates between vanilla and modded installs.
-    /// Returns null if either file is missing.
-    /// </summary>
-    public GameAssemblyComparison? CompareGameAssembly()
+    public DateTime? GetModdedGameAssemblyTimestamp()
     {
-        var vanillaDir = _paths.VanillaDir;
-        if (vanillaDir == null) return null;
-
-        var vanillaGa = Path.Combine(vanillaDir, "GameAssembly.dll");
         var moddedGa = Path.Combine(_paths.LauncherDir, "GameAssembly.dll");
-
-        if (!File.Exists(vanillaGa) || !File.Exists(moddedGa))
+        if (!File.Exists(moddedGa))
             return null;
-
-        var vanillaTime = File.GetLastWriteTimeUtc(vanillaGa);
-        var moddedTime = File.GetLastWriteTimeUtc(moddedGa);
-
-        return new GameAssemblyComparison
+        try
         {
-            VanillaLastModified = vanillaTime,
-            ModdedLastModified = moddedTime,
-            VanillaIsNewer = vanillaTime > moddedTime
-        };
-    }
-
-    /// <summary>
-    /// Reads the installed game version from version.txt if present.
-    /// </summary>
-    public string? GetInstalledVersion(string gameDir)
-    {
-        var versionFile = Path.Combine(gameDir, "version.txt");
-        if (File.Exists(versionFile))
-        {
-            var v = File.ReadAllText(versionFile).Trim();
-            if (!string.IsNullOrEmpty(v)) return v;
+            return File.GetLastWriteTimeUtc(moddedGa);
         }
-
-        return null;
+        catch
+        {
+            return null;
+        }
     }
-
-}
-
-public class GameAssemblyComparison
-{
-    public DateTime VanillaLastModified { get; init; }
-    public DateTime ModdedLastModified { get; init; }
-    public bool VanillaIsNewer { get; init; }
 }
