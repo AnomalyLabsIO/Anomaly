@@ -157,6 +157,9 @@
         <Reference Include="UnityEngine">
           <HintPath>..\..\Server\server\SCPSL_Data\Managed\UnityEngine.dll</HintPath>
         </Reference>
+        <Reference Include="UnityEngine.AudioModule">
+          <HintPath>..\..\Server\server\SCPSL_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
+        </Reference>
         <Reference Include="UnityEngine.CoreModule">
           <HintPath>..\..\Server\server\SCPSL_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
         </Reference>
@@ -180,6 +183,9 @@
         <Compile Include="Assets\AssetOverrides.cs" />
         <Compile Include="Assets\AssetRegistry.cs" />
         <Compile Include="Assets\AssetSpawner.cs" />
+        <Compile Include="Features\Announcer.cs" />
+        <Compile Include="Features\PlayerColorState.cs" />
+        <Compile Include="Features\PlayerColorBridge.cs" />
         <Compile Include="FileTransfer\FileTransferSession.cs" />
         <Compile Include="FileTransfer\ServerAssetManager.cs" />
         <Compile Include="Map\FacilityGlyphs.cs" />

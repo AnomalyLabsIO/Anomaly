@@ -59,6 +59,7 @@
         <Compile Include="Networking\HalfHelper.cs" />
         <Compile Include="Networking\IAnomalyMessage.cs" />
         <Compile Include="Networking\MessageChannel.cs" />
+        <Compile Include="Networking\Messages\AnnouncerVocabularyMessage.cs" />
         <Compile Include="Networking\Messages\AssetClearAllOverridesMessage.cs" />
         <Compile Include="Networking\Messages\AssetClearOverrideMessage.cs" />
         <Compile Include="Networking\Messages\AssetDespawnMessage.cs" />
@@ -79,6 +80,8 @@
         <Compile Include="Networking\Messages\FileTransferCompleteMessage.cs" />
         <Compile Include="Networking\Messages\SilentRoleChangeMessage.cs" />
         <Compile Include="Networking\Messages\RoundStateMessage.cs" />
+        <Compile Include="Networking\Messages\SetFavoriteColorMessage.cs" />
+        <Compile Include="Networking\Messages\PlayerColorChangedMessage.cs" />
         <Compile Include="Properties\AssemblyInfo.cs"/>
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>

@@ -618,7 +618,8 @@
                 <!-- Detail -->
                 <ScrollViewer Grid.Column="1" IsVisible="{Binding HasSelectedRepoMod}"
                               Padding="0,0,12,0">
-                    <StackPanel DataContext="{Binding SelectedRepoMod}" x:DataType="vm:RepoModItemViewModel">
+                    <StackPanel DataContext="{Binding SelectedRepoMod}">
+                        <StackPanel x:DataType="vm:RepoModItemViewModel">
                         <!-- Screenshot gallery placeholder -->
                         <Grid Height="220" Background="{StaticResource Bg0}" ColumnDefinitions="2*,*,*">
                             <Border Grid.Column="0" Background="{StaticResource Bg2}">
@@ -766,6 +767,7 @@
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
+                        </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

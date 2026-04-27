@@ -120,6 +120,9 @@ public static class ServerAssetManager
             case ".bundle":
             case ".assetbundle":
                 return AssetKind.AssetBundle;
+            case ".ogg":
+            case ".wav":
+                return AssetKind.AudioClip;
             default:
                 return AssetKind.Unknown;
         }

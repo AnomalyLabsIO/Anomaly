@@ -108,6 +108,10 @@ namespace Anomaly.Shared.Networking
             Register("anomaly:asset:override-clear", () => new AssetClearOverrideMessage());
             Register("anomaly:asset:override-clearall", () => new AssetClearAllOverridesMessage());
 
+            Register("anomaly:announcer:vocabulary", () => new AnnouncerVocabularyMessage());
+
+            Register("anomaly:player:setfavoritecolor", () => new SetFavoriteColorMessage());
+            Register("anomaly:player:colorchanged", () => new PlayerColorChangedMessage());
         }
 
         /// <summary>

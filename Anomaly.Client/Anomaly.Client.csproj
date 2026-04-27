@@ -390,11 +390,13 @@
 		<Compile Include="FileTransfer\ChunkBuffer.cs" />
 		<Compile Include="FileTransfer\FileTransferClient.cs" />
 		<Compile Include="Internal\Bootstrap\ClientRuntime.cs" />
+		<Compile Include="Internal\Audio\AnnouncerVocabularyReceiver.cs" />
 		<Compile Include="Internal\Effects\EffectStateTracker.cs" />
 		<Compile Include="Internal\Map\FacilityBootstrapMessages.cs" />
 		<Compile Include="Internal\Map\FacilityRecipeClient.cs" />
 		<Compile Include="Internal\UI\PreloaderSkinBootstrap.cs" />
 		<Compile Include="Internal\Networking\SilentRoleChangeHandler.cs" />
+		<Compile Include="Internal\PlayerCustomization\PlayerColorTracker.cs" />
 		<Compile Include="Internal\Round\RoundStateReceiver.cs" />
 		<Compile Include="Internal\SilentRoleChange.cs" />
 		<Compile Include="Internal\Stats\HealthStateTracker.cs" />
@@ -446,6 +448,7 @@
 
 	<ItemGroup>
 	  <EmbeddedResource Include="Resources\i18n\*.json" />
+	  <EmbeddedResource Include="Resources\PlayerCustomization\*.png" />
 	</ItemGroup>
 	
 	<!--

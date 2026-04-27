@@ -4,7 +4,9 @@ using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Assets;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.FileTransfer;
+using Anomaly.Client.Internal.Audio;
 using Anomaly.Client.Internal.Map;
+using Anomaly.Client.Internal.PlayerCustomization;
 using Anomaly.Client.Internal.Round;
 using Anomaly.Client.Patches.Audio;
 using Anomaly.Shared.Networking;
@@ -33,12 +35,14 @@ public static class NetworkManagerRegisterClientMessages
                 AnomalyMessageRegistry.RegisterDefaults();
 
                 SilentRoleChangeHandler.Register();
+                PlayerColorTracker.Init();
                 FileCache.Init();
                 FileTransferClient.Init();
 
                 SpawnedObjectRegistry.Init();
                 OverrideRegistry.Init();
                 PathOverrideRegistry.Init();
+                AnnouncerVocabularyReceiver.Init();
                 RoundStateReceiver.Init();
 
                 // Clean up everything the asset pipeline created so reconnecting to a
@@ -50,6 +54,7 @@ public static class NetworkManagerRegisterClientMessages
                     OverrideRegistry.Clear();
                     SpawnedObjectRegistry.Clear();
                     PathOverrideRegistry.Shutdown();
+                    AnnouncerVocabularyReceiver.Clear();
                     CassieLineSourceSchedulePatch.RestoreAll();
                     AnomalyResources.UnloadAll();
                     // Reset file-transfer state so a reconnect starts with a clean manifest

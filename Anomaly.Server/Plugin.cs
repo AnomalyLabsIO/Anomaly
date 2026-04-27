@@ -3,6 +3,7 @@ using System.Linq;
 using Anomaly.Server.API.Plugins;
 using Anomaly.Server.Assets;
 using Anomaly.Server.Diagnostics;
+using Anomaly.Server.Features;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Map;
 using Anomaly.Server.Networking;
@@ -48,10 +49,13 @@ public class Plugin : Plugin<Config>
             AnomalyMessageRegistry.RegisterDefaults();
             Logger.Info("AnomalyMessageRegistry initialized");
 
+            PlayerColorBridge.Init();
+
             ServerAssetManager.Init(Config.AssetDirectory);
             AssetRegistry.LogSummary();
             AssetSpawner.Init();
             AssetOverrides.Init();
+            Announcer.Init();
             AssetFileWatcher.Start(Config.AssetDirectory);
 
             AnomalyMessaging.MessageReceived += (hub, msg) =>

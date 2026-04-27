@@ -19,6 +19,7 @@ namespace Anomaly.Client.Api.Assets
     {
         private static readonly Dictionary<string, Texture2D> _textures = new();
         private static readonly Dictionary<string, AssetBundle> _bundles = new();
+        private static readonly Dictionary<string, AudioClip> _audioClips = new();
 
         public static bool TryGetTexture(byte[] hash, out Texture2D texture)
         {
@@ -84,6 +85,39 @@ namespace Anomaly.Client.Api.Assets
             }
         }
 
+        public static bool TryGetAudioClip(byte[] hash, out AudioClip clip)
+        {
+            clip = null;
+            if (hash == null || hash.Length != 32) return false;
+
+            string hex = FileCache.ToHex(hash);
+            if (_audioClips.TryGetValue(hex, out clip) && clip != null)
+                return true;
+
+            if (!FileCache.HasFile(hash))
+                return false;
+
+            try
+            {
+                var bytes = File.ReadAllBytes(FileCache.GetFilePath(hash));
+                var c = AudioClipFactory.TryDecode(bytes, "announcer_" + hex.Substring(0, 8));
+                if (c == null)
+                {
+                    MelonLogger.Warning($"AnomalyResources: AudioClip decode failed for {hex}.");
+                    return false;
+                }
+
+                _audioClips[hex] = c;
+                clip = c;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"AnomalyResources.TryGetAudioClip({hex}): {ex}");
+                return false;
+            }
+        }
+
         /// <summary>
         /// Loads a named asset out of a cached bundle. Convenience helper that
         /// combines <see cref="TryGetBundle"/> + <c>LoadAsset</c>.
@@ -127,6 +161,12 @@ namespace Anomaly.Client.Api.Assets
                 bundle.Unload(true);
                 _bundles.Remove(hex);
             }
+            if (_audioClips.TryGetValue(hex, out var clip) && clip != null)
+            {
+                AudioClipFactory.ReleaseStreamer(clip);
+                UnityEngine.Object.Destroy(clip);
+                _audioClips.Remove(hex);
+            }
         }
 
         public static void UnloadAll()
@@ -138,6 +178,14 @@ namespace Anomaly.Client.Api.Assets
             foreach (var b in _bundles.Values)
                 if (b != null) b.Unload(true);
             _bundles.Clear();
+
+            foreach (var c in _audioClips.Values)
+            {
+                if (c == null) continue;
+                AudioClipFactory.ReleaseStreamer(c);
+                UnityEngine.Object.Destroy(c);
+            }
+            _audioClips.Clear();
         }
     }
 }
