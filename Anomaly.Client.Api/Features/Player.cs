@@ -91,6 +91,11 @@ public class Player
 
     public ReadOnlyCollection<Item> Items => Item.Get(ItemBases);
 
+    public Transform GetAnchor(PlayerAnchor anchor) => PlayerAnchors.Get(this, anchor);
+
+    public bool TryGetAnchor(PlayerAnchor anchor, out Transform transform) =>
+        PlayerAnchors.TryGet(this, anchor, out transform);
+
     public float Health => Stats.Health;
 
     public float MaxHealth => Stats.MaxHealth;
