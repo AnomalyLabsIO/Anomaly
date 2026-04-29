@@ -9,7 +9,10 @@ namespace Anomaly.Client.Internal.Stats;
 
 internal static class HealthStateTracker
 {
-    private static readonly Dictionary<ReferenceHub, HealthSnapshot> _snapshots = new();
+    private const float StaminaChangeEpsilon = 0.005f;     // ~0.5% of a normalized stamina
+    private const float HumeShieldChangeEpsilon = 0.5f;    // raw HP units
+
+    private static readonly Dictionary<ReferenceHub, StatSnapshot> _snapshots = new();
     private static readonly HashSet<ReferenceHub> _observedHubs = new();
     private static readonly List<ReferenceHub> _staleHubs = new();
 
@@ -20,12 +23,12 @@ internal static class HealthStateTracker
         foreach (Player player in PlayerRegistry.PlayerList)
         {
             ReferenceHub hub = player?.ReferenceHub;
-            if (hub == null || !TryReadSnapshot(player, out HealthSnapshot current))
+            if (hub == null || !TryReadSnapshot(player, out StatSnapshot current))
                 continue;
 
             _observedHubs.Add(hub);
 
-            if (_snapshots.TryGetValue(hub, out HealthSnapshot previous))
+            if (_snapshots.TryGetValue(hub, out StatSnapshot previous))
             {
                 if (previous.LifeIdentifier != current.LifeIdentifier)
                 {
@@ -35,6 +38,16 @@ internal static class HealthStateTracker
 
                 if (current.Health > previous.Health)
                     StatsEvents.OnHealed(new PlayerHealedEventArgs(player, previous.Health, current.Health));
+
+                if (System.Math.Abs(current.Stamina - previous.Stamina) >= StaminaChangeEpsilon)
+                    StatsEvents.OnStaminaChanged(new PlayerStaminaChangedEventArgs(player, previous.Stamina, current.Stamina));
+
+                if (System.Math.Abs(current.HumeShield - previous.HumeShield) >= HumeShieldChangeEpsilon
+                    || (previous.HumeShield > 0f && current.HumeShield <= 0f))
+                {
+                    StatsEvents.OnHumeShieldChanged(
+                        new PlayerHumeShieldChangedEventArgs(player, previous.HumeShield, current.HumeShield));
+                }
 
                 _snapshots[hub] = current;
                 continue;
@@ -59,7 +72,7 @@ internal static class HealthStateTracker
             _snapshots.Remove(hub);
     }
 
-    private static bool TryReadSnapshot(Player player, out HealthSnapshot snapshot)
+    private static bool TryReadSnapshot(Player player, out StatSnapshot snapshot)
     {
         snapshot = default;
 
@@ -68,10 +81,20 @@ internal static class HealthStateTracker
 
         try
         {
-            if (!player.PlayerStats.TryGetModule<HealthStat>(out HealthStat healthStat) || healthStat == null)
-                return false;
+            float health = 0f;
+            float stamina = 0f;
+            float humeShield = 0f;
 
-            snapshot = new HealthSnapshot(healthStat.CurValue, player.Role?.LifeIdentifier ?? 0);
+            if (player.PlayerStats.TryGetModule<HealthStat>(out HealthStat healthStat) && healthStat != null)
+                health = healthStat.CurValue;
+
+            if (player.PlayerStats.TryGetModule<StaminaStat>(out StaminaStat staminaStat) && staminaStat != null)
+                stamina = staminaStat.CurValue;
+
+            if (player.PlayerStats.TryGetModule<HumeShieldStat>(out HumeShieldStat shieldStat) && shieldStat != null)
+                humeShield = shieldStat.CurValue;
+
+            snapshot = new StatSnapshot(health, stamina, humeShield, player.Role?.LifeIdentifier ?? 0);
             return true;
         }
         catch
@@ -87,7 +110,7 @@ internal static class HealthStateTracker
 
         _staleHubs.Clear();
 
-        foreach (KeyValuePair<ReferenceHub, HealthSnapshot> pair in _snapshots)
+        foreach (KeyValuePair<ReferenceHub, StatSnapshot> pair in _snapshots)
         {
             if (pair.Key == null || !_observedHubs.Contains(pair.Key))
                 _staleHubs.Add(pair.Key);
@@ -97,5 +120,5 @@ internal static class HealthStateTracker
             _snapshots.Remove(staleHub);
     }
 
-    private readonly record struct HealthSnapshot(float Health, int LifeIdentifier);
+    private readonly record struct StatSnapshot(float Health, float Stamina, float HumeShield, int LifeIdentifier);
 }

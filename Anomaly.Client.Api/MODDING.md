@@ -99,8 +99,35 @@ All under `Anomaly.Client.Api.Events.Handlers.*`. Subscribe in `OnInitializeMelo
 | `NetworkMessageEvents` | `AnomalyMessageReceived` (any custom Anomaly message) |
 | `FileTransferEvents` | `Progress`, `Complete` |
 | `AssetEvents` | `Spawned`, `Despawned`, `Reloaded`, `OverrideApplied`, `OverrideCleared` |
+| `AnnouncerEvents` | `LineScheduled`, `LineStarted` |
+| `WarheadEvents` | `ProgressChanged`, `Detonated` |
+| `GeneratorEvents` | `Engaged` |
+| `TeslaEvents` | `Added`, `Removed`, `Bursted` |
+| `ElevatorEvents` | `Spawned`, `Removed`, `Moved` |
+| `FacilityCameraEvents` | `Created`, `Removed`, `StateChanged` |
+| `RagdollEvents` | `Spawned`, `Removed` |
 
 Handlers run on the Unity main thread. Exceptions in your handler are caught and logged by `EventInvoker`; they don't propagate to other subscribers. You're still responsible for not corrupting your own state.
+
+## Character model
+
+If your mod manipulates a player's character model — IK overrides, custom bones, third-person camera attachments, body scaling, finger pose overrides — you'll hit several non-obvious behaviours in SCP:SL's animation pipeline. Use the `CharacterModels` static helpers and the `IModelHook` interface; both encode patterns that the SecretLabVR mod had to discover the hard way.
+
+**The animator runs from `CullingSubcontroller`, not Unity's standard timing.** SCP:SL drives the animator manually from `CullingSubcontroller.LateUpdate` via per-instance `OnBeforeAnimatorUpdated` and `OnAnimatorUpdated` events. Mods that write bones from a plain `MonoBehaviour.LateUpdate` either get clobbered by the next animator pass (writes too early) or fight the cycle. Implement `IModelHook` and call `CharacterModels.RegisterLocalHook(hook)`; the framework auto-attaches and re-attaches across role changes.
+
+**Call `CharacterModels.SyncSecondaryRigs(model)` after writing bones.** SCP:SL's `SecondaryRigsSubcontroller` mirrors helper bones; if you don't call `MatchAll()` after your bone writes, you get asymmetric flicker on the body.
+
+**Suppress the competing `LookatSubcontroller`** if your mod is driving head/torso. `CharacterModels.SuppressLookAt(model, true)` disables the native solver so it doesn't add chest/neck motion on top of yours.
+
+**Use the existing animator layers for hand poses.** The avatar already has `"Left Hand Pose - (RefId=44175)"` and `"Right Hand Pose - (RefId=25842)"` layers driven by `LeftHandPose` / `RightHandPose` time parameters and the `hand/PoseLib` clip. Override their layer weights instead of fighting the raw finger bones — it's cheaper and survives locomotion animation. Cache layer indices via `CharacterModels.GetAnimatorLayerIndex(animator, layerName)`.
+
+**`HandPoseSubcontroller` is event-driven, not Update-driven.** Disabling the component does NOT stop its writes (it fires from `CullingSubcontroller.OnBeforeAnimatorUpdated`). Override the hand pose layer weights afterward instead of trying to disable the subcontroller.
+
+**`FpcMouseLook.CurrentVertical` uses opposite sign from world-space camera X pitch.** Negate when reading or writing pitch through `MouseLook`. Confusing, but consistent across the codebase.
+
+**Don't recenter from the animated head bone.** Walk animation moves the head bone forward/back; if you recenter from it every frame, the whole model drags behind the camera. Cache a stable head anchor at `Animator.GetBoneTransform(HumanBodyBones.Hips).parent` (the primary armature root) instead of the animated `Head` bone.
+
+**For visual-only crouch, keep root correction in XZ only.** Spread residual height delta through `Spine` / `Chest` / `UpperChest` / `Neck`. Moving the root down breaks leg animation.
 
 ## IL2CPP gotchas
 

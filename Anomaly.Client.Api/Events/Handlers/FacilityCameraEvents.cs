@@ -1,0 +1,28 @@
+using Anomaly.Client.Api.Events.Args;
+
+namespace Anomaly.Client.Api.Events.Handlers;
+
+/// <summary>
+/// SCP-079 facility camera (CCTV) lifecycle events. Hooked from
+/// <see cref="Il2CppPlayerRoles.PlayableScps.Scp079.Cameras.Scp079Camera"/>'s
+/// static events.
+/// </summary>
+public static class FacilityCameraEvents
+{
+    /// <summary>Fires when a CCTV camera is created (typically at scene load).</summary>
+    public static event AnomalyEventHandler<FacilityCameraEventArgs> Created;
+
+    /// <summary>Fires when a CCTV camera is destroyed.</summary>
+    public static event AnomalyEventHandler<FacilityCameraEventArgs> Removed;
+
+    /// <summary>
+    /// Fires when any CCTV camera's active/inactive state changes (e.g. SCP-079
+    /// switches the active camera). Use <see cref="FacilityCamera.IsActive"/> to
+    /// observe the new state.
+    /// </summary>
+    public static event AnomalyEventHandler<FacilityCameraEventArgs> StateChanged;
+
+    internal static void OnCreated(FacilityCameraEventArgs args) => EventInvoker.Invoke(Created, args);
+    internal static void OnRemoved(FacilityCameraEventArgs args) => EventInvoker.Invoke(Removed, args);
+    internal static void OnStateChanged(FacilityCameraEventArgs args) => EventInvoker.Invoke(StateChanged, args);
+}

@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using Il2CppInventorySystem.Items.ThrowableProjectiles;
 using UnityEngine;
 
@@ -7,6 +8,7 @@ namespace Anomaly.Client.Api.Features;
 public class Projectile : Pickup
 {
     private static readonly Dictionary<ThrownProjectile, Projectile> _projectiles = new();
+    private static readonly Dictionary<ushort, Projectile> _serialCache = new();
 
     protected Projectile(ThrownProjectile projectileBase) : base(projectileBase)
     {
@@ -23,15 +25,13 @@ public class Projectile : Pickup
     {
         get
         {
-            List<Projectile> projectiles = new();
-            foreach (ThrownProjectile projectile in UnityEngine.Object.FindObjectsOfType<ThrownProjectile>())
+            List<Projectile> snapshot = new(_projectiles.Count);
+            foreach (Projectile p in _projectiles.Values)
             {
-                Projectile wrapper = Get(projectile);
-                if (wrapper != null)
-                    projectiles.Add(wrapper);
+                if (p != null && p.ProjectileBase != null)
+                    snapshot.Add(p);
             }
-
-            return projectiles.AsReadOnly();
+            return snapshot.AsReadOnly();
         }
     }
 
@@ -41,11 +41,85 @@ public class Projectile : Pickup
             return null;
 
         if (_projectiles.TryGetValue(projectileBase, out Projectile projectile))
+        {
+            RefreshSerialIndex(projectile);
             return projectile;
+        }
 
         projectile = new Projectile(projectileBase);
         _projectiles[projectileBase] = projectile;
+        RefreshSerialIndex(projectile);
         return projectile;
+    }
+
+    /// <summary>
+    /// Look up a projectile by its serial. Returns <c>null</c> if no projectile
+    /// with that serial is currently tracked.
+    /// </summary>
+    public static new Projectile Get(ushort serial)
+    {
+        if (serial == 0)
+            return null;
+        _serialCache.TryGetValue(serial, out Projectile p);
+        return p;
+    }
+
+    /// <inheritdoc cref="Get(ushort)"/>
+    public static bool TryGet(ushort serial, out Projectile projectile)
+    {
+        if (serial == 0)
+        {
+            projectile = null;
+            return false;
+        }
+        return _serialCache.TryGetValue(serial, out projectile);
+    }
+
+    internal override void OnRemove()
+    {
+        if (ProjectileBase != null)
+            _projectiles.Remove(ProjectileBase);
+
+        ushort serial = SafeProjectileSerial();
+        if (serial != 0 && _serialCache.TryGetValue(serial, out Projectile cached) && ReferenceEquals(cached, this))
+            _serialCache.Remove(serial);
+
+        base.OnRemove();
+    }
+
+    /// <summary>
+    /// Drops every cached projectile. Called by the loader on client disconnect
+    /// alongside <see cref="Pickup.ClearAll"/> so the projectile-specific
+    /// caches are also cleared.
+    /// </summary>
+    internal static void ClearAllProjectiles()
+    {
+        _projectiles.Clear();
+        _serialCache.Clear();
+    }
+
+    private static void RefreshSerialIndex(Projectile projectile)
+    {
+        ushort serial = projectile.SafeProjectileSerial();
+        if (serial == 0)
+            return;
+
+        if (!_serialCache.TryGetValue(serial, out Projectile existing) || !ReferenceEquals(existing, projectile))
+            _serialCache[serial] = projectile;
+    }
+
+    private ushort SafeProjectileSerial()
+    {
+        try
+        {
+            if (ProjectileBase == null)
+                return 0;
+            return ProjectileBase.Info.Serial;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     public override string ToString() => $"Projectile({TypeName}, {Serial})";

@@ -96,6 +96,65 @@ public class Player
     public bool TryGetAnchor(PlayerAnchor anchor, out Transform transform) =>
         PlayerAnchors.TryGet(this, anchor, out transform);
 
+    /// <summary>
+    /// The current movement-state byte from the player's FPC module
+    /// (<c>Crouching</c>, <c>Sneaking</c>, <c>Walking</c>, <c>Sprinting</c>).
+    /// Returns <see cref="PlayerMovementState.Walking"/> if the player has no
+    /// FPC module (e.g. SCP-079, dead, spectator).
+    /// </summary>
+    public PlayerMovementState MovementState
+    {
+        get
+        {
+            FirstPersonMovementModule module = FirstPersonMovementModule;
+            if (module == null)
+                return PlayerMovementState.Walking;
+            return module.CurrentMovementState;
+        }
+    }
+
+    /// <summary>True if the player is in the crouching or sneaking state.</summary>
+    public bool IsCrouching
+    {
+        get
+        {
+            PlayerMovementState s = MovementState;
+            return s == PlayerMovementState.Crouching || s == PlayerMovementState.Sneaking;
+        }
+    }
+
+    /// <summary>True if the player is in the sprinting state.</summary>
+    public bool IsSprinting => MovementState == PlayerMovementState.Sprinting;
+
+    /// <summary>True if the player is in the walking state (the default ground state).</summary>
+    public bool IsWalking => MovementState == PlayerMovementState.Walking;
+
+    /// <summary>
+    /// True if the player's FPC module reports being grounded. Returns false
+    /// when the module is unavailable (non-FPC roles).
+    /// </summary>
+    public bool IsGrounded
+    {
+        get
+        {
+            FirstPersonMovementModule module = FirstPersonMovementModule;
+            return module != null && module.IsGrounded;
+        }
+    }
+
+    /// <summary>
+    /// The facility zone the player is currently in. Returns
+    /// <see cref="FacilityZone.None"/> if the player isn't in any tracked room.
+    /// </summary>
+    public FacilityZone Zone
+    {
+        get
+        {
+            Room room = Room;
+            return room != null ? room.Zone : FacilityZone.None;
+        }
+    }
+
     public float Health => Stats.Health;
 
     public float MaxHealth => Stats.MaxHealth;

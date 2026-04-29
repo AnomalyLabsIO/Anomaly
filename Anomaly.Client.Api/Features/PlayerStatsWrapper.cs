@@ -44,6 +44,15 @@ public class PlayerStatsWrapper
 
     public float MaxArtificialHealth => TryGet<AhpStat>(out AhpStat ahpStat) ? ahpStat.MaxValue : 0f;
 
+    /// <summary>
+    /// Current stamina (0..MaxStamina). Available on both local and remote
+    /// players because <see cref="StaminaStat"/> is replicated.
+    /// </summary>
+    public float Stamina => TryGet<StaminaStat>(out StaminaStat staminaStat) ? staminaStat.CurValue : 0f;
+
+    /// <inheritdoc cref="Stamina"/>
+    public float MaxStamina => TryGet<StaminaStat>(out StaminaStat staminaStat) ? staminaStat.MaxValue : 0f;
+
     public bool TryGet<T>(out T module) where T : StatBase
     {
         module = null;
