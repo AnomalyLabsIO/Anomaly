@@ -379,6 +379,7 @@
 		<Compile Include="Components\AuthStatusOverrideComponent.cs" />
 		<Compile Include="Components\ConnectionInfoOverrideComponent.cs" />
 		<Compile Include="Components\FileTransferOverlayComponent.cs" />
+		<Compile Include="Components\PasswordPromptComponent.cs" />
 		<Compile Include="Diagnostics\CircularLogBuffer.cs" />
 		<Compile Include="Diagnostics\CrashHooks.cs" />
 		<Compile Include="Diagnostics\CrashReport.cs" />

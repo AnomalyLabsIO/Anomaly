@@ -11,6 +11,9 @@
 # ===== Authentication / connection overlays =====
 "anomaly.overlay.authenticating": "Authenticating, Please Wait..."
 "anomaly.overlay.connection_authenticating": "<size=80>Authenticating...</size>\nPlease wait while the server identifies you."
+"anomaly.overlay.password_required": "<size=80>Password Required</size>\nEnter the server password to continue."
+"anomaly.password_prompt.title": "Server Password Required"
+"anomaly.password_prompt.hint": "Type the password, then press Enter. Press Esc to cancel."
 
 # ===== File transfer overlay =====
 "anomaly.overlay.file_transfer.preparing": "Preparing download..."

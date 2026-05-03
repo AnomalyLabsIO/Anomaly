@@ -127,7 +127,10 @@ public static class AuthHandler
             }
             else
             {
-                var attempt = connection.Session.CreateLoginAttempt(connection.Handshake);
+                if (connection.PasswordChallenge?.Required == true && connection.PasswordProof == null)
+                    MelonLogger.Warning("Server requires a password but no password proof is available; phase-2 auth will be rejected.");
+
+                var attempt = connection.Session.CreateLoginAttempt(connection.Handshake, connection.PasswordProof);
                 writer.PutBytesWithLength(attempt.Encode());
                 writer.Put(connection.ServerIdentifier, 0);
                 writer.Put(PlayerAuth.Username, 0);
@@ -187,11 +190,94 @@ public static class AuthHandler
         }
         connection.Handshake = handShake;
         connection.ServerIdentifier = data.GetString();
+        try
+        {
+            connection.PasswordChallenge = ReadPasswordChallenge(data);
+        }
+        catch (Exception ex)
+        {
+            AuthStatusOverlay.EndAuthenticating();
+            ConnectionInfoOverlay.EndOverride();
+            MelonLogger.Error($"Failed to read password challenge from server: {ex}");
+            return false;
+        }
         MelonLogger.Msg($"[Anomaly] Stored handshake for server {server}, identifier: {connection.ServerIdentifier}");
 
+        var port = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.port.ToString();
+        if (connection.PasswordChallenge?.Required == true)
+        {
+            PromptForPassword(server, port, connection);
+            return false;
+        }
+
         ConnectionInfoOverlay.BeginOverride(Tr.Get(TrKeys.Overlay_ConnectionAuthenticating));
-        MelonCoroutines.Start(ConnectAgain(server, Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.port.ToString()));
+        MelonCoroutines.Start(ConnectAgain(server, port));
         return false; // We handled it, skip original handler
+    }
+
+    private static PasswordChallenge ReadPasswordChallenge(NetDataReader data)
+    {
+        if (data.EndOfData)
+            return PasswordChallenge.NotRequired();
+
+        var required = data.GetBool();
+        if (!required)
+            return PasswordChallenge.NotRequired();
+
+        var salt = data.GetBytesWithLength();
+        var iterations = data.GetInt();
+        var nonce = data.GetBytesWithLength();
+
+        if (salt == null || salt.Length != PasswordAuth.SaltSize)
+            throw new InvalidDataException($"Password salt length was {salt?.Length ?? 0}, expected {PasswordAuth.SaltSize}.");
+        if (iterations < PasswordAuth.MinimumIterations)
+            throw new InvalidDataException($"Password KDF iterations {iterations} below minimum {PasswordAuth.MinimumIterations}.");
+        if (nonce == null || nonce.Length != PasswordAuth.NonceSize)
+            throw new InvalidDataException($"Password nonce length was {nonce?.Length ?? 0}, expected {PasswordAuth.NonceSize}.");
+
+        return new PasswordChallenge
+        {
+            Required = true,
+            Salt = salt,
+            Iterations = iterations,
+            Nonce = nonce,
+        };
+    }
+
+    private static void PromptForPassword(string server, string port, ServerConnection connection)
+    {
+        ConnectionInfoOverlay.BeginOverride(Tr.Get(TrKeys.Overlay_PasswordRequired));
+        PasswordPrompt.Show(
+            password =>
+            {
+                try
+                {
+                    connection.PasswordProof = connection.Session.CreatePasswordProof(
+                        password,
+                        connection.Handshake,
+                        connection.ServerIdentifier,
+                        connection.PasswordChallenge);
+
+                    ConnectionInfoOverlay.BeginOverride(Tr.Get(TrKeys.Overlay_ConnectionAuthenticating));
+                    MelonCoroutines.Start(ConnectAgain(server, port));
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Error($"Failed to prepare password proof: {ex}");
+                    CancelPasswordPrompt(server);
+                }
+            },
+            () => CancelPasswordPrompt(server));
+    }
+
+    private static void CancelPasswordPrompt(string server)
+    {
+        _connections.Remove(server);
+        CurrentKey = null;
+        _phase2Sent = false;
+        _connectionGeneration++;
+        AuthStatusOverlay.EndAuthenticating();
+        ConnectionInfoOverlay.EndOverride();
     }
 
     private static IEnumerator ConnectAgain(string ip, string port)

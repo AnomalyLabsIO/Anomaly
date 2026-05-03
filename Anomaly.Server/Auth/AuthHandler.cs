@@ -16,7 +16,7 @@ public static class AuthHandler
     internal static Dictionary<string, Connection> _connections = new();
     internal static Dictionary<IPEndPoint, PlayerStorage> _storedPlayers = new();
 
-    internal static string AddConnection(ServerAuthSession session,ClientHandshake handshake)
+    internal static string AddConnection(ServerAuthSession session, ClientHandshake handshake, PasswordChallenge passwordChallenge = null)
     {
         string random;
         lock (_connectionsLock)
@@ -34,6 +34,10 @@ public static class AuthHandler
                 ServerEnv = session,
                 Handshake = handshake,
                 CreatedAtUtc = DateTime.UtcNow,
+                PasswordRequired = passwordChallenge?.Required == true,
+                PasswordSalt = passwordChallenge?.Salt,
+                PasswordIterations = passwordChallenge?.Iterations ?? 0,
+                PasswordNonce = passwordChallenge?.Nonce,
             };
         }
 

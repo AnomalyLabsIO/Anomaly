@@ -9,6 +9,9 @@ internal static class TrKeys
     // Auth overlay
     public const string Overlay_Authenticating = "anomaly.overlay.authenticating";
     public const string Overlay_ConnectionAuthenticating = "anomaly.overlay.connection_authenticating";
+    public const string Overlay_PasswordRequired = "anomaly.overlay.password_required";
+    public const string PasswordPrompt_Title = "anomaly.password_prompt.title";
+    public const string PasswordPrompt_Hint = "anomaly.password_prompt.hint";
 
     // File transfer overlay
     public const string FileTransfer_Preparing = "anomaly.overlay.file_transfer.preparing";

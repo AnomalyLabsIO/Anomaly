@@ -98,14 +98,40 @@ public static class PlayerAuthenticationManagerPatch
             return;
         }
 
+        var safeNickname = nickname ?? "Dummy";
+
         try
         {
             __result.authManager.UserId = DummyUserId;
-            __result.nicknameSync.UpdateNickname(nickname ?? "Dummy");
-            __result.serverRoles.SetGroup(DummyUtils.DummyGroup, byAdmin: true);
+            __result.nicknameSync.MyNick = safeNickname;
+        }
+        catch (Exception ex)
+        {
+            OffThreadLogger.Error($"Dummy spawn pre-normalization failed: {ex}");
+        }
 
-            PlayerEvents.OnJoined(new PlayerJoinedEventArgs(__result));
-            OffThreadLogger.Info($"Dummy player joined: userId={__result.authManager.UserId} nick={__result.nicknameSync.MyNick} playerId={__result.PlayerId} mode={__result.authManager.InstanceMode}");
+        Timing.CallDelayed(0.1f, () => NormalizeSpawnedDummy(safeNickname, __result));
+    }
+
+    private static void NormalizeSpawnedDummy(string nickname, ReferenceHub hub)
+    {
+        if (hub == null)
+        {
+            return;
+        }
+
+        try
+        {
+            hub.authManager.UserId = DummyUserId;
+            hub.nicknameSync.MyNick = nickname;
+
+            if (hub.serverRoles.Group != DummyUtils.DummyGroup)
+            {
+                hub.serverRoles.SetGroup(DummyUtils.DummyGroup, byAdmin: true);
+            }
+
+            PlayerEvents.OnJoined(new PlayerJoinedEventArgs(hub));
+            OffThreadLogger.Info($"Dummy player joined: userId={hub.authManager.UserId} nick={hub.nicknameSync.MyNick} playerId={hub.PlayerId} mode={hub.authManager.InstanceMode}");
         }
         catch (Exception ex)
         {

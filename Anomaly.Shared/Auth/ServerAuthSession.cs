@@ -31,11 +31,30 @@ public class ServerAuthSession
 
     public bool Validate(ClientHandshake handshake, ClientLoginAttempt attempt)
     {
+        return Validate(handshake, attempt, out _);
+    }
+
+    public bool Validate(ClientHandshake handshake, ClientLoginAttempt attempt, out byte[] passwordProof)
+    {
+        passwordProof = null;
+
         var buf = new byte[32];
         Array.Copy(handshake.nonce, 0, buf, 0, 12);
         Array.Copy(challenge, 0, buf, 12, 20);
         var sharedSecret = AuthCrypto.ComputeSharedSecret(sessionKeyPair, handshake.sessionPublic);
-        var signature = AuthCrypto.AesDecrypt(sharedSecret, handshake.nonce, attempt.signature);
+        byte[] payload;
+        try
+        {
+            payload = AuthCrypto.AesDecrypt(sharedSecret, handshake.nonce, attempt.signature);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (!ClientLoginAttempt.TryDecodePlainPayload(payload, out var signature, out passwordProof))
+            return false;
+
         var identityPublic = AuthCrypto.ReadPublic(handshake.identityPublic);
         return AuthCrypto.VerifyData(buf, signature, identityPublic);
     }

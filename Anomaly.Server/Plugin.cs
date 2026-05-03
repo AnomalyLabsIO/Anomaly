@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Anomaly.Server.Assets;
+using Anomaly.Server.Auth;
 using Anomaly.Server.Diagnostics;
 using Anomaly.Server.Features;
 using Anomaly.Server.FileTransfer;
@@ -42,6 +43,11 @@ public class Plugin : Plugin<Config>
             Logger.Info("OnlineMode set to false");
 
             Instance = this;
+
+            PasswordStore.Load();
+            Logger.Info($"Password auth: required={PasswordStore.IsRequired}, verifierConfigured={PasswordStore.HasPassword}.");
+            if (Config.RequirePassword && !PasswordStore.HasPassword)
+                Logger.Warn("RequirePassword is enabled, but no Anomaly password verifier exists. Run 'password <value>' in LocalAdmin; clients will be rejected until then.");
 
             AnomalyMessageRegistry.Log = s => Logger.Info(s);
             AnomalyMessageRegistry.Warn = s => Logger.Warn(s);

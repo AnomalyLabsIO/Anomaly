@@ -34,12 +34,34 @@ public class ClientAuthSession
 
     public ClientLoginAttempt CreateLoginAttempt(ServerHandshake handshake)
     {
+        return CreateLoginAttempt(handshake, null);
+    }
+
+    public ClientLoginAttempt CreateLoginAttempt(ServerHandshake handshake, byte[] passwordProof)
+    {
         var buf = new byte[32];
         Array.Copy(nonce, 0, buf, 0, 12);
         Array.Copy(handshake.challenge, 0, buf, 12, 20);
         var signature = AuthCrypto.SignData(buf, identityKeyPair);
+        var payload = ClientLoginAttempt.EncodePlainPayload(signature, passwordProof);
         var sharedSecret = AuthCrypto.ComputeSharedSecret(sessionKeyPair, handshake.sessionPublic);
-        signature = AuthCrypto.AesEncrypt(sharedSecret, nonce, signature);
-        return new ClientLoginAttempt { signature = signature };
+        var encryptedPayload = AuthCrypto.AesEncrypt(sharedSecret, nonce, payload);
+        return new ClientLoginAttempt { signature = encryptedPayload };
+    }
+
+    public byte[] CreatePasswordProof(string password, ServerHandshake handshake, string serverIdentifier, PasswordChallenge challenge)
+    {
+        if (challenge == null || !challenge.Required)
+            return null;
+
+        var verifier = PasswordAuth.DeriveVerifier(password, challenge.Salt, challenge.Iterations);
+        try
+        {
+            return PasswordAuth.CreateProof(verifier, nonce, handshake.challenge, serverIdentifier, challenge.Nonce);
+        }
+        finally
+        {
+            Array.Clear(verifier, 0, verifier.Length);
+        }
     }
 }

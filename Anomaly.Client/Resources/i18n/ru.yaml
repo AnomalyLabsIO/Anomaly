@@ -7,6 +7,9 @@
 # ===== Authentication / connection overlays =====
 "anomaly.overlay.authenticating": "Идёт аутентификация, подожди..."
 "anomaly.overlay.connection_authenticating": "<size=80>Аутентификация...</size>\nПодожди, пока сервер тебя опознаёт."
+"anomaly.overlay.password_required": "<size=80>Нужен пароль</size>\nВведи пароль сервера, чтобы продолжить."
+"anomaly.password_prompt.title": "Нужен пароль сервера"
+"anomaly.password_prompt.hint": "Введи пароль и нажми Enter. Нажми Esc для отмены."
 
 # ===== File transfer overlay =====
 "anomaly.overlay.file_transfer.preparing": "Подготовка загрузки..."

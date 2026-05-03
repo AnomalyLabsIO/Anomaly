@@ -162,6 +162,16 @@ public static class ProcessConnectionRequestPatch
             #endregion
 
             #region AnomalyAuth
+            if (PasswordStore.IsRequired && PasswordStore.IsBlocked(ip))
+            {
+                OffThreadLogger.Warn($"Rejecting {ip}: too many failed Anomaly password attempts.");
+                RequestWriter.Reset();
+                RequestWriter.Put((byte)RejectionReason.RateLimit);
+                request.RejectForce(RequestWriter);
+                CustomLiteNetLib4MirrorTransport.ResetIdleMode();
+                return false;
+            }
+
             if(!request.Data.TryGetBytesWithLength(out var authData))
             {
                 OffThreadLogger.Warn($"Failed to read auth data from {ip}");
@@ -178,6 +188,15 @@ public static class ProcessConnectionRequestPatch
             switch (requestType)
             {
                 case 3: // Handshake/Preauth
+                    if (!PasswordStore.TryCreateChallenge(out var passwordChallenge, out var passwordChallengeError))
+                    {
+                        OffThreadLogger.Error($"Rejecting {ip}: {passwordChallengeError}");
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.Error);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
+
                     var serverEnv = ServerAuthSession.Generate();
                     ClientHandshake clientHandshake;
                     try
@@ -193,7 +212,7 @@ public static class ProcessConnectionRequestPatch
                         return false;
                     }
                     userId = clientHandshake.GetUserId();
-                    var serverIden = AuthHandler.AddConnection(serverEnv, clientHandshake);
+                    var serverIden = AuthHandler.AddConnection(serverEnv, clientHandshake, passwordChallenge);
 
                     var serverHandshakeBytes = serverEnv.CreateHandshake().Encode();
                     OffThreadLogger.Debug($"ServerHandshake raw bytes ({serverHandshakeBytes.Length}): {BitConverter.ToString(serverHandshakeBytes, 0, Math.Min(serverHandshakeBytes.Length, 16))}...");
@@ -203,6 +222,7 @@ public static class ProcessConnectionRequestPatch
                     RequestWriter.Put((byte)100);
                     RequestWriter.PutBytesWithLength(serverHandshakeBytes);
                     RequestWriter.Put(serverIden);
+                    WritePasswordChallenge(RequestWriter, passwordChallenge);
                     request.RejectForce(RequestWriter);
 
                     OffThreadLogger.Debug("Got Handshake from user " + userId + " from ip " + ip);
@@ -240,7 +260,7 @@ public static class ProcessConnectionRequestPatch
 
                     OffThreadLogger.Info("Validating Attempt");
                     OffThreadLogger.Info($"{connection.Handshake}");
-                    if (!connection.ServerEnv.Validate(connection.Handshake, attempt))
+                    if (!connection.ServerEnv.Validate(connection.Handshake, attempt, out var passwordProof))
                     {
                         OffThreadLogger.Warn($"Login attempt validation failed for {ip}. Signature mismatch.");
                         AuthHandler.RemoveConnection(serverIdentifier);
@@ -249,6 +269,20 @@ public static class ProcessConnectionRequestPatch
                         request.RejectForce(RequestWriter);
                         return false;
                     }
+
+                    if (connection.PasswordRequired && !PasswordStore.VerifyProof(connection, serverIdentifier, passwordProof))
+                    {
+                        OffThreadLogger.Warn($"Password proof validation failed for {ip} ({connection.Handshake.GetUserId()}).");
+                        PasswordStore.RecordFailure(ip);
+                        AuthHandler.RemoveConnection(serverIdentifier);
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.InvalidToken);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
+
+                    if (connection.PasswordRequired)
+                        PasswordStore.ClearFailures(ip);
 
                     OffThreadLogger.Info("Removing identifier");
                     AuthHandler.RemoveConnection(serverIdentifier);
@@ -504,5 +538,17 @@ public static class ProcessConnectionRequestPatch
         }
 
         return false;
+    }
+
+    private static void WritePasswordChallenge(NetDataWriter writer, PasswordChallenge challenge)
+    {
+        var required = challenge?.Required == true;
+        writer.Put(required);
+        if (!required)
+            return;
+
+        writer.PutBytesWithLength(challenge.Salt);
+        writer.Put(challenge.Iterations);
+        writer.PutBytesWithLength(challenge.Nonce);
     }
 }

@@ -169,7 +169,9 @@
         <Compile Include="Round\RoundStartBridge.cs" />
         <Compile Include="Auth\AuthHandler.cs" />
         <Compile Include="Auth\Connection.cs" />
+        <Compile Include="Auth\PasswordStore.cs" />
         <Compile Include="Auth\PlayerStorage.cs" />
+        <Compile Include="Commands\PasswordCommand.cs" />
         <Compile Include="Config.cs" />
         <Compile Include="Patches\PlayerAuthenticationManagerPatch.cs" />
         <Compile Include="Patches\ProcessConnectionRequestPatch.cs" />
