@@ -1,16 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Internal.Persistence;
-using MelonLoader.Utils;
 
 namespace Anomaly.Client.Api.Persistence;
 
 /// <summary>
-/// Entry point for per-mod cross-session persistence on the client. Returns
-/// a JSON-file-backed <see cref="IPersistenceStore"/> rooted at
-/// <c>&lt;UserData&gt;/Anomaly/&lt;modId&gt;/data.json</c>.
+/// Entry point for per-mod cross-session persistence on the client. Returns a
+/// MelonPreferences-backed <see cref="IPersistenceStore"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,8 +15,9 @@ namespace Anomaly.Client.Api.Persistence;
 /// the same id return the same instance.
 /// </para>
 /// <para>
-/// On the server side, plugins should use LabAPI's config or their own file I/O.
-/// This facade exists because the client has no equivalent.
+/// New mods should prefer direct MelonPreferences categories for local state.
+/// This facade remains for existing Anomaly.Client.Api consumers that want a
+/// small typed key/value compatibility layer.
 /// </para>
 /// </remarks>
 public static class ClientPersistence
@@ -48,8 +46,7 @@ public static class ClientPersistence
         if (_stores.TryGetValue(modId, out var existing))
             return existing;
 
-        string path = Path.Combine(MelonEnvironment.UserDataDirectory, "Anomaly", modId, "data.json");
-        var store = new JsonPersistenceStore(modId, path);
+        var store = new MelonPreferencesPersistenceStore(modId);
         _stores[modId] = store;
         return store;
     }

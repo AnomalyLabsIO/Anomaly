@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using Anomaly.Server.API.Plugins;
 using Anomaly.Server.Assets;
 using Anomaly.Server.Diagnostics;
 using Anomaly.Server.Features;
@@ -90,10 +89,6 @@ public class Plugin : Plugin<Config>
             }
 
             AuthAndRoleDiag.Init();
-
-            // Discover [AnomalyPlugin]-attributed LabAPI plugins. Runs after Harmony
-            // so any plugins loaded alongside us are already instantiated.
-            AnomalyServerPlugins.Discover();
         }
         catch (Exception ex)
         {

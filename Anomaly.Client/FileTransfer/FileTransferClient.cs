@@ -4,6 +4,8 @@ using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Components;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
 using MelonLoader;
@@ -21,10 +23,22 @@ public static class FileTransferClient
     private static int _completedFiles;
     private static long _totalBytes;
     private static long _receivedBytes;
+    private static int _totalAssetsInManifest;
 
     public static void Init()
     {
         AnomalyMessaging.MessageReceived += OnMessageReceived;
+
+        // Drive the overlay across the full join-server lifecycle: visible from
+        // socket-connect through scene-ready, regardless of whether any files
+        // need transfer. The disconnect-side reset stays in
+        // NetworkManagerRegisterClientMessages.
+        ClientEvents.Connected += _ =>
+        {
+            FileTransferOverlay.Show();
+            FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_Connecting));
+        };
+        ClientEvents.Ready += _ => FileTransferOverlay.Hide();
     }
 
     public static void Reset()
@@ -36,6 +50,7 @@ public static class FileTransferClient
         _completedFiles = 0;
         _totalBytes = 0;
         _receivedBytes = 0;
+        _totalAssetsInManifest = 0;
         FileTransferOverlay.Hide();
     }
 
@@ -57,6 +72,8 @@ public static class FileTransferClient
 
     private static void HandleManifest(FileManifestMessage manifest)
     {
+        _totalAssetsInManifest = manifest.Files.Count;
+
         var missing = new List<byte[]>();
 
         foreach (var file in manifest.Files)
@@ -81,6 +98,8 @@ public static class FileTransferClient
         {
             _state = State.Complete;
             MelonLogger.Msg("FileTransfer: All files already cached.");
+            // Keep overlay visible; the level is still loading until ClientEvents.Ready.
+            FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_LoadingLevel, _totalAssetsInManifest));
             FileTransferEvents.OnComplete(new FileTransferCompleteEventArgs(true, 0));
             return;
         }
@@ -162,7 +181,9 @@ public static class FileTransferClient
         if (_completedFiles >= _totalFiles)
         {
             _state = State.Complete;
-            FileTransferOverlay.Hide();
+            // Keep overlay visible until the level finishes loading; the
+            // ClientEvents.Ready hook in Init hides it.
+            FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_LoadingLevel, _totalAssetsInManifest));
             FileCache.Evict(500 * 1024 * 1024); // 500 MB limit
             FileTransferEvents.OnComplete(new FileTransferCompleteEventArgs(true, _completedFiles));
             MelonLogger.Msg($"FileTransfer: All {_completedFiles} files received.");

@@ -378,7 +378,7 @@
 	  Override $(AnomalyClientUserLibsDir) via env var or a .csproj.user file.
 	-->
 	<PropertyGroup>
-		<AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">E:\Projects\AnomalyLabs\Client\UserLibs</AnomalyClientUserLibsDir>
+		<AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">E:\Projects\AnomalyLabs\ModdedFiles\loadouts\dev\local\UserLibs</AnomalyClientUserLibsDir>
 	</PropertyGroup>
 	<Target Name="CopyApiToLocalClient" AfterTargets="Build">
 		<Message Importance="high" Text="Anomaly.Client.Api: copying $(TargetFileName) -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)')" />

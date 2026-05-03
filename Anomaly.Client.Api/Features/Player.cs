@@ -60,7 +60,7 @@ public class Player
     public Item CurrentItem => Inventory.CurrentItem;
 
     public FirstPersonMovementModule FirstPersonMovementModule =>
-        (ReferenceHub.roleManager.CurrentRole.Cast<IFpcRole>())?.FpcModule;
+        ReferenceHub?.roleManager?.CurrentRole?.TryCast<IFpcRole>()?.FpcModule;
 
     public CharacterModel CharacterModel => FirstPersonMovementModule?.CharacterModelInstance;
     

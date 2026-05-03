@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Anomaly.Client.Api.Assets;
-using Anomaly.Client.Api.Config;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Api.Features;
@@ -27,7 +26,7 @@ namespace Anomaly.Client.Internal.PlayerCustomization;
 internal static class PlayerColorTracker
 {
     private const string ConfigModId = "anomaly";
-    private const string ConfigKey = "playerCustomization.classD.favoriteColor";
+    private const string FavoriteColorEntryId = "class_d_favorite_color";
     private const string DefaultColorHex = "#FFFFFF";
     private const string JumpsuitGameObjectPrefix = "jumpsuit_LOD";
     private const string NeutralBaseMapResource =
@@ -36,6 +35,8 @@ internal static class PlayerColorTracker
     private static Color _localColor = Color.white;
     private static readonly Dictionary<uint, Color> _byNetId = new();
     private static Texture2D _neutralBaseMap;
+    private static MelonPreferences_Category _preferences;
+    private static MelonPreferences_Entry<string> _favoriteColorEntry;
     private static bool _initialized;
 
     internal static void Init()
@@ -55,6 +56,7 @@ internal static class PlayerColorTracker
                     "cool-palette tints look dark/black against the orange jumpsuit).");
             }
 
+            EnsurePreferences();
             _localColor = LoadLocalColor();
         }
         catch (Exception ex)
@@ -72,7 +74,7 @@ internal static class PlayerColorTracker
     /// <summary>
     /// Public entry point for changing the local player's color mid-game (e.g.
     /// from a future config-watcher, slash command, or settings UI). Updates
-    /// in-memory state, persists to <see cref="ClientConfig"/>, re-applies to
+    /// in-memory state, persists to MelonPreferences, re-applies to
     /// the local model if currently Class D, and notifies the server so other
     /// clients can rebroadcast.
     /// </summary>
@@ -82,9 +84,9 @@ internal static class PlayerColorTracker
 
         try
         {
-            var cfg = ClientConfig.For(ConfigModId);
-            cfg.Set(ConfigKey, ColorToHex(color));
-            cfg.Save();
+            EnsurePreferences();
+            _favoriteColorEntry.Value = ColorToHex(color);
+            _preferences.SaveToFile(printmsg: false);
         }
         catch (Exception ex)
         {
@@ -245,18 +247,31 @@ internal static class PlayerColorTracker
     {
         try
         {
-            var cfg = ClientConfig.For(ConfigModId);
-            var hex = cfg.Get(ConfigKey, DefaultColorHex);
+            EnsurePreferences();
+            var hex = string.IsNullOrWhiteSpace(_favoriteColorEntry.Value)
+                ? DefaultColorHex
+                : _favoriteColorEntry.Value;
             if (ColorUtility.TryParseHtmlString(hex, out var parsed))
                 return parsed;
             MelonLogger.Warning(
-                $"PlayerColorTracker: '{ConfigKey}' value '{hex}' is not a valid color; using default {DefaultColorHex}.");
+                $"PlayerColorTracker: '{FavoriteColorEntryId}' value '{hex}' is not a valid color; using default {DefaultColorHex}.");
         }
         catch (Exception ex)
         {
             MelonLogger.Warning($"PlayerColorTracker.LoadLocalColor: {ex}");
         }
         return Color.white;
+    }
+
+    private static void EnsurePreferences()
+    {
+        _preferences ??= MelonPreferences.CreateCategory(ConfigModId, "Anomaly");
+        _favoriteColorEntry ??= _preferences.GetEntry<string>(FavoriteColorEntryId)
+            ?? _preferences.CreateEntry(
+                FavoriteColorEntryId,
+                DefaultColorHex,
+                "Class D favorite color",
+                "Preferred Class D jumpsuit tint as #RRGGBB. #FFFFFF disables tinting.");
     }
 
     private static Texture2D LoadEmbeddedNeutralBaseMap()

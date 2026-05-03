@@ -1,4 +1,3 @@
-using System.Reflection;
 using Anomaly.Client.Api.Commands;
 using Anomaly.Client.Api.Config;
 using Anomaly.Client.Api.Localization;
@@ -17,7 +16,7 @@ using MelonLoader.Utils;
 
 [assembly: MelonInfo(typeof(Anomaly.Client.Core), "Anomaly", "0.1.0", "AnomalyLabs", null)]
 [assembly: MelonGame("Northwood", "SCPSL")]
-[assembly: AssemblyMetadata("TargetGameVersion", "14.2.6")]
+[assembly: MelonGameVersion("14.2.6")]
 
 namespace Anomaly.Client;
 

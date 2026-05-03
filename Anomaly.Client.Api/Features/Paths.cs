@@ -34,7 +34,7 @@ public static class Paths
             Directory.CreateDirectory(AnomalyPath);
 
         AnomalyUserDataPath = Path.Combine(MelonEnvironment.UserDataDirectory, "Anomaly");
-        SkinsPath = Path.Combine(AnomalyUserDataPath, "Skins");
+        SkinsPath = Path.Combine(MelonEnvironment.UserDataDirectory, "Skins");
         if (!Directory.Exists(AnomalyUserDataPath))
             Directory.CreateDirectory(AnomalyUserDataPath);
         if (!Directory.Exists(SkinsPath))

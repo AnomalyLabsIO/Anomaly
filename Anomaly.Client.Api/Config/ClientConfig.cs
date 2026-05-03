@@ -1,23 +1,21 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Internal.Config;
-using MelonLoader.Utils;
 
 namespace Anomaly.Client.Api.Config;
 
 /// <summary>
-/// Entry point for per-mod configuration on the client. Returns a JSON-file
-/// backed <see cref="IConfigSource"/> rooted at
-/// <c>&lt;UserData&gt;/Anomaly/&lt;modId&gt;/config.json</c>.
+/// Entry point for per-mod configuration on the client. Returns a
+/// MelonPreferences-backed <see cref="IConfigSource"/>.
 /// </summary>
 /// <remarks>
 /// <para>Instances are cached per mod id so multiple calls to
 /// <see cref="For"/> with the same id return the same store (and therefore
 /// share <see cref="IConfigSource.KeyChanged"/> subscribers).</para>
-/// <para>On the server side, plugins should use LabAPI's <c>Plugin&lt;TConfig&gt;</c>
-/// directly — this facade exists only because the client has no equivalent.</para>
+/// <para>New mods should prefer direct MelonPreferences categories for their
+/// user-facing settings. This facade remains for Anomaly.Client.Api consumers
+/// that want a small typed key/value compatibility layer.</para>
 /// </remarks>
 public static class ClientConfig
 {
@@ -45,28 +43,17 @@ public static class ClientConfig
         if (_sources.TryGetValue(modId, out var existing))
             return existing;
 
-        string path = Path.Combine(MelonEnvironment.UserDataDirectory, "Anomaly", modId, "config.json");
-        var source = new JsonConfigSource(modId, path);
+        var source = new MelonPreferencesConfigSource(modId);
         _sources[modId] = source;
         return source;
     }
 
     /// <summary>
-    /// Disposes every cached config source, releasing the underlying
-    /// <see cref="System.IO.FileSystemWatcher"/>s and scheduled reload tasks.
-    /// Call on shutdown paths (e.g. <c>OnApplicationQuit</c>) to leave a clean
-    /// process exit. Mirrors <see cref="Persistence.ClientPersistence.FlushAll"/>.
+    /// Clears cached config source instances. MelonPreferences owns file IO and
+    /// watchers; this only resets Anomaly's compatibility facade cache.
     /// </summary>
     public static void DisposeAll()
     {
-        foreach (var source in _sources.Values)
-        {
-            if (source is IDisposable disposable)
-            {
-                try { disposable.Dispose(); }
-                catch (Exception) { /* per-source failures are non-fatal on shutdown */ }
-            }
-        }
         _sources.Clear();
     }
 }

@@ -456,8 +456,7 @@
 	  $(AnomalyClientModsDir) via env var or a .csproj.user file to redirect.
 	-->
 	<PropertyGroup>
-		<AnomalyClientModsDir Condition="'$(AnomalyClientModsDir)' == ''">E:\Projects\AnomalyLabs\Client\Mods</AnomalyClientModsDir>
-		<AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">E:\Projects\AnomalyLabs\Client\UserLibs</AnomalyClientUserLibsDir>
+		<AnomalyClientModsDir Condition="'$(AnomalyClientModsDir)' == ''">E:\Projects\AnomalyLabs\ModdedFiles\loadouts\dev\local\Mods</AnomalyClientModsDir>
 	</PropertyGroup>
 	<Target Name="CopyToLocalClient" AfterTargets="Build">
 		<Message Importance="high" Text="Anomaly.Client: copying $(TargetFileName) -&gt; $(AnomalyClientModsDir)" Condition="Exists('$(AnomalyClientModsDir)')" />

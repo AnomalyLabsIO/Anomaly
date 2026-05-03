@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using MelonLoader.Utils;
 
 namespace Anomaly.Client.Api.Localization;
 
@@ -30,6 +32,17 @@ public static class Tr
     {
         if (_service == null) return false;
         return _service.RegisterMod(modNamespace, i18nDirectoryPath);
+    }
+
+    /// <summary>
+    /// Register a third-party mod's translation namespace from the conventional
+    /// <c>&lt;UserData&gt;/i18n/&lt;modNamespace&gt;/</c> directory.
+    /// </summary>
+    public static bool RegisterMod(string modNamespace)
+    {
+        if (string.IsNullOrWhiteSpace(modNamespace)) return false;
+        string path = Path.Combine(MelonEnvironment.UserDataDirectory, "i18n", modNamespace.ToLowerInvariant());
+        return RegisterMod(modNamespace, path);
     }
 
     /// <summary>Look up a translation key. Returns the key itself if missing.</summary>

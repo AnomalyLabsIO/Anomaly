@@ -1,9 +1,9 @@
 namespace Anomaly.Client.Api.Persistence;
 
 /// <summary>
-/// A typed, key/value persistence store for cross-session state (local
-/// settings, UI layout, accumulated stats for local display, etc.). Each
-/// mod gets its own store via <see cref="ClientPersistence.For"/>.
+/// A typed, key/value persistence store for cross-session state backed by
+/// MelonPreferences. Each mod gets its own store via
+/// <see cref="ClientPersistence.For"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -13,7 +13,7 @@ namespace Anomaly.Client.Api.Persistence;
 /// </para>
 /// <para>
 /// Writes are debounced — rapid successive <see cref="Save"/> calls coalesce
-/// into one file write — so callers can freely save on every change.
+/// into one MelonPreferences write — so callers can freely save on every change.
 /// </para>
 /// </remarks>
 public interface IPersistenceStore

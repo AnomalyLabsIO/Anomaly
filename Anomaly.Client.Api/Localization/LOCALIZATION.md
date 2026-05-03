@@ -22,7 +22,7 @@ All your translation keys must start with this namespace followed by a dot: `mym
 Put per-locale JSON files in your own directory under Anomaly's i18n tree. The recommended location is:
 
 ```
-<MelonLoader>/UserData/Anomaly/i18n/mods/<your_namespace>/
+<UserData>/i18n/<your_namespace>/
     en.json      # canonical source — required
     fr.json
     de.json
@@ -55,19 +55,15 @@ In your `MelonMod.OnInitializeMelon()`:
 
 ```csharp
 using Anomaly.Client.Api.Localization;
-using MelonLoader.Utils;
 
 public override void OnInitializeMelon()
 {
-    var myI18nDir = Path.Combine(
-        MelonEnvironment.UserDataDirectory, "Anomaly", "i18n", "mods", "mymod");
-
-    // Create the directory & extract your bundled translations here if needed.
-    // (Up to you — e.g., from <EmbeddedResource> in your DLL.)
-
-    Tr.RegisterMod("mymod", myI18nDir);
+    // Extract your bundled translations to UserData/i18n/mymod first if needed.
+    Tr.RegisterMod("mymod");
 }
 ```
+
+Use `Tr.RegisterMod("mymod", customDirectory)` only when your translations intentionally live outside the conventional `UserData/i18n/<namespace>/` path.
 
 **Important:** Anomaly initializes its own localization in `Core.OnInitializeMelon()`, which means yours must run after it. Declare the dependency explicitly with `[assembly: MelonAdditionalDependencies("Anomaly")]` — CLR assembly references do not affect MelonLoader's `OnInitializeMelon` order. See [MODDING.md](../MODDING.md) for the full load-order contract.
 
@@ -90,7 +86,7 @@ Missing keys return the key itself and log a warning via `MelonLogger`. Don't pa
 The active locale is determined at mod init, in priority order:
 
 1. **SCPSL registry** (`%APPDATA%/SCP Secret Laboratory/registry.txt`, `translation_path` field) — authoritative
-2. **Anomaly config** (`UserData/Anomaly/config.json`, `locale` field) — override for testing/custom
+2. **Anomaly MelonPreferences** (`anomaly` category, `locale` entry) — override for testing/custom
 3. **System culture** (`CultureInfo.CurrentCulture.TwoLetterISOLanguageName`)
 4. **`"en"`** — final fallback
 
@@ -137,9 +133,9 @@ Translators should preserve tags verbatim. If a tag is malformed, TMP will rende
 
 ## File locations at runtime
 
-- **Anomaly's own translations**: `UserData/Anomaly/i18n/en.json`, `fr.json`, ...
-- **Your mod's translations**: `UserData/Anomaly/i18n/mods/<namespace>/en.json`, ...
-- **User-edited locale override**: `UserData/Anomaly/config.json` → `{ "locale": "fr" }`
+- **Anomaly's own translations**: `UserData/i18n/anomaly/en.json`, `fr.json`, ...
+- **Your mod's translations**: `UserData/i18n/<namespace>/en.json`, ...
+- **User-edited locale override**: MelonPreferences category `anomaly`, entry `locale`
 - **SCPSL language setting (source of truth)**: `%APPDATA%/SCP Secret Laboratory/registry.txt` → `translation_path`
 
 ---

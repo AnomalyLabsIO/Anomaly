@@ -12,6 +12,7 @@ using LabApi.Events.Handlers;
 using MEC;
 using Mirror;
 using Mirror.LiteNetLib4Mirror;
+using NetworkManagerUtils.Dummies;
 
 namespace Anomaly.Server.Patches;
 
@@ -38,10 +39,20 @@ public static class PlayerAuthenticationManagerPatch
         if (__instance.isLocalPlayer) return;
         if (__instance._authenticationRequested) return;
         if (!__instance.connectionToClient.isReady) return;
+        if (__instance.connectionToClient is DummyNetworkConnection) return;
+        if (__instance._hub != null && __instance._hub.IsDummy) return;
 
-        OffThreadLogger.Info("Processing auth in FixedUpdate for connection " + __instance.connectionToClient.connectionId);
+        var connectionId = __instance.connectionToClient.connectionId;
+        OffThreadLogger.Info("Processing auth in FixedUpdate for connection " + connectionId);
 
-        var endPoint = LiteNetLib4MirrorServer.Peers[__instance.connectionToClient.connectionId].EndPoint;
+        if (!LiteNetLib4MirrorServer.Peers.TryGetValue(connectionId, out var peer) || peer == null)
+        {
+            OffThreadLogger.Warn($"Authentication failed for connection {connectionId}: no LiteNetLib peer was found.");
+            __instance.RejectAuthentication("Authentication failed Server Side", null, false);
+            return;
+        }
+
+        var endPoint = peer.EndPoint;
         if(!AuthHandler._storedPlayers.TryGetValue(endPoint,out var player))
         {
             OffThreadLogger.Error($"Player from {endPoint} joined the server without being authenticated. No stored player data found.");

@@ -15,10 +15,13 @@ public class FileTransferOverlayComponent : MonoBehaviour
     private TMP_Text _percentText;
     private Image _barFill;
     private GameObject _root;
+    private GameObject _barTrackGo;
+    private GameObject _percentGo;
 
     private string _pendingStatus;
     private string _pendingPercent;
     private float _pendingFill;
+    private bool _pendingShowProgress;
     private bool _dirty;
 
     public FileTransferOverlayComponent(IntPtr intPtr) : base(intPtr) { }
@@ -38,6 +41,11 @@ public class FileTransferOverlayComponent : MonoBehaviour
         if (_statusText != null) _statusText.text = _pendingStatus ?? "";
         if (_percentText != null) _percentText.text = _pendingPercent ?? "";
         if (_barFill != null) _barFill.fillAmount = _pendingFill;
+
+        if (_barTrackGo != null && _barTrackGo.activeSelf != _pendingShowProgress)
+            _barTrackGo.SetActive(_pendingShowProgress);
+        if (_percentGo != null && _percentGo.activeSelf != _pendingShowProgress)
+            _percentGo.SetActive(_pendingShowProgress);
     }
 
     [HideFromIl2Cpp]
@@ -58,6 +66,15 @@ public class FileTransferOverlayComponent : MonoBehaviour
         _pendingStatus = Tr.Get(TrKeys.FileTransfer_Downloading, fileName, fileIndex, totalFiles);
         _pendingPercent = $"{Mathf.RoundToInt(percent * 100f)}%";
         _pendingFill = Mathf.Clamp01(percent);
+        _pendingShowProgress = true;
+        _dirty = true;
+    }
+
+    [HideFromIl2Cpp]
+    public void SetStatus(string text)
+    {
+        _pendingStatus = text ?? "";
+        _pendingShowProgress = false;
         _dirty = true;
     }
 
@@ -103,6 +120,7 @@ public class FileTransferOverlayComponent : MonoBehaviour
 
         // Bar track (bottom half of panel)
         var trackGo = CreateUIElement("BarTrack", panelGo.transform);
+        _barTrackGo = trackGo;
         var trackRect = trackGo.GetComponent<RectTransform>();
         trackRect.anchorMin = new Vector2(0f, 0f);
         trackRect.anchorMax = new Vector2(0.85f, 0.45f);
@@ -126,6 +144,7 @@ public class FileTransferOverlayComponent : MonoBehaviour
 
         // Percent text (right side)
         var pctGo = CreateUIElement("PercentText", panelGo.transform);
+        _percentGo = pctGo;
         var pctRect = pctGo.GetComponent<RectTransform>();
         pctRect.anchorMin = new Vector2(0.85f, 0f);
         pctRect.anchorMax = new Vector2(1f, 0.45f);
@@ -160,6 +179,12 @@ public static class FileTransferOverlay
     public static void UpdateProgress(string fileName, int fileIndex, int totalFiles, float percent)
     {
         _instance?.UpdateProgress(fileName, fileIndex, totalFiles, percent);
+    }
+
+    public static void SetStatus(string text)
+    {
+        EnsureInstance();
+        _instance?.SetStatus(text);
     }
 
     public static void Hide()

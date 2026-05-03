@@ -23,9 +23,9 @@ namespace Anomaly.Client.Api.Localization;
 public class LocalizationService
 {
     private readonly string _anomalyI18nDir;
-    private readonly string _configPath;
     private readonly string _userDataDir;
     private readonly Assembly _resourceAssembly;
+    private readonly MelonPreferences_Entry<string> _localeOverride;
     private readonly Dictionary<string, string> _active = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _fallback = new(StringComparer.Ordinal);
 
@@ -46,8 +46,8 @@ public class LocalizationService
     {
         _userDataDir = userDataDir;
         _resourceAssembly = resourceAssembly ?? throw new ArgumentNullException(nameof(resourceAssembly));
-        _anomalyI18nDir = Path.Combine(userDataDir, "Anomaly", "i18n");
-        _configPath = Path.Combine(userDataDir, "Anomaly", "config.json");
+        _anomalyI18nDir = Path.Combine(userDataDir, "i18n", "anomaly");
+        _localeOverride = GetOrCreateStringPreference("anomaly", "locale", string.Empty, "Locale override");
 
         EnsureAnomalyExtracted();
         ActiveLocale = ResolveLocale();
@@ -136,8 +136,10 @@ public class LocalizationService
 
         try
         {
-            MergeFileInto(_fallback, Path.Combine(i18nDirectoryPath, "en.json"));
-            MergeActiveFromDir(i18nDirectoryPath);
+            if (!MergeFileInto(_fallback, Path.Combine(i18nDirectoryPath, "en.json"), modNamespace))
+                return false;
+            if (!MergeActiveFromDir(i18nDirectoryPath, modNamespace))
+                return false;
             _registeredNamespaces.Add(modNamespace);
             MelonLogger.Msg($"[Anomaly i18n] Registered mod namespace '{modNamespace}' from '{i18nDirectoryPath}'.");
             return true;
@@ -222,21 +224,9 @@ public class LocalizationService
         if (!string.IsNullOrEmpty(scpslLocale))
             return scpslLocale;
 
-        // 2. Anomaly config.json override
-        if (File.Exists(_configPath))
-        {
-            try
-            {
-                var json = File.ReadAllText(_configPath);
-                var config = JsonConvert.DeserializeObject<ClientConfig>(json);
-                if (!string.IsNullOrEmpty(config?.Locale))
-                    return config.Locale;
-            }
-            catch
-            {
-                // Ignore malformed config
-            }
-        }
+        // 2. Anomaly MelonPreferences override
+        if (!string.IsNullOrWhiteSpace(_localeOverride.Value))
+            return _localeOverride.Value;
 
         // 3. System culture
         var sys = CultureInfo.CurrentCulture.TwoLetterISOLanguageName;
@@ -250,12 +240,12 @@ public class LocalizationService
 
     private void LoadAnomalyTranslations()
     {
-        MergeFileInto(_fallback, Path.Combine(_anomalyI18nDir, "en.json"));
+        MergeFileInto(_fallback, Path.Combine(_anomalyI18nDir, "en.json"), "anomaly");
 
         var exact = LoadJsonFile(Path.Combine(_anomalyI18nDir, $"{ActiveLocale}.json"));
         if (exact != null)
         {
-            foreach (var kvp in exact) _active[kvp.Key] = kvp.Value;
+            foreach (var kvp in exact) AddTranslation(_active, kvp.Key, kvp.Value, _anomalyI18nDir);
             return;
         }
 
@@ -266,7 +256,7 @@ public class LocalizationService
             var prefixMatch = LoadJsonFile(Path.Combine(_anomalyI18nDir, $"{prefix}.json"));
             if (prefixMatch != null)
             {
-                foreach (var kvp in prefixMatch) _active[kvp.Key] = kvp.Value;
+                foreach (var kvp in prefixMatch) AddTranslation(_active, kvp.Key, kvp.Value, _anomalyI18nDir);
                 return;
             }
         }
@@ -275,13 +265,12 @@ public class LocalizationService
         foreach (var kvp in _fallback) _active[kvp.Key] = kvp.Value;
     }
 
-    private void MergeActiveFromDir(string dir)
+    private bool MergeActiveFromDir(string dir, string expectedNamespace)
     {
         var exact = LoadJsonFile(Path.Combine(dir, $"{ActiveLocale}.json"));
         if (exact != null)
         {
-            foreach (var kvp in exact) _active[kvp.Key] = kvp.Value;
-            return;
+            return MergeTranslations(_active, exact, dir, expectedNamespace);
         }
 
         var underscore = ActiveLocale.IndexOf('_');
@@ -291,20 +280,53 @@ public class LocalizationService
             var prefixMatch = LoadJsonFile(Path.Combine(dir, $"{prefix}.json"));
             if (prefixMatch != null)
             {
-                foreach (var kvp in prefixMatch) _active[kvp.Key] = kvp.Value;
-                return;
+                return MergeTranslations(_active, prefixMatch, dir, expectedNamespace);
             }
         }
 
         // Nothing translated for active locale — fallback file (en.json) was already merged into _fallback.
+        return true;
     }
 
-    private void MergeFileInto(Dictionary<string, string> target, string path)
+    private bool MergeFileInto(Dictionary<string, string> target, string path, string expectedNamespace)
     {
         var loaded = LoadJsonFile(path);
-        if (loaded == null) return;
+        if (loaded == null) return true;
+
+        return MergeTranslations(target, loaded, path, expectedNamespace);
+    }
+
+    private bool MergeTranslations(
+        Dictionary<string, string> target,
+        Dictionary<string, string> loaded,
+        string source,
+        string expectedNamespace)
+    {
+        string prefix = expectedNamespace + ".";
         foreach (var kvp in loaded)
-            target[kvp.Key] = kvp.Value;
+        {
+            if (!kvp.Key.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                MelonLogger.Error(
+                    $"[Anomaly i18n] '{source}' contains key '{kvp.Key}' outside namespace '{expectedNamespace}'.");
+                return false;
+            }
+
+            AddTranslation(target, kvp.Key, kvp.Value, source);
+        }
+
+        return true;
+    }
+
+    private void AddTranslation(Dictionary<string, string> target, string key, string value, string source)
+    {
+        if (target.TryGetValue(key, out var existing) && existing != value)
+        {
+            MelonLogger.Warning(
+                $"[Anomaly i18n] Key '{key}' from '{source}' overwrites an existing translation.");
+        }
+
+        target[key] = value;
     }
 
     private static Dictionary<string, string> LoadJsonFile(string path)
@@ -322,9 +344,14 @@ public class LocalizationService
         }
     }
 
-    private class ClientConfig
+    private static MelonPreferences_Entry<string> GetOrCreateStringPreference(
+        string categoryId,
+        string entryId,
+        string defaultValue,
+        string displayName)
     {
-        [JsonProperty("locale")]
-        public string Locale { get; set; }
+        var category = MelonPreferences.CreateCategory(categoryId, "Anomaly");
+        var entry = category.GetEntry<string>(entryId);
+        return entry ?? category.CreateEntry(entryId, defaultValue, displayName);
     }
 }

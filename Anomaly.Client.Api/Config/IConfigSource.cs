@@ -3,17 +3,15 @@ using System;
 namespace Anomaly.Client.Api.Config;
 
 /// <summary>
-/// A typed, key/value config store backed by persistent storage. Each Anomaly
-/// mod gets its own <see cref="IConfigSource"/> via
-/// <see cref="ClientConfig.For"/>; the store is scoped to that mod's id and
-/// isolated from other mods.
+/// A typed, key/value config store backed by MelonPreferences. Each Anomaly mod
+/// gets its own <see cref="IConfigSource"/> via <see cref="ClientConfig.For"/>;
+/// the store is scoped to that mod's id and isolated from other mods.
 /// </summary>
 /// <remarks>
 /// <para>Values are serialized with Newtonsoft.Json so any type Json.NET can round-trip
 /// is supported (primitives, POCOs, collections, enums).</para>
-/// <para>The store supports file-watcher-based hot reload: when the backing file
-/// changes on disk, <see cref="Reload"/> is called and <see cref="KeyChanged"/>
-/// fires for each key whose value differs from the in-memory copy.</para>
+/// <para>New mods should prefer direct MelonPreferences categories for their
+/// public settings. This interface remains as a compatibility key/value layer.</para>
 /// </remarks>
 public interface IConfigSource
 {

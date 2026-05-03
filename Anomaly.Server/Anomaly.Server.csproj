@@ -165,8 +165,6 @@
         </Reference>
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="API\Plugins\AnomalyPluginAttribute.cs" />
-        <Compile Include="API\Plugins\AnomalyServerPlugins.cs" />
         <Compile Include="Round\RoundStateBroadcaster.cs" />
         <Compile Include="Round\RoundStartBridge.cs" />
         <Compile Include="Auth\AuthHandler.cs" />

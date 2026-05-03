@@ -92,7 +92,7 @@
     -->
     <PropertyGroup>
       <AnomalyServerDepsDir Condition="'$(AnomalyServerDepsDir)' == ''">E:\Projects\AnomalyLabs\Server\server\AppData\SCP Secret Laboratory\LabAPI\dependencies\global</AnomalyServerDepsDir>
-      <AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">E:\Projects\AnomalyLabs\Client\UserLibs</AnomalyClientUserLibsDir>
+      <AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">E:\Projects\AnomalyLabs\ModdedFiles\loadouts\dev\local\UserLibs</AnomalyClientUserLibsDir>
     </PropertyGroup>
     <Target Name="CopySharedToLocalTargets" AfterTargets="Build">
       <Message Importance="high" Text="Anomaly.Shared: copying $(TargetFileName) -&gt; $(AnomalyServerDepsDir)" Condition="Exists('$(AnomalyServerDepsDir)')" />

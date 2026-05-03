@@ -13,6 +13,8 @@ internal static class TrKeys
     // File transfer overlay
     public const string FileTransfer_Preparing = "anomaly.overlay.file_transfer.preparing";
     public const string FileTransfer_Downloading = "anomaly.overlay.file_transfer.downloading";
+    public const string FileTransfer_Connecting = "anomaly.overlay.file_transfer.connecting";
+    public const string FileTransfer_LoadingLevel = "anomaly.overlay.file_transfer.loading_level";
 
     // News / main menu announcement
     public const string News_Anomaly_Title = "anomaly.news.anomaly.title";

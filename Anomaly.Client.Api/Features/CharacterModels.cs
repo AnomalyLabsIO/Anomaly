@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
+using Anomaly.Client.Api.Scheduling;
 using Il2CppInterop.Runtime;
 using Il2CppPlayerRoles.FirstPersonControl.Thirdperson;
 using Il2CppPlayerRoles.FirstPersonControl.Thirdperson.Subcontrollers;
@@ -43,7 +44,11 @@ public static class CharacterModels
         public AnimatedCharacterModel AttachedModel;
         public Action BeforeDelegate;
         public Action AfterDelegate;
+        public ScheduledTask RetryTask;
     }
+
+    private const int LocalAttachRetryCount = 20;
+    private static readonly TimeSpan LocalAttachRetryDelay = TimeSpan.FromMilliseconds(100);
 
     private static readonly List<HookEntry> _localHooks = new();
     private static readonly Dictionary<int, int> _animatorLayerCache = new();
@@ -204,11 +209,30 @@ public static class CharacterModels
 
     private static void AttachToCurrentLocalModel(HookEntry entry)
     {
+        AttachToCurrentLocalModel(entry, LocalAttachRetryCount);
+    }
+
+    private static void AttachToCurrentLocalModel(HookEntry entry, int retriesLeft)
+    {
+        if (entry == null || entry.Hook == null)
+            return;
+
+        entry.RetryTask?.Cancel();
+        entry.RetryTask = null;
+
         AnimatedCharacterModel model = LocalModel;
-        if (model == null) return;
+        if (model == null)
+        {
+            ScheduleAttachRetry(entry, retriesLeft);
+            return;
+        }
 
         CullingSubcontroller sub = GetCullingSubcontroller(model);
-        if (sub == null) return;
+        if (sub == null)
+        {
+            ScheduleAttachRetry(entry, retriesLeft);
+            return;
+        }
 
         try
         {
@@ -229,9 +253,26 @@ public static class CharacterModels
         }
     }
 
+    private static void ScheduleAttachRetry(HookEntry entry, int retriesLeft)
+    {
+        if (entry == null || retriesLeft <= 0)
+            return;
+
+        entry.RetryTask = Scheduler.In(LocalAttachRetryDelay, () =>
+        {
+            if (_localHooks.Contains(entry) && entry.AttachedModel == null)
+                AttachToCurrentLocalModel(entry, retriesLeft - 1);
+        }, ownerId: "anomaly.character-models");
+    }
+
     private static void DetachHook(HookEntry entry)
     {
-        if (entry == null || entry.AttachedModel == null) return;
+        if (entry == null) return;
+
+        entry.RetryTask?.Cancel();
+        entry.RetryTask = null;
+
+        if (entry.AttachedModel == null) return;
 
         CullingSubcontroller sub = GetCullingSubcontroller(entry.AttachedModel);
         if (sub != null)
