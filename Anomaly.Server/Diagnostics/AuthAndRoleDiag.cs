@@ -38,6 +38,10 @@ namespace Anomaly.Server.Diagnostics
             PlayerEvents.ChangedRole     += OnChangedRole;
             PlayerEvents.Spawning        += OnSpawning;
             PlayerEvents.Spawned         += OnSpawned;
+            PlayerEvents.RequestingRaPlayerList += OnRequestingRaPlayerList;
+            PlayerEvents.RaPlayerListAddingPlayer += OnRaPlayerListAddingPlayer;
+            PlayerEvents.RaPlayerListAddedPlayer += OnRaPlayerListAddedPlayer;
+            PlayerEvents.RequestedRaPlayerList += OnRequestedRaPlayerList;
             ServerEvents.RoundStarted    += OnRoundStarted;
             ServerEvents.CommandExecuting += OnCommandExecuting;
             ServerEvents.MapGenerated    += OnMapGenerated;
@@ -73,6 +77,10 @@ namespace Anomaly.Server.Diagnostics
             PlayerEvents.ChangedRole     -= OnChangedRole;
             PlayerEvents.Spawning        -= OnSpawning;
             PlayerEvents.Spawned         -= OnSpawned;
+            PlayerEvents.RequestingRaPlayerList -= OnRequestingRaPlayerList;
+            PlayerEvents.RaPlayerListAddingPlayer -= OnRaPlayerListAddingPlayer;
+            PlayerEvents.RaPlayerListAddedPlayer -= OnRaPlayerListAddedPlayer;
+            PlayerEvents.RequestedRaPlayerList -= OnRequestedRaPlayerList;
             ServerEvents.RoundStarted    -= OnRoundStarted;
             ServerEvents.CommandExecuting -= OnCommandExecuting;
             ServerEvents.MapGenerated    -= OnMapGenerated;
@@ -209,6 +217,66 @@ namespace Anomaly.Server.Diagnostics
             catch (Exception ex) { OffThreadLogger.Error($"[Diag] OnCommandExecuting: {ex}"); }
         }
 
+        private static int _raListRequestCount;
+        private static void OnRequestingRaPlayerList(PlayerRequestingRaPlayerListEventArgs ev)
+        {
+            try
+            {
+                int requestId = ++_raListRequestCount;
+                OffThreadLogger.Info(
+                    $"[Diag] RAList Requesting #{requestId}: requester={DescribePlayer(ev.Player)} " +
+                    $"sorting={ev.Sorting} desc={ev.IsDescending} allowed={ev.IsAllowed} hubs={CountHubs()}");
+
+                foreach (var hub in ReferenceHub.AllHubs)
+                {
+                    if (hub == null) continue;
+                    OffThreadLogger.Info($"[Diag] RAList #{requestId} candidate: {DescribeHub(hub)}");
+                }
+            }
+            catch (Exception ex) { OffThreadLogger.Error($"[Diag] OnRequestingRaPlayerList: {ex}"); }
+        }
+
+        private static void OnRaPlayerListAddingPlayer(PlayerRaPlayerListAddingPlayerEventArgs ev)
+        {
+            try
+            {
+                var hub = ev.Target?.ReferenceHub;
+                if (!IsDummyish(hub)) return;
+
+                OffThreadLogger.Info(
+                    $"[Diag] RAList Adding dummy: requester={DescribePlayer(ev.Player)} allowed={ev.IsAllowed} " +
+                    $"prefix='{TrimLog(ev.Prefix)}' body='{TrimLog(ev.Body)}' target={DescribeHub(hub)}");
+            }
+            catch (Exception ex) { OffThreadLogger.Error($"[Diag] OnRaPlayerListAddingPlayer: {ex}"); }
+        }
+
+        private static void OnRaPlayerListAddedPlayer(PlayerRaPlayerListAddedPlayerEventArgs ev)
+        {
+            try
+            {
+                var hub = ev.Target?.ReferenceHub;
+                if (!IsDummyish(hub)) return;
+
+                OffThreadLogger.Info(
+                    $"[Diag] RAList Added dummy: requester={DescribePlayer(ev.Player)} " +
+                    $"row='{TrimLog(ev.TargetBuilder?.ToString())}' target={DescribeHub(hub)}");
+            }
+            catch (Exception ex) { OffThreadLogger.Error($"[Diag] OnRaPlayerListAddedPlayer: {ex}"); }
+        }
+
+        private static void OnRequestedRaPlayerList(PlayerRequestedRaPlayerListEventArgs ev)
+        {
+            try
+            {
+                string body = ev.ListBuilder?.ToString() ?? string.Empty;
+                OffThreadLogger.Info(
+                    $"[Diag] RAList Requested: requester={DescribePlayer(ev.Player)} " +
+                    $"len={body.Length} containsDummyNick={body.IndexOf("Dummy", StringComparison.OrdinalIgnoreCase) >= 0} " +
+                    $"body='{TrimLog(body, 300)}'");
+            }
+            catch (Exception ex) { OffThreadLogger.Error($"[Diag] OnRequestedRaPlayerList: {ex}"); }
+        }
+
         // ---------------------------------------------------------------- Harmony patches
 
         private static void TryPatch(Type type, string methodName, string prefix = null, string postfix = null)
@@ -320,6 +388,73 @@ namespace Anomaly.Server.Diagnostics
                     $"seed={SeedSynchronizer.Seed}");
             }
             catch (Exception ex) { OffThreadLogger.Error($"[Diag] GenerateLevel_Postfix: {ex}"); }
+        }
+
+        private static int CountHubs()
+        {
+            int count = 0;
+            foreach (var hub in ReferenceHub.AllHubs)
+            {
+                if (hub != null) count++;
+            }
+
+            return count;
+        }
+
+        private static bool IsDummyish(ReferenceHub hub)
+        {
+            if (hub == null) return false;
+
+            try
+            {
+                return hub.IsDummy || string.Equals(hub.authManager?.UserId, "ID_Dummy", StringComparison.Ordinal);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string DescribePlayer(LabApi.Features.Wrappers.Player player)
+        {
+            if (player == null) return "<null>";
+            return $"{player.Nickname ?? "<null>"} ({player.UserId ?? "<null>"})";
+        }
+
+        private static string DescribeHub(ReferenceHub hub)
+        {
+            if (hub == null) return "<null>";
+
+            string role = "?";
+            try { role = hub.roleManager?.CurrentRole?.RoleTypeId.ToString() ?? "<null>"; } catch { }
+
+            string group = "<null>";
+            try { group = hub.serverRoles?.Group?.BadgeText ?? "<none>"; } catch { }
+
+            string conn = "<null>";
+            bool ready = false;
+            try
+            {
+                conn = hub.connectionToClient?.GetType().Name ?? "<null>";
+                ready = hub.connectionToClient?.isReady ?? false;
+            }
+            catch { }
+
+            return
+                $"userId={hub.authManager?.UserId ?? "<null>"} nick={hub.nicknameSync?.MyNick ?? "<null>"} " +
+                $"combined={hub.nicknameSync?.CombinedName ?? "<null>"} playerId={hub.PlayerId} " +
+                $"mode={hub.authManager?.InstanceMode} isDummy={hub.IsDummy} role={role} " +
+                $"ra={hub.serverRoles?.RemoteAdmin ?? false} perms=0x{(hub.serverRoles?.Permissions ?? 0UL):X16} " +
+                $"group={group} conn={conn} ready={ready} netId={hub.networkIdentity?.netId ?? 0}";
+        }
+
+        private static string TrimLog(string value, int max = 160)
+        {
+            if (value == null) return "<null>";
+
+            value = value.Replace("\r", "\\r").Replace("\n", "\\n");
+            if (value.Length <= max) return value;
+            return value.Substring(0, max) + "...";
         }
     }
 }

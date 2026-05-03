@@ -46,6 +46,12 @@ public class PasswordPromptComponent : MonoBehaviour
             return;
         }
 
+        if (TryPasteFromClipboard())
+        {
+            UpdatePasswordText();
+            return;
+        }
+
         foreach (var c in Input.inputString)
         {
             if (c == '\b')
@@ -55,13 +61,43 @@ public class PasswordPromptComponent : MonoBehaviour
                 continue;
             }
 
-            if (c == '\n' || c == '\r' || char.IsControl(c))
-                continue;
-
-            _password += c;
+            AppendPasswordChar(c);
         }
 
         UpdatePasswordText();
+    }
+
+    [HideFromIl2Cpp]
+    private bool TryPasteFromClipboard()
+    {
+        var commandModifier = Input.GetKey(KeyCode.LeftControl)
+            || Input.GetKey(KeyCode.RightControl)
+            || Input.GetKey(KeyCode.LeftCommand)
+            || Input.GetKey(KeyCode.RightCommand);
+        var shiftModifier = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        var pastePressed = (commandModifier && Input.GetKeyDown(KeyCode.V))
+            || (shiftModifier && Input.GetKeyDown(KeyCode.Insert));
+
+        if (!pastePressed)
+            return false;
+
+        var clipboard = GUIUtility.systemCopyBuffer;
+        if (string.IsNullOrEmpty(clipboard))
+            return true;
+
+        foreach (var c in clipboard)
+            AppendPasswordChar(c);
+
+        return true;
+    }
+
+    [HideFromIl2Cpp]
+    private void AppendPasswordChar(char c)
+    {
+        if (c == '\n' || c == '\r' || char.IsControl(c))
+            return;
+
+        _password += c;
     }
 
     [HideFromIl2Cpp]

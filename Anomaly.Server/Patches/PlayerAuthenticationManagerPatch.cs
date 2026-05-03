@@ -247,7 +247,7 @@ public static class PlayerAuthenticationManagerPatch
 
         EncryptedChannelManager.EncryptedChannel channel;
         uint counter;
-        string content;
+        byte[] content;
         EncryptedChannelManager.EncryptedMessage message;
 
         var localClient = conn?.identity != null && conn.identity.isLocalPlayer;
@@ -275,7 +275,8 @@ public static class PlayerAuthenticationManagerPatch
             }
 
             counter = BitConverter.ToUInt32(packedData, 1);
-            content = Encoding.UTF8.GetString(packedData, EncryptedMessageHeaderSize, packedData.Length - EncryptedMessageHeaderSize);
+            content = new byte[packedData.Length - EncryptedMessageHeaderSize];
+            Array.Copy(packedData, EncryptedMessageHeaderSize, content, 0, content.Length);
             message = new EncryptedChannelManager.EncryptedMessage(channel, content, counter);
         }
         else
@@ -359,7 +360,8 @@ public static class PlayerAuthenticationManagerPatch
             }
 
             counter = BitConverter.ToUInt32(decryptedData, 1);
-            content = Encoding.UTF8.GetString(decryptedData, EncryptedMessageHeaderSize, decryptedData.Length - EncryptedMessageHeaderSize);
+            content = new byte[decryptedData.Length - EncryptedMessageHeaderSize];
+            Array.Copy(decryptedData, EncryptedMessageHeaderSize, content, 0, content.Length);
             message = new EncryptedChannelManager.EncryptedMessage(channel, content, counter);
 
             if (encrypted)

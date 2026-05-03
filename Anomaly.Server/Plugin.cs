@@ -21,6 +21,8 @@ namespace Anomaly.Server;
 
 public class Plugin : Plugin<Config>
 {
+    private const string OnlineModeConfigKey = "online_mode";
+
     public static Plugin Instance { get; private set; }
     public Harmony Harmony { get; }
 
@@ -39,8 +41,8 @@ public class Plugin : Plugin<Config>
             OffThreadLogger.Init();
             Logger.Info("OffThreadLogger initialized");
 
-            PlayerAuthenticationManager.OnlineMode = false;
-            Logger.Info("OnlineMode set to false");
+            EnforceOfflineMode();
+            GameCore.ConfigFile.OnConfigReloaded += EnforceOfflineMode;
 
             Instance = this;
 
@@ -104,6 +106,7 @@ public class Plugin : Plugin<Config>
 
     public override void Disable()
     {
+        GameCore.ConfigFile.OnConfigReloaded -= EnforceOfflineMode;
         AuthAndRoleDiag.Disable();
         RoundStartBridge.Disable();
         RoundStateBroadcaster.Disable();
@@ -118,4 +121,36 @@ public class Plugin : Plugin<Config>
     public override string Author { get; } = "AnomalyLabs";
     public override Version Version => GetType().Assembly.GetName().Version;
     public override Version RequiredApiVersion => new Version(1, 1, 5);
+
+    private static void EnforceOfflineMode()
+    {
+        try
+        {
+            PlayerAuthenticationManager.OnlineMode = false;
+            CustomLiteNetLib4MirrorTransport.IpPassthroughEnabled = false;
+
+            var serverConfig = GameCore.ConfigFile.ServerConfig;
+            if (serverConfig == null)
+            {
+                Logger.Warn("Anomaly requires online_mode=false, but the gameplay config is not loaded yet. Runtime OnlineMode was still forced off.");
+                return;
+            }
+
+            if (serverConfig.GetBool(OnlineModeConfigKey, true))
+            {
+                serverConfig.SetString(OnlineModeConfigKey, "false");
+                Logger.Warn("Anomaly requires vanilla online_mode=false; updated config_gameplay online_mode to false.");
+            }
+            else
+            {
+                Logger.Info("OnlineMode forced to false for Anomaly auth.");
+            }
+        }
+        catch (Exception ex)
+        {
+            PlayerAuthenticationManager.OnlineMode = false;
+            CustomLiteNetLib4MirrorTransport.IpPassthroughEnabled = false;
+            Logger.Error($"Failed to persist online_mode=false; runtime OnlineMode was forced off anyway: {ex}");
+        }
+    }
 }

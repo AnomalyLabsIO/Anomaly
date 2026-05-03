@@ -11,8 +11,8 @@ using Il2Cpp;
 using Il2CppCentralAuth;
 using Il2CppCryptography;
 using Il2CppGameCore;
+using Il2CppMirror;
 using Il2CppRemoteAdmin;
-using Il2CppSystem.Text;
 using MelonLoader;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Engines;
@@ -26,6 +26,9 @@ namespace Anomaly.Client.Patches.Auth;
 [HarmonyPatch]
 public static class PlayerAuthenticationManagerPatch
 {
+    private const int EncryptedMessageHeaderSize = 5;
+    private const int AesGcmNonceSize = 32;
+
     private struct PendingEncryptedMessage
     {
         public EncryptedChannelManager.EncryptedMessage Message;
@@ -194,18 +197,65 @@ public static class PlayerAuthenticationManagerPatch
         // that — our own AuthHandler already knows the shared secret from
         // phase-2 auth, so fall back to AuthHandler.CurrentKey. Sync it onto
         // the hub once we have both so subsequent vanilla code paths work.
-        byte[] key = hub.encryptedChannelManager.EncryptionKey;
-        if (key == null)
+        byte[] packedData = packed.Data;
+        if (packedData == null || packedData.Length == 0)
         {
-            key = AuthHandler.CurrentKey;
+            MelonLogger.Warning("Got encrypted channel message with an empty payload.");
+            return false;
+        }
+
+        byte[] decryptedData;
+        if (packed.Level == EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated)
+        {
+            byte[] key = hub.encryptedChannelManager.EncryptionKey;
             if (key == null)
             {
-                MelonLogger.Warning("Got EncryptedMessage but no encryption key available (hub and AuthHandler both null)");
+                key = AuthHandler.CurrentKey;
+                if (key == null)
+                {
+                    MelonLogger.Warning("Got EncryptedMessage but no encryption key available (hub and AuthHandler both null)");
+                    return false;
+                }
+                hub.encryptedChannelManager.EncryptionKey = key;
+            }
+
+            if (packedData.Length < AesGcmNonceSize)
+            {
+                MelonLogger.Warning($"Encrypted-channel message was too short to decrypt ({packedData.Length} bytes).");
                 return false;
             }
-            hub.encryptedChannelManager.EncryptionKey = key;
+
+            try
+            {
+                decryptedData = AES.AesGcmDecrypt(packedData, key);
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"Failed to decrypt encrypted-channel message ({packedData.Length} bytes): {ex.GetType().Name}: {ex.Message}");
+                return false;
+            }
         }
-        var decryptedData = AES.AesGcmDecrypt(packed.Data, key);
+        else if (packed.Level == EncryptedChannelManager.SecurityLevel.Unsecured)
+        {
+            if (!NetworkServer.active)
+            {
+                MelonLogger.Warning("Dropping unsecured encrypted-channel message from a remote server.");
+                return false;
+            }
+
+            decryptedData = packedData;
+        }
+        else
+        {
+            MelonLogger.Warning($"Dropping encrypted-channel message with unknown security level {packed.Level}.");
+            return false;
+        }
+
+        if (decryptedData == null || decryptedData.Length < EncryptedMessageHeaderSize)
+        {
+            MelonLogger.Warning($"Decoded encrypted-channel message was too short ({decryptedData?.Length ?? 0} bytes).");
+            return false;
+        }
 
         var channel = (EncryptedChannelManager.EncryptedChannel)decryptedData[0];
 
@@ -221,7 +271,8 @@ public static class PlayerAuthenticationManagerPatch
         }
 
         var counter = BitConverter.ToUInt32(decryptedData, 1);
-        var content = Encoding.UTF8.GetString(decryptedData, 5, decryptedData.Length - 5);
+        var content = new byte[decryptedData.Length - EncryptedMessageHeaderSize];
+        Array.Copy(decryptedData, EncryptedMessageHeaderSize, content, 0, content.Length);
         EncryptedChannelManager.EncryptedMessage message = new EncryptedChannelManager.EncryptedMessage(channel, content, counter);
 
         if (hub.encryptedChannelManager._rxCounter == 4294967295U)

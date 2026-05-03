@@ -8,6 +8,7 @@ using Anomaly.Client.Api.Internal.Localization;
 using Anomaly.Client.Api.Localization;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
+using Il2CppMirror;
 using MelonLoader;
 
 namespace Anomaly.Client.FileTransfer;
@@ -35,6 +36,12 @@ public static class FileTransferClient
         // NetworkManagerRegisterClientMessages.
         ClientEvents.Connected += _ =>
         {
+            if (NetworkServer.active)
+            {
+                FileTransferOverlay.Hide();
+                return;
+            }
+
             FileTransferOverlay.Show();
             FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_Connecting));
         };

@@ -195,7 +195,7 @@ internal static class CrashHooks
             // Skip reports for well-known vanilla SCP:SL bugs that self-
             // heal within a frame or two (e.g., Alphawarhead panel null deref
             // before AlphaWarheadController.Singleton resolves).
-            if (IsKnownBenignVanillaException(stackTrace))
+            if (IsKnownBenignVanillaException(message, stackTrace))
                 return;
 
             // Dedup: same (message + top-of-stack) within the window gets
@@ -240,13 +240,34 @@ internal static class CrashHooks
         }
     }
 
-    private static bool IsKnownBenignVanillaException(string stackTrace)
+    private static bool IsKnownBenignVanillaException(string message, string stackTrace)
     {
         if (string.IsNullOrEmpty(stackTrace)) return false;
         foreach (var sig in VanillaBenignStackSignatures)
         {
             if (stackTrace.IndexOf(sig, StringComparison.Ordinal) >= 0) return true;
         }
+
+        if (IsLiteNetLibShutdownDisconnect(message, stackTrace))
+            return true;
+
+        return false;
+    }
+
+    private static bool IsLiteNetLibShutdownDisconnect(string message, string stackTrace)
+    {
+        if (string.IsNullOrEmpty(message) || message.IndexOf("NullReferenceException", StringComparison.Ordinal) < 0)
+            return false;
+
+        if (stackTrace.IndexOf("LiteNetLib4MirrorClient+<>c__DisplayClass9_0.<OnNetworkReceive>b__0", StringComparison.Ordinal) < 0)
+            return false;
+
+        foreach (string entry in CircularLogBuffer.GetSnapshot())
+        {
+            if (entry.IndexOf("Server is shutting down", StringComparison.Ordinal) >= 0)
+                return true;
+        }
+
         return false;
     }
 
