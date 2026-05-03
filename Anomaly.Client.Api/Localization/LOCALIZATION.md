@@ -19,34 +19,36 @@ All your translation keys must start with this namespace followed by a dot: `mym
 
 ### 2. Create your translation files
 
-Put per-locale JSON files in your own directory under Anomaly's i18n tree. The recommended location is:
+Put per-locale YAML files in your own directory under Anomaly's i18n tree. The recommended location is:
 
 ```
 <UserData>/i18n/<your_namespace>/
-    en.json      # canonical source — required
-    fr.json
-    de.json
+    en.yaml      # canonical source — required
+    fr.yaml
+    de.yaml
     ...
 ```
 
-Each JSON file is a flat key-value object. Keys are your full namespaced identifiers. Placeholders use `.NET` `string.Format` positional syntax (`{0}`, `{1}`).
+Each YAML file is a flat key-value mapping. Keys are your full namespaced identifiers (quote them — the dots would otherwise look like nested keys to YAML). Values are double-quoted strings; `\n`, `\t`, and `\"` work the same as JSON. Placeholders use `.NET` `string.Format` positional syntax (`{0}`, `{1}`).
 
-`en.json`:
-```json
-{
-  "mymod.greeting": "Hello, {0}!",
-  "mymod.button.open_settings": "Open Settings",
-  "mymod.error.connection_lost": "Lost connection to server ({0})"
-}
+Comments (`#`) are first-class — use them to document what each placeholder means so translators don't reorder slots silently.
+
+`en.yaml`:
+```yaml
+# {0} = username
+"mymod.greeting": "Hello, {0}!"
+"mymod.button.open_settings": "Open Settings"
+# {0} = server name
+"mymod.error.connection_lost": "Lost connection to server ({0})"
 ```
 
-`fr.json`:
-```json
-{
-  "mymod.greeting": "Bonjour, {0} !",
-  "mymod.button.open_settings": "Ouvrir les paramètres",
-  "mymod.error.connection_lost": "Connexion perdue au serveur ({0})"
-}
+`fr.yaml`:
+```yaml
+# {0} = nom d'utilisateur
+"mymod.greeting": "Bonjour, {0} !"
+"mymod.button.open_settings": "Ouvrir les paramètres"
+# {0} = nom du serveur
+"mymod.error.connection_lost": "Connexion perdue au serveur ({0})"
 ```
 
 ### 3. Register in your mod
@@ -77,7 +79,7 @@ var btn = Tr.Get("mymod.button.open_settings");         // "Open Settings"
 var anomalyKey = Tr.Get("anomaly.overlay.authenticating");
 ```
 
-Missing keys return the key itself and log a warning via `MelonLogger`. Don't panic — just add the key to your `en.json` and restart.
+Missing keys return the key itself and log a warning via `MelonLogger`. Don't panic — just add the key to your `en.yaml` and restart.
 
 ---
 
@@ -98,22 +100,20 @@ Locale changes require a mod restart in v1. Live switching may come in a later v
 
 When the active locale has a region suffix (e.g., `pt_BR`, `zh_Hans`):
 
-1. Try exact match (`pt_BR.json`)
-2. Fall back to language-only (`pt.json`)
-3. Fall back to `en.json`
+1. Try exact match (`pt_BR.yaml`)
+2. Fall back to language-only (`pt.yaml`)
+3. Fall back to `en.yaml`
 
-This means most mods can ship just `en.json`, `fr.json`, `de.json`, etc. and still get acceptable results for regional variants.
+This means most mods can ship just `en.yaml`, `fr.yaml`, `de.yaml`, etc. and still get acceptable results for regional variants.
 
 ---
 
 ## Rich text and TMP tags
 
-Unity's TextMeshPro rich-text tags (`<color>`, `<b>`, `<size>`) can be included inside translated values:
+Unity's TextMeshPro rich-text tags (`<color>`, `<b>`, `<size>`) can be included inside translated values. Use double-quoted YAML strings so the angle brackets aren't ambiguous to the parser:
 
-```json
-{
-  "mymod.news.welcome": "<b><size=20>Welcome</size></b>\n<color=#ff3300>Build 42</color>"
-}
+```yaml
+"mymod.news.welcome": "<b><size=20>Welcome</size></b>\n<color=#ff3300>Build 42</color>"
 ```
 
 Translators should preserve tags verbatim. If a tag is malformed, TMP will render it as literal text — which is ugly but not destructive.
@@ -133,8 +133,8 @@ Translators should preserve tags verbatim. If a tag is malformed, TMP will rende
 
 ## File locations at runtime
 
-- **Anomaly's own translations**: `UserData/i18n/anomaly/en.json`, `fr.json`, ...
-- **Your mod's translations**: `UserData/i18n/<namespace>/en.json`, ...
+- **Anomaly's own translations**: `UserData/i18n/anomaly/en.yaml`, `fr.yaml`, ...
+- **Your mod's translations**: `UserData/i18n/<namespace>/en.yaml`, ...
 - **User-edited locale override**: MelonPreferences category `anomaly`, entry `locale`
 - **SCPSL language setting (source of truth)**: `%APPDATA%/SCP Secret Laboratory/registry.txt` → `translation_path`
 
@@ -142,7 +142,7 @@ Translators should preserve tags verbatim. If a tag is malformed, TMP will rende
 
 ## Troubleshooting
 
-- **Missing-key warnings in the MelonLoader log**: add the missing key to your `en.json`. The system falls back to English if a translated file lacks a specific key, but a missing English source is an error.
+- **Missing-key warnings in the MelonLoader log**: add the missing key to your `en.yaml`. The system falls back to English if a translated file lacks a specific key, but a missing English source is an error.
 - **Key shows the raw identifier instead of text**: your registration failed. Check the MelonLoader log for `[Anomaly i18n]` errors.
-- **Wrong locale active**: confirm SCPSL's in-game language setting (`Settings → Language`). Override via `UserData/Anomaly/config.json` for testing.
+- **Wrong locale active**: confirm SCPSL's in-game language setting (`Settings → Language`). For testing, override via the MelonPreferences entry `anomaly` → `locale` (set to a locale code like `fr` or `pt_BR`).
 - **Placeholders show as `{0}` literally**: mismatch between `Tr.Get(...)` argument count and the template. Fix the call or the translation.

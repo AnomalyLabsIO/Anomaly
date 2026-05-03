@@ -9,7 +9,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Anomaly.Client.Api.Internal.Localization;
 using MelonLoader;
-using Newtonsoft.Json;
+using YamlDotNet.Serialization;
 
 namespace Anomaly.Client.Api.Localization;
 
@@ -92,7 +92,7 @@ public class LocalizationService
     /// "anomaly." or "launcher." (reserved for the core platform).
     /// </param>
     /// <param name="i18nDirectoryPath">
-    /// Absolute path to a directory containing per-locale JSON files (en.json, fr.json, ...).
+    /// Absolute path to a directory containing per-locale YAML files (en.yaml, fr.yaml, ...).
     /// All keys in those files must be prefixed with the mod's namespace.
     /// </param>
     /// <returns>True if registered; false if rejected (invalid namespace or duplicate).</returns>
@@ -136,7 +136,7 @@ public class LocalizationService
 
         try
         {
-            if (!MergeFileInto(_fallback, Path.Combine(i18nDirectoryPath, "en.json"), modNamespace))
+            if (!MergeFileInto(_fallback, Path.Combine(i18nDirectoryPath, "en.yaml"), modNamespace))
                 return false;
             if (!MergeActiveFromDir(i18nDirectoryPath, modNamespace))
                 return false;
@@ -164,7 +164,7 @@ public class LocalizationService
             foreach (var resourceName in assembly.GetManifestResourceNames())
             {
                 if (resourceName.IndexOf(".Resources.i18n.", StringComparison.Ordinal) < 0) continue;
-                if (!resourceName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!resourceName.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase)) continue;
 
                 var fileName = ExtractFileName(resourceName);
                 var destPath = Path.Combine(_anomalyI18nDir, fileName);
@@ -240,9 +240,9 @@ public class LocalizationService
 
     private void LoadAnomalyTranslations()
     {
-        MergeFileInto(_fallback, Path.Combine(_anomalyI18nDir, "en.json"), "anomaly");
+        MergeFileInto(_fallback, Path.Combine(_anomalyI18nDir, "en.yaml"), "anomaly");
 
-        var exact = LoadJsonFile(Path.Combine(_anomalyI18nDir, $"{ActiveLocale}.json"));
+        var exact = LoadYamlFile(Path.Combine(_anomalyI18nDir, $"{ActiveLocale}.yaml"));
         if (exact != null)
         {
             foreach (var kvp in exact) AddTranslation(_active, kvp.Key, kvp.Value, _anomalyI18nDir);
@@ -253,7 +253,7 @@ public class LocalizationService
         if (underscore > 0)
         {
             var prefix = ActiveLocale.Substring(0, underscore);
-            var prefixMatch = LoadJsonFile(Path.Combine(_anomalyI18nDir, $"{prefix}.json"));
+            var prefixMatch = LoadYamlFile(Path.Combine(_anomalyI18nDir, $"{prefix}.yaml"));
             if (prefixMatch != null)
             {
                 foreach (var kvp in prefixMatch) AddTranslation(_active, kvp.Key, kvp.Value, _anomalyI18nDir);
@@ -267,7 +267,7 @@ public class LocalizationService
 
     private bool MergeActiveFromDir(string dir, string expectedNamespace)
     {
-        var exact = LoadJsonFile(Path.Combine(dir, $"{ActiveLocale}.json"));
+        var exact = LoadYamlFile(Path.Combine(dir, $"{ActiveLocale}.yaml"));
         if (exact != null)
         {
             return MergeTranslations(_active, exact, dir, expectedNamespace);
@@ -277,20 +277,20 @@ public class LocalizationService
         if (underscore > 0)
         {
             var prefix = ActiveLocale.Substring(0, underscore);
-            var prefixMatch = LoadJsonFile(Path.Combine(dir, $"{prefix}.json"));
+            var prefixMatch = LoadYamlFile(Path.Combine(dir, $"{prefix}.yaml"));
             if (prefixMatch != null)
             {
                 return MergeTranslations(_active, prefixMatch, dir, expectedNamespace);
             }
         }
 
-        // Nothing translated for active locale — fallback file (en.json) was already merged into _fallback.
+        // Nothing translated for active locale — fallback file (en.yaml) was already merged into _fallback.
         return true;
     }
 
     private bool MergeFileInto(Dictionary<string, string> target, string path, string expectedNamespace)
     {
-        var loaded = LoadJsonFile(path);
+        var loaded = LoadYamlFile(path);
         if (loaded == null) return true;
 
         return MergeTranslations(target, loaded, path, expectedNamespace);
@@ -329,14 +329,16 @@ public class LocalizationService
         target[key] = value;
     }
 
-    private static Dictionary<string, string> LoadJsonFile(string path)
+    private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder().Build();
+
+    private static Dictionary<string, string> LoadYamlFile(string path)
     {
         try
         {
             if (!File.Exists(path))
                 return null;
-            var json = File.ReadAllText(path);
-            return JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
+            var yaml = File.ReadAllText(path);
+            return YamlDeserializer.Deserialize<Dictionary<string, string>>(yaml);
         }
         catch
         {

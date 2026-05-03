@@ -52,20 +52,21 @@ public static class AnomalyMessaging
         BitConverter.GetBytes(counter).CopyTo(data, 1);
         Array.Copy(inner, 0, data, 5, inner.Length);
 
-        EncryptedChannelManager.EncryptedMessageOutside packed;
         if (NetworkServer.active)
         {
-            packed = new EncryptedChannelManager.EncryptedMessageOutside(
-                EncryptedChannelManager.SecurityLevel.Unsecured, data);
+            EncryptedMessageTransport.Send(
+                EncryptedChannelManager.SecurityLevel.Unsecured,
+                data,
+                (int)msg.TransportChannel);
         }
         else
         {
             var encrypted = AesGcmEncrypt(data, ecm.EncryptionKey);
-            packed = new EncryptedChannelManager.EncryptedMessageOutside(
-                EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encrypted);
+            EncryptedMessageTransport.Send(
+                EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
+                encrypted,
+                (int)msg.TransportChannel);
         }
-
-        NetworkClient.Send(packed, (int)msg.TransportChannel);
     }
 
     internal static void OnReceived(byte[] anomalyPayload)

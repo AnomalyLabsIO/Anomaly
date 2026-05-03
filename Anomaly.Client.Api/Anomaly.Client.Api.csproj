@@ -362,6 +362,11 @@
 		     Used to materialize user/server-supplied .ogg overrides into AudioClip. -->
 		<PackageReference Include="NVorbis" Version="0.10.5" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1" />
+		<!-- Managed YamlDotNet for LocalizationService (i18n YAML files). Version
+		     pinned to match what SCPSL itself ships (11.0.x); the Il2CppYamlDotNet
+		     reference above is the Il2Cpp wrapper used by game code, not callable
+		     from managed mod code with generics. -->
+		<PackageReference Include="YamlDotNet" Version="11.0.1" />
 	</ItemGroup>
 
 	<PropertyGroup>
@@ -388,5 +393,7 @@
 		<Copy SourceFiles="$(OutputPath)BigGustave.dll" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)BigGustave.dll')" />
 		<Message Importance="high" Text="Anomaly.Client.Api: copying NVorbis.dll -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)NVorbis.dll')" />
 		<Copy SourceFiles="$(OutputPath)NVorbis.dll" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)NVorbis.dll')" />
+		<Message Importance="high" Text="Anomaly.Client.Api: copying YamlDotNet.dll -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)YamlDotNet.dll')" />
+		<Copy SourceFiles="$(OutputPath)YamlDotNet.dll" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)YamlDotNet.dll')" />
 	</Target>
 </Project>

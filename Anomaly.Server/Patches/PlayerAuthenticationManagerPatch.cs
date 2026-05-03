@@ -19,6 +19,9 @@ namespace Anomaly.Server.Patches;
 [HarmonyPatch]
 public static class PlayerAuthenticationManagerPatch
 {
+    private const int EncryptedMessageHeaderSize = 5;
+    private const int AesGcmNonceSize = 32;
+    private const string DummyUserId = "ID_Dummy";
     
     /*[HarmonyPostfix]
     [HarmonyPatch(typeof(PlayerAuthenticationManager), nameof(PlayerAuthenticationManager.Start))]
@@ -83,6 +86,31 @@ public static class PlayerAuthenticationManagerPatch
         {
             __instance._hub.serverRoles.RefreshPermissions(false);
         });
+    }
+
+    [HarmonyPostfix]
+    [HarmonyPatch(typeof(DummyUtils), nameof(DummyUtils.SpawnDummy))]
+    public static void SpawnDummy(string nickname, ReferenceHub __result)
+    {
+        if (__result == null)
+        {
+            OffThreadLogger.Warn("Dummy spawn returned null ReferenceHub.");
+            return;
+        }
+
+        try
+        {
+            __result.authManager.UserId = DummyUserId;
+            __result.nicknameSync.UpdateNickname(nickname ?? "Dummy");
+            __result.serverRoles.SetGroup(DummyUtils.DummyGroup, byAdmin: true);
+
+            PlayerEvents.OnJoined(new PlayerJoinedEventArgs(__result));
+            OffThreadLogger.Info($"Dummy player joined: userId={__result.authManager.UserId} nick={__result.nicknameSync.MyNick} playerId={__result.PlayerId} mode={__result.authManager.InstanceMode}");
+        }
+        catch (Exception ex)
+        {
+            OffThreadLogger.Error($"Dummy spawn normalization failed: {ex}");
+        }
     }
 
     [HarmonyPrefix]
@@ -163,6 +191,9 @@ public static class PlayerAuthenticationManagerPatch
     [HarmonyPatch(typeof(EncryptedChannelManager), nameof(EncryptedChannelManager.ServerReceivePackedMessage))]
     public static bool OnReceivePackedMessage(NetworkConnection conn, EncryptedChannelManager.EncryptedMessageOutside packed)
     {
+        if (!NetworkServer.active)
+            return false;
+
         if (!ReferenceHub.TryGetHub(conn, out var hub))
         {
             OffThreadLogger.Warn(
@@ -171,41 +202,116 @@ public static class PlayerAuthenticationManagerPatch
             return false;
         }
 
+        var packedData = packed.Data;
+        if (packedData == null)
+        {
+            OffThreadLogger.Warn(
+                $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: payload was null " +
+                $"(connId={conn?.connectionId ?? -1}, level={packed.Level}).");
+            return false;
+        }
+
+        if (packedData.Length == 0)
+        {
+            OffThreadLogger.Warn(
+                $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: payload was empty " +
+                $"(connId={conn?.connectionId ?? -1}, level={packed.Level}).");
+            return false;
+        }
+
         EncryptedChannelManager.EncryptedChannel channel;
         uint counter;
         string content;
         EncryptedChannelManager.EncryptedMessage message;
 
-        if (conn.identity.isLocalPlayer)
+        var localClient = conn?.identity != null && conn.identity.isLocalPlayer;
+        if (localClient)
         {
-            channel = (EncryptedChannelManager.EncryptedChannel)packed.Data[0];
+            channel = (EncryptedChannelManager.EncryptedChannel)packedData[0];
 
             // Anomaly custom messages -- separate dispatch. Wire is
             // [0xFE][counter][hash][payload]; AnomalyMessaging.OnReceived
             // parses the counter/hash and applies replay protection.
             if ((byte)channel == AnomalyChannel.ChannelId)
             {
-                var anomalyPayload = new byte[packed.Data.Length - 1];
-                Array.Copy(packed.Data, 1, anomalyPayload, 0, anomalyPayload.Length);
+                var anomalyPayload = new byte[packedData.Length - 1];
+                Array.Copy(packedData, 1, anomalyPayload, 0, anomalyPayload.Length);
                 AnomalyMessaging.OnReceived(hub, anomalyPayload);
                 return false;
             }
 
-            counter = BitConverter.ToUInt32(packed.Data, 1);
-            content = Encoding.UTF8.GetString(packed.Data, 5, packed.Data.Length - 5);
+            if (packedData.Length < EncryptedMessageHeaderSize)
+            {
+                OffThreadLogger.Warn(
+                    $"Encrypted message dropped from local client {hub.LoggedNameFromRefHub()}: " +
+                    $"payload too short ({packedData.Length} bytes).");
+                return false;
+            }
+
+            counter = BitConverter.ToUInt32(packedData, 1);
+            content = Encoding.UTF8.GetString(packedData, EncryptedMessageHeaderSize, packedData.Length - EncryptedMessageHeaderSize);
             message = new EncryptedChannelManager.EncryptedMessage(channel, content, counter);
         }
         else
         {
-            if (hub.encryptedChannelManager.EncryptionKey == null)
+            var encrypted = packed.Level == EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated;
+            if (!encrypted && packed.Level != EncryptedChannelManager.SecurityLevel.Unsecured)
             {
-                OffThreadLogger.Warn("Got EncryptedMessage eventhough no Key was set");
+                OffThreadLogger.Warn(
+                    $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: unknown security level {packed.Level}.");
                 return false;
             }
 
-            var decryptedData = AES.AesGcmDecrypt(packed.Data, hub.encryptedChannelManager.EncryptionKey);
+            byte[] decryptedData;
+            if (encrypted)
+            {
+                var encryptionKey = hub.encryptedChannelManager.EncryptionKey;
+                if (encryptionKey == null)
+                {
+                    OffThreadLogger.Warn("Got EncryptedMessage eventhough no Key was set");
+                    return false;
+                }
+
+                if (packedData.Length < AesGcmNonceSize)
+                {
+                    OffThreadLogger.Warn(
+                        $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: encrypted payload too short " +
+                        $"({packedData.Length} bytes).");
+                    return false;
+                }
+
+                try
+                {
+                    decryptedData = AES.AesGcmDecrypt(packedData, encryptionKey);
+                }
+                catch (Exception ex)
+                {
+                    OffThreadLogger.Warn(
+                        $"Failed to decrypt received message from {hub.LoggedNameFromRefHub()} " +
+                        $"(connId={conn?.connectionId ?? -1}, bytes={packedData.Length}): {ex.GetType().Name}: {ex.Message}");
+                    return false;
+                }
+            }
+            else
+            {
+                decryptedData = packedData;
+            }
+
+            if (decryptedData == null || decryptedData.Length == 0)
+            {
+                OffThreadLogger.Warn(
+                    $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: " +
+                    $"decoded payload was {(decryptedData == null ? "null" : "empty")}.");
+                return false;
+            }
 
             channel = (EncryptedChannelManager.EncryptedChannel)decryptedData[0];
+
+            if (!encrypted && RequiresEncryption(channel))
+            {
+                OffThreadLogger.Warn($"Message on channel {channel} was sent without encryption. Discarding message!");
+                return false;
+            }
 
             // Anomaly custom messages -- separate dispatch. Wire is
             // [0xFE][counter][hash][payload]; AnomalyMessaging.OnReceived
@@ -218,25 +324,35 @@ public static class PlayerAuthenticationManagerPatch
                 return false;
             }
 
-            counter = BitConverter.ToUInt32(decryptedData, 1);
-            content = Encoding.UTF8.GetString(decryptedData, 5, decryptedData.Length - 5);
-            message = new EncryptedChannelManager.EncryptedMessage(channel, content, counter);
-
-
-            if (hub.encryptedChannelManager._rxCounter == 4294967295U)
-                hub.encryptedChannelManager._rxCounter = 0;
-
-            if (counter <= hub.encryptedChannelManager._rxCounter)
+            if (decryptedData.Length < EncryptedMessageHeaderSize)
             {
-                OffThreadLogger.Warn($"Received message with counter {counter}, which is lower or equal to last received message counter {hub.encryptedChannelManager._rxCounter}. Discarding message!");
+                OffThreadLogger.Warn(
+                    $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: decoded payload too short " +
+                    $"({decryptedData.Length} bytes, channel={channel}, level={packed.Level}).");
                 return false;
             }
 
-            hub.encryptedChannelManager._rxCounter = counter;
+            counter = BitConverter.ToUInt32(decryptedData, 1);
+            content = Encoding.UTF8.GetString(decryptedData, EncryptedMessageHeaderSize, decryptedData.Length - EncryptedMessageHeaderSize);
+            message = new EncryptedChannelManager.EncryptedMessage(channel, content, counter);
+
+            if (encrypted)
+            {
+                if (hub.encryptedChannelManager._rxCounter == 4294967295U)
+                    hub.encryptedChannelManager._rxCounter = 0;
+
+                if (counter <= hub.encryptedChannelManager._rxCounter)
+                {
+                    OffThreadLogger.Warn($"Received message with counter {counter}, which is lower or equal to last received message counter {hub.encryptedChannelManager._rxCounter}. Discarding message!");
+                    return false;
+                }
+
+                hub.encryptedChannelManager._rxCounter = counter;
+            }
         }
 
 
-        if (!EncryptedChannelManager.ServerChannelHandlers.ContainsKey(channel))
+        if (!EncryptedChannelManager.ServerChannelHandlers.TryGetValue(channel, out var handler))
         {
             OffThreadLogger.Warn($"No handler is registered for encrypted channel {channel} (server).");
             return false;
@@ -244,7 +360,7 @@ public static class PlayerAuthenticationManagerPatch
 
         try
         {
-            EncryptedChannelManager.ServerChannelHandlers[channel].Invoke(hub, message, packed.Level);
+            handler.Invoke(hub, message, packed.Level);
         }
         catch (Exception ex)
         {
@@ -252,5 +368,11 @@ public static class PlayerAuthenticationManagerPatch
             OffThreadLogger.Error(ex.StackTrace);
         }
         return false;
+    }
+
+    private static bool RequiresEncryption(EncryptedChannelManager.EncryptedChannel channel)
+    {
+        return channel == EncryptedChannelManager.EncryptedChannel.RemoteAdmin ||
+               channel == EncryptedChannelManager.EncryptedChannel.AdminChat;
     }
 }

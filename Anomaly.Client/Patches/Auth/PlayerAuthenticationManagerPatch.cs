@@ -11,7 +11,6 @@ using Il2Cpp;
 using Il2CppCentralAuth;
 using Il2CppCryptography;
 using Il2CppGameCore;
-using Il2CppMirror;
 using Il2CppRemoteAdmin;
 using Il2CppSystem.Text;
 using MelonLoader;
@@ -101,8 +100,6 @@ public static class PlayerAuthenticationManagerPatch
             __instance._txCounter = 0;
         __instance._txCounter++;
 
-        EncryptedChannelManager.EncryptedMessageOutside messageOut;
-
         // `data` is a managed byte[]. `using Il2CppSystem.Text;` makes the bare
         // `Encoding.UTF8` resolve to the IL2CPP wrapper, which marshals managed
         // byte[] arguments to a temporary IL2CPP copy — the original array is
@@ -132,9 +129,11 @@ public static class PlayerAuthenticationManagerPatch
         }
 
         var encryptedData = AesGcmEncrypt(data, key, _secureRandom);
-        messageOut = new EncryptedChannelManager.EncryptedMessageOutside(EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encryptedData);
         MelonLogger.Warning("Sending encrypted message outside");
-        NetworkClient.Send(messageOut);
+        EncryptedMessageTransport.Send(
+            EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
+            encryptedData,
+            0);
         __result = true;
         return false;
     }

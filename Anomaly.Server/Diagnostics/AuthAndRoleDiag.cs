@@ -101,11 +101,22 @@ namespace Anomaly.Server.Diagnostics
         {
             try
             {
-                var hub = ev.Player.ReferenceHub;
+                var player = ev?.Player;
+                if (player == null)
+                {
+                    OffThreadLogger.Warn("[Diag] GroupChanged: event player was null.");
+                    return;
+                }
+
+                var hub = player.ReferenceHub;
+                var serverRoles = hub?.serverRoles;
+                var remoteAdmin = serverRoles != null ? serverRoles.RemoteAdmin.ToString() : "<null>";
+                var permissions = serverRoles != null ? serverRoles.Permissions : 0UL;
+
                 OffThreadLogger.Info(
-                    $"[Diag] GroupChanged: userId={ev.Player.UserId} group={ev.Group?.BadgeText ?? "<null>"} " +
+                    $"[Diag] GroupChanged: userId={player.UserId ?? "<null>"} group={ev.Group?.BadgeText ?? "<null>"} " +
                     $"groupPerms=0x{(ev.Group?.Permissions ?? 0UL):X16} " +
-                    $"ra={hub.serverRoles.RemoteAdmin} perms=0x{hub.serverRoles.Permissions:X16}");
+                    $"ra={remoteAdmin} perms=0x{permissions:X16}");
             }
             catch (Exception ex) { OffThreadLogger.Error($"[Diag] OnGroupChanged: {ex}"); }
         }
