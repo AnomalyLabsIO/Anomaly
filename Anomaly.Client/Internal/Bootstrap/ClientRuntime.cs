@@ -13,7 +13,6 @@ using Il2CppAdminToys;
 using Il2CppCassie;
 using Il2CppCustomPlayerEffects;
 using Il2Cpp;
-using Il2CppFootprinting;
 using Il2CppInteractables.Interobjects;
 using Il2CppInventorySystem;
 using Il2CppInventorySystem.Items;
@@ -66,10 +65,6 @@ internal static class ClientRuntime
         TryHookStaticEvent("AlphaWarheadController.OnDetonated", () =>
             AlphaWarheadController.OnDetonated += DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
                 new Action(HandleWarheadDetonated)));
-
-        TryHookStaticEvent("Scp079Generator.OnGeneratorEngaged", () =>
-            Scp079Generator.OnGeneratorEngaged += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<Scp079Generator, Footprint>>(
-                new Action<Scp079Generator, Footprint>(HandleGeneratorEngaged)));
 
         TryHookStaticEvent("TeslaGate.OnAdded", () =>
             TeslaGate.OnAdded += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<TeslaGate>>(
@@ -358,7 +353,7 @@ internal static class ClientRuntime
         RunSafely(WarheadEvents.OnDetonated, nameof(HandleWarheadDetonated));
     }
 
-    internal static void HandleGeneratorEngaged(Scp079Generator generatorBase, Footprint engager)
+    internal static void HandleGeneratorEngaged(Scp079Generator generatorBase)
     {
         RunSafely(() =>
         {

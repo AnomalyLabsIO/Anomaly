@@ -107,7 +107,8 @@ public static class PlayerAuthenticationManagerPatch
         }
         catch (Exception ex)
         {
-            OffThreadLogger.Error($"Dummy spawn pre-normalization failed: {ex}");
+            OffThreadLogger.Error(
+                $"Dummy spawn pre-normalization failed: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
         }
 
         Timing.CallDelayed(0.1f, () => NormalizeSpawnedDummy(safeNickname, __result));
@@ -135,7 +136,8 @@ public static class PlayerAuthenticationManagerPatch
         }
         catch (Exception ex)
         {
-            OffThreadLogger.Error($"Dummy spawn normalization failed: {ex}");
+            OffThreadLogger.Error(
+                $"Dummy spawn normalization failed: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
         }
     }
 
@@ -144,6 +146,17 @@ public static class PlayerAuthenticationManagerPatch
     public static bool OnPackBytes(EncryptedChannelManager __instance, out bool __result,
         byte[] content, EncryptedChannelManager.EncryptedChannel channel)
     {
+        // Vanilla DummyNetworkConnection.Send is a no-op; report success
+        // without burning a counter slot or building the payload. Returning
+        // false here (the prior behavior) caused vanilla callers like
+        // serverRoles.SetGroup to throw during dummy spawn, which the
+        // surrounding try/catch swallowed and prevented PlayerEvents.OnJoined.
+        if (__instance.connectionToClient is DummyNetworkConnection)
+        {
+            __result = true;
+            return false;
+        }
+
         if (__instance._txCounter == 4294967295U)
             __instance._txCounter = 0;
         __instance._txCounter++;
@@ -181,6 +194,12 @@ public static class PlayerAuthenticationManagerPatch
     public static bool OnPack(EncryptedChannelManager __instance, out bool __result,
         string content, EncryptedChannelManager.EncryptedChannel channel)
     {
+        if (__instance.connectionToClient is DummyNetworkConnection)
+        {
+            __result = true;
+            return false;
+        }
+
         if (__instance._txCounter == 4294967295U)
             __instance._txCounter = 0;
         __instance._txCounter++;

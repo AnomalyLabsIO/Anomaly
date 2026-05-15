@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using Anomaly.Server.Assets;
 using Anomaly.Server.Auth;
-using Anomaly.Server.Diagnostics;
 using Anomaly.Server.Features;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Map;
@@ -95,8 +94,6 @@ public class Plugin : Plugin<Config>
             {
                 Logger.Info($"  - {method.DeclaringType?.FullName}.{method.Name}");
             }
-
-            AuthAndRoleDiag.Init();
         }
         catch (Exception ex)
         {
@@ -107,7 +104,6 @@ public class Plugin : Plugin<Config>
     public override void Disable()
     {
         GameCore.ConfigFile.OnConfigReloaded -= EnforceOfflineMode;
-        AuthAndRoleDiag.Disable();
         RoundStartBridge.Disable();
         RoundStateBroadcaster.Disable();
         AssetFileWatcher.Stop();

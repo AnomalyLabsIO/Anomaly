@@ -5,6 +5,7 @@ using Anomaly.Shared.Networking;
 using Cryptography;
 using GameCore;
 using Mirror;
+using NetworkManagerUtils.Dummies;
 using Org.BouncyCastle.Security;
 using UnityEngine;
 using Logger = LabApi.Features.Console.Logger;
@@ -32,8 +33,26 @@ public static class AnomalyMessaging
 
     private static readonly SecureRandom SecureRandom = new SecureRandom();
 
+    /// <summary>
+    /// Whether <paramref name="hub"/> is a real client we can deliver Anomaly
+    /// messages to. Filters out dummies (whose <see cref="DummyNetworkConnection"/>
+    /// is a no-op) and hubs without a backing connection. Encryption-key
+    /// readiness is checked at send time inside <see cref="SendToClient"/>.
+    /// </summary>
+    internal static bool IsAnomalyTarget(ReferenceHub hub)
+    {
+        if (hub == null) return false;
+        if (hub.IsDummy) return false;
+        var conn = hub.connectionToClient;
+        if (conn == null) return false;
+        if (conn is DummyNetworkConnection) return false;
+        return true;
+    }
+
     public static void SendToClient(ReferenceHub hub, IAnomalyMessage msg)
     {
+        if (!IsAnomalyTarget(hub)) return;
+
         var ecm = hub.encryptedChannelManager;
         var state = AnomalyReplayTable.GetOrCreate(hub);
         uint counter = state.NextTxCounter(msg.TransportChannel);
@@ -64,7 +83,7 @@ public static class AnomalyMessaging
     {
         foreach (var hub in ReferenceHub.AllHubs)
         {
-            if (hub.connectionToClient == null) continue;
+            if (!IsAnomalyTarget(hub)) continue;
             SendToClient(hub, msg);
         }
     }
@@ -73,7 +92,7 @@ public static class AnomalyMessaging
     {
         foreach (var hub in ReferenceHub.AllHubs)
         {
-            if (hub.connectionToClient == null) continue;
+            if (!IsAnomalyTarget(hub)) continue;
             if (hub.connectionToClient == exclude) continue;
             SendToClient(hub, msg);
         }

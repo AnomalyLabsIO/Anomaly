@@ -195,7 +195,6 @@
         <Compile Include="Map\Patches\AtlasZoneGeneratorPatch.cs" />
         <Compile Include="Map\Patches\SeedSynchronizerPatch.cs" />
         <Compile Include="Utils\OffThreadLogger.cs" />
-        <Compile Include="Diagnostics\AuthAndRoleDiag.cs" />
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj">

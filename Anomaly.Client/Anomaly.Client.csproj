@@ -403,6 +403,7 @@
 		<Compile Include="Internal\Stats\HealthStateTracker.cs" />
 		<Compile Include="Patches\PatchInvocationGuard.cs" />
 		<Compile Include="Patches\Audio\CassieLineSourceSchedulePatch.cs" />
+		<Compile Include="Patches\Audio\AudioSourcePoolManagerPatch.cs" />
 		<Compile Include="Patches\Auth\NetDataWriterPut.cs" />
 		<Compile Include="Patches\Auth\PlayerAuthenticationManagerPatch.cs" />
 		<Compile Include="Patches\Command\ConsoleTypeCommandPatch.cs" />
@@ -425,10 +426,22 @@
 		<Compile Include="Patches\Runtime\ItemPickupBasePatch.cs" />
 		<Compile Include="Patches\Runtime\AdminToyBasePatch.cs" />
 		<Compile Include="Patches\Runtime\PlayerRoleManagerPatch.cs" />
+		<Compile Include="Patches\Runtime\Scp079GeneratorPatch.cs" />
 		<Compile Include="Patches\Runtime\SilentRoleChangePatch.cs" />
 		<Compile Include="Patches\Runtime\PlayerStatsPatch.cs" />
 		<Compile Include="Patches\Runtime\ReferenceHubPatch.cs" />
 		<Compile Include="Patches\Runtime\ThrownProjectilePatch.cs" />
+		<Compile Include="Patches\Runtime\SimpleTriggerModulePatch.cs" />
+		<Compile Include="Patches\Runtime\InteractionCoordinatorPatch.cs" />
+		<Compile Include="Patches\Runtime\ThrowableItemPatch.cs" />
+		<Compile Include="Patches\Runtime\Scp079CurrentCameraSyncPatch.cs" />
+		<Compile Include="Patches\Runtime\HintDisplayPatch.cs" />
+		<Compile Include="Patches\Runtime\BroadcastPatch.cs" />
+		<Compile Include="Patches\Runtime\InventoryGuiControllerPatch.cs" />
+		<Compile Include="Patches\Runtime\CameraShakeControllerPatch.cs" />
+		<Compile Include="Patches\Input\FpcStateProcessorPatch.cs" />
+		<Compile Include="Patches\Input\FpcJumpControllerPatch.cs" />
+		<Compile Include="Patches\Input\FpcNoclipPatch.cs" />
 		<Compile Include="Patches\Voice\VoiceMessageReadersWritersPatch.cs" />
 		<Compile Include="Patches\Voice\VoiceTransceiverPatch.cs" />
 	</ItemGroup>

@@ -1,19 +1,7 @@
-using Anomaly.Client.Api.Features;
-using Anomaly.Client.Api.Events.Args;
-using Anomaly.Client.Api.Events.Handlers;
-using HarmonyLib;
-using Il2CppMirror;
-using Il2CppVoiceChat.Networking;
-
 namespace Anomaly.Client.Patches.Voice;
 
-[HarmonyPatch(typeof(VoiceMessageReadersWriters), nameof(VoiceMessageReadersWriters.SerializeVoiceMessage))]
-public static class VoiceMessageReadersWritersPatch
-{
-    [HarmonyPrefix]
-    public static void SerializeVoiceMessagePrefix(NetworkWriter writer, VoiceMessage msg)
-    {
-        VoiceMessagePacket packet = VoiceMessagePacket.FromMessage(msg, isOutgoing: true);
-        VoiceEvents.OnSending(new VoiceMessageSendingEventArgs(packet));
-    }
-}
+// Intentionally empty. The Sending dispatch previously lived here (as a
+// prefix on VoiceMessageReadersWriters.SerializeVoiceMessage), but that
+// location runs during Mirror serialization where cancellation would corrupt
+// the NetworkWriter. Sending now fires from VoiceTransceiverPatch's prefix
+// on ClientSendData, which is a safe cancellation point.

@@ -32,8 +32,6 @@ public class Core : MelonMod
         // and third-party mods loading after us can register their own namespaces.
         Tr.Register(new LocalizationService(MelonEnvironment.UserDataDirectory, typeof(Core).Assembly));
 
-        HarmonyInstance.PatchAll();
-
         CustomNetworkManager.Modded = true;
         CentralAuthManager.NoAuthStartupArg = "-noauth";
 

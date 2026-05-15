@@ -22,7 +22,15 @@ public static class FacilityCameraEvents
     /// </summary>
     public static event AnomalyEventHandler<FacilityCameraEventArgs> StateChanged;
 
+    /// <summary>
+    /// Fires when the local SCP-079 player is about to send a camera-switch
+    /// command, before <c>Scp079CurrentCameraSync.ClientSendCmd</c> runs.
+    /// Cancellable.
+    /// </summary>
+    public static event AnomalyEventHandler<Scp079SwitchingCameraEventArgs> Scp079Switching;
+
     internal static void OnCreated(FacilityCameraEventArgs args) => EventInvoker.Invoke(Created, args);
     internal static void OnRemoved(FacilityCameraEventArgs args) => EventInvoker.Invoke(Removed, args);
     internal static void OnStateChanged(FacilityCameraEventArgs args) => EventInvoker.Invoke(StateChanged, args);
+    internal static void OnScp079Switching(Scp079SwitchingCameraEventArgs args) => EventInvoker.Invoke(Scp079Switching, args);
 }

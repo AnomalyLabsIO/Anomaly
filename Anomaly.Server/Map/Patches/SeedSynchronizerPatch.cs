@@ -1,6 +1,7 @@
 using HarmonyLib;
 using MapGeneration;
 using Mirror;
+using NetworkManagerUtils.Dummies;
 
 namespace Anomaly.Server.Map.Patches
 {
@@ -17,6 +18,11 @@ namespace Anomaly.Server.Map.Patches
             // Host (local player) — let vanilla run; no network hop needed.
             if (connectionToClient == NetworkClient.connection)
                 return true;
+
+            // Dummies have a no-op connection and don't run client-side map
+            // generation; sending bootstrap to them is wasted work.
+            if (connectionToClient is DummyNetworkConnection)
+                return false;
 
             FacilityLayout.SendBootstrap(connectionToClient);
             return false;
