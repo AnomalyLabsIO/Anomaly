@@ -1,6 +1,7 @@
-﻿using Anomaly.Client.Api.Components;
+﻿using Anomaly.Client.Components;
 using HarmonyLib;
 using Il2Cpp;
+using MelonLoader;
 using UnityEngine;
 
 namespace Anomaly.Client.Patches.Credits;
@@ -11,15 +12,22 @@ public class NewCreditsPatch
     [HarmonyPrefix]
     public static bool InjectCreditsHook()
     {
-
-        if (CreditsHookComponent.Singleton != null)
-            return true;
-        GameObject creditsHookObject = new GameObject
+        try
         {
-            name = "Credits Hook"
-        };
-        creditsHookObject.AddComponent<CreditsHookComponent>();
-            
+            if (CreditsHookComponent.Singleton != null)
+                return true;
+
+            GameObject creditsHookObject = new GameObject
+            {
+                name = "Credits Hook"
+            };
+            creditsHookObject.AddComponent<CreditsHookComponent>();
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"NewCreditsPatch: failed to inject credits hook: {ex}");
+        }
+
         return true;
     }
 }

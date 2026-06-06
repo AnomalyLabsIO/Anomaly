@@ -1,29 +1,30 @@
-﻿using Anomaly.Client.Api.Events.Args;
-using Anomaly.Client.Api.Events.Handlers;
 using Il2CppInterop.Runtime.Attributes;
 using Il2CppTMPro;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Anomaly.Client.Api.Components;
+namespace Anomaly.Client.Components;
 
 [RegisterTypeInIl2Cpp]
 public class CreditsHookComponent : MonoBehaviour
 {
     public static CreditsHookComponent Singleton;
-    public CreditsHookComponent(IntPtr intPtr) : base(intPtr) {}
-        
-    public CreditsHookComponent(){}
+
+    public CreditsHookComponent(IntPtr intPtr) : base(intPtr) { }
+
+    public CreditsHookComponent() { }
+
     private bool _creditsReadyToUse;
     private bool _objectsCreated;
+    private bool _anomalyCreditsAdded;
     public bool IsCreditsHookReadyToUse => _creditsReadyToUse;
 
     private readonly Dictionary<string, CreditsCategoryInfo> _categoryInfos = new Dictionary<string, CreditsCategoryInfo>();
 
     private GameObject _titleGameObject;
     private GameObject _roleGameObject;
-        
+
     private void OnEnable()
     {
         Singleton = this;
@@ -55,11 +56,11 @@ public class CreditsHookComponent : MonoBehaviour
                     _titleGameObject = GameObject.Find("/New Main Menu/Credits/root/Content/CreditsCategory(Clone)");
                     _roleGameObject = GameObject.Find("/New Main Menu/Credits/root/Content/CreditsElement with Role(Clone)/");
                     _creditsReadyToUse = true;
-                    ClientEvents.OnCreditHook(new CreditHookEventArgs(this));
+                    AddAnomalyCredits();
                 }
             }
         }
-            
+
         if (_creditsReadyToUse && !_objectsCreated)
         {
             foreach (CreditsCategoryInfo cat in _categoryInfos.Values)
@@ -74,6 +75,21 @@ public class CreditsHookComponent : MonoBehaviour
             _objectsCreated = true;
             SortElements();
         }
+    }
+
+    [HideFromIl2Cpp]
+    private void AddAnomalyCredits()
+    {
+        if (_anomalyCreditsAdded)
+            return;
+
+        if (!_categoryInfos.ContainsKey("Modding Support") && !CreateCreditsCategory("Modding Support"))
+            return;
+        CreateCreditsEntry("TayTay", "Anomaly - Creator", "Modding Support", CreditColors.CrabPink);
+        CreateCreditsEntry("Dimenzio", "Axon - Creator, Maintainer", "Modding Support", CreditColors.CrabPink);
+        CreateCreditsEntry("Tili", "Axon - Developer", "Modding Support", CreditColors.DevBlue);
+        CreateCreditsEntry("Helight", "Axon - Helper", "Modding Support", CreditColors.Yellow);
+        _anomalyCreditsAdded = true;
     }
 
     private void SortElements()
@@ -108,18 +124,20 @@ public class CreditsHookComponent : MonoBehaviour
 
         CreditsCategoryInfo catInfo = new CreditsCategoryInfo
         {
-            CategoryName = catName, GameObjects ={
+            CategoryName = catName,
+            GameObjects =
+            {
                 CategoryObject = GenerateCategoryObject(catName)
             }
         };
 
         _categoryInfos.Add(catName, catInfo);
-            
+
         SortElements();
-            
+
         return true;
     }
-        
+
     private GameObject GenerateCategoryObject(string catName)
     {
         GameObject result = Instantiate(_titleGameObject, _titleGameObject.transform.parent, true);
@@ -139,19 +157,19 @@ public class CreditsHookComponent : MonoBehaviour
         CreditsCategoryInfo cat = _categoryInfos[category];
 
         cat.GameObjects.EntryObjects.Add(GenerateEntryObject(username, role, color));
-            
+
         cat.UserEntries.Add(new UserInfo()
         {
             Username = username,
             Role = role,
             Color = color
         });
-            
+
         SortElements();
-            
+
         return true;
     }
-        
+
     private GameObject GenerateEntryObject(string username, string role, Color color)
     {
         GameObject result = Instantiate(_roleGameObject, _roleGameObject.transform.parent, true);
@@ -163,7 +181,7 @@ public class CreditsHookComponent : MonoBehaviour
         return result;
     }
 }
-    
+
 public class UserInfo
 {
     public string Username;
@@ -183,7 +201,7 @@ public class CreditsCategoryInfo
     public List<UserInfo> UserEntries = new List<UserInfo>();
     public CreditsCategoryGameObjects GameObjects = new CreditsCategoryGameObjects();
 }
-    
+
 public class CreditColors
 {
     public static readonly Color Yellow = new Color(0.8471f, 0.5922f, 0.1882f, 1);

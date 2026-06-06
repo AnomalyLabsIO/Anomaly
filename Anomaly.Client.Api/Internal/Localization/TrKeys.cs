@@ -31,4 +31,9 @@ internal static class TrKeys
 
     // Shared between preloader and main menu version labels
     public const string Version_ModSuffix = "anomaly.version_modded_suffix";
+
+    // Mods settings tab
+    public const string Settings_TabMods = "anomaly.settings.tab_mods";
+    public const string Settings_ModsEmptyState = "anomaly.settings.mods_empty";
+    public const string Settings_ModsUnsupportedType = "anomaly.settings.mods_unsupported_type";
 }

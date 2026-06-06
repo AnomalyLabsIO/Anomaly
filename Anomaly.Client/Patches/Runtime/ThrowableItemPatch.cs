@@ -40,9 +40,9 @@ public static class ThrowableItemPatch
             if (player == null) return true;
 
             ThrowableItem item = null;
-            if(ThrowableItem.TryGet(__instance.ItemSerial, out var wrapper) && wrapper is ThrowableItem)
+            if(ThrowableItem.TryGet(__instance.ItemSerial, out var wrapper) && wrapper is ThrowableItem throwableItem)
             {
-                item = (ThrowableItem)wrapper;
+                item = throwableItem;
             }
             PlayerThrowingEventArgs ev = new(player, item);
             ProjectileEvents.OnThrowing(ev);

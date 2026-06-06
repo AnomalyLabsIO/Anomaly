@@ -86,7 +86,7 @@ All under `Anomaly.Client.Api.Events.Handlers.*`. Subscribe in `OnInitializeMelo
 
 | Handler | Fires when |
 |---|---|
-| `ClientEvents` | `SceneLoaded`, `Connected`, `Disconnected`, `Ready` (in-game ready), `CanvasReady`, `CreditHook` |
+| `ClientEvents` | `SceneLoaded`, `Connected`, `Disconnected`, `Ready` (in-game ready), `CanvasReady` |
 | `PlayerEvents` | `Added`, `Removed` |
 | `RoleEvents` | `Changed` |
 | `StatsEvents` | `Damaged`, `Died`, `Healed` |

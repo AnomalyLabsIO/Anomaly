@@ -378,7 +378,12 @@
 		<Compile Include="Commands\NameCommand.cs" />
 		<Compile Include="Components\AuthStatusOverrideComponent.cs" />
 		<Compile Include="Components\ConnectionInfoOverrideComponent.cs" />
+		<Compile Include="Components\CreditsHookComponent.cs" />
 		<Compile Include="Components\FileTransferOverlayComponent.cs" />
+		<Compile Include="Components\ModSettings\ModSettingsDropdownBinder.cs" />
+		<Compile Include="Components\ModSettings\ModSettingsInputFieldBinder.cs" />
+		<Compile Include="Components\ModSettings\ModSettingsSliderBinder.cs" />
+		<Compile Include="Components\ModSettings\ModSettingsToggleBinder.cs" />
 		<Compile Include="Components\PasswordPromptComponent.cs" />
 		<Compile Include="Diagnostics\CircularLogBuffer.cs" />
 		<Compile Include="Diagnostics\CrashHooks.cs" />
@@ -413,6 +418,11 @@
 		<Compile Include="Patches\Loader\LauncherVersionPatch.cs" />
 		<Compile Include="Patches\Menu\CanvasPatch.cs" />
 		<Compile Include="Patches\Menu\MainMenuCustomizer.cs" />
+		<Compile Include="Patches\Menu\ModSettings\ModSettingsRenderer.cs" />
+		<Compile Include="Patches\Menu\ModSettings\ModSettingsSaveScheduler.cs" />
+		<Compile Include="Patches\Menu\ModSettings\ModSettingsTabInstaller.cs" />
+		<Compile Include="Patches\Menu\ModSettings\ModSettingsTemplateCache.cs" />
+		<Compile Include="Patches\Menu\ModSettings\UserSettingsCategoriesPatch.cs" />
 		<Compile Include="Patches\Menu\NewServerBrowserOnEnablePatch.cs" />
 		<Compile Include="Patches\Menu\NewsLoaderStartPatch.cs" />
 		<Compile Include="Patches\Mirror\EncryptedChannelHandlerFix.cs" />

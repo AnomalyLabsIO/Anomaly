@@ -35,6 +35,12 @@
 "anomaly.menu.auth_connected": "Connected as {0}"
 "anomaly.menu.auth_not_signed_in": "Not signed in"
 
+# ===== Mods settings tab =====
+"anomaly.settings.tab_mods": "Mods"
+"anomaly.settings.mods_empty": "No mod settings are registered."
+# {0} = the unsupported .NET type name (e.g. "DateTime")
+"anomaly.settings.mods_unsupported_type": "(Unsupported setting type: {0})"
+
 # ===== Misc =====
 # Appended to the version string when running modded; leading space is intentional.
 "anomaly.version_modded_suffix": " (MODDED)"

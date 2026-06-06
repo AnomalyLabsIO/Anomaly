@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Commands;
+using Anomaly.Client.Api.Compatibility;
 using Anomaly.Client.Api.Config;
 using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Persistence;
@@ -9,6 +10,7 @@ using Anomaly.Client.Internal.Bootstrap;
 using Anomaly.Client.Api.Internal.UI;
 using Anomaly.Client.Internal.UI;
 using Anomaly.Client.Patches.Menu;
+using Anomaly.Client.Patches.Menu.ModSettings;
 using Il2Cpp;
 using Il2CppCentralAuth;
 using MelonLoader;
@@ -17,6 +19,7 @@ using MelonLoader.Utils;
 [assembly: MelonInfo(typeof(Anomaly.Client.Core), "Anomaly", "0.1.0", "AnomalyLabs", null)]
 [assembly: MelonGame("Northwood", "SCPSL")]
 [assembly: MelonGameVersion("14.2.6")]
+[assembly: SupportedGameVersion("14.2.6^")]
 
 namespace Anomaly.Client;
 
@@ -41,8 +44,12 @@ public class Core : MelonMod
         UiBootstrap.Init();
         PreloaderSkinBootstrap.Init();
         MainMenuCustomizer.Init();
+        ModSettingsTabInstaller.Init();
 
         CommandRegistry.Register("anomaly", new NameCommand());
+
+        MelonPreferences.CreateCategory("Anomaly Test").CreateEntry("TestBool", true, "Test Bool");
+        
 
         LoggerInstance.Msg($"Initialized (locale: {Tr.ActiveLocale}).");
     }
@@ -55,6 +62,7 @@ public class Core : MelonMod
 
     public override void OnApplicationQuit()
     {
+        ModSettingsSaveScheduler.Flush();
         ClientConfig.DisposeAll();
         ClientPersistence.FlushAll();
         DiagnosticBootstrap.Shutdown();

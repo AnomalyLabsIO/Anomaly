@@ -9,7 +9,6 @@ public static class ClientEvents
     public static event AnomalyEventHandler<ClientDisconnectedEventArgs> Disconnected;
     public static event AnomalyEventHandler<ClientReadyEventArgs> Ready;
     public static event AnomalyEventHandler<CanvasReadyEventArgs> CanvasReady;
-    public static event AnomalyEventHandler<CreditHookEventArgs> CreditHook;
 
     internal static void OnSceneLoaded(SceneLoadedEventArgs args) => EventInvoker.Invoke(SceneLoaded, args);
 
@@ -20,6 +19,4 @@ public static class ClientEvents
     internal static void OnReady(ClientReadyEventArgs args) => EventInvoker.Invoke(Ready, args);
 
     internal static void OnCanvasReady(CanvasReadyEventArgs args) => EventInvoker.Invoke(CanvasReady, args);
-
-    internal static void OnCreditHook(CreditHookEventArgs args) => EventInvoker.Invoke(CreditHook, args);
 }

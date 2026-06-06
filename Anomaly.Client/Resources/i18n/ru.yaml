@@ -31,5 +31,11 @@
 "anomaly.menu.auth_connected": "Подключён как {0}"
 "anomaly.menu.auth_not_signed_in": "Вход не выполнен"
 
+# ===== Mods settings tab =====
+"anomaly.settings.tab_mods": "Моды"
+"anomaly.settings.mods_empty": "Настройки модов не зарегистрированы."
+# {0} = имя неподдерживаемого .NET-типа
+"anomaly.settings.mods_unsupported_type": "(Неподдерживаемый тип настройки: {0})"
+
 # ===== Misc =====
 "anomaly.version_modded_suffix": " (MODDED)"
