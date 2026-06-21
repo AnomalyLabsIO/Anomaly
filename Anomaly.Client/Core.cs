@@ -18,7 +18,6 @@ using MelonLoader.Utils;
 
 [assembly: MelonInfo(typeof(Anomaly.Client.Core), "Anomaly", "0.1.0", "AnomalyLabs", null)]
 [assembly: MelonGame("Northwood", "SCPSL")]
-[assembly: MelonGameVersion("14.2.6")]
 [assembly: SupportedGameVersion("14.2.6^")]
 
 namespace Anomaly.Client;

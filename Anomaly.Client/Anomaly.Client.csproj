@@ -406,6 +406,7 @@
 		<Compile Include="Internal\Round\RoundStateReceiver.cs" />
 		<Compile Include="Internal\SilentRoleChange.cs" />
 		<Compile Include="Internal\Stats\HealthStateTracker.cs" />
+		<Compile Include="Patches\Input\VirtualInputPatches.cs" />
 		<Compile Include="Patches\PatchInvocationGuard.cs" />
 		<Compile Include="Patches\Audio\CassieLineSourceSchedulePatch.cs" />
 		<Compile Include="Patches\Audio\AudioSourcePoolManagerPatch.cs" />
@@ -432,6 +433,7 @@
 		<Compile Include="Patches\Network\CustomNetworkManagerPatch.cs" />
 		<Compile Include="Patches\Runtime\AtlasZoneGeneratorPatch.cs" />
 		<Compile Include="Patches\Runtime\AudioLogServerSyncClipFix.cs" />
+		<Compile Include="Patches\Runtime\BasicRagdollPatch.cs" />
 		<Compile Include="Patches\Runtime\InventoryPatch.cs" />
 		<Compile Include="Patches\Runtime\ItemPickupBasePatch.cs" />
 		<Compile Include="Patches\Runtime\AdminToyBasePatch.cs" />
