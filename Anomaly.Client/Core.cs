@@ -47,9 +47,6 @@ public class Core : MelonMod
 
         CommandRegistry.Register("anomaly", new NameCommand());
 
-        MelonPreferences.CreateCategory("Anomaly Test").CreateEntry("TestBool", true, "Test Bool");
-        
-
         LoggerInstance.Msg($"Initialized (locale: {Tr.ActiveLocale}).");
     }
 

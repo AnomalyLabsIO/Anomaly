@@ -36,6 +36,32 @@ namespace Anomaly.Server.Map
         private static bool _initialized;
 
         /// <summary>
+        /// Master switch for the facility-layout recipe feature. <b>Disabled for release.</b>
+        /// The client-side <c>AtlasZoneGenerator</c> patches are currently off (an IL2CPP
+        /// parameter-unwrap trampoline NREs ~50x/sec during generation), so if the server
+        /// staged and applied recipes it would generate a different facility than clients do
+        /// from the same seed — a hard map desync. With this off, no recipe is staged, the
+        /// server generates the vanilla layout, and the seed still ships normally, so server
+        /// and client maps match. To re-enable: fix the client trampoline, flip
+        /// <c>AtlasZoneGeneratorPatch.PatchesEnabled</c> (client) to true, then set this true.
+        /// Enabling only this side re-introduces the desync.
+        /// </summary>
+        public static bool Enabled = false;
+
+        private static bool _disabledWarned;
+
+        private static bool CheckEnabled()
+        {
+            if (Enabled) return true;
+            if (!_disabledWarned)
+            {
+                _disabledWarned = true;
+                Logger.Warn("FacilityLayout is disabled for this release (client-side recipe application is off pending an IL2CPP trampoline fix); layout mutations are ignored.");
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Fires after the server has finished applying the recipe to its own
         /// generated facility. Mostly useful for debug logging.
         /// </summary>
@@ -68,6 +94,7 @@ namespace Anomaly.Server.Map
         /// the facility has already been generated this round.</exception>
         public static void MoveRoom(FacilityZone zone, Vector2Int coords, Vector3 offset)
         {
+            if (!CheckEnabled()) return;
             RequirePreGeneration();
             var key = (zone, coords);
             _entries.TryGetValue(key, out var entry);
@@ -85,6 +112,7 @@ namespace Anomaly.Server.Map
         /// </summary>
         public static void RotateRoom(FacilityZone zone, Vector2Int coords, float yRotation)
         {
+            if (!CheckEnabled()) return;
             RequirePreGeneration();
             var key = (zone, coords);
             _entries.TryGetValue(key, out var entry);
@@ -104,6 +132,7 @@ namespace Anomaly.Server.Map
         /// </summary>
         public static void RemoveRoom(FacilityZone zone, Vector2Int coords)
         {
+            if (!CheckEnabled()) return;
             RequirePreGeneration();
             var key = (zone, coords);
             _entries[key] = new RecipeEntry
@@ -143,6 +172,7 @@ namespace Anomaly.Server.Map
         /// produce a room, or any other color to leave the tile empty.</param>
         public static void SetAtlasPixel(FacilityZone zone, int atlasIdx, int pixelX, int pixelY, Color32 color)
         {
+            if (!CheckEnabled()) return;
             RequirePreGeneration();
             if (atlasIdx < 0 || atlasIdx > 255)
                 throw new ArgumentOutOfRangeException(nameof(atlasIdx), "AtlasIdx must fit in a byte (0-255).");
@@ -264,8 +294,14 @@ namespace Anomaly.Server.Map
 
             try
             {
-                SendBootstrapPayload(conn, RecipeMessageId, BuildRecipePayload());
-                SendBootstrapPayload(conn, AtlasEditsMessageId, BuildAtlasEditsPayload());
+                // Only ship the custom recipe/atlas-edit messages when the feature is on.
+                // The vanilla SeedMessage must ALWAYS go out (the client needs the seed for
+                // normal generation), so it stays outside the gate.
+                if (Enabled)
+                {
+                    SendBootstrapPayload(conn, RecipeMessageId, BuildRecipePayload());
+                    SendBootstrapPayload(conn, AtlasEditsMessageId, BuildAtlasEditsPayload());
+                }
                 conn.Send(new SeedSynchronizer.SeedMessage { Value = SeedSynchronizer.Seed });
             }
             catch (Exception ex)

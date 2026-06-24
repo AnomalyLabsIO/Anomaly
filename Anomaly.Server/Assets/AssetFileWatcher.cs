@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
@@ -21,6 +22,13 @@ namespace Anomaly.Server.Assets
     {
         private static FileSystemWatcher _watcher;
         private static readonly Dictionary<string, CoroutineHandle> _pendingDebounces = new Dictionary<string, CoroutineHandle>();
+
+        // FileSystemWatcher callbacks fire on threadpool worker threads. MEC's Timing and
+        // the _pendingDebounces dictionary are main-thread-only, so worker threads only
+        // enqueue paths here; a main-thread MEC coroutine (DrainIncoming) drains them and
+        // performs all debounce/scheduling work. Mirrors the OffThreadLogger pattern.
+        private static readonly ConcurrentQueue<string> _incoming = new ConcurrentQueue<string>();
+        private static CoroutineHandle _drainHandle;
         private const float DebounceSeconds = 0.25f;
 
         public static void Start(string assetDirectory)
@@ -43,24 +51,49 @@ namespace Anomaly.Server.Assets
             _watcher.Created += OnFileEvent;
             _watcher.Renamed += OnFileRenamed;
 
+            _drainHandle = Timing.RunCoroutine(DrainIncoming());
+
             Logger.Info($"AssetFileWatcher: Watching '{assetDirectory}' for changes.");
         }
 
         public static void Stop()
         {
+            // Called on the main thread (Start / Plugin.Disable), so MEC calls are safe.
+            if (_drainHandle.IsRunning)
+                Timing.KillCoroutines(_drainHandle);
+
+            foreach (var handle in _pendingDebounces.Values)
+                if (handle.IsRunning)
+                    Timing.KillCoroutines(handle);
+            _pendingDebounces.Clear();
+
+            while (_incoming.TryDequeue(out _)) { }
+
             if (_watcher == null) return;
             _watcher.EnableRaisingEvents = false;
             _watcher.Dispose();
             _watcher = null;
         }
 
-        private static void OnFileEvent(object sender, FileSystemEventArgs e) => Debounce(e.FullPath);
-        private static void OnFileRenamed(object sender, RenamedEventArgs e) => Debounce(e.FullPath);
+        // Worker-thread entry points: only enqueue. No MEC, no dictionary access here.
+        private static void OnFileEvent(object sender, FileSystemEventArgs e) => _incoming.Enqueue(e.FullPath);
+        private static void OnFileRenamed(object sender, RenamedEventArgs e) => _incoming.Enqueue(e.FullPath);
+
+        // Main-thread pump: drains worker-thread file events and runs the debounce on the
+        // main thread, where Timing and _pendingDebounces are safe to touch.
+        private static IEnumerator<float> DrainIncoming()
+        {
+            while (true)
+            {
+                while (_incoming.TryDequeue(out var fullPath))
+                    Debounce(fullPath);
+                yield return Timing.WaitForOneFrame;
+            }
+        }
 
         private static void Debounce(string fullPath)
         {
-            // FileSystemWatcher fires from a worker thread; all game/Mirror work
-            // must happen on the main thread via MEC.
+            // Runs on the main thread (via DrainIncoming) — MEC + _pendingDebounces are safe here.
             OffThreadLogger.Info($"AssetFileWatcher: change detected for '{fullPath}', debouncing.");
 
             if (_pendingDebounces.TryGetValue(fullPath, out var handle) && handle.IsRunning)

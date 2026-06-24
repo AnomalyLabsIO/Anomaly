@@ -28,12 +28,7 @@ public static class ProcessConnectionRequestPatch
         }
         catch (Exception ex)
         {
-            try
-            {
-                System.IO.File.AppendAllText("anomaly_debug.log",
-                    $"[{DateTime.Now:HH:mm:ss.fff}] PREFIX EXCEPTION (likely JIT failure): {ex}\n");
-            }
-            catch { }
+            OffThreadLogger.Error($"ProcessConnectionRequest prefix exception (likely JIT failure): {ex}");
             // Reject rather than fall through to vanilla. Vanilla preauth on an
             // Anomaly server runs in offline mode and would accept unauthenticated
             // clients, so silent fall-through is an auth bypass.
@@ -215,8 +210,6 @@ public static class ProcessConnectionRequestPatch
                     var serverIden = AuthHandler.AddConnection(serverEnv, clientHandshake, passwordChallenge);
 
                     var serverHandshakeBytes = serverEnv.CreateHandshake().Encode();
-                    OffThreadLogger.Debug($"ServerHandshake raw bytes ({serverHandshakeBytes.Length}): {BitConverter.ToString(serverHandshakeBytes, 0, Math.Min(serverHandshakeBytes.Length, 16))}...");
-                    OffThreadLogger.Debug($"Client nonce[0..3]: {BitConverter.ToString(clientHandshake.nonce, 0, 4)}, sessionPublic[0..3]: {BitConverter.ToString(clientHandshake.sessionPublic, 0, 4)}");
 
                     RequestWriter.Reset();
                     RequestWriter.Put((byte)100);
@@ -302,9 +295,7 @@ public static class ProcessConnectionRequestPatch
                     OffThreadLogger.Info("Get UserId");
                     userId = connection.Handshake.GetUserId();
                     OffThreadLogger.Info(userId);
-                    OffThreadLogger.Info("Get Shared Key");
                     sharedKey = connection.ServerEnv.GetSharedSecret(connection.Handshake);
-                    OffThreadLogger.Info(sharedKey.ToString());
 
                     OffThreadLogger.Debug($"Verified {name}({userId}) - " + ip);
                     break;
@@ -481,12 +472,12 @@ public static class ProcessConnectionRequestPatch
             CustomLiteNetLib4MirrorTransport.PreauthDisableIdleMode();
             #endregion
 
-            AuthHandler._storedPlayers[request.RemoteEndPoint] = new Server.Auth.PlayerStorage
+            AuthHandler.StorePlayer(request.RemoteEndPoint, new Server.Auth.PlayerStorage
             {
                 NickName = name,
                 UserId = userId,
                 SharedKey = sharedKey,
-            };
+            });
             return false;
         }
         catch (Exception ex)

@@ -56,7 +56,7 @@ public static class PlayerAuthenticationManagerPatch
         }
 
         var endPoint = peer.EndPoint;
-        if(!AuthHandler._storedPlayers.TryGetValue(endPoint,out var player))
+        if(!AuthHandler.TryTakePlayer(endPoint, out var player))
         {
             OffThreadLogger.Error($"Player from {endPoint} joined the server without being authenticated. No stored player data found.");
             __instance.RejectAuthentication("Authentication failed Server Side", null, false);
@@ -64,7 +64,6 @@ public static class PlayerAuthenticationManagerPatch
         }
 
         __instance._authenticationRequested = true;
-        AuthHandler._storedPlayers.Remove(endPoint);
 
         __instance.UserId = player.UserId;
         __instance._hub.nicknameSync.UpdateNickname(player.NickName);

@@ -46,7 +46,6 @@ public static class PlayerAuthenticationManagerPatch
         AuthStatusOverlay.EndAuthenticating();
         ConnectionInfoOverlay.EndOverride();
         __instance._hub.encryptedChannelManager.EncryptionKey = AuthHandler.CurrentKey;
-        MelonLogger.Warning("Starting player authentication manager");
         FlushPendingClientMessages();
     }
 
@@ -132,7 +131,6 @@ public static class PlayerAuthenticationManagerPatch
         }
 
         var encryptedData = AesGcmEncrypt(data, key, _secureRandom);
-        MelonLogger.Warning("Sending encrypted message outside");
         EncryptedMessageTransport.Send(
             EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
             encryptedData,
@@ -181,8 +179,6 @@ public static class PlayerAuthenticationManagerPatch
         // (vanilla: EncryptedChannelManager._rxCounter; Anomaly: per-channel
         // state on AnomalyReplayTable), which naturally rejects the duplicate
         // dispatches as replays.
-
-        MelonLogger.Warning("Got message back.");
 
         ReferenceHub hub = LocalPlayer.Instance?.ReferenceHub;
         if (hub == null && !PlayerRegistry.TryGetLocalHub(out hub))

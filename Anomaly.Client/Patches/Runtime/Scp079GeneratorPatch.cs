@@ -4,6 +4,11 @@ using Il2CppMapGeneration.Distributors;
 
 namespace Anomaly.Client.Patches.Runtime;
 
+// Class-level [HarmonyPatch] is REQUIRED: HarmonyX's PatchAll skips any type whose
+// container has no class-level Harmony attribute (allowUnannotatedType:false), even
+// when its methods carry [HarmonyPatch]. Without this the generator-engaged hook
+// (and GeneratorEvents.OnEngaged) silently never fires.
+[HarmonyPatch]
 public static class Scp079GeneratorPatch
 {
     [HarmonyPrefix]

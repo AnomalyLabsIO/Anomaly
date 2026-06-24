@@ -414,7 +414,6 @@
 		<Compile Include="Patches\Auth\PlayerAuthenticationManagerPatch.cs" />
 		<Compile Include="Patches\Command\ConsoleTypeCommandPatch.cs" />
 		<Compile Include="Patches\Credits\NewCreditsPatch.cs" />
-		<Compile Include="Patches\Diagnostics\MirrorDiagnosticPatches.cs" />
 		<Compile Include="Patches\Loader\LoaderPatch.cs" />
 		<Compile Include="Patches\Loader\LauncherVersionPatch.cs" />
 		<Compile Include="Patches\Menu\CanvasPatch.cs" />
