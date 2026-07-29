@@ -31,6 +31,7 @@ namespace Anomaly.Shared.Networking
         private static readonly Dictionary<uint, string> HashToName = new Dictionary<uint, string>();
         private static readonly Dictionary<string, uint> NameToHash = new Dictionary<string, uint>();
         private static readonly Dictionary<uint, MessageChannel> HashToChannel = new Dictionary<uint, MessageChannel>();
+        private static readonly Dictionary<uint, AnomalyMessagePolicy> HashToPolicy = new Dictionary<uint, AnomalyMessagePolicy>();
 
         public static void Register<T>(string name, Func<T> factory) where T : IAnomalyMessage
         {
@@ -51,10 +52,30 @@ namespace Anomaly.Shared.Networking
             // static lookup rather than allocating a fresh message per packet (which an
             // attacker could exploit via replay-before-validation GC pressure).
             var sample = factory();
+            if (sample == null)
+                throw new InvalidOperationException(
+                    $"AnomalyMessageRegistry: '{name}' factory returned null.");
+
+            var directional = sample as IDirectionalAnomalyMessage;
+            var bounded = sample as IBoundedAnomalyMessage;
+            int maxPayloadBytes = bounded?.MaxPayloadBytes ?? AnomalyChannel.MaxEnvelopeBytes;
+            if (maxPayloadBytes <= 0 || maxPayloadBytes > AnomalyChannel.MaxEnvelopeBytes)
+                throw new InvalidOperationException(
+                    $"AnomalyMessageRegistry: '{name}' declared invalid payload ceiling {maxPayloadBytes}.");
+
+            var policy = new AnomalyMessagePolicy(
+                directional?.Direction ?? AnomalyMessageDirection.Bidirectional,
+                maxPayloadBytes,
+                sample is IRoundScopedAnomalyMessage);
+
+            // Commit all lookup tables only after the factory and policy have
+            // passed validation, so a failed registration cannot leave a partial
+            // hash entry behind.
             Factories[hash] = () => factory();
             HashToName[hash] = name;
             NameToHash[name] = hash;
             HashToChannel[hash] = sample.TransportChannel;
+            HashToPolicy[hash] = policy;
 
             Log($"AnomalyMessageRegistry: Registered '{name}' (hash=0x{hash:X8}, channel={sample.TransportChannel})");
         }
@@ -73,6 +94,11 @@ namespace Anomaly.Shared.Networking
         public static bool TryGetChannel(uint hash, out MessageChannel channel)
         {
             return HashToChannel.TryGetValue(hash, out channel);
+        }
+
+        public static bool TryGetPolicy(uint hash, out AnomalyMessagePolicy policy)
+        {
+            return HashToPolicy.TryGetValue(hash, out policy);
         }
 
         public static uint GetHash(string name)
@@ -115,6 +141,9 @@ namespace Anomaly.Shared.Networking
 
             Register("anomaly:content:catalog", () => new ContentCatalogMessage());
             Register("anomaly:content:catalogack", () => new ContentCatalogAckMessage());
+
+            Register("anomaly:capability:challenge", () => new CapabilityChallengeMessage());
+            Register("anomaly:capability:snapshot", () => new CapabilitySnapshotMessage());
         }
 
         /// <summary>

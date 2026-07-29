@@ -82,6 +82,21 @@ namespace Anomaly.Server.Map
             Logger.Info("FacilityLayout: initialized.");
         }
 
+        public static void Disable()
+        {
+            if (_initialized)
+            {
+                ServerEvents.RoundRestarted -= OnRoundRestarted;
+                ServerEvents.MapGenerated -= OnMapGenerated;
+                _initialized = false;
+            }
+
+            ClearRecipe();
+            RecipeApplied = null;
+            _disabledWarned = false;
+            Enabled = false;
+        }
+
         // ---- Public API -------------------------------------------------
 
         /// <summary>

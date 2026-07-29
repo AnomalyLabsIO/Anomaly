@@ -42,6 +42,15 @@ internal static class PasswordStore
             _storage = IsStorageValid(storage) ? storage : null;
     }
 
+    public static void Reset()
+    {
+        lock (Sync)
+        {
+            _storage = null;
+            Failures.Clear();
+        }
+    }
+
     public static bool SetPassword(string password, int iterations, out string error)
     {
         error = null;

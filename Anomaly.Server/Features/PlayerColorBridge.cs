@@ -17,24 +17,45 @@ namespace Anomaly.Server.Features
     /// </summary>
     internal static class PlayerColorBridge
     {
+        private static bool _initialized;
+
         internal static void Init()
         {
+            if (_initialized)
+                return;
+
+            _initialized = true;
             AnomalyMessaging.MessageReceived += HandleMessage;
             AnomalyMessaging.ClientReady += HandleClientReady;
+            PlayerEvents.Left += HandlePlayerLeft;
+        }
 
-            PlayerEvents.Left += ev =>
+        internal static void Disable()
+        {
+            if (_initialized)
             {
-                try
-                {
-                    var userId = ev?.Player?.UserId;
-                    if (!string.IsNullOrEmpty(userId))
-                        PlayerColorState.Remove(userId);
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error($"PlayerColorBridge.PlayerLeft: {ex}");
-                }
-            };
+                AnomalyMessaging.MessageReceived -= HandleMessage;
+                AnomalyMessaging.ClientReady -= HandleClientReady;
+                PlayerEvents.Left -= HandlePlayerLeft;
+                _initialized = false;
+            }
+
+            PlayerColorState.Clear();
+        }
+
+        private static void HandlePlayerLeft(
+            LabApi.Events.Arguments.PlayerEvents.PlayerLeftEventArgs ev)
+        {
+            try
+            {
+                var userId = ev?.Player?.UserId;
+                if (!string.IsNullOrEmpty(userId))
+                    PlayerColorState.Remove(userId);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"PlayerColorBridge.PlayerLeft: {ex}");
+            }
         }
 
         private static void HandleMessage(ReferenceHub sender, IAnomalyMessage msg)

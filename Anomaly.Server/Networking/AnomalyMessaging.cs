@@ -32,6 +32,7 @@ public static class AnomalyMessaging
     }
 
     private static readonly SecureRandom SecureRandom = new SecureRandom();
+    internal static uint CurrentRoundEpoch { get; set; }
 
     /// <summary>
     /// Whether <paramref name="hub"/> is a real client we can deliver Anomaly
@@ -53,10 +54,23 @@ public static class AnomalyMessaging
     {
         if (!IsAnomalyTarget(hub)) return;
 
+        uint hash = AnomalyMessageRegistry.GetHash(msg.MessageName);
+        if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var policy))
+        {
+            Logger.Warn($"AnomalyMessaging.SendToClient: No policy registered for '{msg.MessageName}'.");
+            return;
+        }
+        if (policy.Direction == AnomalyMessageDirection.ClientToServer)
+        {
+            Logger.Warn($"AnomalyMessaging.SendToClient: '{msg.MessageName}' is client-to-server only.");
+            return;
+        }
+
         var ecm = hub.encryptedChannelManager;
         var state = AnomalyReplayTable.GetOrCreate(hub);
         uint counter = state.NextTxCounter(msg.TransportChannel);
-        var data = BuildPayload(msg, counter);
+        var data = BuildPayload(msg, counter, hash, policy);
+        if (data == null) return;
 
         EncryptedChannelManager.EncryptedMessageOutside packed;
         if (ecm.isLocalPlayer)
@@ -98,8 +112,27 @@ public static class AnomalyMessaging
         }
     }
 
-    internal static void OnReceived(ReferenceHub sender, byte[] anomalyPayload)
+    internal static void OnReceived(
+        ReferenceHub sender,
+        byte[] anomalyPayload,
+        bool encryptedAndAuthenticated,
+        bool localTransport)
     {
+        if (!encryptedAndAuthenticated && !localTransport)
+        {
+            Logger.Warn(
+                $"AnomalyMessaging.OnReceived: Dropping unauthenticated remote 0xFE message from " +
+                $"{sender?.LoggedNameFromRefHub() ?? "unknown"}.");
+            return;
+        }
+        if (anomalyPayload == null || anomalyPayload.Length > AnomalyChannel.MaxEnvelopeBytes)
+        {
+            Logger.Warn(
+                $"AnomalyMessaging.OnReceived: Payload exceeded the absolute envelope ceiling " +
+                $"({anomalyPayload?.Length ?? 0}/{AnomalyChannel.MaxEnvelopeBytes} bytes).");
+            return;
+        }
+
         // Wire: [4:counter][4:hash][N:payload]
         if (anomalyPayload.Length < 8)
         {
@@ -113,6 +146,28 @@ public static class AnomalyMessaging
         if (!AnomalyMessageRegistry.TryGetChannel(hash, out var channel))
         {
             Logger.Warn($"AnomalyMessaging.OnReceived: Unknown message hash 0x{hash:X8}.");
+            return;
+        }
+
+        if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var policy))
+        {
+            Logger.Warn($"AnomalyMessaging.OnReceived: No policy for hash 0x{hash:X8}.");
+            return;
+        }
+        if (policy.Direction == AnomalyMessageDirection.ServerToClient)
+        {
+            Logger.Warn(
+                $"AnomalyMessaging.OnReceived: Dropping server-to-client message hash 0x{hash:X8} " +
+                $"from {sender.LoggedNameFromRefHub()}.");
+            return;
+        }
+
+        int payloadBytes = anomalyPayload.Length - 8;
+        if (payloadBytes > policy.MaxPayloadBytes)
+        {
+            Logger.Warn(
+                $"AnomalyMessaging.OnReceived: Payload for hash 0x{hash:X8} exceeded its ceiling " +
+                $"({payloadBytes}/{policy.MaxPayloadBytes} bytes).");
             return;
         }
 
@@ -138,12 +193,39 @@ public static class AnomalyMessaging
             using (var reader = new BinaryReader(ms))
             {
                 message.Deserialize(reader);
+                if (ms.Position != ms.Length)
+                    throw new InvalidDataException(
+                        $"Message left {ms.Length - ms.Position} unread payload bytes.");
             }
         }
         catch (Exception ex)
         {
             Logger.Error($"AnomalyMessaging.OnReceived: Failed to deserialize '{message.MessageName}': {ex}");
             return;
+        }
+
+        if (policy.IsRoundScoped)
+        {
+            var scoped = message as IRoundScopedAnomalyMessage;
+            if (scoped == null)
+            {
+                Logger.Warn($"AnomalyMessaging.OnReceived: Round-scoped policy mismatch for hash 0x{hash:X8}.");
+                return;
+            }
+
+            var result = AnomalyReplayTable.GetSequenceOrCreate(sender).TryAccept(
+                CurrentRoundEpoch,
+                scoped.RoundEpoch,
+                scoped.Sequence,
+                hash);
+            if (result != AnomalySequenceState.RxResult.Accepted)
+            {
+                Logger.Warn(
+                    $"AnomalyMessaging.OnReceived: Dropping round-scoped packet from " +
+                    $"{sender.LoggedNameFromRefHub()} (hash=0x{hash:X8}, " +
+                    $"epoch={scoped.RoundEpoch}/{CurrentRoundEpoch}, sequence={scoped.Sequence}, reason={result}).");
+                return;
+            }
         }
 
         try
@@ -156,7 +238,11 @@ public static class AnomalyMessaging
         }
     }
 
-    private static byte[] BuildPayload(IAnomalyMessage msg, uint counter)
+    private static byte[] BuildPayload(
+        IAnomalyMessage msg,
+        uint counter,
+        uint hash,
+        AnomalyMessagePolicy policy)
     {
         using (var ms = new MemoryStream())
         using (var writer = new BinaryWriter(ms))
@@ -164,9 +250,18 @@ public static class AnomalyMessaging
             // [channel byte][counter][hash][serialized data]
             writer.Write(AnomalyChannel.ChannelId);
             writer.Write(counter);
-            writer.Write(AnomalyMessageRegistry.GetHash(msg.MessageName));
+            writer.Write(hash);
             msg.Serialize(writer);
             writer.Flush();
+            int serializedPayloadBytes = checked((int)ms.Length - 9);
+            if (serializedPayloadBytes > policy.MaxPayloadBytes ||
+                ms.Length > AnomalyChannel.MaxEnvelopeBytes)
+            {
+                Logger.Warn(
+                    $"AnomalyMessaging.SendToClient: '{msg.MessageName}' exceeded its payload ceiling " +
+                    $"({serializedPayloadBytes}/{policy.MaxPayloadBytes} bytes).");
+                return null;
+            }
             return ms.ToArray();
         }
     }

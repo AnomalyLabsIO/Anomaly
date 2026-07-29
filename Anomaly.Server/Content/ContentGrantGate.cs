@@ -37,5 +37,7 @@ namespace Anomaly.Server.Content
             _byNetId.TryGetValue(netId, out var ack) && ack.HashMatches && !ack.FailedKeys.Contains(key);
 
         internal static void Remove(uint netId) => _byNetId.Remove(netId);
+
+        internal static void Reset() => _byNetId.Clear();
     }
 }

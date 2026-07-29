@@ -50,6 +50,11 @@ namespace Anomaly.Server.Features
             _byUserId.Remove(userId);
         }
 
+        internal static void Clear()
+        {
+            _byUserId.Clear();
+        }
+
         internal static IEnumerable<KeyValuePair<string, ColorRgb>> All => _byUserId;
     }
 }

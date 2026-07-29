@@ -199,6 +199,13 @@ public static class PlayerAuthenticationManagerPatch
             MelonLogger.Warning("Got encrypted channel message with an empty payload.");
             return false;
         }
+        if (packedData.Length > AnomalyChannel.MaxEncryptedEnvelopeBytes)
+        {
+            MelonLogger.Warning(
+                $"Dropping encrypted-channel message over the absolute ceiling " +
+                $"({packedData.Length}/{AnomalyChannel.MaxEncryptedEnvelopeBytes} bytes).");
+            return false;
+        }
 
         byte[] decryptedData;
         if (packed.Level == EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated)
@@ -262,7 +269,10 @@ public static class PlayerAuthenticationManagerPatch
         {
             var anomalyPayload = new byte[decryptedData.Length - 1];
             Array.Copy(decryptedData, 1, anomalyPayload, 0, anomalyPayload.Length);
-            AnomalyMessaging.OnReceived(anomalyPayload);
+            AnomalyMessaging.OnReceived(
+                anomalyPayload,
+                packed.Level == EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
+                NetworkServer.active);
             return false;
         }
 

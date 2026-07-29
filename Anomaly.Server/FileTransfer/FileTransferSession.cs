@@ -52,6 +52,7 @@ public class FileTransferSession
         if (ServerAssetManager.AllAssets.Count == 0)
             return;
 
+        CleanupPlayer(hub);
         var session = new FileTransferSession(hub);
         ActiveSessions[hub] = session;
         session.SendManifest();
@@ -65,6 +66,17 @@ public class FileTransferSession
                 Timing.KillCoroutines(session._sendHandle);
             ActiveSessions.Remove(hub);
         }
+    }
+
+    public static void Reset()
+    {
+        foreach (var session in ActiveSessions.Values)
+        {
+            if (session._sendHandle.IsRunning)
+                Timing.KillCoroutines(session._sendHandle);
+        }
+
+        ActiveSessions.Clear();
     }
 
     public static void HandleMessage(ReferenceHub sender, IAnomalyMessage msg)

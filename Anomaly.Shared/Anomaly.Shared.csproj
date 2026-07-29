@@ -60,9 +60,12 @@
         <Compile Include="Content\ContentAssetId.cs" />
         <Compile Include="Content\ModNamespace.cs" />
         <Compile Include="Content\IContentRegistrar.cs" />
+        <Compile Include="Capabilities\CapabilityDescriptor.cs" />
         <Compile Include="Networking\AnomalyChannel.cs" />
+        <Compile Include="Networking\AnomalyMessagePolicy.cs" />
         <Compile Include="Networking\AnomalyMessageRegistry.cs" />
         <Compile Include="Networking\AnomalyReplayState.cs" />
+        <Compile Include="Networking\AnomalySequenceState.cs" />
         <Compile Include="Networking\HalfHelper.cs" />
         <Compile Include="Networking\IAnomalyMessage.cs" />
         <Compile Include="Networking\MessageChannel.cs" />
@@ -79,6 +82,8 @@
         <Compile Include="Networking\Messages\BoneTransformsMessage.cs" />
         <Compile Include="Networking\Messages\ContentCatalogMessage.cs" />
         <Compile Include="Networking\Messages\ContentCatalogAckMessage.cs" />
+        <Compile Include="Networking\Messages\CapabilityChallengeMessage.cs" />
+        <Compile Include="Networking\Messages\CapabilitySnapshotMessage.cs" />
         <Compile Include="Networking\Messages\EmotionBlendShapesMessage.cs" />
         <Compile Include="Networking\Messages\FacilityAtlasEditsMessage.cs" />
         <Compile Include="Networking\Messages\FacilityLayoutRecipeMessage.cs" />

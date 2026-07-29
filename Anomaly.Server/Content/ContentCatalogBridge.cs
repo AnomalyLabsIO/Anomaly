@@ -15,11 +15,29 @@ namespace Anomaly.Server.Content
     internal static class ContentCatalogBridge
     {
         private static bool _frozen;
+        private static bool _initialized;
 
         internal static void Init()
         {
+            if (_initialized)
+                return;
+
+            _initialized = true;
             AnomalyMessaging.MessageReceived += HandleMessage;
             AnomalyMessaging.ClientReady += HandleClientReady;
+        }
+
+        internal static void Disable()
+        {
+            if (_initialized)
+            {
+                AnomalyMessaging.MessageReceived -= HandleMessage;
+                AnomalyMessaging.ClientReady -= HandleClientReady;
+                _initialized = false;
+            }
+
+            _frozen = false;
+            ContentGrantGate.Reset();
         }
 
         /// <summary>

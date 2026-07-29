@@ -3,12 +3,14 @@ using Anomaly.Client.Api.Compatibility;
 using Anomaly.Client.Api.Config;
 using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Persistence;
+using Anomaly.Client.Api.Features;
 using Anomaly.Client.Auth;
 using Anomaly.Client.Commands;
 using Anomaly.Client.Diagnostics;
 using Anomaly.Client.Internal.Bootstrap;
 using Anomaly.Client.Api.Internal.UI;
 using Anomaly.Client.Internal.UI;
+using Anomaly.Client.Internal.Motion;
 using Anomaly.Client.Patches.Menu;
 using Anomaly.Client.Patches.Menu.ModSettings;
 using Il2Cpp;
@@ -18,7 +20,7 @@ using MelonLoader.Utils;
 
 [assembly: MelonInfo(typeof(Anomaly.Client.Core), "Anomaly", "0.1.0", "AnomalyLabs", null)]
 [assembly: MelonGame("Northwood", "SCPSL")]
-[assembly: SupportedGameVersion("14.2.6^")]
+[assembly: SupportedGameVersion("14.2.7^")]
 
 namespace Anomaly.Client;
 
@@ -38,6 +40,8 @@ public class Core : MelonMod
         CentralAuthManager.NoAuthStartupArg = "-noauth";
 
         AuthHandler.Init();
+        ClientCapabilities.Initialize();
+        LocalPlayerMotionAdapter.Initialize();
         ClientRuntime.Initialize();
         DiagnosticBootstrap.Initialize();
         UiBootstrap.Init();
@@ -61,6 +65,9 @@ public class Core : MelonMod
         ModSettingsSaveScheduler.Flush();
         ClientConfig.DisposeAll();
         ClientPersistence.FlushAll();
+        ClientCapabilities.Shutdown();
+        ClientVisibility.ReleaseAll();
+        LocalPlayerMotionAdapter.Shutdown();
         DiagnosticBootstrap.Shutdown();
     }
 

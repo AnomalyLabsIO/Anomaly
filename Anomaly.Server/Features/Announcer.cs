@@ -21,6 +21,7 @@ public static class Announcer
 {
     private static readonly Dictionary<string, Word> _words = new Dictionary<string, Word>(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, CassieLine> _appliedLines = new Dictionary<string, CassieLine>(StringComparer.OrdinalIgnoreCase);
+    private static readonly List<AudioClip> _ownedClips = new List<AudioClip>();
     private static readonly FieldInfo AllLinesField = typeof(CassieLineDatabase).GetField(
         "<AllLines>k__BackingField",
         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -38,6 +39,27 @@ public static class Announcer
         FileTransferSession.SessionCompleted += OnSessionCompleted;
         CassieTtsAnnouncer.OnSingletonSet += ApplyAll;
         ApplyAll();
+    }
+
+    public static void Disable()
+    {
+        if (_initialized)
+        {
+            FileTransferSession.SessionCompleted -= OnSessionCompleted;
+            CassieTtsAnnouncer.OnSingletonSet -= ApplyAll;
+            _initialized = false;
+        }
+
+        RemoveAppliedLines();
+        _words.Clear();
+        _appliedLines.Clear();
+
+        foreach (AudioClip clip in _ownedClips)
+        {
+            if (clip != null)
+                UnityEngine.Object.Destroy(clip);
+        }
+        _ownedClips.Clear();
     }
 
     public static Word AddWord(string apiName, string assetPath, float durationSeconds, CassieClipCategory type = CassieClipCategory.Word)
@@ -182,7 +204,63 @@ public static class Announcer
 
         int sampleRate = 48000;
         int samples = Math.Max(1, (int)(Math.Max(0.01f, word.DurationSeconds) * sampleRate));
-        return AudioClip.Create("AnomalyAnnouncer:" + word.ApiName, samples, 1, sampleRate, false);
+        AudioClip ownedClip = AudioClip.Create(
+            "AnomalyAnnouncer:" + word.ApiName,
+            samples,
+            1,
+            sampleRate,
+            false);
+        _ownedClips.Add(ownedClip);
+        return ownedClip;
+    }
+
+    private static void RemoveAppliedLines()
+    {
+        if (_appliedLines.Count == 0 ||
+            !CassieTtsAnnouncer.TryGetDatabase(out CassieLineDatabase db) ||
+            db == null ||
+            db.AllLines == null)
+        {
+            return;
+        }
+
+        CassieLine[] lines = db.AllLines;
+        int retainedCount = 0;
+        foreach (CassieLine line in lines)
+        {
+            if (!IsAppliedLine(line))
+                retainedCount++;
+        }
+
+        if (retainedCount == lines.Length)
+            return;
+
+        var retained = new CassieLine[retainedCount];
+        int index = 0;
+        foreach (CassieLine line in lines)
+        {
+            if (!IsAppliedLine(line))
+                retained[index++] = line;
+        }
+
+        if (!SetAllLines(db, retained))
+        {
+            Logger.Warn("Announcer: Failed to remove custom words from CassieLineDatabase.AllLines.");
+            return;
+        }
+
+        db.ValidateCache(true);
+    }
+
+    private static bool IsAppliedLine(CassieLine candidate)
+    {
+        foreach (CassieLine applied in _appliedLines.Values)
+        {
+            if (ReferenceEquals(candidate, applied))
+                return true;
+        }
+
+        return false;
     }
 
     private static bool SetAllLines(CassieLineDatabase db, CassieLine[] lines)

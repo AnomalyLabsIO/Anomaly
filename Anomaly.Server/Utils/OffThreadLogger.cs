@@ -10,6 +10,7 @@ public class OffThreadLogger
 {
     private static ConcurrentQueue<LogEntry> _queue = new ConcurrentQueue<LogEntry>();
     private static bool _initialized;
+    private static CoroutineHandle _drainHandle;
 
     /// <summary>
     /// Must be called once from the main Unity thread (e.g. Plugin.Enable) to start the drain coroutine.
@@ -18,7 +19,17 @@ public class OffThreadLogger
     {
         if (_initialized) return;
         _initialized = true;
-        Timing.RunCoroutine(DrainQueue());
+        _drainHandle = Timing.RunCoroutine(DrainQueue());
+    }
+
+    public static void Disable()
+    {
+        if (_drainHandle.IsRunning)
+            Timing.KillCoroutines(_drainHandle);
+
+        _drainHandle = default;
+        _initialized = false;
+        while (_queue.TryDequeue(out _)) { }
     }
 
     public static void Debug(string message)

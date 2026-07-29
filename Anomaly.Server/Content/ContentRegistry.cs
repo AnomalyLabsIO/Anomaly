@@ -130,6 +130,20 @@ namespace Anomaly.Server.Content
         internal static IEnumerable<CatalogEntry> ItemEntries => _itemById.Values;
         internal static IEnumerable<CatalogEntry> RoleEntries => _roleById.Values;
 
+        internal static void Reset()
+        {
+            _items.Clear();
+            _roles.Clear();
+            _effects.Clear();
+            _keyToId.Clear();
+            _itemById.Clear();
+            _roleById.Clear();
+            _itemLogic.Clear();
+            _roleLogic.Clear();
+            Catalog = new ContentCatalog();
+            Frozen = false;
+        }
+
         // --- entry builders ---
 
         private static CatalogEntry BuildItemEntry(CustomItemDefinition d) => new CatalogEntry

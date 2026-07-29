@@ -50,9 +50,13 @@ namespace Anomaly.Server.Round
 
         internal static void Disable()
         {
-            if (!_hooked) return;
-            _hooked = false;
-            ServerEvents.RoundStarted -= OnRoundStarted;
+            if (_hooked)
+            {
+                ServerEvents.RoundStarted -= OnRoundStarted;
+                _hooked = false;
+            }
+
+            _onRoundStartedField = null;
         }
 
         private static void OnRoundStarted()

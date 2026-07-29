@@ -42,6 +42,31 @@ namespace Anomaly.Server.Assets
             }
         }
 
+        public static void Disable()
+        {
+            if (_hookedSessionCompleted)
+            {
+                FileTransferSession.SessionCompleted -= OnSessionCompleted;
+                _hookedSessionCompleted = false;
+            }
+
+            var ids = new List<uint>(_spawns.Keys);
+            _spawns.Clear();
+            Interlocked.Exchange(ref _nextId, 0);
+
+            foreach (uint id in ids)
+            {
+                try
+                {
+                    AnomalyMessaging.SendToAll(new AssetDespawnMessage { ObjectId = id });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"AssetSpawner: Failed to broadcast cleanup for object {id}: {ex}");
+                }
+            }
+        }
+
         /// <summary>
         /// Broadcasts a spawn for the given asset hash to all connected clients
         /// and records the spawn for late-join replay. Returns the server-assigned

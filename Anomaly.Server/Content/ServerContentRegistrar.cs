@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Anomaly.Shared.Content;
 using InventorySystem;
 using InventorySystem.Items;
@@ -29,6 +30,16 @@ namespace Anomaly.Server.Content
     /// </remarks>
     internal static class ServerContentRegistrar
     {
+        private sealed class Registration
+        {
+            public ItemBase Template;
+            public ItemBase PreviousTemplate;
+            public bool HadPreviousTemplate;
+        }
+
+        private static readonly Dictionary<ItemType, Registration> Registrations =
+            new Dictionary<ItemType, Registration>();
+
         internal static void RegisterItems()
         {
             foreach (var entry in ContentRegistry.ItemEntries)
@@ -44,24 +55,59 @@ namespace Anomaly.Server.Content
             }
         }
 
+        internal static void Reset()
+        {
+            var available = InventoryItemLoader.AvailableItems;
+            foreach (var registration in Registrations)
+            {
+                if (available.TryGetValue(registration.Key, out var current) &&
+                    ReferenceEquals(current, registration.Value.Template))
+                {
+                    if (registration.Value.HadPreviousTemplate)
+                        available[registration.Key] = registration.Value.PreviousTemplate;
+                    else
+                        available.Remove(registration.Key);
+                }
+
+                if (registration.Value.Template != null)
+                    UnityEngine.Object.Destroy(registration.Value.Template.gameObject);
+            }
+
+            Registrations.Clear();
+        }
+
         private static void RegisterItem(CatalogEntry entry)
         {
             var available = InventoryItemLoader.AvailableItems;
+            var itemType = (ItemType)entry.AssignedId;
+            if (Registrations.TryGetValue(itemType, out var existing))
+            {
+                available[itemType] = existing.Template;
+                return;
+            }
+
             if (!available.TryGetValue((ItemType)entry.BaseTemplateId, out var baseTemplate) || baseTemplate == null)
             {
                 Logger.Warn($"Anomaly.Content: base item template {entry.BaseTemplateId} for '{entry.Key}' not found; skipping.");
                 return;
             }
 
+            bool hadPrevious = available.TryGetValue(itemType, out var previousTemplate);
             var cloneGo = UnityEngine.Object.Instantiate(baseTemplate.gameObject);
             UnityEngine.Object.DontDestroyOnLoad(cloneGo);
             cloneGo.SetActive(false); // a template, not a live item
             cloneGo.name = $"AnomalyItem_{entry.AssignedId}_{entry.Key}";
 
             var cloneItem = cloneGo.GetComponent<ItemBase>();
-            cloneItem.ItemTypeId = (ItemType)entry.AssignedId;
+            cloneItem.ItemTypeId = itemType;
 
-            available[(ItemType)entry.AssignedId] = cloneItem;
+            available[itemType] = cloneItem;
+            Registrations[itemType] = new Registration
+            {
+                Template = cloneItem,
+                PreviousTemplate = previousTemplate,
+                HadPreviousTemplate = hadPrevious,
+            };
             Logger.Info($"Anomaly.Content: server registered item '{entry.Key}' as id {entry.AssignedId} (cloned from {entry.BaseTemplateId}).");
         }
     }

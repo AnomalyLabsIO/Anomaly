@@ -18,6 +18,8 @@ public static class AnomalyMessaging
     public static event Action<IAnomalyMessage> MessageReceived;
 
     private static readonly SecureRandom SecureRandom = new();
+    private static readonly AnomalySequenceState SequenceState = new();
+    private static uint _currentRoundEpoch;
 
     public static void Send(IAnomalyMessage msg)
     {
@@ -38,6 +40,17 @@ public static class AnomalyMessaging
         uint counter = AnomalyReplayTable.Instance.NextTxCounter(msg.TransportChannel);
         uint hash = AnomalyMessageRegistry.GetHash(msg.MessageName);
 
+        if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var policy))
+        {
+            MelonLogger.Warning($"AnomalyMessaging.Send: No policy registered for '{msg.MessageName}'.");
+            return;
+        }
+        if (policy.Direction == AnomalyMessageDirection.ServerToClient)
+        {
+            MelonLogger.Warning($"AnomalyMessaging.Send: '{msg.MessageName}' is server-to-client only.");
+            return;
+        }
+
         // Serialize the inner payload: [hash][message payload]
         using var innerMs = new MemoryStream();
         using var innerWriter = new BinaryWriter(innerMs);
@@ -45,6 +58,15 @@ public static class AnomalyMessaging
         msg.Serialize(innerWriter);
         innerWriter.Flush();
         var inner = innerMs.ToArray();
+        int serializedPayloadBytes = inner.Length - sizeof(uint);
+        if (serializedPayloadBytes > policy.MaxPayloadBytes ||
+            inner.Length + 5 > AnomalyChannel.MaxEnvelopeBytes)
+        {
+            MelonLogger.Warning(
+                $"AnomalyMessaging.Send: '{msg.MessageName}' exceeded its payload ceiling " +
+                $"({serializedPayloadBytes}/{policy.MaxPayloadBytes} bytes).");
+            return;
+        }
 
         // Build the full envelope: [0xFE][4:counter][inner]
         var data = new byte[5 + inner.Length];
@@ -69,8 +91,24 @@ public static class AnomalyMessaging
         }
     }
 
-    internal static void OnReceived(byte[] anomalyPayload)
+    internal static void OnReceived(
+        byte[] anomalyPayload,
+        bool encryptedAndAuthenticated,
+        bool localTransport)
     {
+        if (!encryptedAndAuthenticated && !localTransport)
+        {
+            MelonLogger.Warning("AnomalyMessaging.OnReceived: Dropping unauthenticated remote 0xFE message.");
+            return;
+        }
+        if (anomalyPayload == null || anomalyPayload.Length > AnomalyChannel.MaxEnvelopeBytes)
+        {
+            MelonLogger.Warning(
+                $"AnomalyMessaging.OnReceived: Payload exceeded the absolute envelope ceiling " +
+                $"({anomalyPayload?.Length ?? 0}/{AnomalyChannel.MaxEnvelopeBytes} bytes).");
+            return;
+        }
+
         // Wire (after stripping 0xFE): [4:counter][4:hash][N:payload]
         if (anomalyPayload.Length < 8)
         {
@@ -84,6 +122,26 @@ public static class AnomalyMessaging
         if (!AnomalyMessageRegistry.TryGetChannel(hash, out var channel))
         {
             MelonLogger.Warning($"AnomalyMessaging.OnReceived: Unknown message hash 0x{hash:X8}.");
+            return;
+        }
+
+        if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var policy))
+        {
+            MelonLogger.Warning($"AnomalyMessaging.OnReceived: No policy for hash 0x{hash:X8}.");
+            return;
+        }
+        if (policy.Direction == AnomalyMessageDirection.ClientToServer)
+        {
+            MelonLogger.Warning($"AnomalyMessaging.OnReceived: Dropping client-to-server message hash 0x{hash:X8}.");
+            return;
+        }
+
+        int payloadBytes = anomalyPayload.Length - 8;
+        if (payloadBytes > policy.MaxPayloadBytes)
+        {
+            MelonLogger.Warning(
+                $"AnomalyMessaging.OnReceived: Payload for hash 0x{hash:X8} exceeded its ceiling " +
+                $"({payloadBytes}/{policy.MaxPayloadBytes} bytes).");
             return;
         }
 
@@ -106,11 +164,37 @@ public static class AnomalyMessaging
             using var ms = new MemoryStream(anomalyPayload, 8, anomalyPayload.Length - 8);
             using var reader = new BinaryReader(ms);
             message.Deserialize(reader);
+            if (ms.Position != ms.Length)
+                throw new InvalidDataException(
+                    $"Message left {ms.Length - ms.Position} unread payload bytes.");
         }
         catch (Exception ex)
         {
             MelonLogger.Error($"AnomalyMessaging.OnReceived: Failed to deserialize '{message.MessageName}': {ex}");
             return;
+        }
+
+        if (policy.IsRoundScoped)
+        {
+            if (message is not IRoundScopedAnomalyMessage scoped)
+            {
+                MelonLogger.Warning($"AnomalyMessaging.OnReceived: Round-scoped policy mismatch for hash 0x{hash:X8}.");
+                return;
+            }
+
+            var result = SequenceState.TryAccept(
+                _currentRoundEpoch,
+                scoped.RoundEpoch,
+                scoped.Sequence,
+                hash);
+            if (result != AnomalySequenceState.RxResult.Accepted)
+            {
+                MelonLogger.Warning(
+                    $"AnomalyMessaging.OnReceived: Dropping round-scoped packet " +
+                    $"(hash=0x{hash:X8}, epoch={scoped.RoundEpoch}/{_currentRoundEpoch}, " +
+                    $"sequence={scoped.Sequence}, reason={result}).");
+                return;
+            }
         }
 
         try
@@ -122,6 +206,12 @@ public static class AnomalyMessaging
         {
             MelonLogger.Error($"AnomalyMessaging.OnReceived: Handler exception for '{message.MessageName}': {ex}");
         }
+    }
+
+    internal static void ResetSession(uint roundEpoch)
+    {
+        _currentRoundEpoch = roundEpoch;
+        SequenceState.Reset(roundEpoch);
     }
 
     private static byte[] AesGcmEncrypt(byte[] data, byte[] key)

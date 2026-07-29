@@ -14,16 +14,30 @@ namespace Anomaly.Server.Networking
     {
         private static readonly ConcurrentDictionary<ReferenceHub, AnomalyReplayState> States =
             new ConcurrentDictionary<ReferenceHub, AnomalyReplayState>();
+        private static readonly ConcurrentDictionary<ReferenceHub, AnomalySequenceState> SequenceStates =
+            new ConcurrentDictionary<ReferenceHub, AnomalySequenceState>();
 
         public static AnomalyReplayState GetOrCreate(ReferenceHub hub)
         {
             return States.GetOrAdd(hub, _ => new AnomalyReplayState());
         }
 
+        public static AnomalySequenceState GetSequenceOrCreate(ReferenceHub hub)
+        {
+            return SequenceStates.GetOrAdd(hub, _ => new AnomalySequenceState());
+        }
+
         public static void Remove(ReferenceHub hub)
         {
             if (hub == null) return;
             States.TryRemove(hub, out _);
+            SequenceStates.TryRemove(hub, out _);
+        }
+
+        public static void Reset()
+        {
+            States.Clear();
+            SequenceStates.Clear();
         }
     }
 }

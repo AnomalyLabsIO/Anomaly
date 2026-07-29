@@ -151,6 +151,8 @@ internal static class ClientRuntime
             global::Anomaly.Client.Api.Features.Locker.ClearAll();
             CharacterModels.Reset();
             CameraManager.Reset();
+            ClientVisibility.ReleaseAll();
+            LocalPlayerMotion.ResetSequence();
             Hud.ResetAll();
             ScreenEffects.Reset();
             VirtualInputs.Reset();

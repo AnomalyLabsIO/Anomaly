@@ -263,6 +263,14 @@ public static class PlayerAuthenticationManagerPatch
             return false;
         }
 
+        if (packedData.Length > AnomalyChannel.MaxEncryptedEnvelopeBytes)
+        {
+            OffThreadLogger.Warn(
+                $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: payload exceeded the " +
+                $"absolute ceiling ({packedData.Length}/{AnomalyChannel.MaxEncryptedEnvelopeBytes} bytes).");
+            return false;
+        }
+
         EncryptedChannelManager.EncryptedChannel channel;
         uint counter;
         byte[] content;
@@ -280,7 +288,11 @@ public static class PlayerAuthenticationManagerPatch
             {
                 var anomalyPayload = new byte[packedData.Length - 1];
                 Array.Copy(packedData, 1, anomalyPayload, 0, anomalyPayload.Length);
-                AnomalyMessaging.OnReceived(hub, anomalyPayload);
+                AnomalyMessaging.OnReceived(
+                    hub,
+                    anomalyPayload,
+                    packed.Level == EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
+                    true);
                 return false;
             }
 
@@ -365,7 +377,7 @@ public static class PlayerAuthenticationManagerPatch
             {
                 var anomalyPayload = new byte[decryptedData.Length - 1];
                 Array.Copy(decryptedData, 1, anomalyPayload, 0, anomalyPayload.Length);
-                AnomalyMessaging.OnReceived(hub, anomalyPayload);
+                AnomalyMessaging.OnReceived(hub, anomalyPayload, encrypted, false);
                 return false;
             }
 
@@ -419,6 +431,7 @@ public static class PlayerAuthenticationManagerPatch
     private static bool RequiresEncryption(EncryptedChannelManager.EncryptedChannel channel)
     {
         return channel == EncryptedChannelManager.EncryptedChannel.RemoteAdmin ||
-               channel == EncryptedChannelManager.EncryptedChannel.AdminChat;
+               channel == EncryptedChannelManager.EncryptedChannel.AdminChat ||
+               (byte)channel == AnomalyChannel.ChannelId;
     }
 }

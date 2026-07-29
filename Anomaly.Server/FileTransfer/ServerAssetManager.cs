@@ -18,6 +18,7 @@ public static class ServerAssetManager
 
     public static void Init(string assetDirectory)
     {
+        Reset();
         _assetDirectory = assetDirectory;
 
         if (string.IsNullOrEmpty(_assetDirectory))
@@ -34,6 +35,12 @@ public static class ServerAssetManager
         }
 
         ScanAssets();
+    }
+
+    public static void Reset()
+    {
+        Assets.Clear();
+        _assetDirectory = null;
     }
 
     public static void Rescan()

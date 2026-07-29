@@ -50,17 +50,20 @@ namespace Anomaly.Server.Round
 
         internal static void Disable()
         {
-            if (!_hooked) return;
-            _hooked = false;
+            if (_hooked)
+            {
+                ServerEvents.WaitingForPlayers -= OnWaitingForPlayers;
+                ServerEvents.RoundStarting     -= OnRoundStarting;
+                ServerEvents.RoundStarted      -= OnRoundStarted;
+                ServerEvents.RoundEnding       -= OnRoundEnding;
+                ServerEvents.RoundEnded        -= OnRoundEnded;
+                ServerEvents.RoundRestarted    -= OnRoundRestarted;
 
-            ServerEvents.WaitingForPlayers -= OnWaitingForPlayers;
-            ServerEvents.RoundStarting     -= OnRoundStarting;
-            ServerEvents.RoundStarted      -= OnRoundStarted;
-            ServerEvents.RoundEnding       -= OnRoundEnding;
-            ServerEvents.RoundEnded        -= OnRoundEnded;
-            ServerEvents.RoundRestarted    -= OnRoundRestarted;
+                FileTransferSession.SessionCompleted -= BroadcastCurrentTo;
+                _hooked = false;
+            }
 
-            FileTransferSession.SessionCompleted -= BroadcastCurrentTo;
+            _currentPhase = RoundPhase.WaitingForPlayers;
         }
 
         /// <summary>

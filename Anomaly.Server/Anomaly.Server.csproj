@@ -175,6 +175,7 @@
         <Compile Include="Config.cs" />
         <Compile Include="Patches\PlayerAuthenticationManagerPatch.cs" />
         <Compile Include="Patches\ProcessConnectionRequestPatch.cs" />
+        <Compile Include="Patches\FpcMotionHandoffPatch.cs" />
         <Compile Include="Plugin.cs" />
         <Compile Include="Properties\AssemblyInfo.cs"/>
         <Compile Include="Networking\AnomalyMessaging.cs" />
@@ -186,6 +187,9 @@
         <Compile Include="Features\Announcer.cs" />
         <Compile Include="Features\PlayerColorState.cs" />
         <Compile Include="Features\PlayerColorBridge.cs" />
+        <Compile Include="Features\ClientCapabilities.cs" />
+        <Compile Include="Features\PlayerMotion.cs" />
+        <Compile Include="Internal\Motion\FpcMotionHandoff.cs" />
         <Compile Include="Content\Content.cs" />
         <Compile Include="Content\ContentCatalogBridge.cs" />
         <Compile Include="Content\ServerContentRegistrar.cs" />

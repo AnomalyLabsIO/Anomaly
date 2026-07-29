@@ -400,6 +400,8 @@
 		<Compile Include="Internal\Effects\EffectStateTracker.cs" />
 		<Compile Include="Internal\Map\FacilityBootstrapMessages.cs" />
 		<Compile Include="Internal\Map\FacilityRecipeClient.cs" />
+		<Compile Include="Internal\Motion\FpcMotionHandoff.cs" />
+		<Compile Include="Internal\Motion\LocalPlayerMotionAdapter.cs" />
 		<Compile Include="Internal\UI\PreloaderSkinBootstrap.cs" />
 		<Compile Include="Internal\Networking\SilentRoleChangeHandler.cs" />
 		<Compile Include="Internal\PlayerCustomization\PlayerColorTracker.cs" />
@@ -425,6 +427,7 @@
 		<Compile Include="Patches\Menu\ModSettings\UserSettingsCategoriesPatch.cs" />
 		<Compile Include="Patches\Menu\NewServerBrowserOnEnablePatch.cs" />
 		<Compile Include="Patches\Menu\NewsLoaderStartPatch.cs" />
+		<Compile Include="Patches\Motion\FpcMotionHandoffPatch.cs" />
 		<Compile Include="Patches\Mirror\EncryptedChannelHandlerFix.cs" />
 		<Compile Include="Patches\Mirror\NetworkIdentityOnStartClientPatch.cs" />
 		<Compile Include="Patches\Mirror\NetworkManagerRegisterClientMessages.cs" />
@@ -455,6 +458,7 @@
 		<Compile Include="Patches\Input\FpcNoclipPatch.cs" />
 		<Compile Include="Patches\Voice\VoiceMessageReadersWritersPatch.cs" />
 		<Compile Include="Patches\Voice\VoiceTransceiverPatch.cs" />
+		<Compile Include="Patches\Visibility\ClientVisibilityPatches.cs" />
 	</ItemGroup>
 
 	<ItemGroup>

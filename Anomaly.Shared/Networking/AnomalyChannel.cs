@@ -9,6 +9,19 @@ namespace Anomaly.Shared.Networking
         /// This value must not collide with any game EncryptedChannel enum value.
         /// </summary>
         public const byte ChannelId = 0xFE;
+
+        /// <summary>
+        /// Absolute decoded envelope ceiling. Individual message policies are
+        /// normally much smaller; this protects the hash lookup and allocation
+        /// boundary for legacy messages that do not yet declare a ceiling.
+        /// </summary>
+        public const int MaxEnvelopeBytes = 2 * 1024 * 1024;
+
+        /// <summary>
+        /// AES-GCM envelopes add a 32-byte nonce and a 16-byte authentication
+        /// tag. Keep a small margin for provider-specific framing.
+        /// </summary>
+        public const int MaxEncryptedEnvelopeBytes = MaxEnvelopeBytes + 64;
     }
 
     /// <summary>

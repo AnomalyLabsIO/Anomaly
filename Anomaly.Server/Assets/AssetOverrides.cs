@@ -49,6 +49,32 @@ namespace Anomaly.Server.Assets
             }
         }
 
+        public static void Disable()
+        {
+            if (_hookedSessionCompleted)
+            {
+                FileTransferSession.SessionCompleted -= OnSessionCompleted;
+                _hookedSessionCompleted = false;
+            }
+
+            var netIds = new HashSet<uint>();
+            foreach (var key in _overrides.Keys)
+                netIds.Add(key.NetId);
+            _overrides.Clear();
+
+            foreach (uint netId in netIds)
+            {
+                try
+                {
+                    AnomalyMessaging.SendToAll(new AssetClearAllOverridesMessage { NetId = netId });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"AssetOverrides: Failed to broadcast cleanup for netId {netId}: {ex}");
+                }
+            }
+        }
+
         // ----- Generic (wire-level) API -----
 
         public static void SetTexture(uint netId, string componentPath, int materialIdx, byte[] textureHash)
