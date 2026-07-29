@@ -112,6 +112,9 @@ namespace Anomaly.Shared.Networking
 
             Register("anomaly:player:setfavoritecolor", () => new SetFavoriteColorMessage());
             Register("anomaly:player:colorchanged", () => new PlayerColorChangedMessage());
+
+            Register("anomaly:content:catalog", () => new ContentCatalogMessage());
+            Register("anomaly:content:catalogack", () => new ContentCatalogAckMessage());
         }
 
         /// <summary>

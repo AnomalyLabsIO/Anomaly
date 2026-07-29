@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Anomaly.Server.Assets;
 using Anomaly.Server.Auth;
+using Anomaly.Server.Content;
 using Anomaly.Server.Features;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Map;
@@ -56,6 +57,7 @@ public class Plugin : Plugin<Config>
             Logger.Info("AnomalyMessageRegistry initialized");
 
             PlayerColorBridge.Init();
+            ContentCatalogBridge.Init();
 
             ServerAssetManager.Init(Config.AssetDirectory);
             AssetRegistry.LogSummary();
@@ -81,6 +83,7 @@ public class Plugin : Plugin<Config>
             {
                 FileTransferSession.CleanupPlayer(ev.Player.ReferenceHub);
                 AnomalyReplayTable.Remove(ev.Player.ReferenceHub);
+                ContentGrantGate.Remove(ev.Player.ReferenceHub.netId);
             };
 
             RoundStateBroadcaster.Init();

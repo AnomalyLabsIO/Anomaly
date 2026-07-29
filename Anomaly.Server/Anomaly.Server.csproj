@@ -186,6 +186,16 @@
         <Compile Include="Features\Announcer.cs" />
         <Compile Include="Features\PlayerColorState.cs" />
         <Compile Include="Features\PlayerColorBridge.cs" />
+        <Compile Include="Content\Content.cs" />
+        <Compile Include="Content\ContentCatalogBridge.cs" />
+        <Compile Include="Content\ServerContentRegistrar.cs" />
+        <Compile Include="Content\ContentRegistry.cs" />
+        <Compile Include="Content\ContentGrantGate.cs" />
+        <Compile Include="Content\CustomItemDefinition.cs" />
+        <Compile Include="Content\CustomRoleDefinition.cs" />
+        <Compile Include="Content\CustomEffectDefinition.cs" />
+        <Compile Include="Content\ItemLogicBase.cs" />
+        <Compile Include="Content\RoleLogicBase.cs" />
         <Compile Include="FileTransfer\FileTransferSession.cs" />
         <Compile Include="FileTransfer\ServerAssetManager.cs" />
         <Compile Include="Map\FacilityGlyphs.cs" />

@@ -55,6 +55,11 @@
         <Compile Include="Auth\ServerAuthSession.cs" />
         <Compile Include="Auth\ServerHandshake.cs" />
         <Compile Include="Assets\AssetKind.cs" />
+        <Compile Include="Content\CatalogTypes.cs" />
+        <Compile Include="Content\CatalogBuilder.cs" />
+        <Compile Include="Content\ContentAssetId.cs" />
+        <Compile Include="Content\ModNamespace.cs" />
+        <Compile Include="Content\IContentRegistrar.cs" />
         <Compile Include="Networking\AnomalyChannel.cs" />
         <Compile Include="Networking\AnomalyMessageRegistry.cs" />
         <Compile Include="Networking\AnomalyReplayState.cs" />
@@ -72,6 +77,8 @@
         <Compile Include="Networking\Messages\AssetSetTransformMessage.cs" />
         <Compile Include="Networking\Messages\AssetSpawnMessage.cs" />
         <Compile Include="Networking\Messages\BoneTransformsMessage.cs" />
+        <Compile Include="Networking\Messages\ContentCatalogMessage.cs" />
+        <Compile Include="Networking\Messages\ContentCatalogAckMessage.cs" />
         <Compile Include="Networking\Messages\EmotionBlendShapesMessage.cs" />
         <Compile Include="Networking\Messages\FacilityAtlasEditsMessage.cs" />
         <Compile Include="Networking\Messages\FacilityLayoutRecipeMessage.cs" />

@@ -30,4 +30,12 @@ public class Config
     /// Duration of the temporary password failure block in seconds.
     /// </summary>
     public int PasswordBlockSeconds { get; set; } = 300;
+
+    /// <summary>
+    /// When true, a client whose custom-content catalog hash does not match the server's
+    /// (or that fails to register catalog entries) is disconnected. Default false: the
+    /// server instead logs the mismatch and refuses to grant the affected custom content
+    /// to that client, leaving the rest of the session intact.
+    /// </summary>
+    public bool ContentMismatchKick { get; set; } = false;
 }
