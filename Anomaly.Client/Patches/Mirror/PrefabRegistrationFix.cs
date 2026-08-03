@@ -45,6 +45,7 @@ public static class PrefabRegistrationFix
         ("Il2CppInventorySystem.Items.ThrowableProjectiles.ThrowableNetworkHandler", "RegisterProjectiles"),
         ("Il2CppMapGeneration.Distributors.SpawnablesDistributorSettings", "RegisterSpawnables"),
         ("Il2CppMapGeneration.RoomConnectors.RoomConnectorDistributorSettings", "RegisterSpawnables"),
+        ("Il2CppAchievements.AchievementManager", "LocalPlayerStarted"),
     };
 
     /// <summary>
@@ -61,6 +62,7 @@ public static class PrefabRegistrationFix
         "Il2CppMapGeneration.SeedSynchronizer",                                     // SeedMessage handler replace
         "Il2CppMapGeneration.RoomConnectors.RoomConnectorDistributorSettings",      // LoadSettingsFromResources()
         "Il2CppPlayerRoles.Ragdolls.RagdollManager",                                // UserSetting listeners
+        "Il2CppAchievements.AchievementManager",                                    // AchievementMessage handler (id=62514)
     };
 
     [HarmonyPrefix]
