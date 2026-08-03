@@ -51,10 +51,18 @@ public class Plugin : Plugin<Config>
 
             Instance = this;
 
+            if (!ServerIdentityStore.LoadOrCreate(out var identityError))
+                throw new InvalidOperationException("Server signing identity is unavailable: " + identityError);
+            Logger.Info($"Protocol-v2 server identity fingerprint: {ServerIdentityStore.Fingerprint}");
+            PreauthGate.Initialize();
+            AuthHandler.Reset();
+
             PasswordStore.Load();
             Logger.Info($"Password auth: required={PasswordStore.IsRequired}, verifierConfigured={PasswordStore.HasPassword}.");
             if (Config.RequirePassword && !PasswordStore.HasPassword)
                 Logger.Warn("RequirePassword is enabled, but no Anomaly password verifier exists. Run 'password <value>' in LocalAdmin; clients will be rejected until then.");
+            if (Config.RequirePassword && !Config.EnableLegacyPasswordAuthOnLoopback)
+                Logger.Warn("RequirePassword is enabled, but public password mode is disabled because no vetted OPAQUE implementation supports both target runtimes. Remote clients will be rejected; the legacy loopback-only override is migration-only.");
 
             AnomalyMessageRegistry.Log = s => Logger.Info(s);
             AnomalyMessageRegistry.Warn = s => Logger.Warn(s);
@@ -133,6 +141,7 @@ public class Plugin : Plugin<Config>
         ReferenceHub hub = ev.Player.ReferenceHub;
         FileTransferSession.CleanupPlayer(hub);
         AnomalyReplayTable.Remove(hub);
+        AuthenticatedTransportSessions.Remove(hub);
         PlayerMotion.Reset(hub);
         ContentGrantGate.Remove(hub.netId);
     }
@@ -170,7 +179,11 @@ public class Plugin : Plugin<Config>
         RunCleanup(context, "client capabilities", ClientCapabilities.Disable);
         RunCleanup(context, "player motion", PlayerMotion.ResetAll);
         RunCleanup(context, "replay table", AnomalyReplayTable.Reset);
+        RunCleanup(context, "authenticated transport sessions", AuthenticatedTransportSessions.Reset);
+        RunCleanup(context, "auth state", AuthHandler.Reset);
+        RunCleanup(context, "preauth gate", PreauthGate.Reset);
         RunCleanup(context, "password store", PasswordStore.Reset);
+        RunCleanup(context, "server identity", ServerIdentityStore.Reset);
 
         if (_configReloadSubscribed)
         {

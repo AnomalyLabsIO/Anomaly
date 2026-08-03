@@ -8,8 +8,10 @@ namespace Anomaly.Shared.Networking.Messages
     /// original material texture the client cached when the override was first
     /// applied.
     /// </summary>
-    public class AssetClearOverrideMessage : IAnomalyMessage
+    public class AssetClearOverrideMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        private const int MaxComponentPathBytes = 1024;
+        public override int MaxPayloadBytes => 4 + 2 + MaxComponentPathBytes + 2;
         public string MessageName => "anomaly:asset:override-clear";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 
@@ -22,6 +24,8 @@ namespace Anomaly.Shared.Networking.Messages
             writer.Write(NetId);
 
             var pathBytes = Encoding.UTF8.GetBytes(ComponentPath ?? "");
+            if (pathBytes.Length > MaxComponentPathBytes)
+                throw new InvalidDataException($"Component path exceeded {MaxComponentPathBytes} bytes.");
             writer.Write((ushort)pathBytes.Length);
             writer.Write(pathBytes);
 
@@ -33,7 +37,12 @@ namespace Anomaly.Shared.Networking.Messages
             NetId = reader.ReadUInt32();
 
             int pathLen = reader.ReadUInt16();
-            ComponentPath = Encoding.UTF8.GetString(reader.ReadBytes(pathLen));
+            if (pathLen > MaxComponentPathBytes)
+                throw new InvalidDataException($"Component path exceeded {MaxComponentPathBytes} bytes.");
+            byte[] pathBytes = reader.ReadBytes(pathLen);
+            if (pathBytes.Length != pathLen)
+                throw new EndOfStreamException("Component path was truncated.");
+            ComponentPath = Encoding.UTF8.GetString(pathBytes);
 
             MaterialIndex = reader.ReadUInt16();
         }

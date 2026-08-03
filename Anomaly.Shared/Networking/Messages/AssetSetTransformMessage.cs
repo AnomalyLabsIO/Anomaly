@@ -6,8 +6,9 @@ namespace Anomaly.Shared.Networking.Messages
     /// Server → client. Updates one or more transform components on a spawned asset.
     /// Fields are only written/read if their bit in <see cref="DirtyMask"/> is set.
     /// </summary>
-    public class AssetSetTransformMessage : IAnomalyMessage
+    public class AssetSetTransformMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public override int MaxPayloadBytes => 45;
         public string MessageName => "anomaly:asset:transform";
         public MessageChannel TransportChannel => MessageChannel.Sequenced; // latest-wins
 
@@ -33,6 +34,7 @@ namespace Anomaly.Shared.Networking.Messages
 
         public void Serialize(BinaryWriter writer)
         {
+            Validate();
             writer.Write(ObjectId);
             writer.Write(DirtyMask);
 
@@ -54,6 +56,8 @@ namespace Anomaly.Shared.Networking.Messages
         {
             ObjectId = reader.ReadUInt32();
             DirtyMask = reader.ReadByte();
+            if ((DirtyMask & ~(DirtyPosition | DirtyRotation | DirtyScale)) != 0)
+                throw new InvalidDataException("Asset transform dirty mask was invalid.");
 
             if ((DirtyMask & DirtyPosition) != 0)
             {
@@ -67,6 +71,22 @@ namespace Anomaly.Shared.Networking.Messages
             {
                 ScaleX = reader.ReadSingle(); ScaleY = reader.ReadSingle(); ScaleZ = reader.ReadSingle();
             }
+            Validate();
         }
+
+        private void Validate()
+        {
+            if ((DirtyMask & ~(DirtyPosition | DirtyRotation | DirtyScale)) != 0)
+                throw new InvalidDataException("Asset transform dirty mask was invalid.");
+            if (((DirtyMask & DirtyPosition) != 0 &&
+                 (!IsFinite(PositionX) || !IsFinite(PositionY) || !IsFinite(PositionZ))) ||
+                ((DirtyMask & DirtyRotation) != 0 &&
+                 (!IsFinite(RotationX) || !IsFinite(RotationY) || !IsFinite(RotationZ) || !IsFinite(RotationW))) ||
+                ((DirtyMask & DirtyScale) != 0 &&
+                 (!IsFinite(ScaleX) || !IsFinite(ScaleY) || !IsFinite(ScaleZ))))
+                throw new InvalidDataException("Asset transform contained a non-finite value.");
+        }
+
+        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

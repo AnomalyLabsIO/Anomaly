@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Anomaly.Server.Networking;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
@@ -78,7 +79,33 @@ namespace Anomaly.Server.Content
             try
             {
                 bool match = ack.CatalogHash == ContentRegistry.Catalog.CatalogHash;
-                ContentGrantGate.RecordAck(sender.netId, match, ack.FailedKeys);
+                var knownKeys = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var entry in ContentRegistry.Catalog.Entries)
+                    knownKeys.Add(entry.Key);
+
+                bool invalidFailedKey = false;
+                foreach (var key in ack.FailedKeys)
+                {
+                    if (!knownKeys.Contains(key))
+                    {
+                        invalidFailedKey = true;
+                        break;
+                    }
+                }
+
+                if (invalidFailedKey)
+                {
+                    Logger.Warn(
+                        $"Anomaly.Content: rejected catalog ACK from {sender.LoggedNameFromRefHub()} " +
+                        "because it named an entry outside the advertised catalog.");
+                    return;
+                }
+                if (!ContentGrantGate.TryRecordAck(sender.netId, match, ack.FailedKeys))
+                {
+                    Logger.Warn(
+                        $"Anomaly.Content: ignored duplicate catalog ACK from {sender.LoggedNameFromRefHub()}.");
+                    return;
+                }
 
                 if (!match)
                 {

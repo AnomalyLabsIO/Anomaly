@@ -23,3 +23,7 @@ steamdb_patch_manifest_map.csv
 
 # Private vanity-identity outputs (contain private key material)
 tools/vanity-results.jsonl*
+
+# Operator-owned release signing keys
+*.pem
+*.key

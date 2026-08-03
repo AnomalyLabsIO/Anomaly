@@ -2,11 +2,9 @@ using System;
 using System.IO;
 using System.Text;
 using Anomaly.Shared.Networking;
-using Cryptography;
 using GameCore;
 using Mirror;
 using NetworkManagerUtils.Dummies;
-using Org.BouncyCastle.Security;
 using UnityEngine;
 using Logger = LabApi.Features.Console.Logger;
 
@@ -18,8 +16,8 @@ public static class AnomalyMessaging
 
     /// <summary>
     /// Fires once per newly-authenticated hub the moment the Anomaly encrypted
-    /// channel is ready to carry messages to that client (i.e. the shared
-    /// encryption key has been set on its <c>encryptedChannelManager</c>).
+    /// channel is ready to carry messages to that client (i.e. its directional
+    /// protocol-v2 transport session has been registered).
     /// Subsystems that need to push per-player state immediately after auth —
     /// before the round-start snapshot goes out — hook this.
     /// </summary>
@@ -31,7 +29,6 @@ public static class AnomalyMessaging
         catch (Exception ex) { Logger.Error($"AnomalyMessaging.ClientReady handler threw: {ex}"); }
     }
 
-    private static readonly SecureRandom SecureRandom = new SecureRandom();
     internal static uint CurrentRoundEpoch { get; set; }
 
     /// <summary>
@@ -66,26 +63,33 @@ public static class AnomalyMessaging
             return;
         }
 
-        var ecm = hub.encryptedChannelManager;
         var state = AnomalyReplayTable.GetOrCreate(hub);
         uint counter = state.NextTxCounter(msg.TransportChannel);
         var data = BuildPayload(msg, counter, hash, policy);
         if (data == null) return;
 
         EncryptedChannelManager.EncryptedMessageOutside packed;
-        if (ecm.isLocalPlayer)
+        if (hub.encryptedChannelManager.isLocalPlayer)
         {
             packed = new EncryptedChannelManager.EncryptedMessageOutside(
                 EncryptedChannelManager.SecurityLevel.Unsecured, data);
         }
         else
         {
-            if (ecm.EncryptionKey == null)
+            byte[] encrypted;
+            try
             {
-                Logger.Warn($"AnomalyMessaging.SendToClient: No encryption key for {hub.LoggedNameFromRefHub()}");
+                if (!AuthenticatedTransportSessions.TryEncryptToClient(hub, data, out encrypted))
+                {
+                    Logger.Warn($"AnomalyMessaging.SendToClient: No protocol-v2 transport session for {hub.LoggedNameFromRefHub()}");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"AnomalyMessaging.SendToClient: Encryption failed for {hub.LoggedNameFromRefHub()}: {ex.GetType().Name}: {ex.Message}");
                 return;
             }
-            var encrypted = AES.AesGcmEncrypt(data, ecm.EncryptionKey, SecureRandom);
             packed = new EncryptedChannelManager.EncryptedMessageOutside(
                 EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encrypted);
         }
@@ -120,54 +124,99 @@ public static class AnomalyMessaging
     {
         if (!encryptedAndAuthenticated && !localTransport)
         {
-            Logger.Warn(
+            RegisterProtocolViolation(
+                sender,
                 $"AnomalyMessaging.OnReceived: Dropping unauthenticated remote 0xFE message from " +
-                $"{sender?.LoggedNameFromRefHub() ?? "unknown"}.");
+                $"{sender?.LoggedNameFromRefHub() ?? "unknown"}",
+                localTransport);
             return;
         }
         if (anomalyPayload == null || anomalyPayload.Length > AnomalyChannel.MaxEnvelopeBytes)
         {
-            Logger.Warn(
+            RegisterProtocolViolation(
+                sender,
                 $"AnomalyMessaging.OnReceived: Payload exceeded the absolute envelope ceiling " +
-                $"({anomalyPayload?.Length ?? 0}/{AnomalyChannel.MaxEnvelopeBytes} bytes).");
+                $"({anomalyPayload?.Length ?? 0}/{AnomalyChannel.MaxEnvelopeBytes} bytes)",
+                localTransport);
             return;
         }
 
         // Wire: [4:counter][4:hash][N:payload]
         if (anomalyPayload.Length < 8)
         {
-            Logger.Warn("AnomalyMessaging.OnReceived: Payload too short for counter + message hash.");
+            RegisterProtocolViolation(
+                sender,
+                "AnomalyMessaging.OnReceived: Payload too short for counter + message hash",
+                localTransport);
             return;
         }
 
         uint counter = BitConverter.ToUInt32(anomalyPayload, 0);
         uint hash = BitConverter.ToUInt32(anomalyPayload, 4);
+        int payloadBytes = anomalyPayload.Length - 8;
+
+        if (sender == null)
+        {
+            Logger.Warn("AnomalyMessaging.OnReceived: Dropping message with no sender hub.");
+            return;
+        }
+
+        var limiter = AnomalyReplayTable.GetRateLimiterOrCreate(sender);
+        var rateResult = limiter.TryAccept(hash, payloadBytes);
+        if (!rateResult.Allowed)
+        {
+            HandleRateLimitResult(
+                sender,
+                rateResult,
+                $"AnomalyMessaging.OnReceived: Rate-limited hash 0x{hash:X8}",
+                localTransport);
+            return;
+        }
 
         if (!AnomalyMessageRegistry.TryGetChannel(hash, out var channel))
         {
-            Logger.Warn($"AnomalyMessaging.OnReceived: Unknown message hash 0x{hash:X8}.");
+            RegisterProtocolViolation(
+                sender,
+                $"AnomalyMessaging.OnReceived: Unknown message hash 0x{hash:X8}",
+                localTransport);
             return;
         }
 
         if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var policy))
         {
-            Logger.Warn($"AnomalyMessaging.OnReceived: No policy for hash 0x{hash:X8}.");
+            RegisterProtocolViolation(
+                sender,
+                $"AnomalyMessaging.OnReceived: No policy for hash 0x{hash:X8}",
+                localTransport);
+            return;
+        }
+        if (policy.AuthPhase == AnomalyMessageAuthPhase.AuthenticatedSession &&
+            !encryptedAndAuthenticated &&
+            !localTransport)
+        {
+            RegisterProtocolViolation(
+                sender,
+                $"AnomalyMessaging.OnReceived: Dropping pre-auth message hash 0x{hash:X8}",
+                localTransport);
             return;
         }
         if (policy.Direction == AnomalyMessageDirection.ServerToClient)
         {
-            Logger.Warn(
+            RegisterProtocolViolation(
+                sender,
                 $"AnomalyMessaging.OnReceived: Dropping server-to-client message hash 0x{hash:X8} " +
-                $"from {sender.LoggedNameFromRefHub()}.");
+                $"from {sender.LoggedNameFromRefHub()}",
+                localTransport);
             return;
         }
 
-        int payloadBytes = anomalyPayload.Length - 8;
         if (payloadBytes > policy.MaxPayloadBytes)
         {
-            Logger.Warn(
+            RegisterProtocolViolation(
+                sender,
                 $"AnomalyMessaging.OnReceived: Payload for hash 0x{hash:X8} exceeded its ceiling " +
-                $"({payloadBytes}/{policy.MaxPayloadBytes} bytes).");
+                $"({payloadBytes}/{policy.MaxPayloadBytes} bytes)",
+                localTransport);
             return;
         }
 
@@ -176,14 +225,29 @@ public static class AnomalyMessaging
         if (rx != AnomalyReplayState.RxResult.Accepted)
         {
             if (shouldLog)
-                Logger.Warn($"AnomalyMessaging.OnReceived: Dropping packet from {sender.LoggedNameFromRefHub()} (hash=0x{hash:X8}, counter={counter}, channel={channel}, reason={rx}).");
+            {
+                RegisterProtocolViolation(
+                    sender,
+                    $"AnomalyMessaging.OnReceived: Dropping packet from {sender.LoggedNameFromRefHub()} " +
+                    $"(hash=0x{hash:X8}, counter={counter}, channel={channel}, reason={rx})",
+                    localTransport);
+            }
+            else
+            {
+                var violation = limiter.RegisterProtocolViolation();
+                if (violation.ShouldDisconnect)
+                    HandleRateLimitResult(sender, violation, "AnomalyMessaging.OnReceived: Sustained replay traffic", localTransport);
+            }
             return;
         }
 
         if (!AnomalyMessageRegistry.TryCreate(hash, out var message))
         {
             // Registered in HashToChannel but not in Factories would be a bug in Register.
-            Logger.Warn($"AnomalyMessaging.OnReceived: No factory for hash 0x{hash:X8}.");
+            RegisterProtocolViolation(
+                sender,
+                $"AnomalyMessaging.OnReceived: No factory for hash 0x{hash:X8}",
+                localTransport);
             return;
         }
 
@@ -200,7 +264,11 @@ public static class AnomalyMessaging
         }
         catch (Exception ex)
         {
-            Logger.Error($"AnomalyMessaging.OnReceived: Failed to deserialize '{message.MessageName}': {ex}");
+            RegisterProtocolViolation(
+                sender,
+                $"AnomalyMessaging.OnReceived: Failed to deserialize '{message.MessageName}': " +
+                $"{ex.GetType().Name}: {ex.Message}",
+                localTransport);
             return;
         }
 
@@ -209,7 +277,10 @@ public static class AnomalyMessaging
             var scoped = message as IRoundScopedAnomalyMessage;
             if (scoped == null)
             {
-                Logger.Warn($"AnomalyMessaging.OnReceived: Round-scoped policy mismatch for hash 0x{hash:X8}.");
+                RegisterProtocolViolation(
+                    sender,
+                    $"AnomalyMessaging.OnReceived: Round-scoped policy mismatch for hash 0x{hash:X8}",
+                    localTransport);
                 return;
             }
 
@@ -220,10 +291,12 @@ public static class AnomalyMessaging
                 hash);
             if (result != AnomalySequenceState.RxResult.Accepted)
             {
-                Logger.Warn(
+                RegisterProtocolViolation(
+                    sender,
                     $"AnomalyMessaging.OnReceived: Dropping round-scoped packet from " +
                     $"{sender.LoggedNameFromRefHub()} (hash=0x{hash:X8}, " +
-                    $"epoch={scoped.RoundEpoch}/{CurrentRoundEpoch}, sequence={scoped.Sequence}, reason={result}).");
+                    $"epoch={scoped.RoundEpoch}/{CurrentRoundEpoch}, sequence={scoped.Sequence}, reason={result})",
+                    localTransport);
                 return;
             }
         }
@@ -235,6 +308,45 @@ public static class AnomalyMessaging
         catch (Exception ex)
         {
             Logger.Error($"AnomalyMessaging.OnReceived: Handler exception for '{message.MessageName}': {ex}");
+        }
+    }
+
+    private static void RegisterProtocolViolation(
+        ReferenceHub sender,
+        string message,
+        bool localTransport)
+    {
+        if (sender == null)
+        {
+            Logger.Warn(message + ".");
+            return;
+        }
+
+        var result = AnomalyReplayTable.GetRateLimiterOrCreate(sender).RegisterProtocolViolation();
+        HandleRateLimitResult(sender, result, message, localTransport);
+    }
+
+    private static void HandleRateLimitResult(
+        ReferenceHub sender,
+        AnomalyRateLimitResult result,
+        string message,
+        bool localTransport)
+    {
+        if (result.ShouldLog)
+            Logger.Warn($"{message} (drops={result.DroppedInWindow}).");
+        if (!result.ShouldDisconnect || localTransport || sender?.connectionToClient == null)
+            return;
+
+        Logger.Error(
+            $"AnomalyMessaging.OnReceived: Disconnecting {sender.LoggedNameFromRefHub()} after " +
+            "sustained invalid or over-limit traffic.");
+        try
+        {
+            sender.connectionToClient.Disconnect();
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"AnomalyMessaging.OnReceived: Rate-limit disconnect failed: {ex.Message}");
         }
     }
 

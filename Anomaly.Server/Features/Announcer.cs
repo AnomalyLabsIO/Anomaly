@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using Anomaly.Server.Assets;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Networking;
@@ -87,12 +88,19 @@ public static class Announcer
         string normalizedName = NormalizeApiName(apiName);
         if (audioHash == null || audioHash.Length != 32)
             throw new ArgumentException("Audio hash must be 32 bytes.", nameof(audioHash));
-        if (durationSeconds <= 0f || float.IsNaN(durationSeconds) || float.IsInfinity(durationSeconds))
-            throw new ArgumentOutOfRangeException(nameof(durationSeconds), "Duration must be a positive finite value.");
+        if (durationSeconds <= 0f ||
+            durationSeconds > AnnouncerVocabularyMessage.MaxDurationSeconds ||
+            float.IsNaN(durationSeconds) || float.IsInfinity(durationSeconds))
+            throw new ArgumentOutOfRangeException(
+                nameof(durationSeconds),
+                $"Duration must be finite and no more than {AnnouncerVocabularyMessage.MaxDurationSeconds} seconds.");
         if (!Enum.IsDefined(typeof(CassieClipCategory), type))
             throw new ArgumentOutOfRangeException(nameof(type));
         if (_words.ContainsKey(normalizedName))
             throw new InvalidOperationException($"Announcer word '{normalizedName}' is already registered.");
+        if (_words.Count >= AnnouncerVocabularyMessage.MaxWords)
+            throw new InvalidOperationException(
+                $"Announcer custom vocabulary is limited to {AnnouncerVocabularyMessage.MaxWords} words.");
 
         var word = new Word
         {
@@ -302,6 +310,10 @@ public static class Announcer
             throw new ArgumentException("Announcer API name must be non-empty.", nameof(apiName));
 
         string normalized = apiName.Trim().ToUpperInvariant();
+        if (Encoding.UTF8.GetByteCount(normalized) > AnnouncerVocabularyMessage.MaxApiNameBytes)
+            throw new ArgumentException(
+                $"Announcer API names are limited to {AnnouncerVocabularyMessage.MaxApiNameBytes} UTF-8 bytes.",
+                nameof(apiName));
         foreach (char c in normalized)
         {
             if (char.IsWhiteSpace(c))

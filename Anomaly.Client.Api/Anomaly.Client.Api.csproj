@@ -375,7 +375,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj" />
+		<ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj"
+		                  AdditionalProperties="DeployLocal=$(DeployLocal)" />
 	</ItemGroup>
 
 	<!--
@@ -384,9 +385,10 @@
 	  Override $(AnomalyClientUserLibsDir) via env var or a .csproj.user file.
 	-->
 	<PropertyGroup>
+		<DeployLocal Condition="'$(DeployLocal)' == ''">false</DeployLocal>
 		<AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">E:\Projects\AnomalyLabs\ModdedFiles\loadouts\dev\local\UserLibs</AnomalyClientUserLibsDir>
 	</PropertyGroup>
-	<Target Name="CopyApiToLocalClient" AfterTargets="Build">
+	<Target Name="CopyApiToLocalClient" AfterTargets="Build" Condition="'$(DeployLocal)' == 'true'">
 		<Message Importance="high" Text="Anomaly.Client.Api: copying $(TargetFileName) -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)')" />
 		<Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)')" />
 		<Warning Text="Anomaly.Client.Api: AnomalyClientUserLibsDir does not exist: $(AnomalyClientUserLibsDir)" Condition="!Exists('$(AnomalyClientUserLibsDir)')" />

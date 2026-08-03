@@ -43,21 +43,26 @@ namespace Anomaly.Client.Api.Assets
         /// </summary>
         private static readonly Dictionary<AudioClip, Streamer> _liveStreamers = new();
 
-        public static AudioClip TryDecode(byte[] bytes, string clipName)
+        public static AudioClip TryDecode(byte[] bytes, string clipName) =>
+            TryDecode(bytes, clipName, null);
+
+        internal static AudioClip TryDecode(byte[] bytes, string clipName, string liveBudgetKey)
         {
-            if (bytes == null || bytes.Length < 4)
+            if (bytes == null || bytes.Length < 4 ||
+                bytes.Length > RemoteAssetDecodeBudget.MaxEncodedAudioBytes)
                 return null;
 
             OggLoader.PcmData pcm;
             bool ok;
+            RemoteAssetDecodeBudget.Reservation reservation;
 
             if (bytes[0] == 'O' && bytes[1] == 'g' && bytes[2] == 'g' && bytes[3] == 'S')
             {
-                ok = OggLoader.TryDecode(bytes, out pcm);
+                ok = OggLoader.TryDecode(bytes, out pcm, out reservation);
             }
             else if (bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F')
             {
-                ok = WavLoader.TryDecode(bytes, out pcm);
+                ok = WavLoader.TryDecode(bytes, out pcm, out reservation);
             }
             else
             {
@@ -65,16 +70,29 @@ namespace Anomaly.Client.Api.Assets
                 return null;
             }
 
-            if (!ok || pcm.Samples == null || pcm.Samples.Length == 0)
+            if (!ok || reservation == null || pcm.Samples == null || pcm.Samples.Length == 0 ||
+                pcm.Channels <= 0 || pcm.Samples.Length % pcm.Channels != 0)
             {
+                reservation?.Dispose();
                 MelonLogger.Warning($"AudioClipFactory: decode failed for '{clipName}'.");
                 return null;
+            }
+
+            for (int i = 0; i < pcm.Samples.Length; i++)
+            {
+                float sample = pcm.Samples[i];
+                if (float.IsNaN(sample) || float.IsInfinity(sample))
+                    pcm.Samples[i] = 0f;
+                else if (sample > 1f)
+                    pcm.Samples[i] = 1f;
+                else if (sample < -1f)
+                    pcm.Samples[i] = -1f;
             }
 
             try
             {
                 int totalPerChannel = pcm.Samples.Length / pcm.Channels;
-                var streamer = new Streamer(pcm.Samples, pcm.Channels);
+                var streamer = new Streamer(pcm.Samples, pcm.Channels, liveBudgetKey);
 
                 var clip = AudioClip.Create(
                     name: clipName ?? "anomaly_override",
@@ -84,12 +102,19 @@ namespace Anomaly.Client.Api.Assets
                     stream: true,
                     pcmreadercallback: (AudioClip.PCMReaderCallback)streamer.Read,
                     pcmsetpositioncallback: (AudioClip.PCMSetPositionCallback)streamer.SetPosition);
+                if (clip == null)
+                {
+                    reservation.Dispose();
+                    return null;
+                }
 
                 _liveStreamers[clip] = streamer;
+                reservation.CommitLive(liveBudgetKey);
                 return clip;
             }
             catch (Exception ex)
             {
+                reservation.Dispose();
                 MelonLogger.Error($"AudioClipFactory.AudioClip.Create('{clipName}'): {ex}");
                 return null;
             }
@@ -102,12 +127,16 @@ namespace Anomaly.Client.Api.Assets
         /// </summary>
         public static void ReleaseStreamer(AudioClip clip)
         {
-            if (clip != null)
-                _liveStreamers.Remove(clip);
+            if (ReferenceEquals(clip, null) || !_liveStreamers.TryGetValue(clip, out var streamer))
+                return;
+            _liveStreamers.Remove(clip);
+            RemoteAssetDecodeBudget.ReleaseLive(streamer.LiveBudgetKey);
         }
 
         public static void ReleaseAllStreamers()
         {
+            foreach (var streamer in _liveStreamers.Values)
+                RemoteAssetDecodeBudget.ReleaseLive(streamer.LiveBudgetKey);
             _liveStreamers.Clear();
         }
 
@@ -124,11 +153,13 @@ namespace Anomaly.Client.Api.Assets
             private readonly float[] _samples;
             private readonly int _channels;
             private int _pos;
+            public string LiveBudgetKey { get; }
 
-            public Streamer(float[] samples, int channels)
+            public Streamer(float[] samples, int channels, string liveBudgetKey)
             {
                 _samples = samples;
                 _channels = channels;
+                LiveBudgetKey = liveBudgetKey;
             }
 
             public void Read(Il2CppStructArray<float> data)

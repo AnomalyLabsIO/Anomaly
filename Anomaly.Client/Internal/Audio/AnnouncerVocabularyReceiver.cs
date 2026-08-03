@@ -59,7 +59,9 @@ internal static class AnnouncerVocabularyReceiver
     {
         if (string.IsNullOrWhiteSpace(word.ApiName) || word.AudioHash == null || word.AudioHash.Length != 32)
             return false;
-        if (word.DurationSeconds <= 0f || float.IsNaN(word.DurationSeconds) || float.IsInfinity(word.DurationSeconds))
+        if (word.DurationSeconds <= 0f ||
+            word.DurationSeconds > AnnouncerVocabularyMessage.MaxDurationSeconds ||
+            float.IsNaN(word.DurationSeconds) || float.IsInfinity(word.DurationSeconds))
             return false;
         if (!System.Enum.IsDefined(typeof(CassieClipCategory), (CassieClipCategory)word.Type))
             return false;
@@ -67,6 +69,23 @@ internal static class AnnouncerVocabularyReceiver
         if (!AnomalyResources.TryGetAudioClip(word.AudioHash, out var clip))
         {
             MelonLogger.Warning($"Announcer: Audio for server word '{word.ApiName}' is not cached or failed to decode.");
+            return false;
+        }
+        if (clip.length <= 0f || clip.length > AnnouncerVocabularyMessage.MaxDurationSeconds ||
+            Math.Abs(clip.length - word.DurationSeconds) > Math.Max(0.5f, clip.length * 0.1f))
+        {
+            MelonLogger.Warning(
+                $"Announcer: Rejected server word '{word.ApiName}' because its declared duration " +
+                "did not match the bounded decoded clip.");
+            return false;
+        }
+
+        if (!_serverLines.ContainsKey(word.ApiName) &&
+            _serverLines.Count >= AnnouncerVocabularyMessage.MaxWords)
+        {
+            MelonLogger.Warning(
+                $"Announcer: Rejected '{word.ApiName}' because the server vocabulary reached " +
+                $"{AnnouncerVocabularyMessage.MaxWords} entries.");
             return false;
         }
 

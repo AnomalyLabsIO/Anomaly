@@ -6,8 +6,9 @@ namespace Anomaly.Shared.Networking.Messages
     /// Server → client. Reverts every active texture override targeting the
     /// given <see cref="NetId"/>.
     /// </summary>
-    public class AssetClearAllOverridesMessage : IAnomalyMessage
+    public class AssetClearAllOverridesMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public override int MaxPayloadBytes => sizeof(uint);
         public string MessageName => "anomaly:asset:override-clearall";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 

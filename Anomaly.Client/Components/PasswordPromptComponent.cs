@@ -17,7 +17,10 @@ public class PasswordPromptComponent : MonoBehaviour
     private GameObject _root;
     private string _password = string.Empty;
     private System.Action<string> _onSubmit;
+    private System.Action _onConfirm;
     private System.Action _onCancel;
+    private bool _confirmationMode;
+    private bool _plainTextMode;
     private bool _wasCursorVisible;
 
     public PasswordPromptComponent(IntPtr intPtr) : base(intPtr) { }
@@ -45,6 +48,9 @@ public class PasswordPromptComponent : MonoBehaviour
             Submit();
             return;
         }
+
+        if (_confirmationMode)
+            return;
 
         if (TryPasteFromClipboard())
         {
@@ -103,12 +109,64 @@ public class PasswordPromptComponent : MonoBehaviour
     [HideFromIl2Cpp]
     public void Show(System.Action<string> onSubmit, System.Action onCancel)
     {
+        _confirmationMode = false;
+        _plainTextMode = false;
         _password = string.Empty;
         _onSubmit = onSubmit;
+        _onConfirm = null;
         _onCancel = onCancel;
         _wasCursorVisible = Cursor.visible;
         Cursor.visible = true;
 
+        _titleText.text = Tr.Get(TrKeys.PasswordPrompt_Title);
+        _hintText.text = Tr.Get(TrKeys.PasswordPrompt_Hint);
+        _passwordText.alignment = TextAlignmentOptions.MidlineLeft;
+        UpdatePasswordText();
+        _root.SetActive(true);
+    }
+
+    [HideFromIl2Cpp]
+    public void ShowConfirmation(
+        string title,
+        string detail,
+        System.Action onConfirm,
+        System.Action onCancel)
+    {
+        _confirmationMode = true;
+        _plainTextMode = false;
+        _password = detail ?? string.Empty;
+        _onSubmit = null;
+        _onConfirm = onConfirm;
+        _onCancel = onCancel;
+        _wasCursorVisible = Cursor.visible;
+        Cursor.visible = true;
+
+        _titleText.text = title ?? "Confirm";
+        _hintText.text = "Press Enter to trust this server key. Press Esc to cancel.";
+        _passwordText.alignment = TextAlignmentOptions.Center;
+        UpdatePasswordText();
+        _root.SetActive(true);
+    }
+
+    [HideFromIl2Cpp]
+    public void ShowTextInput(
+        string title,
+        string hint,
+        System.Action<string> onSubmit,
+        System.Action onCancel)
+    {
+        _confirmationMode = false;
+        _plainTextMode = true;
+        _password = string.Empty;
+        _onSubmit = onSubmit;
+        _onConfirm = null;
+        _onCancel = onCancel;
+        _wasCursorVisible = Cursor.visible;
+        Cursor.visible = true;
+
+        _titleText.text = title ?? "Enter text";
+        _hintText.text = hint ?? "Press Enter to continue. Press Esc to cancel.";
+        _passwordText.alignment = TextAlignmentOptions.MidlineLeft;
         UpdatePasswordText();
         _root.SetActive(true);
     }
@@ -122,7 +180,10 @@ public class PasswordPromptComponent : MonoBehaviour
         Cursor.visible = _wasCursorVisible;
         _password = string.Empty;
         _onSubmit = null;
+        _onConfirm = null;
         _onCancel = null;
+        _confirmationMode = false;
+        _plainTextMode = false;
         UpdatePasswordText();
     }
 
@@ -131,9 +192,17 @@ public class PasswordPromptComponent : MonoBehaviour
     {
         var password = _password;
         var callback = _onSubmit;
+        var confirm = _onConfirm;
+        var confirmationMode = _confirmationMode;
         Hide();
 
-        try { callback?.Invoke(password); }
+        try
+        {
+            if (confirmationMode)
+                confirm?.Invoke();
+            else
+                callback?.Invoke(password);
+        }
         catch (Exception ex) { MelonLogger.Error($"Password prompt submit failed: {ex}"); }
     }
 
@@ -153,7 +222,11 @@ public class PasswordPromptComponent : MonoBehaviour
         if (_passwordText == null)
             return;
 
-        _passwordText.text = _password.Length == 0 ? "_" : new string('*', _password.Length);
+        _passwordText.text = _confirmationMode
+            ? _password
+            : (_password.Length == 0
+                ? "_"
+                : (_plainTextMode ? _password : new string('*', _password.Length)));
     }
 
     [HideFromIl2Cpp]
@@ -254,6 +327,26 @@ public static class PasswordPrompt
     {
         EnsureInstance();
         _instance?.Show(onSubmit, onCancel);
+    }
+
+    public static void ShowConfirmation(
+        string title,
+        string detail,
+        System.Action onConfirm,
+        System.Action onCancel)
+    {
+        EnsureInstance();
+        _instance?.ShowConfirmation(title, detail, onConfirm, onCancel);
+    }
+
+    public static void ShowTextInput(
+        string title,
+        string hint,
+        System.Action<string> onSubmit,
+        System.Action onCancel)
+    {
+        EnsureInstance();
+        _instance?.ShowTextInput(title, hint, onSubmit, onCancel);
     }
 
     public static void Hide()

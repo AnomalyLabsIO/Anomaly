@@ -52,11 +52,16 @@ namespace Anomaly.Server.Map
 
         private static bool CheckEnabled()
         {
-            if (Enabled) return true;
+            // v1 containment is unconditional: the client no longer registers the former
+            // plain-Mirror pre-auth handlers. Keep the public field for source compatibility,
+            // but do not let a plugin assignment reactivate an unauthenticated bootstrap.
+            Enabled = false;
             if (!_disabledWarned)
             {
                 _disabledWarned = true;
-                Logger.Warn("FacilityLayout is disabled for this release (client-side recipe application is off pending an IL2CPP trampoline fix); layout mutations are ignored.");
+                Logger.Warn(
+                    "FacilityLayout is disabled for v1: the unauthenticated plain-Mirror " +
+                    "bootstrap was removed, so layout mutations are ignored.");
             }
             return false;
         }
@@ -312,7 +317,7 @@ namespace Anomaly.Server.Map
                 // Only ship the custom recipe/atlas-edit messages when the feature is on.
                 // The vanilla SeedMessage must ALWAYS go out (the client needs the seed for
                 // normal generation), so it stays outside the gate.
-                if (Enabled)
+                if (CheckEnabled())
                 {
                     SendBootstrapPayload(conn, RecipeMessageId, BuildRecipePayload());
                     SendBootstrapPayload(conn, AtlasEditsMessageId, BuildAtlasEditsPayload());

@@ -1,5 +1,7 @@
 ﻿using System;
 using Anomaly.Server.Auth;
+using System.Security.Cryptography;
+using System.Text;
 using Anomaly.Server.Utils;
 using Anomaly.Shared.Auth;
 using Anomaly.Shared.Networking;
@@ -17,6 +19,11 @@ namespace Anomaly.Server.Patches;
 [HarmonyPatch(typeof(CustomLiteNetLib4MirrorTransport), nameof(CustomLiteNetLib4MirrorTransport.ProcessConnectionRequest))]
 public static class ProcessConnectionRequestPatch
 {
+    private const byte HandshakeResponseCode = 100;
+    private const byte RetryCookieResponseCode = 101;
+    private const long MaximumPreauthFutureSeconds = 60;
+    private const long MaximumPreauthPastSkewSeconds = 5;
+
     [HarmonyPrefix]
     public static bool OnConnectionRequest(ConnectionRequest request)
     {
@@ -140,16 +147,20 @@ public static class ProcessConnectionRequestPatch
                 request.RejectForce(RequestWriter);
                 return false;
             }
-            if(TimeBehaviour.CurrentUnixTimestamp > timeStamp)
+            var currentTimestamp = TimeBehaviour.CurrentUnixTimestamp;
+            if (timeStamp < currentTimestamp - MaximumPreauthPastSkewSeconds
+                || timeStamp > currentTimestamp + MaximumPreauthFutureSeconds)
             {
                 RequestRejected();
                 if(LogRejection)
                 {
-                    OffThreadLogger.Warn("Player from endpoint " + ip + " sent expired preauthentication request.");
-                    OffThreadLogger.Warn("Make sure that time and timezone set on server is correct. We recommend synchronizing the time.");
+                    OffThreadLogger.Warn(
+                        $"Rejected preauthentication timestamp from {ip}: expiry={timeStamp}, serverNow={currentTimestamp}.");
                 }
                 RequestWriter.Reset();
-                RequestWriter.Put((byte)RejectionReason.ExpiredAuth);
+                RequestWriter.Put((byte)(timeStamp < currentTimestamp
+                    ? RejectionReason.ExpiredAuth
+                    : RejectionReason.InvalidToken));
                 request.RejectForce(RequestWriter);
                 CustomLiteNetLib4MirrorTransport.ResetIdleMode();
                 return false;
@@ -157,6 +168,15 @@ public static class ProcessConnectionRequestPatch
             #endregion
 
             #region AnomalyAuth
+            if (!PreauthGate.TryAcceptRequest(request.RemoteEndPoint.Address))
+            {
+                RequestWriter.Reset();
+                RequestWriter.Put((byte)RejectionReason.RateLimit);
+                request.RejectForce(RequestWriter);
+                CustomLiteNetLib4MirrorTransport.ResetIdleMode();
+                return false;
+            }
+
             if (PasswordStore.IsRequired && PasswordStore.IsBlocked(ip))
             {
                 OffThreadLogger.Warn($"Rejecting {ip}: too many failed Anomaly password attempts.");
@@ -178,21 +198,12 @@ public static class ProcessConnectionRequestPatch
 
             var userId = string.Empty;
             var name = string.Empty;
-            var sharedKey = new byte[0];
+            Connection authenticatedConnection = null;
+            string authenticatedServerIdentifier = null;
 
             switch (requestType)
             {
                 case 3: // Handshake/Preauth
-                    if (!PasswordStore.TryCreateChallenge(out var passwordChallenge, out var passwordChallengeError))
-                    {
-                        OffThreadLogger.Error($"Rejecting {ip}: {passwordChallengeError}");
-                        RequestWriter.Reset();
-                        RequestWriter.Put((byte)RejectionReason.Error);
-                        request.RejectForce(RequestWriter);
-                        return false;
-                    }
-
-                    var serverEnv = ServerAuthSession.Generate();
                     ClientHandshake clientHandshake;
                     try
                     {
@@ -206,28 +217,160 @@ public static class ProcessConnectionRequestPatch
                         request.RejectForce(RequestWriter);
                         return false;
                     }
-                    userId = clientHandshake.GetUserId();
-                    var serverIden = AuthHandler.AddConnection(serverEnv, clientHandshake, passwordChallenge);
+                    catch (Exception ex)
+                    {
+                        OffThreadLogger.Warn($"Rejecting malformed phase-one auth from {ip}: {ex.Message}");
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.InvalidToken);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
 
-                    var serverHandshakeBytes = serverEnv.CreateHandshake().Encode();
+                    if (!clientHandshake.MatchesGameVersion(
+                            cMajor,
+                            cMinor,
+                            cRevision,
+                            flag,
+                            cBackwardRevision))
+                    {
+                        OffThreadLogger.Warn(
+                            $"Rejecting {ip}: signed phase-one game version did not match the outer preauth fields.");
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.VersionMismatch);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
 
-                    RequestWriter.Reset();
-                    RequestWriter.Put((byte)100);
-                    RequestWriter.PutBytesWithLength(serverHandshakeBytes);
-                    RequestWriter.Put(serverIden);
-                    WritePasswordChallenge(RequestWriter, passwordChallenge);
-                    request.RejectForce(RequestWriter);
+                    if (!PreauthGate.ValidateRetryCookie(request.RemoteEndPoint.Address, clientHandshake))
+                    {
+                        var retryCookie = PreauthGate.CreateRetryCookie(request.RemoteEndPoint.Address, clientHandshake);
+                        RequestWriter.Reset();
+                        RequestWriter.Put(RetryCookieResponseCode);
+                        RequestWriter.PutBytesWithLength(retryCookie);
+                        request.RejectForce(RequestWriter);
+                        CustomLiteNetLib4MirrorTransport.PreauthDisableIdleMode();
+                        return false;
+                    }
+
+                    try
+                    {
+                        AuthCrypto.ReadPublic(clientHandshake.identityPublic);
+                        var anySessionKeyByte = 0;
+                        for (var i = 0; i < clientHandshake.sessionPublic.Length; i++)
+                            anySessionKeyByte |= clientHandshake.sessionPublic[i];
+                        if (anySessionKeyByte == 0)
+                            throw new CryptographicException("Client X25519 public key is all zero.");
+                    }
+                    catch (Exception ex)
+                    {
+                        OffThreadLogger.Warn($"Rejecting invalid client key material from {ip}: {ex.Message}");
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.InvalidToken);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
+
+                    if (!clientHandshake.TryValidateIdentityRotationChain(
+                            out var enrollmentIdentityPublic,
+                            out var rotationError))
+                    {
+                        OffThreadLogger.Warn(
+                            $"Rejecting invalid client identity rotation from {ip}: {rotationError}");
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.InvalidToken);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
+
+                    try
+                    {
+                        userId = ServerIdentityStore.GetEnrollmentId(enrollmentIdentityPublic);
+                    }
+                    finally
+                    {
+                        Array.Clear(enrollmentIdentityPublic, 0, enrollmentIdentityPublic.Length);
+                    }
+
+                    if (!PasswordStore.TryCreateChallenge(
+                            request.RemoteEndPoint.Address,
+                            out var passwordChallenge,
+                            out var passwordChallengeError))
+                    {
+                        OffThreadLogger.Error($"Rejecting {ip}: {passwordChallengeError}");
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.Error);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
+
+                    if (!AuthHandler.TryReserveConnection(
+                            clientHandshake,
+                            request.RemoteEndPoint.Address,
+                            passwordChallenge,
+                            out var serverIden,
+                            out var reservedConnection))
+                    {
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.RateLimit);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
+                    reservedConnection.EnrollmentId = userId;
+
+                    byte[] persistentIdentity = null;
+                    try
+                    {
+                        persistentIdentity = ServerIdentityStore.GetIdentity();
+                        var serverEnv = ServerAuthSession.Generate(persistentIdentity);
+                        var serverHandshake = serverEnv.CreateHandshake(
+                            clientHandshake,
+                            serverIden,
+                            passwordChallenge,
+                            ServerIdentityStore.GetActiveRotationRecord());
+                        reservedConnection.ServerEnv = serverEnv;
+                        reservedConnection.ServerHandshake = serverHandshake;
+                        var serverHandshakeBytes = serverHandshake.Encode();
+
+                        RequestWriter.Reset();
+                        RequestWriter.Put(HandshakeResponseCode);
+                        RequestWriter.PutBytesWithLength(serverHandshakeBytes);
+                        RequestWriter.Put(serverIden);
+                        WritePasswordChallenge(RequestWriter, passwordChallenge);
+                        request.RejectForce(RequestWriter);
+                    }
+                    catch
+                    {
+                        AuthHandler.RemoveConnection(serverIden);
+                        throw;
+                    }
+                    finally
+                    {
+                        if (persistentIdentity != null)
+                            Array.Clear(persistentIdentity, 0, persistentIdentity.Length);
+                    }
 
                     OffThreadLogger.Debug("Got Handshake from user " + userId + " from ip " + ip);
-                    OffThreadLogger.Debug("Sending 100 response to client.");
                     CustomLiteNetLib4MirrorTransport.PreauthDisableIdleMode();
                     return false;
 
                 case 4: // Connect
-                    OffThreadLogger.Info("Attempting to decode auth request.");
-                    var attempt = ClientLoginAttempt.Decode(authData);
-                    OffThreadLogger.Info("Checking Server Identifier");
-                    if (!request.Data.TryGetString(out var serverIdentifier))
+                    ClientLoginAttempt attempt;
+                    try
+                    {
+                        attempt = ClientLoginAttempt.Decode(authData);
+                    }
+                    catch (Exception ex)
+                    {
+                        OffThreadLogger.Warn($"Rejecting malformed phase-two auth from {ip}: {ex.Message}");
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.InvalidToken);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
+
+                    if (!request.Data.TryGetString(out var serverIdentifier)
+                        || string.IsNullOrEmpty(serverIdentifier)
+                        || serverIdentifier.Length > AuthTranscript.MaximumServerIdentifierBytes)
                     {
                         OffThreadLogger.Warn($"Failed to read server identifier from {ip} during login phase");
                         RequestWriter.Reset();
@@ -236,10 +379,21 @@ public static class ProcessConnectionRequestPatch
                         return false;
                     }
 
-                    OffThreadLogger.Info(serverIdentifier);
+                    if (!request.Data.TryGetString(out name)
+                        || string.IsNullOrWhiteSpace(name)
+                        || Encoding.UTF8.GetByteCount(name) > AuthTranscript.MaximumDisplayNameBytes)
+                    {
+                        OffThreadLogger.Warn($"Rejected invalid username from {ip} during login phase");
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.InvalidToken);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
 
-                    OffThreadLogger.Info("Checking connection");
-                    if(!AuthHandler.TryConsumeConnection(serverIdentifier, out var connection))
+                    if(!AuthHandler.TryConsumeConnection(
+                            serverIdentifier,
+                            request.RemoteEndPoint.Address,
+                            out var connection))
                     {
                         OffThreadLogger.Warn($"No matching handshake session for identifier from {ip}. Session may have expired.");
                         RequestWriter.Reset();
@@ -248,15 +402,31 @@ public static class ProcessConnectionRequestPatch
                         return false;
                     }
 
-                    OffThreadLogger.Info(connection.ToString());
+                    if (!connection.Handshake.MatchesGameVersion(
+                            cMajor,
+                            cMinor,
+                            cRevision,
+                            flag,
+                            cBackwardRevision))
+                    {
+                        OffThreadLogger.Warn(
+                            $"Rejecting {ip}: phase-two game version differed from the signed phase-one transcript.");
+                        RequestWriter.Reset();
+                        RequestWriter.Put((byte)RejectionReason.VersionMismatch);
+                        request.RejectForce(RequestWriter);
+                        return false;
+                    }
 
-
-                    OffThreadLogger.Info("Validating Attempt");
-                    OffThreadLogger.Info($"{connection.Handshake}");
-                    if (!connection.ServerEnv.Validate(connection.Handshake, attempt, out var passwordProof))
+                    if (!connection.ServerEnv.Validate(
+                            connection.Handshake,
+                            connection.ServerHandshake,
+                            serverIdentifier,
+                            connection.PasswordChallenge,
+                            name,
+                            attempt,
+                            out var passwordProof))
                     {
                         OffThreadLogger.Warn($"Login attempt validation failed for {ip}. Signature mismatch.");
-                        AuthHandler.RemoveConnection(serverIdentifier);
                         RequestWriter.Reset();
                         RequestWriter.Put((byte)RejectionReason.InvalidToken);
                         request.RejectForce(RequestWriter);
@@ -265,9 +435,10 @@ public static class ProcessConnectionRequestPatch
 
                     if (connection.PasswordRequired && !PasswordStore.VerifyProof(connection, serverIdentifier, passwordProof))
                     {
-                        OffThreadLogger.Warn($"Password proof validation failed for {ip} ({connection.Handshake.GetUserId()}).");
+                        OffThreadLogger.Warn(
+                            $"Password proof validation failed for {ip} "
+                            + $"({connection.EnrollmentId})." );
                         PasswordStore.RecordFailure(ip);
-                        AuthHandler.RemoveConnection(serverIdentifier);
                         RequestWriter.Reset();
                         RequestWriter.Put((byte)RejectionReason.InvalidToken);
                         request.RejectForce(RequestWriter);
@@ -277,25 +448,9 @@ public static class ProcessConnectionRequestPatch
                     if (connection.PasswordRequired)
                         PasswordStore.ClearFailures(ip);
 
-                    OffThreadLogger.Info("Removing identifier");
-                    AuthHandler.RemoveConnection(serverIdentifier);
-
-                    OffThreadLogger.Info("Getting username");
-                    if (!request.Data.TryGetString(out name))
-                    {
-                        OffThreadLogger.Warn($"Failed to read username from {ip} during login phase");
-                        RequestWriter.Reset();
-                        RequestWriter.Put((byte)RejectionReason.Error);
-                        request.RejectForce(RequestWriter);
-                        return false;
-                    }
-
-                    OffThreadLogger.Info(name);
-
-                    OffThreadLogger.Info("Get UserId");
-                    userId = connection.Handshake.GetUserId();
-                    OffThreadLogger.Info(userId);
-                    sharedKey = connection.ServerEnv.GetSharedSecret(connection.Handshake);
+                    userId = connection.EnrollmentId;
+                    authenticatedConnection = connection;
+                    authenticatedServerIdentifier = serverIdentifier;
 
                     OffThreadLogger.Debug($"Verified {name}({userId}) - " + ip);
                     break;
@@ -405,7 +560,7 @@ public static class ProcessConnectionRequestPatch
 
             #region LabAPI
             int position = request.Data.Position;
-            PlayerPreAuthenticatingEventArgs ev = new PlayerPreAuthenticatingEventArgs(!CustomLiteNetLib4MirrorTransport.IsServerFull(), string.Empty, request.RemoteEndPoint.Address.ToString(), 0L, CentralAuthPreauthFlags.None, string.Empty, (byte[]) null, request, position);
+            PlayerPreAuthenticatingEventArgs ev = new PlayerPreAuthenticatingEventArgs(!CustomLiteNetLib4MirrorTransport.IsServerFull(), userId, request.RemoteEndPoint.Address.ToString(), 0L, CentralAuthPreauthFlags.None, string.Empty, (byte[]) null, request, position);
             LabApi.Events.Handlers.PlayerEvents.OnPreAuthenticating(ev);
             if (!ev.IsAllowed)
             {
@@ -427,9 +582,35 @@ public static class ProcessConnectionRequestPatch
             }
             else if (ev.CanJoin)
             {
+                var player = new Server.Auth.PlayerStorage
+                {
+                    NickName = name,
+                    UserId = userId,
+                };
+                using (var keys = authenticatedConnection.ServerEnv.DeriveSessionKeys(
+                           authenticatedConnection.Handshake,
+                           authenticatedConnection.ServerHandshake,
+                           authenticatedServerIdentifier,
+                           authenticatedConnection.PasswordChallenge))
+                {
+                    player.ClientToServerKey = (byte[])keys.ClientToServerKey.Clone();
+                    player.ServerToClientKey = (byte[])keys.ServerToClientKey.Clone();
+                    player.SessionId = (byte[])keys.SessionId.Clone();
+                    player.TranscriptHash = (byte[])keys.TranscriptHash.Clone();
+                }
+
+                if (!AuthHandler.StorePlayer(request.RemoteEndPoint, player))
+                {
+                    OffThreadLogger.Warn($"Rejected {ip}: verified-player handoff capacity is full.");
+                    RequestWriter.Reset();
+                    RequestWriter.Put((byte)RejectionReason.RateLimit);
+                    request.RejectForce(RequestWriter);
+                    return false;
+                }
+
                 request.Accept();
                 CustomLiteNetLib4MirrorTransport.PreauthDisableIdleMode();
-                LabApi.Events.Handlers.PlayerEvents.OnPreAuthenticated(new PlayerPreAuthenticatedEventArgs(string.Empty, request.RemoteEndPoint.Address.ToString(), 0L, CentralAuthPreauthFlags.None, string.Empty, (byte[]) null, request, position));
+                LabApi.Events.Handlers.PlayerEvents.OnPreAuthenticated(new PlayerPreAuthenticatedEventArgs(userId, request.RemoteEndPoint.Address.ToString(), 0L, CentralAuthPreauthFlags.None, string.Empty, (byte[]) null, request, position));
             }
             else
             {
@@ -472,12 +653,6 @@ public static class ProcessConnectionRequestPatch
             CustomLiteNetLib4MirrorTransport.PreauthDisableIdleMode();
             #endregion
 
-            AuthHandler.StorePlayer(request.RemoteEndPoint, new Server.Auth.PlayerStorage
-            {
-                NickName = name,
-                UserId = userId,
-                SharedKey = sharedKey,
-            });
             return false;
         }
         catch (Exception ex)

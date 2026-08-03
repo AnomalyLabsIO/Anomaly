@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Net;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Security;
 
@@ -6,56 +7,136 @@ namespace Anomaly.Shared.Auth;
 
 public class ServerAuthSession
 {
-    AsymmetricCipherKeyPair sessionKeyPair;
-    byte[] challenge;
+    private AsymmetricCipherKeyPair _identityKeyPair;
+    private AsymmetricCipherKeyPair _sessionKeyPair;
+    private byte[] _challenge;
 
-    public static ServerAuthSession Generate()
+    public static ServerAuthSession Generate(byte[] persistentIdentity)
     {
-        var env = new ServerAuthSession();
-        env.sessionKeyPair = AuthCrypto.CreateX25519KeyPair();
-        env.challenge = new byte[20];
-        new SecureRandom().NextBytes(env.challenge);
+        var env = new ServerAuthSession
+        {
+            _identityKeyPair = AuthCrypto.ReadIdentity(persistentIdentity),
+            _sessionKeyPair = AuthCrypto.CreateX25519KeyPair(),
+            _challenge = new byte[ServerHandshake.ChallengeSize],
+        };
+        new SecureRandom().NextBytes(env._challenge);
         return env;
     }
 
-    public ServerHandshake CreateHandshake()
+    public ServerHandshake CreateHandshake(
+        ClientHandshake clientHandshake,
+        string serverIdentifier,
+        PasswordChallenge passwordChallenge,
+        ServerIdentityRotationRecord identityRotationRecord = null)
     {
-        return new ServerHandshake
+        var handshake = new ServerHandshake
         {
-            sessionPublic = AuthCrypto.GetX25519Public(sessionKeyPair),
-            challenge = challenge
+            sessionPublic = AuthCrypto.GetX25519Public(_sessionKeyPair),
+            challenge = (byte[])_challenge.Clone(),
+            identityPublic = AuthCrypto.WritePublic(_identityKeyPair),
+            identityRotationRecord = identityRotationRecord?.Clone(),
         };
+        var transcript = AuthTranscript.Build(clientHandshake, handshake, serverIdentifier, passwordChallenge);
+        handshake.transcriptSignature = AuthCrypto.SignData(transcript, _identityKeyPair);
+        return handshake;
     }
 
-    public byte[] GetSharedSecret(ClientHandshake handshake) => AuthCrypto.ComputeSharedSecret(sessionKeyPair, handshake.sessionPublic);
-
-    public bool Validate(ClientHandshake handshake, ClientLoginAttempt attempt)
-    {
-        return Validate(handshake, attempt, out _);
-    }
-
-    public bool Validate(ClientHandshake handshake, ClientLoginAttempt attempt, out byte[] passwordProof)
+    public bool Validate(
+        ClientHandshake clientHandshake,
+        ServerHandshake serverHandshake,
+        string serverIdentifier,
+        PasswordChallenge passwordChallenge,
+        string displayName,
+        ClientLoginAttempt attempt,
+        out byte[] passwordProof)
     {
         passwordProof = null;
+        if (attempt?.signature == null)
+            return false;
 
-        var buf = new byte[32];
-        Array.Copy(handshake.nonce, 0, buf, 0, 12);
-        Array.Copy(challenge, 0, buf, 12, 20);
-        var sharedSecret = AuthCrypto.ComputeSharedSecret(sessionKeyPair, handshake.sessionPublic);
         byte[] payload;
+        using (var keys = DeriveSessionKeys(clientHandshake, serverHandshake, serverIdentifier, passwordChallenge))
+        {
+            byte[] loginTranscriptHash = null;
+            try
+            {
+                loginTranscriptHash = AuthTranscript.HashLogin(
+                    clientHandshake,
+                    serverHandshake,
+                    serverIdentifier,
+                    passwordChallenge,
+                    displayName);
+                payload = AuthCrypto.AesDecrypt(
+                    keys.LoginKey,
+                    clientHandshake.nonce,
+                    attempt.signature,
+                    loginTranscriptHash);
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (loginTranscriptHash != null)
+                    Array.Clear(loginTranscriptHash, 0, loginTranscriptHash.Length);
+            }
+        }
+
         try
         {
-            payload = AuthCrypto.AesDecrypt(sharedSecret, handshake.nonce, attempt.signature);
+            if (!ClientLoginAttempt.TryDecodePlainPayload(payload, out var signature, out passwordProof))
+                return false;
+
+            var transcript = AuthTranscript.BuildLogin(
+                clientHandshake,
+                serverHandshake,
+                serverIdentifier,
+                passwordChallenge,
+                displayName);
+            var identityPublic = AuthCrypto.ReadPublic(clientHandshake.identityPublic);
+            return AuthCrypto.VerifyData(transcript, signature, identityPublic);
         }
         catch
         {
+            passwordProof = null;
             return false;
         }
+        finally
+        {
+            Array.Clear(payload, 0, payload.Length);
+        }
+    }
 
-        if (!ClientLoginAttempt.TryDecodePlainPayload(payload, out var signature, out passwordProof))
-            return false;
+    public AuthSessionKeys DeriveSessionKeys(
+        ClientHandshake clientHandshake,
+        ServerHandshake serverHandshake,
+        string serverIdentifier,
+        PasswordChallenge passwordChallenge)
+    {
+        return AuthCrypto.DeriveSessionKeys(
+            _sessionKeyPair,
+            clientHandshake.sessionPublic,
+            clientHandshake,
+            serverHandshake,
+            serverIdentifier,
+            passwordChallenge);
+    }
 
-        var identityPublic = AuthCrypto.ReadPublic(handshake.identityPublic);
-        return AuthCrypto.VerifyData(buf, signature, identityPublic);
+    public AuthSessionKeys DeriveLoopbackMigrationSessionKeys(
+        ClientHandshake clientHandshake,
+        ServerHandshake serverHandshake,
+        string serverIdentifier,
+        PasswordChallenge passwordChallenge,
+        IPAddress peerAddress)
+    {
+        return AuthCrypto.DeriveLoopbackMigrationSessionKeys(
+            _sessionKeyPair,
+            clientHandshake.sessionPublic,
+            clientHandshake,
+            serverHandshake,
+            serverIdentifier,
+            passwordChallenge,
+            peerAddress);
     }
 }

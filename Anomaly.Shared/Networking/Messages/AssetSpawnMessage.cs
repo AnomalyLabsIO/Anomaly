@@ -7,8 +7,9 @@ namespace Anomaly.Shared.Networking.Messages
     /// Server → client. Instructs the client to instantiate an asset and register it
     /// under the server-assigned <see cref="ObjectId"/>.
     /// </summary>
-    public class AssetSpawnMessage : IAnomalyMessage
+    public class AssetSpawnMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public override int MaxPayloadBytes => 332;
         public string MessageName => "anomaly:asset:spawn";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 
@@ -31,6 +32,7 @@ namespace Anomaly.Shared.Networking.Messages
 
         public void Serialize(BinaryWriter writer)
         {
+            Validate();
             writer.Write(ObjectId);
             writer.Write(AssetHash);
 
@@ -47,13 +49,34 @@ namespace Anomaly.Shared.Networking.Messages
         {
             ObjectId = reader.ReadUInt32();
             AssetHash = reader.ReadBytes(32);
+            if (AssetHash.Length != 32)
+                throw new EndOfStreamException("Asset spawn hash was truncated.");
 
             int nameLen = reader.ReadByte();
-            BundleAssetName = Encoding.UTF8.GetString(reader.ReadBytes(nameLen));
+            byte[] nameBytes = reader.ReadBytes(nameLen);
+            if (nameLen == 0 || nameBytes.Length != nameLen)
+                throw new InvalidDataException("Asset spawn name was empty or truncated.");
+            BundleAssetName = Encoding.UTF8.GetString(nameBytes);
 
             PositionX = reader.ReadSingle(); PositionY = reader.ReadSingle(); PositionZ = reader.ReadSingle();
             RotationX = reader.ReadSingle(); RotationY = reader.ReadSingle(); RotationZ = reader.ReadSingle(); RotationW = reader.ReadSingle();
             ScaleX = reader.ReadSingle(); ScaleY = reader.ReadSingle(); ScaleZ = reader.ReadSingle();
+            Validate();
         }
+
+        private void Validate()
+        {
+            if (AssetHash == null || AssetHash.Length != 32)
+                throw new InvalidDataException("Asset spawn hash must be 32 bytes.");
+            int nameLength = Encoding.UTF8.GetByteCount(BundleAssetName ?? string.Empty);
+            if (nameLength == 0 || nameLength > byte.MaxValue)
+                throw new InvalidDataException("Asset spawn name was empty or too long.");
+            if (!IsFinite(PositionX) || !IsFinite(PositionY) || !IsFinite(PositionZ) ||
+                !IsFinite(RotationX) || !IsFinite(RotationY) || !IsFinite(RotationZ) || !IsFinite(RotationW) ||
+                !IsFinite(ScaleX) || !IsFinite(ScaleY) || !IsFinite(ScaleZ))
+                throw new InvalidDataException("Asset spawn transform contained a non-finite value.");
+        }
+
+        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

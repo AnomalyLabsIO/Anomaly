@@ -7,8 +7,9 @@ namespace Anomaly.Shared.Networking.Messages
     /// now has new content identified by <see cref="NewHash"/>. The client is expected to
     /// swap all references (spawns using it, materials using it) to the new hash.
     /// </summary>
-    public class AssetReloadMessage : IAnomalyMessage
+    public class AssetReloadMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public override int MaxPayloadBytes => 64;
         public string MessageName => "anomaly:asset:reload";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 
@@ -17,6 +18,8 @@ namespace Anomaly.Shared.Networking.Messages
 
         public void Serialize(BinaryWriter writer)
         {
+            if (OldHash == null || OldHash.Length != 32 || NewHash == null || NewHash.Length != 32)
+                throw new InvalidDataException("Reload hashes must be 32 bytes.");
             writer.Write(OldHash);
             writer.Write(NewHash);
         }
@@ -25,6 +28,8 @@ namespace Anomaly.Shared.Networking.Messages
         {
             OldHash = reader.ReadBytes(32);
             NewHash = reader.ReadBytes(32);
+            if (OldHash.Length != 32 || NewHash.Length != 32)
+                throw new EndOfStreamException("Reload hashes were truncated.");
         }
     }
 }

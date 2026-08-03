@@ -20,6 +20,7 @@ public static class FileCache
         if (!Directory.Exists(_cacheDir))
             Directory.CreateDirectory(_cacheDir);
 
+        CleanupIncomingFiles();
         LoadIndex();
         MelonLogger.Msg($"FileCache initialized at {_cacheDir} ({_index.Count} cached files)");
     }
@@ -29,19 +30,50 @@ public static class FileCache
         string hex = ToHex(hash);
         lock (Lock)
         {
-            if (!_index.TryGetValue(hex, out var entry))
-                return false;
-
-            string filePath = GetFilePathInternal(hex);
-            if (!File.Exists(filePath))
+            try
             {
+                if (!_index.TryGetValue(hex, out var entry))
+                    return false;
+
+                string filePath = GetFilePathInternal(hex);
+                if (!File.Exists(filePath))
+                {
+                    _index.Remove(hex);
+                    return false;
+                }
+
+                var info = new FileInfo(filePath);
+                if (info.Length != entry.Size)
+                {
+                    MelonLogger.Warning($"FileCache: Size verification failed for {hex}; requesting a fresh copy.");
+                    _index.Remove(hex);
+                    return false;
+                }
+                if (entry.VerifiedLastWriteUtcTicks != info.LastWriteTimeUtc.Ticks)
+                {
+                    byte[] actualHash;
+                    using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
+                    using (var sha = SHA256.Create())
+                        actualHash = sha.ComputeHash(stream);
+                    if (!actualHash.AsSpan().SequenceEqual(hash))
+                    {
+                        MelonLogger.Warning($"FileCache: SHA-256 verification failed for {hex}; requesting a fresh copy.");
+                        _index.Remove(hex);
+                        return false;
+                    }
+                    entry.VerifiedLastWriteUtcTicks = info.LastWriteTimeUtc.Ticks;
+                }
+
+                entry.LastUsed = DateTime.UtcNow;
+                _index[hex] = entry;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"FileCache: Verification failed for {hex}: {ex.Message}");
                 _index.Remove(hex);
                 return false;
             }
-
-            entry.LastUsed = DateTime.UtcNow;
-            _index[hex] = entry;
-            return true;
         }
     }
 
@@ -52,6 +84,14 @@ public static class FileCache
 
     public static void WriteFile(byte[] hash, byte[] data, string originalPath)
     {
+        if (hash == null || hash.Length != 32 || data == null || data.Length == 0 ||
+            data.Length > 64 * 1024 * 1024 ||
+            !ComputeHash(data).AsSpan().SequenceEqual(hash))
+        {
+            MelonLogger.Warning("FileCache.WriteFile rejected data that did not match its content hash.");
+            return;
+        }
+
         string hex = ToHex(hash);
         string filePath = GetFilePathInternal(hex);
         string dir = Path.GetDirectoryName(filePath);
@@ -74,7 +114,8 @@ public static class FileCache
                 {
                     OriginalPath = originalPath,
                     Size = (uint)data.Length,
-                    LastUsed = DateTime.UtcNow
+                    LastUsed = DateTime.UtcNow,
+                    VerifiedLastWriteUtcTicks = new FileInfo(filePath).LastWriteTimeUtc.Ticks
                 };
             }
 
@@ -85,6 +126,80 @@ public static class FileCache
             MelonLogger.Error($"FileCache.WriteFile failed for {hex}: {ex.Message}");
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
+        }
+    }
+
+    /// <summary>
+    /// Verifies and atomically imports a completed streaming download into the
+    /// content-addressed cache without materializing the whole file in memory.
+    /// The source file must be on the same volume as the cache so the final move
+    /// cannot expose a partially-written destination.
+    /// </summary>
+    public static bool ImportVerifiedFile(
+        string tempPath,
+        byte[] expectedHash,
+        string originalPath,
+        uint expectedSize)
+    {
+        if (string.IsNullOrWhiteSpace(tempPath) ||
+            expectedHash == null ||
+            expectedHash.Length != 32 ||
+            expectedSize == 0 ||
+            expectedSize > 64u * 1024u * 1024u ||
+            !File.Exists(tempPath))
+        {
+            return false;
+        }
+
+        string hex = ToHex(expectedHash);
+        string filePath = GetFilePathInternal(hex);
+        string cacheRoot = Path.GetFullPath(_cacheDir)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        string sourcePath = Path.GetFullPath(tempPath);
+        if (!sourcePath.StartsWith(cacheRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            MelonLogger.Warning("FileCache.ImportVerifiedFile rejected a temp file outside the cache root.");
+            return false;
+        }
+
+        try
+        {
+            var info = new FileInfo(sourcePath);
+            if (info.Length != expectedSize)
+                return false;
+
+            byte[] actualHash;
+            using (var stream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
+            using (var sha = SHA256.Create())
+                actualHash = sha.ComputeHash(stream);
+
+            if (!actualHash.AsSpan().SequenceEqual(expectedHash))
+                return false;
+
+            string dir = Path.GetDirectoryName(filePath);
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            File.Move(sourcePath, filePath, overwrite: true);
+
+            lock (Lock)
+            {
+                _index[hex] = new CacheEntry
+                {
+                    OriginalPath = originalPath,
+                    Size = expectedSize,
+                    LastUsed = DateTime.UtcNow,
+                    VerifiedLastWriteUtcTicks = new FileInfo(filePath).LastWriteTimeUtc.Ticks
+                };
+            }
+
+            SaveIndex();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Error($"FileCache.ImportVerifiedFile failed for {hex}: {ex.Message}");
+            return false;
         }
     }
 
@@ -125,6 +240,8 @@ public static class FileCache
 
     public static string ToHex(byte[] hash)
     {
+        if (hash == null || hash.Length != 32)
+            throw new ArgumentException("Content hash must be 32 bytes.", nameof(hash));
         return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
     }
 
@@ -151,6 +268,30 @@ public static class FileCache
             MelonLogger.Warning($"FileCache: Failed to load manifest, starting fresh: {ex.Message}");
             _index = new Dictionary<string, CacheEntry>();
         }
+    }
+
+    private static void CleanupIncomingFiles()
+    {
+        string incomingDir = Path.Combine(_cacheDir, ".incoming");
+        if (!Directory.Exists(incomingDir))
+            return;
+
+        int removed = 0;
+        foreach (string file in Directory.GetFiles(incomingDir, "*.part", SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                File.Delete(file);
+                removed++;
+            }
+            catch
+            {
+                // Best effort; active transfers have not started during cache initialization.
+            }
+        }
+
+        if (removed > 0)
+            MelonLogger.Msg($"FileCache: Removed {removed} stale partial download(s).");
     }
 
     private static void SaveIndex()
@@ -182,5 +323,6 @@ public static class FileCache
         public string OriginalPath { get; set; }
         public uint Size { get; set; }
         public DateTime LastUsed { get; set; }
+        public long VerifiedLastWriteUtcTicks { get; set; }
     }
 }

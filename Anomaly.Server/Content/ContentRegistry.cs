@@ -4,7 +4,6 @@ using System.Linq;
 using Anomaly.Server.Assets;
 using Anomaly.Shared.Content;
 using InventorySystem;
-using PlayerRoles;
 using UnityEngine;
 using Logger = LabApi.Features.Console.Logger;
 
@@ -21,8 +20,6 @@ namespace Anomaly.Server.Content
     {
         // Item pickup ids cross the (widened) wire as a byte; reserve 255 for ItemType.None.
         private const int ItemIdCeiling = 254;
-        // RoleTypeId crosses the wire as an sbyte.
-        private const int RoleIdCeiling = 127;
 
         private static readonly Dictionary<string, CustomItemDefinition> _items = new Dictionary<string, CustomItemDefinition>();
         private static readonly Dictionary<string, CustomRoleDefinition> _roles = new Dictionary<string, CustomRoleDefinition>();
@@ -39,8 +36,20 @@ namespace Anomaly.Server.Content
         private static readonly Dictionary<int, RoleLogicBase> _roleLogic = new Dictionary<int, RoleLogicBase>();
 
         internal static void Add(CustomItemDefinition def) => AddGeneric(def?.Key, def, _items, "item");
-        internal static void Add(CustomRoleDefinition def) => AddGeneric(def?.Key, def, _roles, "role");
-        internal static void Add(CustomEffectDefinition def) => AddGeneric(def?.Key, def, _effects, "effect");
+
+        internal static void Add(CustomRoleDefinition def)
+        {
+            if (def != null)
+                Logger.Warn(
+                    $"Anomaly.Content: custom role '{def.Key}' rejected; v1 is items-only and has no safe role materializer.");
+        }
+
+        internal static void Add(CustomEffectDefinition def)
+        {
+            if (def != null)
+                Logger.Warn(
+                    $"Anomaly.Content: custom effect '{def.Key}' rejected; v1 is items-only and has no safe effect materializer.");
+        }
 
         private static void AddGeneric<T>(string key, T def, Dictionary<string, T> store, string kind) where T : class
         {
@@ -76,15 +85,12 @@ namespace Anomaly.Server.Content
 
             var entries = new List<CatalogEntry>();
             foreach (var d in _items.Values) entries.Add(BuildItemEntry(d));
-            foreach (var d in _roles.Values) entries.Add(BuildRoleEntry(d));
-            foreach (var d in _effects.Values) entries.Add(BuildEffectEntry(d));
 
             int itemBase = CatalogBuilder.ComputeIdBase(MaxEnumValue<ItemType>(), IntKeys(InventoryItemLoader.AvailableItems.Keys));
-            int roleBase = CatalogBuilder.ComputeIdBase(MaxEnumValue<RoleTypeId>(), IntKeys(PlayerRoleLoader.AllRoles.Keys));
 
             try
             {
-                Catalog = CatalogBuilder.Build(entries, itemBase, ItemIdCeiling, roleBase, RoleIdCeiling);
+                Catalog = CatalogBuilder.Build(entries, itemBase, ItemIdCeiling, 0, 0);
             }
             catch (Exception ex)
             {
@@ -113,8 +119,8 @@ namespace Anomaly.Server.Content
             }
 
             Frozen = true;
-            Logger.Info($"Anomaly.Content: catalog frozen — {_items.Count} items, {_roles.Count} roles, {_effects.Count} effects " +
-                        $"(hash=0x{Catalog.CatalogHash:X8}, itemBase={itemBase}, roleBase={roleBase}).");
+            Logger.Info($"Anomaly.Content: items-only catalog frozen — {_items.Count} items " +
+                        $"(hash=0x{Catalog.CatalogHash:X8}, itemBase={itemBase}).");
         }
 
         // --- lookups ---

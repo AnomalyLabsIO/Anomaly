@@ -58,13 +58,30 @@ namespace Anomaly.Shared.Networking
 
             var directional = sample as IDirectionalAnomalyMessage;
             var bounded = sample as IBoundedAnomalyMessage;
-            int maxPayloadBytes = bounded?.MaxPayloadBytes ?? AnomalyChannel.MaxEnvelopeBytes;
-            if (maxPayloadBytes <= 0 || maxPayloadBytes > AnomalyChannel.MaxEnvelopeBytes)
+            var phased = sample as IAuthPhaseAnomalyMessage;
+            if (directional == null || bounded == null || phased == null)
+                throw new InvalidOperationException(
+                    $"AnomalyMessageRegistry: '{name}' must explicitly declare direction, authentication phase, and maximum payload size.");
+
+            if (directional.Direction != AnomalyMessageDirection.ClientToServer &&
+                directional.Direction != AnomalyMessageDirection.ServerToClient)
+            {
+                throw new InvalidOperationException(
+                    $"AnomalyMessageRegistry: '{name}' must declare exactly one wire direction; " +
+                    $"'{directional.Direction}' is not permitted.");
+            }
+
+            int maxPayloadBytes = bounded.MaxPayloadBytes;
+            if (maxPayloadBytes < 0 || maxPayloadBytes > AnomalyChannel.MaxEnvelopeBytes)
                 throw new InvalidOperationException(
                     $"AnomalyMessageRegistry: '{name}' declared invalid payload ceiling {maxPayloadBytes}.");
+            if (phased.AuthPhase != AnomalyMessageAuthPhase.AuthenticatedSession)
+                throw new InvalidOperationException(
+                    $"AnomalyMessageRegistry: '{name}' declared unsupported authentication phase {phased.AuthPhase}.");
 
             var policy = new AnomalyMessagePolicy(
-                directional?.Direction ?? AnomalyMessageDirection.Bidirectional,
+                directional.Direction,
+                phased.AuthPhase,
                 maxPayloadBytes,
                 sample is IRoundScopedAnomalyMessage);
 
@@ -77,7 +94,7 @@ namespace Anomaly.Shared.Networking
             HashToChannel[hash] = sample.TransportChannel;
             HashToPolicy[hash] = policy;
 
-            Log($"AnomalyMessageRegistry: Registered '{name}' (hash=0x{hash:X8}, channel={sample.TransportChannel})");
+            Log($"AnomalyMessageRegistry: Registered '{name}' (hash=0x{hash:X8}, channel={sample.TransportChannel}, direction={policy.Direction}, phase={policy.AuthPhase}, max={policy.MaxPayloadBytes})");
         }
 
         public static bool TryCreate(uint hash, out IAnomalyMessage message)

@@ -14,8 +14,9 @@ namespace Anomaly.Shared.Networking.Messages
     /// many of these back-to-back; Sequenced would discard all but the most
     /// recent and the new joiner would only see one player's color.
     /// </remarks>
-    public class PlayerColorChangedMessage : IAnomalyMessage
+    public class PlayerColorChangedMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public override int MaxPayloadBytes => sizeof(uint) + 3;
         public string MessageName => "anomaly:player:colorchanged";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 

@@ -2,14 +2,11 @@ using Anomaly.Client.Api.Features;
 using Anomaly.Client.Api.Events;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Api.Internal.Wrappers;
+using Anomaly.Shared.Auth;
 using Anomaly.Shared.Networking;
 using Il2Cpp;
 using Il2CppMirror;
 using MelonLoader;
-using Org.BouncyCastle.Crypto.Engines;
-using Org.BouncyCastle.Crypto.Modes;
-using Org.BouncyCastle.Crypto.Parameters;
-using Org.BouncyCastle.Security;
 
 namespace Anomaly.Client.Api.Networking;
 
@@ -17,8 +14,12 @@ public static class AnomalyMessaging
 {
     public static event Action<IAnomalyMessage> MessageReceived;
 
-    private static readonly SecureRandom SecureRandom = new();
+    private static readonly object TransportSync = new();
     private static readonly AnomalySequenceState SequenceState = new();
+    private static byte[] _clientToServerKey;
+    private static byte[] _serverToClientKey;
+    private static byte[] _sessionId;
+    private static byte[] _transcriptHash;
     private static uint _currentRoundEpoch;
 
     public static void Send(IAnomalyMessage msg)
@@ -27,13 +28,6 @@ public static class AnomalyMessaging
         if (hub == null && !PlayerRegistry.TryGetLocalHub(out hub))
         {
             MelonLogger.Warning("AnomalyMessaging.Send: No local player hub available.");
-            return;
-        }
-
-        var ecm = hub.encryptedChannelManager;
-        if (ecm.EncryptionKey == null)
-        {
-            MelonLogger.Warning("AnomalyMessaging.Send: No encryption key available.");
             return;
         }
 
@@ -83,7 +77,11 @@ public static class AnomalyMessaging
         }
         else
         {
-            var encrypted = AesGcmEncrypt(data, ecm.EncryptionKey);
+            if (!TryEncryptClientEnvelope(data, out var encrypted))
+            {
+                MelonLogger.Warning("AnomalyMessaging.Send: No authenticated protocol-v2 transport session is available.");
+                return;
+            }
             EncryptedMessageTransport.Send(
                 EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
                 encrypted,
@@ -98,50 +96,81 @@ public static class AnomalyMessaging
     {
         if (!encryptedAndAuthenticated && !localTransport)
         {
-            MelonLogger.Warning("AnomalyMessaging.OnReceived: Dropping unauthenticated remote 0xFE message.");
+            RegisterProtocolViolation(
+                "AnomalyMessaging.OnReceived: Dropping unauthenticated remote 0xFE message",
+                localTransport);
             return;
         }
         if (anomalyPayload == null || anomalyPayload.Length > AnomalyChannel.MaxEnvelopeBytes)
         {
-            MelonLogger.Warning(
+            RegisterProtocolViolation(
                 $"AnomalyMessaging.OnReceived: Payload exceeded the absolute envelope ceiling " +
-                $"({anomalyPayload?.Length ?? 0}/{AnomalyChannel.MaxEnvelopeBytes} bytes).");
+                $"({anomalyPayload?.Length ?? 0}/{AnomalyChannel.MaxEnvelopeBytes} bytes)",
+                localTransport);
             return;
         }
 
         // Wire (after stripping 0xFE): [4:counter][4:hash][N:payload]
         if (anomalyPayload.Length < 8)
         {
-            MelonLogger.Warning("AnomalyMessaging.OnReceived: Payload too short for counter + message hash.");
+            RegisterProtocolViolation(
+                "AnomalyMessaging.OnReceived: Payload too short for counter + message hash",
+                localTransport);
             return;
         }
 
         uint counter = BitConverter.ToUInt32(anomalyPayload, 0);
         uint hash = BitConverter.ToUInt32(anomalyPayload, 4);
+        int payloadBytes = anomalyPayload.Length - 8;
+
+        var rateResult = AnomalyReplayTable.InboundRateLimiter.TryAccept(hash, payloadBytes);
+        if (!rateResult.Allowed)
+        {
+            HandleRateLimitResult(
+                rateResult,
+                $"AnomalyMessaging.OnReceived: Rate-limited hash 0x{hash:X8}",
+                localTransport);
+            return;
+        }
 
         if (!AnomalyMessageRegistry.TryGetChannel(hash, out var channel))
         {
-            MelonLogger.Warning($"AnomalyMessaging.OnReceived: Unknown message hash 0x{hash:X8}.");
+            RegisterProtocolViolation(
+                $"AnomalyMessaging.OnReceived: Unknown message hash 0x{hash:X8}",
+                localTransport);
             return;
         }
 
         if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var policy))
         {
-            MelonLogger.Warning($"AnomalyMessaging.OnReceived: No policy for hash 0x{hash:X8}.");
+            RegisterProtocolViolation(
+                $"AnomalyMessaging.OnReceived: No policy for hash 0x{hash:X8}",
+                localTransport);
+            return;
+        }
+        if (policy.AuthPhase == AnomalyMessageAuthPhase.AuthenticatedSession &&
+            !encryptedAndAuthenticated &&
+            !localTransport)
+        {
+            RegisterProtocolViolation(
+                $"AnomalyMessaging.OnReceived: Dropping pre-auth message hash 0x{hash:X8}",
+                localTransport);
             return;
         }
         if (policy.Direction == AnomalyMessageDirection.ClientToServer)
         {
-            MelonLogger.Warning($"AnomalyMessaging.OnReceived: Dropping client-to-server message hash 0x{hash:X8}.");
+            RegisterProtocolViolation(
+                $"AnomalyMessaging.OnReceived: Dropping client-to-server message hash 0x{hash:X8}",
+                localTransport);
             return;
         }
 
-        int payloadBytes = anomalyPayload.Length - 8;
         if (payloadBytes > policy.MaxPayloadBytes)
         {
-            MelonLogger.Warning(
+            RegisterProtocolViolation(
                 $"AnomalyMessaging.OnReceived: Payload for hash 0x{hash:X8} exceeded its ceiling " +
-                $"({payloadBytes}/{policy.MaxPayloadBytes} bytes).");
+                $"({payloadBytes}/{policy.MaxPayloadBytes} bytes)",
+                localTransport);
             return;
         }
 
@@ -149,13 +178,26 @@ public static class AnomalyMessaging
         if (rx != AnomalyReplayState.RxResult.Accepted)
         {
             if (shouldLog)
-                MelonLogger.Warning($"AnomalyMessaging.OnReceived: Dropping packet (hash=0x{hash:X8}, counter={counter}, channel={channel}, reason={rx}).");
+            {
+                RegisterProtocolViolation(
+                    $"AnomalyMessaging.OnReceived: Dropping packet " +
+                    $"(hash=0x{hash:X8}, counter={counter}, channel={channel}, reason={rx})",
+                    localTransport);
+            }
+            else
+            {
+                var violation = AnomalyReplayTable.InboundRateLimiter.RegisterProtocolViolation();
+                if (violation.ShouldDisconnect)
+                    HandleRateLimitResult(violation, "AnomalyMessaging.OnReceived: Sustained replay traffic", localTransport);
+            }
             return;
         }
 
         if (!AnomalyMessageRegistry.TryCreate(hash, out var message))
         {
-            MelonLogger.Warning($"AnomalyMessaging.OnReceived: No factory for hash 0x{hash:X8}.");
+            RegisterProtocolViolation(
+                $"AnomalyMessaging.OnReceived: No factory for hash 0x{hash:X8}",
+                localTransport);
             return;
         }
 
@@ -170,7 +212,10 @@ public static class AnomalyMessaging
         }
         catch (Exception ex)
         {
-            MelonLogger.Error($"AnomalyMessaging.OnReceived: Failed to deserialize '{message.MessageName}': {ex}");
+            RegisterProtocolViolation(
+                $"AnomalyMessaging.OnReceived: Failed to deserialize '{message.MessageName}': " +
+                $"{ex.GetType().Name}: {ex.Message}",
+                localTransport);
             return;
         }
 
@@ -178,7 +223,9 @@ public static class AnomalyMessaging
         {
             if (message is not IRoundScopedAnomalyMessage scoped)
             {
-                MelonLogger.Warning($"AnomalyMessaging.OnReceived: Round-scoped policy mismatch for hash 0x{hash:X8}.");
+                RegisterProtocolViolation(
+                    $"AnomalyMessaging.OnReceived: Round-scoped policy mismatch for hash 0x{hash:X8}",
+                    localTransport);
                 return;
             }
 
@@ -189,10 +236,11 @@ public static class AnomalyMessaging
                 hash);
             if (result != AnomalySequenceState.RxResult.Accepted)
             {
-                MelonLogger.Warning(
+                RegisterProtocolViolation(
                     $"AnomalyMessaging.OnReceived: Dropping round-scoped packet " +
                     $"(hash=0x{hash:X8}, epoch={scoped.RoundEpoch}/{_currentRoundEpoch}, " +
-                    $"sequence={scoped.Sequence}, reason={result}).");
+                    $"sequence={scoped.Sequence}, reason={result})",
+                    localTransport);
                 return;
             }
         }
@@ -214,23 +262,116 @@ public static class AnomalyMessaging
         SequenceState.Reset(roundEpoch);
     }
 
-    private static byte[] AesGcmEncrypt(byte[] data, byte[] key)
+    private static void RegisterProtocolViolation(string message, bool localTransport)
     {
-        byte[] nonce = new byte[32];
-        SecureRandom.NextBytes(nonce, 0, nonce.Length);
+        var result = AnomalyReplayTable.InboundRateLimiter.RegisterProtocolViolation();
+        HandleRateLimitResult(result, message, localTransport);
+    }
 
-        var cipher = new GcmBlockCipher(new AesEngine());
-        cipher.Init(true, new AeadParameters(new KeyParameter(key), 128, nonce));
+    private static void HandleRateLimitResult(
+        AnomalyRateLimitResult result,
+        string message,
+        bool localTransport)
+    {
+        if (result.ShouldLog)
+            MelonLogger.Warning($"{message} (drops={result.DroppedInWindow}).");
+        if (!result.ShouldDisconnect || localTransport)
+            return;
 
-        int outputSize = cipher.GetOutputSize(data.Length);
-        var ciphertext = new byte[outputSize];
-        int len = cipher.ProcessBytes(data, 0, data.Length, ciphertext, 0);
-        cipher.DoFinal(ciphertext, len);
+        MelonLogger.Error(
+            "AnomalyMessaging.OnReceived: Disconnecting after sustained invalid or over-limit server traffic.");
+        try
+        {
+            NetworkClient.connection?.Disconnect();
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"AnomalyMessaging.OnReceived: Rate-limit disconnect failed: {ex.Message}");
+        }
+    }
 
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        writer.Write(nonce);
-        writer.Write(ciphertext, 0, outputSize);
-        return ms.ToArray();
+    internal static void ConfigureTransportSession(
+        byte[] clientToServerKey,
+        byte[] serverToClientKey,
+        byte[] sessionId,
+        byte[] transcriptHash)
+    {
+        if (clientToServerKey?.Length != 32 || serverToClientKey?.Length != 32 ||
+            sessionId?.Length != AuthTransportCrypto.SessionIdSize ||
+            transcriptHash?.Length != AuthTransportCrypto.TranscriptHashSize)
+            throw new ArgumentException("Invalid protocol-v2 transport session material.");
+
+        lock (TransportSync)
+        {
+            ClearTransportSessionLocked();
+            _clientToServerKey = (byte[])clientToServerKey.Clone();
+            _serverToClientKey = (byte[])serverToClientKey.Clone();
+            _sessionId = (byte[])sessionId.Clone();
+            _transcriptHash = (byte[])transcriptHash.Clone();
+        }
+    }
+
+    internal static void ClearTransportSession()
+    {
+        lock (TransportSync)
+            ClearTransportSessionLocked();
+    }
+
+    internal static bool TryEncryptClientEnvelope(byte[] plaintext, out byte[] envelope)
+    {
+        lock (TransportSync)
+        {
+            if (_clientToServerKey == null)
+            {
+                envelope = null;
+                return false;
+            }
+
+            envelope = AuthTransportCrypto.Encrypt(
+                _clientToServerKey,
+                _sessionId,
+                _transcriptHash,
+                AuthTransportDirection.ClientToServer,
+                plaintext);
+            return true;
+        }
+    }
+
+    internal static bool TryDecryptServerEnvelope(byte[] envelope, out byte[] plaintext)
+    {
+        lock (TransportSync)
+        {
+            if (_serverToClientKey == null)
+            {
+                plaintext = null;
+                return false;
+            }
+
+            plaintext = AuthTransportCrypto.Decrypt(
+                _serverToClientKey,
+                _sessionId,
+                _transcriptHash,
+                AuthTransportDirection.ServerToClient,
+                envelope);
+            return true;
+        }
+    }
+
+    private static void ClearTransportSessionLocked()
+    {
+        Clear(_clientToServerKey);
+        Clear(_serverToClientKey);
+        Clear(_sessionId);
+        Clear(_transcriptHash);
+        _clientToServerKey = null;
+        _serverToClientKey = null;
+        _sessionId = null;
+        _transcriptHash = null;
+    }
+
+    private static void Clear(byte[] value)
+    {
+        if (value != null)
+            Array.Clear(value, 0, value.Length);
     }
 }

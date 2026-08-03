@@ -4,7 +4,7 @@
 
 `Anomaly.Client.Api` is the public **peer library** that exposes event buses, feature wrappers, registries, and helpers to other MelonLoader mods targeting the Anomaly-enabled SCP:SL client. `Anomaly.Client` is the runtime mod that owns the MelonMod lifecycle — Harmony patches, auth, diagnostics, network handlers — and raises events on the Api surface. Your mod links against `Anomaly.Client.Api.dll` (plus `Anomaly.Shared.dll`) and never needs to touch `Anomaly.Client.dll`.
 
-No interface to implement. No attribute to decorate. You build a normal IL2CPP MelonMod and use Anomaly's static helpers directly.
+Existing mods can remain normal IL2CPP MelonMods and use Anomaly's static helpers directly. Public-v1 modules can instead implement `IAnomalyMod`; Anomaly then owns their initialization, cleanup, dependency ordering, and fault attribution.
 
 ## Prerequisites
 
@@ -19,16 +19,25 @@ MelonLoader calls `OnInitializeMelon` in dependency order. If you call any Anoma
 
 ```csharp
 using MelonLoader;
+using Anomaly.Client.Api.Compatibility;
 
 [assembly: MelonInfo(typeof(MyMod.Core), "MyMod", "1.0.0", "YourName", null)]
 [assembly: MelonGame("Northwood", "SCPSL")]
-[assembly: MelonGameVersion("14.2.6")]
+[assembly: SupportedGameVersion("14.2.7^")]
 [assembly: MelonAdditionalDependencies("Anomaly")]
 ```
 
 The string `"Anomaly"` must match Anomaly.Client's own `MelonInfo` name. Without the attribute, load order is undefined and your mod may hit Anomaly's APIs before its own `OnInitializeMelon` has finished running — Harmony patches won't be applied, message registry won't be populated, event handlers won't be wired.
 
 Mods that only call Anomaly APIs from event handlers (i.e. not during `OnInitializeMelon`) don't strictly need the attribute, but declaring it costs nothing and avoids a future footgun.
+
+`SupportedGameVersion` is advisory launcher metadata. `14.2.7^` means 14.2.7 or newer within the 14.2 patch line; stale or mismatched declarations produce a warning and never block launch.
+
+## Anomaly-managed modules
+
+Managed modules live under `UserData/Anomaly/Modules`, implement `IAnomalyMod`, and have a same-name `.dll.anomaly.json` sidecar. The manifest declares a stable id, API/version bounds, dependencies, conflicts, requested capabilities, publisher, and the DLL's SHA-256. Anomaly validates the whole graph before loading any module and tears down context-owned commands, scheduled work, cancellation, and tracked resources on disable.
+
+The launcher approves artifacts by SHA-256 and stages or quarantines every MelonLoader-scanned DLL before process creation, including UserLibs, Plugins, Mods, nested folders that MelonLoader reclassifies, and managed modules. `Anomaly.Bootstrap` repeats the check for ordinary Mods and managed modules before the Mods phase; it is defense in depth, not the authority for earlier-loading UserLibs or Plugins. A changed binary requires renewed consent. This is a trust gate, not a sandbox: approved managed code and ordinary MelonMods still have the full authority of the game process.
 
 ## Picking an id
 
@@ -62,7 +71,7 @@ Anomaly's own init happens inside its `OnInitializeMelon`: localization service,
 
 **No replay-on-subscribe.** If you subscribe to `CanvasReady`, `Connected`, or `Ready` after it has already fired, you won't get a late-dispatch call. Subscribe in `OnInitializeMelon`.
 
-**No hot-unload.** MelonLoader doesn't support unloading mods mid-session, so Anomaly doesn't either. Anything you register lives for the rest of the game session.
+**No assembly hot-unload.** A managed module can be disabled immediately at Anomaly-owned boundaries: its cancellation token is cancelled, commands and scheduled work are removed, tracked subscriptions/resources are disposed, and future owned callbacks are rejected. Its assembly remains loaded in the IL2CPP process, so complete removal takes effect on the next launch. Ordinary MelonMods remain governed by MelonLoader's process-lifetime behavior.
 
 ## Subsystems
 
@@ -78,6 +87,7 @@ All public APIs live under `Anomaly.Client.Api.*`. Quick pointers:
 - **`Tr`** — translations. `Tr.RegisterMod(namespace)` loads `UserData/i18n/<namespace>/`; `Tr.RegisterMod(namespace, dir)` can point at a custom per-locale JSON directory. `Tr.Get(key, args...)` looks up translated strings with fallback to English. See [LOCALIZATION.md](Localization/LOCALIZATION.md).
 - **`AnomalyResources`** — content-addressed texture and asset-bundle loading, populated by the file-transfer layer. `TryGetTexture(hash, ...)`, `TryLoadFromBundle<T>(bundleHash, assetName, ...)`.
 - **`Coroutines`** — `Coroutines.Start(IEnumerator)` / `Coroutines.Stop` / `Coroutines.CallDelayed(float, Action)` wrappers over `MelonCoroutines`.
+- **`FeatureHealth`** — metadata-only snapshots of core and managed-module health. Fragile hook records include the expected upstream target, the target actually resolved, current state, and operator/developer remediation where available.
 - **Feature wrappers** — `Client.Players`, `Client.LocalPlayer`, `Client.Rooms`, `Client.Doors`, `Client.Pickups`, `Client.Projectiles`, `Client.AdminToys`, plus wrappers for `Item`, `Role`, `PlayerEffect`, `PlayerStatsWrapper`, etc. Read-only views over the game state.
 
 ## Events
@@ -146,13 +156,14 @@ Minimal MelonMod that logs every role change and runs a recurring health tick wh
 ```csharp
 using System;
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Compatibility;
 using Anomaly.Client.Api.Scheduling;
 using Anomaly.Client.Api.Events.Handlers;
 using MelonLoader;
 
 [assembly: MelonInfo(typeof(MyMod.Core), "MyMod", "0.1.0", "YourName", null)]
 [assembly: MelonGame("Northwood", "SCPSL")]
-[assembly: MelonGameVersion("14.2.6")]
+[assembly: SupportedGameVersion("14.2.7^")]
 [assembly: MelonAdditionalDependencies("Anomaly")]
 
 namespace MyMod;

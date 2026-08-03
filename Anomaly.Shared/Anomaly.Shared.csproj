@@ -14,6 +14,7 @@
         <RuntimeIdentifiers>win</RuntimeIdentifiers>
         <FileAlignment>512</FileAlignment>
         <LangVersion>latest</LangVersion>
+        <DeployLocal Condition="'$(DeployLocal)' == ''">false</DeployLocal>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
         <PlatformTarget>AnyCPU</PlatformTarget>
@@ -46,14 +47,21 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Auth\AuthCrypto.cs" />
+        <Compile Include="Auth\AuthConnectionContext.cs" />
+        <Compile Include="Auth\AuthSessionKeys.cs" />
+        <Compile Include="Auth\AuthTranscript.cs" />
+        <Compile Include="Auth\AuthTransportCrypto.cs" />
         <Compile Include="Auth\Base58.cs" />
         <Compile Include="Auth\ClientAuthSession.cs" />
+        <Compile Include="Auth\ClientIdentityRotationChain.cs" />
+        <Compile Include="Auth\ClientIdentityRotationRecord.cs" />
         <Compile Include="Auth\ClientHandshake.cs" />
         <Compile Include="Auth\ClientLoginAttempt.cs" />
         <Compile Include="Auth\PasswordAuth.cs" />
         <Compile Include="Auth\PasswordChallenge.cs" />
         <Compile Include="Auth\ServerAuthSession.cs" />
         <Compile Include="Auth\ServerHandshake.cs" />
+        <Compile Include="Auth\ServerIdentityRotationRecord.cs" />
         <Compile Include="Assets\AssetKind.cs" />
         <Compile Include="Content\CatalogTypes.cs" />
         <Compile Include="Content\CatalogBuilder.cs" />
@@ -109,12 +117,12 @@
       <AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">E:\Projects\AnomalyLabs\ModdedFiles\loadouts\dev\local\UserLibs</AnomalyClientUserLibsDir>
     </PropertyGroup>
     <Target Name="CopySharedToLocalTargets" AfterTargets="Build">
-      <Message Importance="high" Text="Anomaly.Shared: copying $(TargetFileName) -&gt; $(AnomalyServerDepsDir)" Condition="Exists('$(AnomalyServerDepsDir)')" />
-      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyServerDepsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyServerDepsDir)')" />
-      <Message Importance="high" Text="Anomaly.Shared: copying $(TargetFileName) -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)')" />
-      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)')" />
-      <Warning Text="Anomaly.Shared: AnomalyServerDepsDir does not exist: $(AnomalyServerDepsDir)" Condition="!Exists('$(AnomalyServerDepsDir)')" />
-      <Warning Text="Anomaly.Shared: AnomalyClientUserLibsDir does not exist: $(AnomalyClientUserLibsDir)" Condition="!Exists('$(AnomalyClientUserLibsDir)')" />
+      <Message Importance="high" Text="Anomaly.Shared: copying $(TargetFileName) -&gt; $(AnomalyServerDepsDir)" Condition="'$(DeployLocal)' == 'true' And Exists('$(AnomalyServerDepsDir)')" />
+      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyServerDepsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="'$(DeployLocal)' == 'true' And Exists('$(AnomalyServerDepsDir)')" />
+      <Message Importance="high" Text="Anomaly.Shared: copying $(TargetFileName) -&gt; $(AnomalyClientUserLibsDir)" Condition="'$(DeployLocal)' == 'true' And Exists('$(AnomalyClientUserLibsDir)')" />
+      <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="'$(DeployLocal)' == 'true' And Exists('$(AnomalyClientUserLibsDir)')" />
+      <Warning Text="Anomaly.Shared: AnomalyServerDepsDir does not exist: $(AnomalyServerDepsDir)" Condition="'$(DeployLocal)' == 'true' And !Exists('$(AnomalyServerDepsDir)')" />
+      <Warning Text="Anomaly.Shared: AnomalyClientUserLibsDir does not exist: $(AnomalyClientUserLibsDir)" Condition="'$(DeployLocal)' == 'true' And !Exists('$(AnomalyClientUserLibsDir)')" />
     </Target>
     <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
          Other similar extension points exist, see Microsoft.Common.targets.

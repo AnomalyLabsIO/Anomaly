@@ -27,16 +27,27 @@ namespace Anomaly.Client.Api.Assets
             if (hash == null || hash.Length != 32) return false;
 
             string hex = FileCache.ToHex(hash);
-            if (_textures.TryGetValue(hex, out texture) && texture != null)
-                return true;
+            if (_textures.TryGetValue(hex, out texture))
+            {
+                if (texture != null)
+                    return true;
+                _textures.Remove(hex);
+                RemoteAssetDecodeBudget.ReleaseLive("texture:" + hex);
+            }
 
             if (!FileCache.HasFile(hash))
                 return false;
 
             try
             {
-                var bytes = File.ReadAllBytes(FileCache.GetFilePath(hash));
-                var tex = PngLoader.TryDecode(bytes);
+                string path = FileCache.GetFilePath(hash);
+                if (new FileInfo(path).Length > RemoteAssetDecodeBudget.MaxEncodedTextureBytes)
+                {
+                    MelonLogger.Warning($"AnomalyResources: Texture {hex} exceeded the encoded decode limit.");
+                    return false;
+                }
+                var bytes = File.ReadAllBytes(path);
+                var tex = PngLoader.TryDecode(bytes, "texture:" + hex);
                 if (tex == null)
                 {
                     MelonLogger.Warning($"AnomalyResources: PNG decode failed for {hex}.");
@@ -91,16 +102,30 @@ namespace Anomaly.Client.Api.Assets
             if (hash == null || hash.Length != 32) return false;
 
             string hex = FileCache.ToHex(hash);
-            if (_audioClips.TryGetValue(hex, out clip) && clip != null)
-                return true;
+            if (_audioClips.TryGetValue(hex, out clip))
+            {
+                if (clip != null)
+                    return true;
+                AudioClipFactory.ReleaseStreamer(clip);
+                _audioClips.Remove(hex);
+            }
 
             if (!FileCache.HasFile(hash))
                 return false;
 
             try
             {
-                var bytes = File.ReadAllBytes(FileCache.GetFilePath(hash));
-                var c = AudioClipFactory.TryDecode(bytes, "announcer_" + hex.Substring(0, 8));
+                string path = FileCache.GetFilePath(hash);
+                if (new FileInfo(path).Length > RemoteAssetDecodeBudget.MaxEncodedAudioBytes)
+                {
+                    MelonLogger.Warning($"AnomalyResources: Audio {hex} exceeded the encoded decode limit.");
+                    return false;
+                }
+                var bytes = File.ReadAllBytes(path);
+                var c = AudioClipFactory.TryDecode(
+                    bytes,
+                    "announcer_" + hex.Substring(0, 8),
+                    "audio:" + hex);
                 if (c == null)
                 {
                     MelonLogger.Warning($"AnomalyResources: AudioClip decode failed for {hex}.");
@@ -151,28 +176,34 @@ namespace Anomaly.Client.Api.Assets
             if (hash == null) return;
             string hex = FileCache.ToHex(hash);
 
-            if (_textures.TryGetValue(hex, out var tex) && tex != null)
+            if (_textures.TryGetValue(hex, out var tex))
             {
-                UnityEngine.Object.Destroy(tex);
+                if (tex != null)
+                    UnityEngine.Object.Destroy(tex);
                 _textures.Remove(hex);
+                RemoteAssetDecodeBudget.ReleaseLive("texture:" + hex);
             }
             if (_bundles.TryGetValue(hex, out var bundle) && bundle != null)
             {
                 bundle.Unload(true);
                 _bundles.Remove(hex);
             }
-            if (_audioClips.TryGetValue(hex, out var clip) && clip != null)
+            if (_audioClips.TryGetValue(hex, out var clip))
             {
                 AudioClipFactory.ReleaseStreamer(clip);
-                UnityEngine.Object.Destroy(clip);
+                if (clip != null)
+                    UnityEngine.Object.Destroy(clip);
                 _audioClips.Remove(hex);
             }
         }
 
         public static void UnloadAll()
         {
-            foreach (var t in _textures.Values)
-                if (t != null) UnityEngine.Object.Destroy(t);
+            foreach (var entry in _textures)
+            {
+                if (entry.Value != null) UnityEngine.Object.Destroy(entry.Value);
+                RemoteAssetDecodeBudget.ReleaseLive("texture:" + entry.Key);
+            }
             _textures.Clear();
 
             foreach (var b in _bundles.Values)
@@ -181,9 +212,9 @@ namespace Anomaly.Client.Api.Assets
 
             foreach (var c in _audioClips.Values)
             {
-                if (c == null) continue;
                 AudioClipFactory.ReleaseStreamer(c);
-                UnityEngine.Object.Destroy(c);
+                if (c != null)
+                    UnityEngine.Object.Destroy(c);
             }
             _audioClips.Clear();
         }

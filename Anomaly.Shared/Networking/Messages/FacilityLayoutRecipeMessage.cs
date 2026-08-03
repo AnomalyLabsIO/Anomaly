@@ -16,8 +16,10 @@ namespace Anomaly.Shared.Networking.Messages
     /// interpretation. This message intentionally has no Unity or game
     /// references so it compiles inside <c>Anomaly.Shared</c>.
     /// </remarks>
-    public class FacilityLayoutRecipeMessage : IAnomalyMessage
+    public class FacilityLayoutRecipeMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public const int MaxEntries = 4096;
+        public override int MaxPayloadBytes => 128 * 1024;
         public string MessageName => "anomaly:facility:recipe";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 
@@ -32,10 +34,13 @@ namespace Anomaly.Shared.Networking.Messages
         public void Serialize(BinaryWriter writer)
         {
             int count = Entries == null ? 0 : Entries.Count;
+            if (count > MaxEntries)
+                throw new InvalidDataException($"Facility recipe count exceeded {MaxEntries}.");
             writer.Write((ushort)count);
             for (int i = 0; i < count; i++)
             {
                 var e = Entries[i];
+                ValidateEntry(e);
                 writer.Write(e.ZoneId);
                 writer.Write(e.CoordsX);
                 writer.Write(e.CoordsY);
@@ -61,6 +66,8 @@ namespace Anomaly.Shared.Networking.Messages
         public void Deserialize(BinaryReader reader)
         {
             int count = reader.ReadUInt16();
+            if (count > MaxEntries)
+                throw new InvalidDataException($"Facility recipe count exceeded {MaxEntries}.");
             Entries = new List<FacilityRecipeEntry>(count);
             for (int i = 0; i < count; i++)
             {
@@ -72,9 +79,14 @@ namespace Anomaly.Shared.Networking.Messages
                     OpType  = reader.ReadByte()
                 };
 
+                if (e.OpType != OpTransformOverride && e.OpType != OpSkip)
+                    throw new InvalidDataException("Facility recipe operation was invalid.");
+
                 if (e.OpType == OpTransformOverride)
                 {
                     e.DirtyMask = reader.ReadByte();
+                    if ((e.DirtyMask & ~(DirtyPosition | DirtyRotation)) != 0)
+                        throw new InvalidDataException("Facility recipe dirty mask was invalid.");
                     if ((e.DirtyMask & DirtyPosition) != 0)
                     {
                         e.OffsetX = reader.ReadSingle();
@@ -87,9 +99,26 @@ namespace Anomaly.Shared.Networking.Messages
                     }
                 }
 
+                ValidateEntry(e);
+
                 Entries.Add(e);
             }
         }
+
+        private static void ValidateEntry(FacilityRecipeEntry entry)
+        {
+            if (entry.OpType != OpTransformOverride && entry.OpType != OpSkip)
+                throw new InvalidDataException("Facility recipe operation was invalid.");
+            if (entry.OpType == OpSkip)
+                return;
+            if ((entry.DirtyMask & ~(DirtyPosition | DirtyRotation)) != 0)
+                throw new InvalidDataException("Facility recipe dirty mask was invalid.");
+            if (!IsFinite(entry.OffsetX) || !IsFinite(entry.OffsetY) ||
+                !IsFinite(entry.OffsetZ) || !IsFinite(entry.RotationY))
+                throw new InvalidDataException("Facility recipe transform contained a non-finite value.");
+        }
+
+        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 
     /// <summary>

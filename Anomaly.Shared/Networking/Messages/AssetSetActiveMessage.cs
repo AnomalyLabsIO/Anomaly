@@ -5,8 +5,9 @@ namespace Anomaly.Shared.Networking.Messages
     /// <summary>
     /// Server → client. Toggles <c>GameObject.SetActive</c> on a spawned asset.
     /// </summary>
-    public class AssetSetActiveMessage : IAnomalyMessage
+    public class AssetSetActiveMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public override int MaxPayloadBytes => sizeof(uint) + sizeof(bool);
         public string MessageName => "anomaly:asset:active";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 

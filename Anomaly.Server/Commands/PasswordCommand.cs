@@ -25,7 +25,9 @@ public sealed class PasswordCommand : ICommand
         var first = arguments.Array[arguments.Offset];
         if (string.Equals(first, "status", StringComparison.OrdinalIgnoreCase))
         {
-            response = $"Anomaly password required: {PasswordStore.IsRequired}; verifier configured: {PasswordStore.HasPassword}.";
+            response = $"Anomaly password required: {PasswordStore.IsRequired}; verifier configured: {PasswordStore.HasPassword}; "
+                + $"legacy loopback-only mode: {Plugin.Instance?.Config?.EnableLegacyPasswordAuthOnLoopback == true}. "
+                + "Public password mode remains disabled until a vetted OPAQUE implementation supports both runtimes.";
             return true;
         }
 
@@ -53,9 +55,12 @@ public sealed class PasswordCommand : ICommand
         }
 
         var enabledSaved = TrySetRequirePassword(true, out var enableError);
+        var migrationMode = Plugin.Instance?.Config?.EnableLegacyPasswordAuthOnLoopback == true;
         response = enabledSaved
-            ? "Anomaly password saved and RequirePassword enabled. New connections must use it immediately."
-            : "Anomaly password saved and enabled for this runtime, but failed to persist RequirePassword=true: " + enableError;
+            ? (migrationMode
+                ? "Anomaly password saved. Legacy password auth is enabled for loopback clients only; remote clients are rejected."
+                : "Anomaly password saved, but public password auth is intentionally disabled. All clients are rejected while RequirePassword remains true unless the loopback-only migration switch is enabled.")
+            : "Anomaly password saved for this runtime, but failed to persist RequirePassword=true: " + enableError;
         return true;
     }
 

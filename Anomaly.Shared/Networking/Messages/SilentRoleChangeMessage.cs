@@ -7,8 +7,9 @@ namespace Anomaly.Shared.Networking.Messages
     /// The side-specific handler hook (e.g. setting a pending flag on the client) lives
     /// outside this class.
     /// </summary>
-    public class SilentRoleChangeMessage : IAnomalyMessage
+    public class SilentRoleChangeMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public override int MaxPayloadBytes => 0;
         public string MessageName => "anomaly:silentrolechange";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered; // ReliableOrdered -- must arrive before RoleSyncInfo
 

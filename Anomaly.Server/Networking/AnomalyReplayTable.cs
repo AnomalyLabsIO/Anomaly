@@ -16,6 +16,8 @@ namespace Anomaly.Server.Networking
             new ConcurrentDictionary<ReferenceHub, AnomalyReplayState>();
         private static readonly ConcurrentDictionary<ReferenceHub, AnomalySequenceState> SequenceStates =
             new ConcurrentDictionary<ReferenceHub, AnomalySequenceState>();
+        private static readonly ConcurrentDictionary<ReferenceHub, AnomalyInboundRateLimiter> RateLimiters =
+            new ConcurrentDictionary<ReferenceHub, AnomalyInboundRateLimiter>();
 
         public static AnomalyReplayState GetOrCreate(ReferenceHub hub)
         {
@@ -27,17 +29,24 @@ namespace Anomaly.Server.Networking
             return SequenceStates.GetOrAdd(hub, _ => new AnomalySequenceState());
         }
 
+        public static AnomalyInboundRateLimiter GetRateLimiterOrCreate(ReferenceHub hub)
+        {
+            return RateLimiters.GetOrAdd(hub, _ => new AnomalyInboundRateLimiter());
+        }
+
         public static void Remove(ReferenceHub hub)
         {
             if (hub == null) return;
             States.TryRemove(hub, out _);
             SequenceStates.TryRemove(hub, out _);
+            RateLimiters.TryRemove(hub, out _);
         }
 
         public static void Reset()
         {
             States.Clear();
             SequenceStates.Clear();
+            RateLimiters.Clear();
         }
     }
 }

@@ -376,6 +376,7 @@
 		<Compile Include="Auth\PlayerAuth.cs" />
 		<Compile Include="Auth\ServerConnection.cs" />
 		<Compile Include="Commands\NameCommand.cs" />
+		<Compile Include="Commands\IdentityCommand.cs" />
 		<Compile Include="Components\AuthStatusOverrideComponent.cs" />
 		<Compile Include="Components\ConnectionInfoOverrideComponent.cs" />
 		<Compile Include="Components\CreditsHookComponent.cs" />
@@ -402,6 +403,8 @@
 		<Compile Include="Internal\Map\FacilityRecipeClient.cs" />
 		<Compile Include="Internal\Motion\FpcMotionHandoff.cs" />
 		<Compile Include="Internal\Motion\LocalPlayerMotionAdapter.cs" />
+		<Compile Include="Internal\Modding\ManagedModRuntime.cs" />
+		<Compile Include="Internal\Modding\ModContext.cs" />
 		<Compile Include="Internal\UI\PreloaderSkinBootstrap.cs" />
 		<Compile Include="Internal\Networking\SilentRoleChangeHandler.cs" />
 		<Compile Include="Internal\PlayerCustomization\PlayerColorTracker.cs" />
@@ -462,8 +465,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj" />
-	  <ProjectReference Include="..\Anomaly.Client.Api\Anomaly.Client.Api.csproj" />
+	  <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj"
+	                    AdditionalProperties="DeployLocal=$(DeployLocal)" />
+	  <ProjectReference Include="..\Anomaly.Client.Api\Anomaly.Client.Api.csproj"
+	                    AdditionalProperties="DeployLocal=$(DeployLocal)" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -485,9 +490,10 @@
 	  $(AnomalyClientModsDir) via env var or a .csproj.user file to redirect.
 	-->
 	<PropertyGroup>
+		<DeployLocal Condition="'$(DeployLocal)' == ''">false</DeployLocal>
 		<AnomalyClientModsDir Condition="'$(AnomalyClientModsDir)' == ''">E:\Projects\AnomalyLabs\ModdedFiles\loadouts\dev\local\Mods</AnomalyClientModsDir>
 	</PropertyGroup>
-	<Target Name="CopyToLocalClient" AfterTargets="Build">
+	<Target Name="CopyToLocalClient" AfterTargets="Build" Condition="'$(DeployLocal)' == 'true'">
 		<Message Importance="high" Text="Anomaly.Client: copying $(TargetFileName) -&gt; $(AnomalyClientModsDir)" Condition="Exists('$(AnomalyClientModsDir)')" />
 		<Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientModsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientModsDir)')" />
 		<Warning Text="Anomaly.Client: AnomalyClientModsDir does not exist: $(AnomalyClientModsDir)" Condition="!Exists('$(AnomalyClientModsDir)')" />

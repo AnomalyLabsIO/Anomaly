@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Anomaly.Bootstrap</AssemblyName>
+    <RootNamespace>Anomaly.Bootstrap</RootNamespace>
+    <DeployLocal Condition="'$(DeployLocal)' == ''">false</DeployLocal>
+    <AnomalyClientPluginsDir Condition="'$(AnomalyClientPluginsDir)' == ''">E:\Projects\AnomalyLabs\ModdedFiles\loadouts\dev\local\Plugins</AnomalyClientPluginsDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\net6\MelonLoader.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="CopyBootstrapToLocalClient" AfterTargets="Build" Condition="'$(DeployLocal)' == 'true'">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientPluginsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientPluginsDir)')" />
+    <Warning Text="Anomaly.Bootstrap: AnomalyClientPluginsDir does not exist: $(AnomalyClientPluginsDir)" Condition="!Exists('$(AnomalyClientPluginsDir)')" />
+  </Target>
+</Project>

@@ -13,8 +13,10 @@ namespace Anomaly.Shared.Networking.Messages
     /// pre-generation state in place before the vanilla <c>SeedMessage</c>
     /// triggers the client's deterministic generator.
     /// </summary>
-    public class FacilityAtlasEditsMessage : IAnomalyMessage
+    public class FacilityAtlasEditsMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public const int MaxEdits = 4096;
+        public override int MaxPayloadBytes => 2 + (MaxEdits * 9);
         public string MessageName => "anomaly:facility:atlasedits";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 
@@ -23,6 +25,8 @@ namespace Anomaly.Shared.Networking.Messages
         public void Serialize(BinaryWriter writer)
         {
             int count = Edits == null ? 0 : Edits.Count;
+            if (count > MaxEdits)
+                throw new InvalidDataException($"Atlas edit count exceeded {MaxEdits}.");
             writer.Write((ushort)count);
             for (int i = 0; i < count; i++)
             {
@@ -40,6 +44,8 @@ namespace Anomaly.Shared.Networking.Messages
         public void Deserialize(BinaryReader reader)
         {
             int count = reader.ReadUInt16();
+            if (count > MaxEdits)
+                throw new InvalidDataException($"Atlas edit count exceeded {MaxEdits}.");
             Edits = new List<AtlasPixelEdit>(count);
             for (int i = 0; i < count; i++)
             {

@@ -1,57 +1,150 @@
+using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.FileTransfer;
+using Anomaly.Shared.Networking.Messages;
+
 namespace Anomaly.Client.FileTransfer;
 
-public class ChunkBuffer
+/// <summary>
+/// Bounded, disk-backed receiver for one manifest-declared file. Chunks may
+/// arrive out of order, but they can never extend the pre-sized temp file or
+/// exceed the manifest's expected byte count.
+/// </summary>
+public sealed class ChunkBuffer : IDisposable
 {
-    private readonly byte[][] _chunks;
-    private readonly ushort _totalChunks;
-    private int _receivedCount;
+    private readonly bool[] _received;
+    private FileStream _stream;
+    private bool _committed;
 
+    public byte[] Hash { get; }
     public string OriginalPath { get; }
-    public int ReceivedCount => _receivedCount;
-    public int TotalChunks => _totalChunks;
-    public bool IsComplete => _receivedCount >= _totalChunks;
+    public uint ExpectedSize { get; }
+    public ushort TotalChunks { get; }
+    public string TempPath { get; }
+    public int ReceivedCount { get; private set; }
+    public long ReceivedBytes { get; private set; }
+    public DateTime LastActivityUtc { get; private set; }
+    public bool IsComplete => ReceivedCount == TotalChunks && ReceivedBytes == ExpectedSize;
 
-    public ChunkBuffer(ushort totalChunks, string originalPath)
+    public ChunkBuffer(ulong sessionId, byte[] hash, uint expectedSize, string originalPath)
     {
-        _totalChunks = totalChunks;
-        _chunks = new byte[totalChunks][];
-        OriginalPath = originalPath;
+        if (sessionId == 0)
+            throw new ArgumentOutOfRangeException(nameof(sessionId));
+        if (hash == null || hash.Length != 32)
+            throw new ArgumentException("File hash must be 32 bytes.", nameof(hash));
+        if (expectedSize == 0 || expectedSize > FileManifestMessage.MaxFileBytes)
+            throw new ArgumentOutOfRangeException(nameof(expectedSize));
+
+        int totalChunks = checked((int)((expectedSize + FileChunkMessage.MaxChunkBytes - 1) /
+            FileChunkMessage.MaxChunkBytes));
+        if (totalChunks <= 0 || totalChunks > FileChunkMessage.MaxChunksPerFile)
+            throw new InvalidDataException("Manifest size requires an invalid chunk count.");
+
+        Hash = (byte[])hash.Clone();
+        ExpectedSize = expectedSize;
+        OriginalPath = originalPath ?? string.Empty;
+        TotalChunks = (ushort)totalChunks;
+        _received = new bool[totalChunks];
+
+        string incomingDir = Path.Combine(Paths.FileCachePath, ".incoming");
+        Directory.CreateDirectory(incomingDir);
+        string hex = FileCache.ToHex(hash);
+        TempPath = Path.Combine(incomingDir, $"{sessionId:x16}-{hex}.part");
+        _stream = new FileStream(
+            TempPath,
+            FileMode.Create,
+            FileAccess.ReadWrite,
+            FileShare.None,
+            FileChunkMessage.MaxChunkBytes,
+            FileOptions.RandomAccess);
+        _stream.SetLength(expectedSize);
+        LastActivityUtc = DateTime.UtcNow;
     }
 
-    /// <summary>
-    /// Stores a chunk. Returns true if this was a new chunk (not a duplicate).
-    /// </summary>
-    public bool AddChunk(ushort index, byte[] data)
+    public bool TryAddChunk(
+        ushort index,
+        ushort advertisedTotalChunks,
+        byte[] data,
+        out bool duplicate,
+        out string error)
     {
-        if (index >= _totalChunks)
+        duplicate = false;
+        error = null;
+
+        if (_stream == null)
+        {
+            error = "buffer is closed";
             return false;
+        }
+        if (advertisedTotalChunks != TotalChunks || index >= TotalChunks)
+        {
+            error = "chunk count/index does not match the manifest";
+            return false;
+        }
+        if (_received[index])
+        {
+            duplicate = true;
+            return false;
+        }
 
-        if (_chunks[index] != null)
-            return false; // Duplicate
+        long offset = (long)index * FileChunkMessage.MaxChunkBytes;
+        int expectedLength = (int)Math.Min(
+            FileChunkMessage.MaxChunkBytes,
+            ExpectedSize - offset);
+        if (data == null || data.Length != expectedLength)
+        {
+            error = $"chunk length {data?.Length ?? 0} did not match expected {expectedLength}";
+            return false;
+        }
 
-        _chunks[index] = data;
-        _receivedCount++;
+        _stream.Position = offset;
+        _stream.Write(data, 0, data.Length);
+        _received[index] = true;
+        ReceivedCount++;
+        ReceivedBytes += data.Length;
+        LastActivityUtc = DateTime.UtcNow;
         return true;
     }
 
-    /// <summary>
-    /// Reassembles all chunks into a single byte array.
-    /// Only call when IsComplete is true.
-    /// </summary>
-    public byte[] Reassemble()
+    public bool CommitToCache()
     {
-        int totalSize = 0;
-        for (int i = 0; i < _totalChunks; i++)
-            totalSize += _chunks[i].Length;
+        if (!IsComplete || _stream == null)
+            return false;
 
-        var result = new byte[totalSize];
-        int offset = 0;
-        for (int i = 0; i < _totalChunks; i++)
+        _stream.Flush(flushToDisk: true);
+        _stream.Dispose();
+        _stream = null;
+
+        _committed = FileCache.ImportVerifiedFile(
+            TempPath,
+            Hash,
+            OriginalPath,
+            ExpectedSize);
+        return _committed;
+    }
+
+    public void Dispose()
+    {
+        try
         {
-            Array.Copy(_chunks[i], 0, result, offset, _chunks[i].Length);
-            offset += _chunks[i].Length;
+            _stream?.Dispose();
         }
+        catch
+        {
+            // Best-effort cleanup during disconnect/abort.
+        }
+        _stream = null;
 
-        return result;
+        if (_committed)
+            return;
+
+        try
+        {
+            if (File.Exists(TempPath))
+                File.Delete(TempPath);
+        }
+        catch
+        {
+            // Best-effort cleanup; startup cache maintenance can remove stale .part files.
+        }
     }
 }

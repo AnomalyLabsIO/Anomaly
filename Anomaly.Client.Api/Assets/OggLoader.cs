@@ -4,70 +4,98 @@ using NVorbis;
 
 namespace Anomaly.Client.Api.Assets
 {
-    /// <summary>
-    /// Decodes OGG Vorbis bytes into interleaved float PCM via the pure-managed
-    /// <see cref="VorbisReader"/>. Caller passes the result to
-    /// <see cref="AudioClipFactory"/> to materialize an <c>AudioClip</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// We don't use Unity's <c>UnityWebRequestMultimedia.GetAudioClip</c> path
-    /// because it requires a real URL on disk and the Il2Cpp interop coroutine
-    /// surface is awkward for synchronous use. Going pure-managed mirrors how
-    /// <see cref="PngLoader"/> bypasses <c>ImageConversion.LoadImage</c>.
-    /// </para>
-    /// </remarks>
     internal static class OggLoader
     {
         public struct PcmData
         {
-            public float[] Samples;     // interleaved if Channels > 1
+            public float[] Samples;
             public int Channels;
             public int SampleRate;
         }
 
-        public static bool TryDecode(byte[] bytes, out PcmData pcm)
+        internal static bool TryDecode(
+            byte[] bytes,
+            out PcmData pcm,
+            out RemoteAssetDecodeBudget.Reservation reservation)
         {
             pcm = default;
-            if (bytes == null || bytes.Length < 4)
+            reservation = null;
+            if (bytes == null || bytes.Length < 4 ||
+                bytes.Length > RemoteAssetDecodeBudget.MaxEncodedAudioBytes)
                 return false;
 
             try
             {
-                using var ms = new MemoryStream(bytes, writable: false);
-                using var reader = new VorbisReader(ms, closeOnDispose: false);
+                using var stream = new MemoryStream(bytes, writable: false);
+                using var reader = new VorbisReader(stream, closeOnDispose: false);
 
                 int channels = reader.Channels;
                 int sampleRate = reader.SampleRate;
-                long totalSamples = reader.TotalSamples; // per channel
-
-                if (channels <= 0 || sampleRate <= 0 || totalSamples <= 0)
+                long samplesPerChannel = reader.TotalSamples;
+                if (!ValidateMetadata(channels, sampleRate, samplesPerChannel, out long interleavedSamples))
                     return false;
 
-                long totalInterleaved = totalSamples * channels;
-                if (totalInterleaved > int.MaxValue)
+                long liveBytes = checked(interleavedSamples * sizeof(float));
+                long peakBytes = checked(liveBytes + bytes.Length + (4L * 1024L * 1024L));
+                if (!RemoteAssetDecodeBudget.TryReserve(
+                        peakBytes,
+                        liveBytes,
+                        out reservation,
+                        out _))
                     return false;
 
-                var samples = new float[totalInterleaved];
+                var samples = new float[checked((int)interleavedSamples)];
                 int read = 0;
                 int chunk;
-                while ((chunk = reader.ReadSamples(samples, read, samples.Length - read)) > 0)
+                while (read < samples.Length &&
+                       (chunk = reader.ReadSamples(samples, read, samples.Length - read)) > 0)
                     read += chunk;
 
-                if (read == 0)
-                    return false;
-
-                if (read < samples.Length)
+                if (read <= 0)
                 {
-                    var trimmed = new float[read];
-                    Array.Copy(samples, trimmed, read);
-                    samples = trimmed;
+                    reservation.Dispose();
+                    reservation = null;
+                    return false;
                 }
 
-                pcm = new PcmData { Samples = samples, Channels = channels, SampleRate = sampleRate };
+                pcm = new PcmData
+                {
+                    Samples = samples,
+                    Channels = channels,
+                    SampleRate = sampleRate
+                };
                 return true;
             }
             catch (Exception)
+            {
+                reservation?.Dispose();
+                reservation = null;
+                pcm = default;
+                return false;
+            }
+        }
+
+        internal static bool ValidateMetadata(
+            int channels,
+            int sampleRate,
+            long samplesPerChannel,
+            out long interleavedSamples)
+        {
+            interleavedSamples = 0;
+            if (channels <= 0 || channels > RemoteAssetDecodeBudget.MaxAudioChannels ||
+                sampleRate < RemoteAssetDecodeBudget.MinAudioSampleRate ||
+                sampleRate > RemoteAssetDecodeBudget.MaxAudioSampleRate ||
+                samplesPerChannel <= 0 ||
+                (double)samplesPerChannel / sampleRate > RemoteAssetDecodeBudget.MaxAudioDurationSeconds)
+                return false;
+
+            try
+            {
+                interleavedSamples = checked(samplesPerChannel * channels);
+                return checked(interleavedSamples * sizeof(float)) <=
+                       RemoteAssetDecodeBudget.MaxDecodedBytesPerAsset;
+            }
+            catch (OverflowException)
             {
                 return false;
             }

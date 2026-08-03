@@ -8,8 +8,9 @@ namespace Anomaly.Shared.Networking.Messages
     /// time the local color changes mid-game). Sender identity is implicit
     /// from the transport, so no NetId or UserId is included on the wire.
     /// </summary>
-    public class SetFavoriteColorMessage : IAnomalyMessage
+    public class SetFavoriteColorMessage : AuthenticatedClientToServerMessage, IAnomalyMessage
     {
+        public override int MaxPayloadBytes => 3;
         public string MessageName => "anomaly:player:setfavoritecolor";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 

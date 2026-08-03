@@ -6,8 +6,9 @@ namespace Anomaly.Shared.Networking.Messages
     /// Server → client. Replaces the main texture on a specific renderer/material
     /// slot of a spawned asset.
     /// </summary>
-    public class AssetSetTextureMessage : IAnomalyMessage
+    public class AssetSetTextureMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public override int MaxPayloadBytes => 40;
         public string MessageName => "anomaly:asset:texture";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 
@@ -18,6 +19,8 @@ namespace Anomaly.Shared.Networking.Messages
 
         public void Serialize(BinaryWriter writer)
         {
+            if (TextureHash == null || TextureHash.Length != 32)
+                throw new InvalidDataException("Texture hash must be 32 bytes.");
             writer.Write(ObjectId);
             writer.Write(RendererIndex);
             writer.Write(MaterialIndex);
@@ -30,6 +33,8 @@ namespace Anomaly.Shared.Networking.Messages
             RendererIndex = reader.ReadUInt16();
             MaterialIndex = reader.ReadUInt16();
             TextureHash = reader.ReadBytes(32);
+            if (TextureHash.Length != 32)
+                throw new EndOfStreamException("Texture hash was truncated.");
         }
     }
 }

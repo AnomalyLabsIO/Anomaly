@@ -11,9 +11,12 @@ namespace Anomaly.Client.Api.Networking;
 public static class AnomalyReplayTable
 {
     public static AnomalyReplayState Instance { get; private set; } = new AnomalyReplayState();
+    public static AnomalyInboundRateLimiter InboundRateLimiter { get; private set; } =
+        new AnomalyInboundRateLimiter();
 
     public static void Reset()
     {
         Instance = new AnomalyReplayState();
+        InboundRateLimiter = new AnomalyInboundRateLimiter();
     }
 }

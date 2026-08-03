@@ -3,9 +3,9 @@ using System.Text;
 using Anomaly.Server.Auth;
 using Anomaly.Server.Networking;
 using Anomaly.Server.Utils;
+using Anomaly.Shared.Auth;
 using Anomaly.Shared.Networking;
 using CentralAuth;
-using Cryptography;
 using HarmonyLib;
 using LabApi.Events.Arguments.PlayerEvents;
 using LabApi.Events.Handlers;
@@ -20,7 +20,7 @@ namespace Anomaly.Server.Patches;
 public static class PlayerAuthenticationManagerPatch
 {
     private const int EncryptedMessageHeaderSize = 5;
-    private const int AesGcmNonceSize = 32;
+    private const uint GenericTransportRateKeyPrefix = 0xFFF00000u;
     private const string DummyUserId = "ID_Dummy";
     
     /*[HarmonyPostfix]
@@ -67,8 +67,18 @@ public static class PlayerAuthenticationManagerPatch
 
         __instance.UserId = player.UserId;
         __instance._hub.nicknameSync.UpdateNickname(player.NickName);
-        __instance._hub.encryptedChannelManager.EncryptionKey = player.SharedKey;
-        OffThreadLogger.Info($"Authenticated {player.NickName} ({player.UserId}) from {endPoint}, encryption key set ({player.SharedKey?.Length ?? 0} bytes)");
+        try
+        {
+            AuthenticatedTransportSessions.Register(__instance._hub, player);
+            __instance._hub.encryptedChannelManager.EncryptionKey = null;
+        }
+        catch (Exception ex)
+        {
+            OffThreadLogger.Error($"Authentication failed for {player.UserId}: invalid transport session: {ex.Message}");
+            __instance.RejectAuthentication("Authentication failed Server Side", null, false);
+            return;
+        }
+        OffThreadLogger.Info($"Authenticated {player.NickName} ({player.UserId}) from {endPoint}, directional protocol-v2 transport enabled");
         __instance._hub.serverRoles.RefreshPermissions(false);
 
         // Vanilla fires PlayerEvents.OnJoined from
@@ -173,13 +183,28 @@ public static class PlayerAuthenticationManagerPatch
         }
         else
         {
-            if (__instance.EncryptionKey == null)
+            if (!ReferenceHub.TryGetHub(__instance.connectionToClient, out var targetHub))
             {
-                OffThreadLogger.Warn("Tried to send encrypted byte[] message, but no key was found");
+                OffThreadLogger.Warn("Tried to send encrypted byte[] message, but no hub was found for the connection");
                 __result = false;
                 return false;
             }
-            var encryptedData = Cryptography.AES.AesGcmEncrypt(data, __instance.EncryptionKey, EncryptedChannelManager.SecureRandom);
+            byte[] encryptedData;
+            try
+            {
+                if (!AuthenticatedTransportSessions.TryEncryptToClient(targetHub, data, out encryptedData))
+                {
+                    OffThreadLogger.Warn("Tried to send encrypted byte[] message, but no protocol-v2 session was found");
+                    __result = false;
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                OffThreadLogger.Warn($"Failed to encrypt server-to-client byte[] message: {ex.GetType().Name}: {ex.Message}");
+                __result = false;
+                return false;
+            }
             messageOut = new EncryptedChannelManager.EncryptedMessageOutside(EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encryptedData);
         }
 
@@ -216,13 +241,28 @@ public static class PlayerAuthenticationManagerPatch
         }
         else
         {
-            if (__instance.EncryptionKey == null)
+            if (!ReferenceHub.TryGetHub(__instance.connectionToClient, out var targetHub))
             {
-                OffThreadLogger.Warn("Tried to send encrypted message, but no key was found");
+                OffThreadLogger.Warn("Tried to send encrypted message, but no hub was found for the connection");
                 __result = false;
                 return false;
             }
-            var encryptedData = Cryptography.AES.AesGcmEncrypt(data, __instance.EncryptionKey, EncryptedChannelManager.SecureRandom);
+            byte[] encryptedData;
+            try
+            {
+                if (!AuthenticatedTransportSessions.TryEncryptToClient(targetHub, data, out encryptedData))
+                {
+                    OffThreadLogger.Warn("Tried to send encrypted message, but no protocol-v2 session was found");
+                    __result = false;
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                OffThreadLogger.Warn($"Failed to encrypt server-to-client message: {ex.GetType().Name}: {ex.Message}");
+                __result = false;
+                return false;
+            }
             messageOut = new EncryptedChannelManager.EncryptedMessageOutside(EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encryptedData);
         }
 
@@ -322,24 +362,19 @@ public static class PlayerAuthenticationManagerPatch
             byte[] decryptedData;
             if (encrypted)
             {
-                var encryptionKey = hub.encryptedChannelManager.EncryptionKey;
-                if (encryptionKey == null)
+                if (!AuthTransportCrypto.IsVersion2Envelope(packedData))
                 {
-                    OffThreadLogger.Warn("Got EncryptedMessage eventhough no Key was set");
-                    return false;
-                }
-
-                if (packedData.Length < AesGcmNonceSize)
-                {
-                    OffThreadLogger.Warn(
-                        $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: encrypted payload too short " +
-                        $"({packedData.Length} bytes).");
+                    OffThreadLogger.Warn($"Rejected legacy/bidirectional encrypted envelope from {hub.LoggedNameFromRefHub()} during protocol v2.");
                     return false;
                 }
 
                 try
                 {
-                    decryptedData = AES.AesGcmDecrypt(packedData, encryptionKey);
+                    if (!AuthenticatedTransportSessions.TryDecryptFromClient(hub, packedData, out decryptedData))
+                    {
+                        OffThreadLogger.Warn($"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: no protocol-v2 transport session.");
+                        return false;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -386,6 +421,28 @@ public static class PlayerAuthenticationManagerPatch
                 OffThreadLogger.Warn(
                     $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: decoded payload too short " +
                     $"({decryptedData.Length} bytes, channel={channel}, level={packed.Level}).");
+                return false;
+            }
+
+            int genericPayloadBytes = decryptedData.Length - EncryptedMessageHeaderSize;
+            uint genericRateKey = GenericTransportRateKeyPrefix | (byte)channel;
+            var genericRateResult = AnomalyReplayTable.GetRateLimiterOrCreate(hub)
+                .TryAccept(genericRateKey, genericPayloadBytes);
+            if (!genericRateResult.Allowed)
+            {
+                if (genericRateResult.ShouldLog)
+                {
+                    OffThreadLogger.Warn(
+                        $"Rate-limited generic encrypted channel {channel} from {hub.LoggedNameFromRefHub()} " +
+                        $"({genericPayloadBytes} bytes, drops={genericRateResult.DroppedInWindow}).");
+                }
+                if (genericRateResult.ShouldDisconnect && conn != null)
+                {
+                    OffThreadLogger.Error(
+                        $"Disconnecting {hub.LoggedNameFromRefHub()} after sustained generic " +
+                        "encrypted-channel traffic exceeded bounded limits.");
+                    conn.Disconnect();
+                }
                 return false;
             }
 

@@ -9,6 +9,7 @@ namespace Anomaly.Client.Diagnostics;
 internal static class CrashHooks
 {
     private static int _isHandlingCrash;
+    private static int _registered;
 
     // First-chance exception flood detection
     private static readonly ConcurrentDictionary<string, FloodTracker> _floodTrackers = new();
@@ -56,9 +57,13 @@ internal static class CrashHooks
 
     internal static void RegisterAll()
     {
+        if (Interlocked.Exchange(ref _registered, 1) != 0)
+            return;
+
         RegisterManaged();
         RegisterUnityLog();
-        RegisterNative();
+        if (DiagnosticPrivacyPolicy.MiniDumpsEnabled)
+            RegisterNative();
     }
 
     private static void RegisterManaged()
@@ -104,14 +109,18 @@ internal static class CrashHooks
         {
             var ex = args.ExceptionObject as Exception;
             var report = BuildReport("UnhandledException", ex);
-            CrashReportWriter.Write(report);
 
-            if (args.IsTerminating)
+            if (args.IsTerminating && DiagnosticPrivacyPolicy.MiniDumpsEnabled)
             {
-                string dumpPath = GetDumpPath(report);
-                NativeMethods.WriteMiniDump(dumpPath, NativeMethods.MiniDumpNormal);
-                report.MiniDumpPath = dumpPath;
+                Directory.CreateDirectory(Paths.CrashReportsPath);
+                string dumpPath = CrashReportWriter.GetArtifactPath(report, ".dmp");
+                if (NativeMethods.WriteMiniDump(dumpPath, NativeMethods.MiniDumpNormal))
+                    report.MiniDumpPath = Path.GetFileName(dumpPath);
+                else
+                    TryDelete(dumpPath);
             }
+
+            CrashReportWriter.Write(report);
         }
         catch { /* crash handler must not throw */ }
         finally
@@ -292,20 +301,35 @@ internal static class CrashHooks
     {
         try
         {
+            if (!DiagnosticPrivacyPolicy.MiniDumpsEnabled)
+                return NativeMethods.EXCEPTION_EXECUTE_HANDLER;
+
             string dir = Paths.CrashReportsPath;
             if (!Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            string timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
-            string guid = Guid.NewGuid().ToString("N").Substring(0, 6);
-            string dumpPath = Path.Combine(dir, $"crash-{timestamp}-NativeCrash-{guid}.dmp");
-            string textPath = Path.Combine(dir, $"crash-{timestamp}-NativeCrash-{guid}.txt");
+            var report = new CrashReport
+            {
+                ReportId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                TriggerType = "NativeCrash"
+            };
+            string dumpPath = CrashReportWriter.GetArtifactPath(report, ".dmp");
+            string textPath = CrashReportWriter.GetArtifactPath(report, ".txt");
 
-            NativeMethods.WriteMiniDump(dumpPath, NativeMethods.MiniDumpNormal, exceptionPointers);
+            bool dumped = NativeMethods.WriteMiniDump(
+                dumpPath,
+                NativeMethods.MiniDumpNormal,
+                exceptionPointers);
+            if (!dumped)
+                TryDelete(dumpPath);
 
             // Write minimal text report (managed serialization may not be safe)
             File.WriteAllText(textPath,
-                $"Native crash at {DateTime.UtcNow:O}\nMiniDump: {dumpPath}\n");
+                $"ArtifactId: {report.ReportId}\n" +
+                $"Native crash at {report.Timestamp:O}\n" +
+                $"MiniDump: {(dumped ? Path.GetFileName(dumpPath) : "not written")}\n" +
+                DiagnosticPrivacyPolicy.ReviewBeforeShareNotice + "\n");
         }
         catch { /* SEH handler must not throw */ }
 
@@ -331,12 +355,17 @@ internal static class CrashHooks
         };
     }
 
-    private static string GetDumpPath(CrashReport report)
+    private static void TryDelete(string path)
     {
-        string dir = Paths.CrashReportsPath;
-        string timestamp = report.Timestamp.ToString("yyyyMMdd-HHmmss");
-        string guid = report.ReportId.Substring(0, 6);
-        return Path.Combine(dir, $"crash-{timestamp}-{report.TriggerType}-{guid}.dmp");
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // Best effort in crash context.
+        }
     }
 
     private class FloodTracker

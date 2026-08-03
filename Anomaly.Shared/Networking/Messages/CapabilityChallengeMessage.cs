@@ -7,14 +7,12 @@ namespace Anomaly.Shared.Networking.Messages
     /// before a capability snapshot is accepted.
     /// </summary>
     public sealed class CapabilityChallengeMessage :
-        IAnomalyMessage,
-        IDirectionalAnomalyMessage,
-        IBoundedAnomalyMessage
+        AuthenticatedServerToClientMessage,
+        IAnomalyMessage
     {
         public string MessageName => "anomaly:capability:challenge";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
-        public AnomalyMessageDirection Direction => AnomalyMessageDirection.ServerToClient;
-        public int MaxPayloadBytes => 8;
+        public override int MaxPayloadBytes => 8;
 
         public uint RoundEpoch { get; set; }
         public uint Sequence { get; set; }

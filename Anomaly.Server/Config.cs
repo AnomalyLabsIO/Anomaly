@@ -15,6 +15,14 @@ public class Config
     public bool RequirePassword { get; set; } = false;
 
     /// <summary>
+    /// Temporary compatibility switch for the legacy verifier-equivalent password
+    /// proof. No vetted OPAQUE implementation supports both target runtimes yet, so
+    /// this mode is disabled by default and, when enabled, is accepted only from a
+    /// loopback address. It must not be exposed to internet clients.
+    /// </summary>
+    public bool EnableLegacyPasswordAuthOnLoopback { get; set; } = false;
+
+    /// <summary>
     /// PBKDF2 iterations used when saving a new password with the LocalAdmin
     /// password command. Existing verifier files keep their stored iteration count.
     /// </summary>

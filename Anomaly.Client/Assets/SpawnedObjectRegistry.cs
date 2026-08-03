@@ -14,6 +14,11 @@ namespace Anomaly.Client.Assets
     /// </summary>
     public static class SpawnedObjectRegistry
     {
+        // Generic server-selected AssetBundle prefabs are not a safe v1 activation surface.
+        // Items use their narrower content-registration path instead.
+        private static readonly bool RemotePrefabSpawningEnabled = false;
+        private static bool _remotePrefabWarningLogged;
+
         private class Entry
         {
             public uint Id;
@@ -61,6 +66,7 @@ namespace Anomaly.Client.Assets
                     UnityEngine.Object.Destroy(entry.GameObject);
             }
             _spawns.Clear();
+            _remotePrefabWarningLogged = false;
         }
 
         private static void OnMessage(Shared.Networking.IAnomalyMessage msg)
@@ -78,6 +84,18 @@ namespace Anomaly.Client.Assets
 
         private static void HandleSpawn(AssetSpawnMessage msg)
         {
+            if (!RemotePrefabSpawningEnabled)
+            {
+                if (!_remotePrefabWarningLogged)
+                {
+                    _remotePrefabWarningLogged = true;
+                    MelonLogger.Warning(
+                        "SpawnedObjectRegistry: generic remote prefab spawning is disabled in v1; " +
+                        "only bounded items-only content paths may activate downloaded assets.");
+                }
+                return;
+            }
+
             if (_spawns.ContainsKey(msg.ObjectId))
             {
                 MelonLogger.Warning($"SpawnedObjectRegistry: duplicate spawn id {msg.ObjectId}, ignoring.");
@@ -90,10 +108,17 @@ namespace Anomaly.Client.Assets
                 return;
             }
 
+            if (!ScriptStripper.IsSafePrefab(prefab, out string unsafeReason))
+            {
+                MelonLogger.Warning(
+                    $"SpawnedObjectRegistry: rejected unsafe prefab '{msg.BundleAssetName}' for spawn " +
+                    $"{msg.ObjectId}: {unsafeReason}.");
+                return;
+            }
+
             var go = UnityEngine.Object.Instantiate(prefab);
             go.name = $"Anomaly:{msg.ObjectId}:{msg.BundleAssetName}";
 
-            ScriptStripper.Strip(go);
             ShaderRemapper.Remap(go);
 
             var t = go.transform;

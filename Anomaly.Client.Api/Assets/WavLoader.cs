@@ -4,156 +4,229 @@ using System.Text;
 
 namespace Anomaly.Client.Api.Assets
 {
-    /// <summary>
-    /// Decodes uncompressed RIFF/WAV bytes into interleaved float PCM. Supports
-    /// PCM int16 / int24 / int32 and IEEE float32. Compressed formats (ADPCM,
-    /// A-law, mu-law) are rejected up front.
-    /// </summary>
     internal static class WavLoader
     {
         private const ushort WaveFormatPcm = 0x0001;
         private const ushort WaveFormatIeeeFloat = 0x0003;
         private const ushort WaveFormatExtensible = 0xFFFE;
 
-        public static bool TryDecode(byte[] bytes, out OggLoader.PcmData pcm)
+        internal static bool TryDecode(
+            byte[] bytes,
+            out OggLoader.PcmData pcm,
+            out RemoteAssetDecodeBudget.Reservation reservation)
         {
             pcm = default;
-            if (bytes == null || bytes.Length < 44)
+            reservation = null;
+            if (bytes == null || bytes.Length < 44 ||
+                bytes.Length > RemoteAssetDecodeBudget.MaxEncodedAudioBytes)
                 return false;
 
             try
             {
-                using var ms = new MemoryStream(bytes, writable: false);
-                using var br = new BinaryReader(ms, Encoding.ASCII, leaveOpen: false);
-
-                if (ReadFourCc(br) != "RIFF") return false;
-                br.ReadUInt32();                    // riff size
-                if (ReadFourCc(br) != "WAVE") return false;
-
-                ushort formatTag = 0;
-                ushort channels = 0;
-                uint sampleRate = 0;
-                ushort bitsPerSample = 0;
-                byte[] data = null;
-
-                while (ms.Position < ms.Length - 8)
-                {
-                    string chunkId = ReadFourCc(br);
-                    uint chunkSize = br.ReadUInt32();
-                    long chunkEnd = ms.Position + chunkSize;
-
-                    if (chunkId == "fmt ")
-                    {
-                        formatTag = br.ReadUInt16();
-                        channels = br.ReadUInt16();
-                        sampleRate = br.ReadUInt32();
-                        br.ReadUInt32();            // byte rate
-                        br.ReadUInt16();            // block align
-                        bitsPerSample = br.ReadUInt16();
-
-                        if (formatTag == WaveFormatExtensible && chunkSize >= 40)
-                        {
-                            br.ReadUInt16();        // cb size
-                            br.ReadUInt16();        // valid bits per sample
-                            br.ReadUInt32();        // channel mask
-                            // First two bytes of the SubFormat GUID are the actual format tag.
-                            formatTag = br.ReadUInt16();
-                        }
-                    }
-                    else if (chunkId == "data")
-                    {
-                        data = br.ReadBytes((int)chunkSize);
-                    }
-
-                    // Pad to even boundary (RIFF chunks are word-aligned).
-                    if ((chunkEnd & 1) == 1) chunkEnd++;
-                    ms.Position = chunkEnd;
-                }
-
-                if (channels == 0 || sampleRate == 0 || data == null || data.Length == 0)
+                if (!TryReadMetadata(
+                        bytes,
+                        out ushort formatTag,
+                        out ushort channels,
+                        out int sampleRate,
+                        out ushort bitsPerSample,
+                        out int dataOffset,
+                        out int dataLength,
+                        out long sampleCount))
                     return false;
 
-                float[] samples = formatTag switch
-                {
-                    WaveFormatPcm => bitsPerSample switch
-                    {
-                        16 => DecodePcm16(data),
-                        24 => DecodePcm24(data),
-                        32 => DecodePcm32(data),
-                        _ => null,
-                    },
-                    WaveFormatIeeeFloat => bitsPerSample == 32 ? DecodeFloat32(data) : null,
-                    _ => null,
-                };
+                long samplesPerChannel = sampleCount / channels;
+                if (!OggLoader.ValidateMetadata(
+                        channels,
+                        sampleRate,
+                        samplesPerChannel,
+                        out long interleavedSamples) ||
+                    interleavedSamples != sampleCount)
+                    return false;
 
+                long liveBytes = checked(sampleCount * sizeof(float));
+                long peakBytes = checked(liveBytes + bytes.Length);
+                if (!RemoteAssetDecodeBudget.TryReserve(
+                        peakBytes,
+                        liveBytes,
+                        out reservation,
+                        out _))
+                    return false;
+
+                float[] samples = Decode(
+                    bytes,
+                    dataOffset,
+                    dataLength,
+                    formatTag,
+                    bitsPerSample,
+                    checked((int)sampleCount));
                 if (samples == null)
+                {
+                    reservation.Dispose();
+                    reservation = null;
                     return false;
+                }
 
                 pcm = new OggLoader.PcmData
                 {
                     Samples = samples,
                     Channels = channels,
-                    SampleRate = (int)sampleRate,
+                    SampleRate = sampleRate
                 };
                 return true;
             }
             catch (Exception)
             {
+                reservation?.Dispose();
+                reservation = null;
+                pcm = default;
                 return false;
             }
         }
 
-        private static string ReadFourCc(BinaryReader br) => Encoding.ASCII.GetString(br.ReadBytes(4));
-
-        private static float[] DecodePcm16(byte[] data)
+        internal static bool TryReadMetadata(
+            byte[] bytes,
+            out ushort formatTag,
+            out ushort channels,
+            out int sampleRate,
+            out ushort bitsPerSample,
+            out int dataOffset,
+            out int dataLength,
+            out long sampleCount)
         {
-            int n = data.Length / 2;
-            var s = new float[n];
-            for (int i = 0; i < n; i++)
+            formatTag = 0;
+            channels = 0;
+            sampleRate = 0;
+            bitsPerSample = 0;
+            dataOffset = 0;
+            dataLength = 0;
+            sampleCount = 0;
+
+            if (bytes == null || bytes.Length < 44)
+                return false;
+
+            using var stream = new MemoryStream(bytes, writable: false);
+            using var reader = new BinaryReader(stream, Encoding.ASCII, leaveOpen: false);
+            if (ReadFourCc(reader) != "RIFF") return false;
+            uint riffSize = reader.ReadUInt32();
+            if (riffSize > bytes.Length - 8) return false;
+            if (ReadFourCc(reader) != "WAVE") return false;
+
+            bool foundFormat = false;
+            bool foundData = false;
+            while (stream.Position <= stream.Length - 8)
             {
-                short v = (short)(data[i * 2] | (data[i * 2 + 1] << 8));
-                s[i] = v / 32768f;
+                string chunkId = ReadFourCc(reader);
+                uint rawChunkSize = reader.ReadUInt32();
+                long chunkStart = stream.Position;
+                long chunkEnd = checked(chunkStart + rawChunkSize);
+                if (chunkEnd > stream.Length)
+                    return false;
+
+                if (chunkId == "fmt ")
+                {
+                    if (rawChunkSize < 16)
+                        return false;
+                    formatTag = reader.ReadUInt16();
+                    channels = reader.ReadUInt16();
+                    uint rawSampleRate = reader.ReadUInt32();
+                    reader.ReadUInt32();
+                    reader.ReadUInt16();
+                    bitsPerSample = reader.ReadUInt16();
+                    if (rawSampleRate > int.MaxValue)
+                        return false;
+                    sampleRate = (int)rawSampleRate;
+
+                    if (formatTag == WaveFormatExtensible)
+                    {
+                        if (rawChunkSize < 40)
+                            return false;
+                        reader.ReadUInt16();
+                        reader.ReadUInt16();
+                        reader.ReadUInt32();
+                        formatTag = reader.ReadUInt16();
+                    }
+                    foundFormat = true;
+                }
+                else if (chunkId == "data" && !foundData)
+                {
+                    if (rawChunkSize == 0 || rawChunkSize > int.MaxValue || chunkStart > int.MaxValue)
+                        return false;
+                    dataOffset = (int)chunkStart;
+                    dataLength = (int)rawChunkSize;
+                    foundData = true;
+                }
+
+                long paddedEnd = chunkEnd + (rawChunkSize & 1u);
+                if (paddedEnd > stream.Length)
+                    return false;
+                stream.Position = paddedEnd;
             }
-            return s;
+
+            if (!foundFormat || !foundData || channels == 0 || sampleRate == 0)
+                return false;
+            int bytesPerSample = bitsPerSample / 8;
+            if ((formatTag != WaveFormatPcm && formatTag != WaveFormatIeeeFloat) ||
+                (bitsPerSample != 16 && bitsPerSample != 24 && bitsPerSample != 32) ||
+                (formatTag == WaveFormatIeeeFloat && bitsPerSample != 32) ||
+                bytesPerSample == 0 || dataLength % bytesPerSample != 0)
+                return false;
+
+            sampleCount = dataLength / bytesPerSample;
+            return sampleCount > 0 && sampleCount % channels == 0;
         }
 
-        private static float[] DecodePcm24(byte[] data)
+        private static float[] Decode(
+            byte[] bytes,
+            int offset,
+            int length,
+            ushort formatTag,
+            ushort bitsPerSample,
+            int sampleCount)
         {
-            int n = data.Length / 3;
-            var s = new float[n];
-            for (int i = 0; i < n; i++)
+            var samples = new float[sampleCount];
+            if (formatTag == WaveFormatIeeeFloat)
             {
-                int b0 = data[i * 3];
-                int b1 = data[i * 3 + 1];
-                int b2 = data[i * 3 + 2];
-                int v = (b2 << 24) | (b1 << 16) | (b0 << 8);
-                v >>= 8;                            // sign-extend 24 -> 32
-                s[i] = v / 8388608f;                // 2^23
+                Buffer.BlockCopy(bytes, offset, samples, 0, length);
+                for (int i = 0; i < samples.Length; i++)
+                {
+                    if (float.IsNaN(samples[i]) || float.IsInfinity(samples[i]))
+                        samples[i] = 0f;
+                }
+                return samples;
             }
-            return s;
+
+            int bytesPerSample = bitsPerSample / 8;
+            for (int i = 0; i < sampleCount; i++)
+            {
+                int p = offset + (i * bytesPerSample);
+                switch (bitsPerSample)
+                {
+                    case 16:
+                        short value16 = (short)(bytes[p] | (bytes[p + 1] << 8));
+                        samples[i] = value16 / 32768f;
+                        break;
+                    case 24:
+                        int value24 = (bytes[p + 2] << 24) | (bytes[p + 1] << 16) | (bytes[p] << 8);
+                        samples[i] = (value24 >> 8) / 8388608f;
+                        break;
+                    case 32:
+                        int value32 = bytes[p] |
+                                      (bytes[p + 1] << 8) |
+                                      (bytes[p + 2] << 16) |
+                                      (bytes[p + 3] << 24);
+                        samples[i] = value32 / 2147483648f;
+                        break;
+                    default:
+                        return null;
+                }
+            }
+            return samples;
         }
 
-        private static float[] DecodePcm32(byte[] data)
+        private static string ReadFourCc(BinaryReader reader)
         {
-            int n = data.Length / 4;
-            var s = new float[n];
-            for (int i = 0; i < n; i++)
-            {
-                int v = data[i * 4]
-                    | (data[i * 4 + 1] << 8)
-                    | (data[i * 4 + 2] << 16)
-                    | (data[i * 4 + 3] << 24);
-                s[i] = v / 2147483648f;             // 2^31
-            }
-            return s;
-        }
-
-        private static float[] DecodeFloat32(byte[] data)
-        {
-            int n = data.Length / 4;
-            var s = new float[n];
-            Buffer.BlockCopy(data, 0, s, 0, n * 4);
-            return s;
+            byte[] bytes = reader.ReadBytes(4);
+            return bytes.Length == 4 ? Encoding.ASCII.GetString(bytes) : string.Empty;
         }
     }
 }

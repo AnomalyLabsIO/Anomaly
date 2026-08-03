@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -5,19 +6,48 @@ using Anomaly.Shared.Assets;
 
 namespace Anomaly.Shared.Networking.Messages
 {
-    public class FileManifestMessage : IAnomalyMessage
+    public class FileManifestMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
+        public const int MaxFiles = 256;
+        public const int MaxPathBytes = 255;
+        public const uint MaxFileBytes = 64u * 1024u * 1024u;
+        public const long MaxAggregateBytes = 256L * 1024L * 1024L;
+        public override int MaxPayloadBytes => 96 * 1024;
+
         public string MessageName => "anomaly:filemanifest";
         public MessageChannel TransportChannel => MessageChannel.ReliableUnordered;
 
+        public ulong SessionId { get; set; }
         public List<FileEntry> Files { get; set; } = new List<FileEntry>();
 
         public void Serialize(BinaryWriter writer)
         {
+            if (SessionId == 0)
+                throw new InvalidDataException("File-transfer session id cannot be zero.");
+            if (Files == null || Files.Count > MaxFiles)
+                throw new InvalidDataException($"Manifest file count exceeded {MaxFiles}.");
+
+            writer.Write(SessionId);
             writer.Write((ushort)Files.Count);
+            long aggregateBytes = 0;
+            var hashes = new HashSet<string>(StringComparer.Ordinal);
             foreach (var file in Files)
             {
-                var pathBytes = Encoding.UTF8.GetBytes(file.Path);
+                ValidateRelativePath(file.Path);
+                var pathBytes = Utf8.GetBytes(file.Path);
+                if (pathBytes.Length == 0 || pathBytes.Length > MaxPathBytes)
+                    throw new InvalidDataException($"Manifest path must be 1-{MaxPathBytes} UTF-8 bytes.");
+                if (file.Hash == null || file.Hash.Length != 32)
+                    throw new InvalidDataException("Manifest hash must be 32 bytes.");
+                if (file.Size == 0 || file.Size > MaxFileBytes)
+                    throw new InvalidDataException($"Manifest file size must be 1-{MaxFileBytes} bytes.");
+                aggregateBytes += file.Size;
+                if (aggregateBytes > MaxAggregateBytes)
+                    throw new InvalidDataException($"Manifest aggregate size exceeded {MaxAggregateBytes} bytes.");
+                if (!hashes.Add(BitConverter.ToString(file.Hash)))
+                    throw new InvalidDataException("Manifest contained a duplicate content hash.");
+                ValidateKind(file.Kind);
                 writer.Write((byte)pathBytes.Length);
                 writer.Write(pathBytes);
                 writer.Write(file.Hash);
@@ -28,17 +58,72 @@ namespace Anomaly.Shared.Networking.Messages
 
         public void Deserialize(BinaryReader reader)
         {
+            SessionId = reader.ReadUInt64();
+            if (SessionId == 0)
+                throw new InvalidDataException("File-transfer session id cannot be zero.");
+
             int count = reader.ReadUInt16();
+            if (count > MaxFiles)
+                throw new InvalidDataException($"Manifest file count exceeded {MaxFiles}.");
             Files = new List<FileEntry>(count);
+            long aggregateBytes = 0;
+            var hashes = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < count; i++)
             {
                 int pathLen = reader.ReadByte();
-                string path = Encoding.UTF8.GetString(reader.ReadBytes(pathLen));
+                if (pathLen == 0 || pathLen > MaxPathBytes)
+                    throw new InvalidDataException($"Manifest path must be 1-{MaxPathBytes} UTF-8 bytes.");
+                byte[] pathBytes = reader.ReadBytes(pathLen);
+                if (pathBytes.Length != pathLen)
+                    throw new EndOfStreamException("Manifest path was truncated.");
+                string path = Utf8.GetString(pathBytes);
+                ValidateRelativePath(path);
                 byte[] hash = reader.ReadBytes(32);
+                if (hash.Length != 32)
+                    throw new EndOfStreamException("Manifest hash was truncated.");
+                if (!hashes.Add(BitConverter.ToString(hash)))
+                    throw new InvalidDataException("Manifest contained a duplicate content hash.");
                 uint size = reader.ReadUInt32();
+                if (size == 0 || size > MaxFileBytes)
+                    throw new InvalidDataException($"Manifest file size must be 1-{MaxFileBytes} bytes.");
+                aggregateBytes += size;
+                if (aggregateBytes > MaxAggregateBytes)
+                    throw new InvalidDataException($"Manifest aggregate size exceeded {MaxAggregateBytes} bytes.");
                 AssetKind kind = (AssetKind)reader.ReadByte();
+                ValidateKind(kind);
                 Files.Add(new FileEntry(path, hash, size, kind));
             }
+        }
+
+        private static void ValidateRelativePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new InvalidDataException("Manifest paths must be non-empty relative paths.");
+            if (path.IndexOfAny(Path.GetInvalidPathChars()) >= 0 || path.IndexOf(':') >= 0)
+                throw new InvalidDataException("Manifest path contained invalid characters.");
+            foreach (char character in path)
+            {
+                if (char.IsControl(character))
+                    throw new InvalidDataException("Manifest path contained control characters.");
+            }
+            if (Path.IsPathRooted(path))
+                throw new InvalidDataException("Manifest paths must be non-empty relative paths.");
+
+            string[] segments = path.Replace('\\', '/').Split('/');
+            foreach (string segment in segments)
+            {
+                if (segment.Length == 0 || segment == "." || segment == "..")
+                    throw new InvalidDataException("Manifest path contained an unsafe segment.");
+            }
+        }
+
+        private static void ValidateKind(AssetKind kind)
+        {
+            if (kind != AssetKind.Texture2D &&
+                kind != AssetKind.AssetBundle &&
+                kind != AssetKind.Font &&
+                kind != AssetKind.AudioClip)
+                throw new InvalidDataException("Manifest contained an unsupported asset kind.");
         }
 
         public struct FileEntry

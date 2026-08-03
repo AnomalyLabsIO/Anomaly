@@ -5,6 +5,7 @@ namespace Anomaly.Client.Diagnostics;
 
 public static class DiagnosticBootstrap
 {
+    private static int _initialized;
     internal static DateTime LastSuccessfulFrame { get; private set; }
     internal static long FrameCount { get; private set; }
 
@@ -13,6 +14,9 @@ public static class DiagnosticBootstrap
 
     public static void Initialize()
     {
+        if (Interlocked.Exchange(ref _initialized, 1) != 0)
+            return;
+
         try
         {
             // Ensure crash reports directory exists
@@ -42,11 +46,14 @@ public static class DiagnosticBootstrap
             LastSuccessfulFrame = DateTime.UtcNow;
             FrameCount = 0;
 
-            MelonLogger.Msg("Diagnostics: Watchdog and crash handlers initialized.");
+            MelonLogger.Msg($"Diagnostics: Watchdog and crash handlers initialized. {DiagnosticPrivacyPolicy.MiniDumpStatus}");
+            MelonLogger.Warning($"Diagnostics: {DiagnosticPrivacyPolicy.ReviewBeforeShareNotice}");
         }
         catch (Exception ex)
         {
             MelonLogger.Error($"Diagnostics: Failed to initialize: {ex}");
+            HangWatchdog.Stop();
+            Interlocked.Exchange(ref _initialized, 0);
         }
     }
 
@@ -60,6 +67,9 @@ public static class DiagnosticBootstrap
 
     public static void Shutdown()
     {
+        if (Interlocked.Exchange(ref _initialized, 0) == 0)
+            return;
+
         try
         {
             HangWatchdog.Stop();

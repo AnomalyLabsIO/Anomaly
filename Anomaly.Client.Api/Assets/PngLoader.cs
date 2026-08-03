@@ -5,70 +5,107 @@ using UnityEngine;
 namespace Anomaly.Client.Api.Assets
 {
     /// <summary>
-    /// Decodes PNG bytes into a new <see cref="Texture2D"/> via pure-managed code
-    /// (<see cref="BigGustave"/>) + <see cref="Texture2D.SetPixels32"/>, avoiding
-    /// <c>UnityEngine.ImageConversion.LoadImage</c>.
+    /// Bounded PNG decoder used by local and server-transferred texture paths.
+    /// Header dimensions and peak working memory are validated before the decoder allocates.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// In this Il2CppInterop build, every overload of <c>ImageConversion.LoadImage</c>
-    /// — including the path exposed by MelonLoader's
-    /// <c>UnityEngine.Il2CppImageConversionManager</c> shim — ultimately dispatches
-    /// to the managed <c>LoadImage(Texture2D, ReadOnlySpan&lt;byte&gt;, bool)</c>
-    /// which calls <c>Il2CppSystem.ReadOnlySpan&lt;byte&gt;.GetPinnableReference</c>.
-    /// That method isn't exported in this build and throws
-    /// <c>MissingMethodException</c> at runtime.
-    /// </para>
-    /// <para>
-    /// This helper exists so the workaround lives in exactly one place. Used by
-    /// <see cref="LocalTextures"/> (user-provided PNGs from disk) and
-    /// <see cref="AnomalyResources"/> (server-transferred PNGs in FileCache).
-    /// </para>
-    /// </remarks>
     internal static class PngLoader
     {
-        /// <summary>
-        /// Decodes a PNG byte array to a new Texture2D. Caller owns the texture
-        /// (must Destroy it when done). Returns null on decode failure; the
-        /// caller is expected to log its own context.
-        /// </summary>
-        public static Texture2D TryDecode(byte[] bytes)
+        public static Texture2D TryDecode(byte[] bytes) => TryDecode(bytes, null);
+
+        internal static Texture2D TryDecode(byte[] bytes, string liveBudgetKey)
         {
-            if (bytes == null || bytes.Length < 8)
+            if (!TryReadDimensions(bytes, out int width, out int height))
                 return null;
 
-            Png png;
+            long pixels;
+            long liveBytes;
+            long peakBytes;
             try
             {
-                png = Png.Open(new System.IO.MemoryStream(bytes, writable: false));
+                pixels = checked((long)width * height);
+                liveBytes = checked(pixels * 4L);
+                // BigGustave's decoded representation plus the Unity upload array can coexist.
+                peakBytes = checked((liveBytes * 2L) + bytes.Length);
             }
-            catch (Exception)
+            catch (OverflowException)
             {
                 return null;
             }
 
-            int w = png.Width;
-            int h = png.Height;
-            if (w <= 0 || h <= 0)
+            if (width > RemoteAssetDecodeBudget.MaxTextureDimension ||
+                height > RemoteAssetDecodeBudget.MaxTextureDimension ||
+                pixels > RemoteAssetDecodeBudget.MaxTexturePixels ||
+                bytes.Length > RemoteAssetDecodeBudget.MaxEncodedTextureBytes)
                 return null;
 
-            var pixels = new Color32[w * h];
+            if (!RemoteAssetDecodeBudget.TryReserve(
+                    peakBytes,
+                    liveBytes,
+                    out var reservation,
+                    out _))
+                return null;
 
-            // BigGustave scans top-to-bottom; Unity Texture2D is bottom-up. Flip Y.
-            for (int y = 0; y < h; y++)
+            using (reservation)
             {
-                int dstRow = (h - 1 - y) * w;
-                for (int x = 0; x < w; x++)
+                Texture2D texture = null;
+                try
                 {
-                    var p = png.GetPixel(x, y);
-                    pixels[dstRow + x] = new Color32(p.R, p.G, p.B, p.A);
+                    using var stream = new System.IO.MemoryStream(bytes, writable: false);
+                    Png png = Png.Open(stream);
+                    if (png.Width != width || png.Height != height)
+                        return null;
+
+                    var decodedPixels = new Color32[checked((int)pixels)];
+                    for (int y = 0; y < height; y++)
+                    {
+                        int dstRow = (height - 1 - y) * width;
+                        for (int x = 0; x < width; x++)
+                        {
+                            var pixel = png.GetPixel(x, y);
+                            decodedPixels[dstRow + x] = new Color32(pixel.R, pixel.G, pixel.B, pixel.A);
+                        }
+                    }
+
+                    texture = new Texture2D(width, height, TextureFormat.RGBA32, mipChain: false);
+                    texture.SetPixels32(decodedPixels);
+                    texture.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+                    reservation.CommitLive(liveBudgetKey);
+                    return texture;
+                }
+                catch (Exception)
+                {
+                    if (texture != null)
+                        UnityEngine.Object.Destroy(texture);
+                    return null;
                 }
             }
-
-            var tex = new Texture2D(w, h, TextureFormat.RGBA32, mipChain: false);
-            tex.SetPixels32(pixels);
-            tex.Apply(updateMipmaps: false, makeNoLongerReadable: false);
-            return tex;
         }
+
+        internal static bool TryReadDimensions(byte[] bytes, out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            if (bytes == null || bytes.Length < 24)
+                return false;
+            if (bytes[0] != 0x89 || bytes[1] != 0x50 || bytes[2] != 0x4E || bytes[3] != 0x47 ||
+                bytes[4] != 0x0D || bytes[5] != 0x0A || bytes[6] != 0x1A || bytes[7] != 0x0A ||
+                bytes[12] != (byte)'I' || bytes[13] != (byte)'H' ||
+                bytes[14] != (byte)'D' || bytes[15] != (byte)'R')
+                return false;
+
+            uint rawWidth = ReadUInt32BigEndian(bytes, 16);
+            uint rawHeight = ReadUInt32BigEndian(bytes, 20);
+            if (rawWidth == 0 || rawHeight == 0 || rawWidth > int.MaxValue || rawHeight > int.MaxValue)
+                return false;
+            width = (int)rawWidth;
+            height = (int)rawHeight;
+            return true;
+        }
+
+        private static uint ReadUInt32BigEndian(byte[] bytes, int offset) =>
+            ((uint)bytes[offset] << 24) |
+            ((uint)bytes[offset + 1] << 16) |
+            ((uint)bytes[offset + 2] << 8) |
+            bytes[offset + 3];
     }
 }

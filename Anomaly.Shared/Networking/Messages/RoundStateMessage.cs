@@ -32,14 +32,30 @@ namespace Anomaly.Shared.Networking.Messages
     /// Server → client. Broadcasts the current <see cref="RoundPhase"/>. Sent by
     /// <c>RoundStateBroadcaster</c> on every LabAPI round event.
     /// </summary>
-    public class RoundStateMessage : IAnomalyMessage
+    public class RoundStateMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public override int MaxPayloadBytes => 1;
         public string MessageName => "anomaly:round:state";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 
         public RoundPhase Phase { get; set; }
 
-        public void Serialize(BinaryWriter writer) => writer.Write((byte)Phase);
-        public void Deserialize(BinaryReader reader) => Phase = (RoundPhase)reader.ReadByte();
+        public void Serialize(BinaryWriter writer)
+        {
+            ValidatePhase(Phase);
+            writer.Write((byte)Phase);
+        }
+
+        public void Deserialize(BinaryReader reader)
+        {
+            Phase = (RoundPhase)reader.ReadByte();
+            ValidatePhase(Phase);
+        }
+
+        private static void ValidatePhase(RoundPhase phase)
+        {
+            if (phase < RoundPhase.WaitingForPlayers || phase > RoundPhase.Restarted)
+                throw new InvalidDataException("Round phase was invalid.");
+        }
     }
 }

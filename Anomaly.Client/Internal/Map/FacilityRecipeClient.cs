@@ -1,58 +1,35 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
-using Anomaly.Transport.Messages;
-using Il2CppInterop.Runtime;
 using Il2CppMapGeneration;
-using Il2CppMirror;
 using MelonLoader;
 using UnityEngine;
 
 namespace Anomaly.Client.Internal.Map
 {
     /// <summary>
-    /// Receives the server's pre-generation facility recipe over plain Mirror
-    /// messages and exposes it to the <c>AtlasZoneGenerator</c> Harmony
-    /// patches. The server sends recipe + atlas edits immediately before the
-    /// vanilla <c>SeedMessage</c>, so storage here completes before
-    /// <c>SeedSynchronizer.ClientReceiveSeed</c> runs <c>GenerateLevel</c>.
+    /// Stores facility recipe state for the client patches. The former plain-Mirror,
+    /// pre-auth bootstrap receiver is intentionally disabled in v1; any future receiver
+    /// must use the authenticated Anomaly transport before mutating generation state.
     /// </summary>
     internal static class FacilityRecipeClient
     {
-        private static readonly ushort RecipeMessageId = GetMessageId(typeof(FacilityRecipeBootstrapMessage));
-        private static readonly ushort AtlasEditsMessageId = GetMessageId(typeof(FacilityAtlasEditsBootstrapMessage));
-
         private static readonly Dictionary<(FacilityZone zone, Vector2IntKey coords), FacilityRecipeEntry> _entries =
             new Dictionary<(FacilityZone, Vector2IntKey), FacilityRecipeEntry>();
 
         private static readonly List<AtlasPixelEdit> _atlasEdits = new List<AtlasPixelEdit>();
-
-        private static NetworkMessageDelegate _recipeDelegate;
-        private static NetworkMessageDelegate _atlasEditsDelegate;
+        private static bool _disabledWarningLogged;
 
         internal static void RegisterHandlers()
         {
-            if (_recipeDelegate == null)
+            Clear();
+            if (!_disabledWarningLogged)
             {
-                _recipeDelegate = DelegateSupport.ConvertDelegate<NetworkMessageDelegate>(
-                    new Action<NetworkConnection, NetworkReader, int>(RecipeDispatch));
+                _disabledWarningLogged = true;
+                MelonLogger.Warning(
+                    "FacilityRecipeClient: facility recipe/atlas bootstrap is disabled in v1; " +
+                    "plain-Mirror pre-auth handlers were not registered.");
             }
-
-            if (_atlasEditsDelegate == null)
-            {
-                _atlasEditsDelegate = DelegateSupport.ConvertDelegate<NetworkMessageDelegate>(
-                    new Action<NetworkConnection, NetworkReader, int>(AtlasEditsDispatch));
-            }
-
-            var handlers = NetworkClient.handlers;
-            handlers[RecipeMessageId] = _recipeDelegate;
-            handlers[AtlasEditsMessageId] = _atlasEditsDelegate;
-
-            MelonLogger.Msg(
-                $"FacilityRecipeClient: registered Mirror bootstrap handlers " +
-                $"recipeId={RecipeMessageId} atlasId={AtlasEditsMessageId} totalHandlers={handlers.Count}");
         }
 
         internal static bool TryGet(FacilityZone zone, Vector2Int coords, out FacilityRecipeEntry entry)
@@ -72,76 +49,6 @@ namespace Anomaly.Client.Internal.Map
             foreach (var e in _atlasEdits)
                 if (e.ZoneId == z && e.AtlasIdx == a) list.Add(e);
             return list;
-        }
-
-        private static void RecipeDispatch(NetworkConnection _, NetworkReader reader, int __)
-        {
-            try
-            {
-                ApplyRecipe(DeserializePayload<FacilityLayoutRecipeMessage>(ReadPayload(reader)));
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"FacilityRecipeClient: failed to dispatch recipe bootstrap: {ex}");
-            }
-        }
-
-        private static void AtlasEditsDispatch(NetworkConnection _, NetworkReader reader, int __)
-        {
-            try
-            {
-                ApplyAtlasEdits(DeserializePayload<FacilityAtlasEditsMessage>(ReadPayload(reader)));
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"FacilityRecipeClient: failed to dispatch atlas-edits bootstrap: {ex}");
-            }
-        }
-
-        private static void ApplyRecipe(FacilityLayoutRecipeMessage recipe)
-        {
-            _entries.Clear();
-            foreach (var e in recipe.Entries)
-            {
-                var key = ((FacilityZone)e.ZoneId, new Vector2IntKey(e.CoordsX, e.CoordsY));
-                _entries[key] = e;
-            }
-
-            MelonLogger.Msg($"FacilityRecipeClient: received {recipe.Entries.Count} recipe entries.");
-        }
-
-        private static void ApplyAtlasEdits(FacilityAtlasEditsMessage edits)
-        {
-            _atlasEdits.Clear();
-            _atlasEdits.AddRange(edits.Edits);
-            MelonLogger.Msg($"FacilityRecipeClient: received {edits.Edits.Count} atlas pixel edits.");
-        }
-
-        private static T DeserializePayload<T>(byte[] payload) where T : IAnomalyMessage, new()
-        {
-            var message = new T();
-            using var ms = new MemoryStream(payload ?? System.Array.Empty<byte>());
-            using var reader = new BinaryReader(ms);
-            message.Deserialize(reader);
-            return message;
-        }
-
-        private static byte[] ReadPayload(NetworkReader reader)
-        {
-            var payload = NetworkReaderExtensions.ReadBytesAndSize(reader);
-            return payload ?? Array.Empty<byte>();
-        }
-
-        private static ushort GetMessageId(Type type)
-        {
-            unchecked
-            {
-                int hash = 23;
-                string name = type.FullName ?? type.Name;
-                for (int i = 0; i < name.Length; i++)
-                    hash = hash * 31 + name[i];
-                return (ushort)hash;
-            }
         }
 
         /// <summary>

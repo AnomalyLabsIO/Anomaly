@@ -32,11 +32,12 @@ namespace Anomaly.Shared.Networking
     public static class AnomalyProtocol
     {
         /// <summary>
-        /// v1: added a 4-byte per-channel replay counter to every 0xFE envelope
-        /// (between the channel byte and the message-hash). Prior to v1, the
-        /// wire was [0xFE][hash][payload] and had no replay protection.
+        /// v2: authenticates the complete client/server handshake transcript,
+        /// adds a persistent signed server identity and stateless retry cookie,
+        /// and introduces transfer/session wire hardening. v1 is intentionally
+        /// rejected; there is no silent downgrade path.
         /// </summary>
-        public const byte CurrentVersion = 1;
+        public const byte CurrentVersion = 2;
     }
 
     /// <summary>

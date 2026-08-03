@@ -60,6 +60,9 @@ internal static class NativeMethods
     /// </summary>
     internal static bool WriteMiniDump(string dumpPath, uint dumpType = MiniDumpNormal, IntPtr exceptionPointers = default)
     {
+        if (!DiagnosticPrivacyPolicy.MiniDumpsEnabled)
+            return false;
+
         IntPtr fileHandle = CreateFileW(
             dumpPath,
             GENERIC_WRITE,

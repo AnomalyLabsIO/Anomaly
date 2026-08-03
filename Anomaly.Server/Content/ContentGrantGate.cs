@@ -19,8 +19,11 @@ namespace Anomaly.Server.Content
         // Keyed by ReferenceHub.netId so we don't hold hub references across the session.
         private static readonly Dictionary<uint, Ack> _byNetId = new Dictionary<uint, Ack>();
 
-        internal static void RecordAck(uint netId, bool hashMatches, IEnumerable<string> failedKeys)
+        internal static bool TryRecordAck(uint netId, bool hashMatches, IEnumerable<string> failedKeys)
         {
+            if (_byNetId.ContainsKey(netId))
+                return false;
+
             var ack = new Ack { HashMatches = hashMatches };
             if (failedKeys != null)
             {
@@ -28,6 +31,7 @@ namespace Anomaly.Server.Content
                     ack.FailedKeys.Add(key);
             }
             _byNetId[netId] = ack;
+            return true;
         }
 
         internal static bool IsReady(uint netId) =>

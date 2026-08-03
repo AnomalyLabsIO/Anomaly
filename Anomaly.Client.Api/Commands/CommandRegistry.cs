@@ -154,6 +154,45 @@ public static class CommandRegistry
         return null;
     }
 
+    /// <summary>Removes one command owned by <paramref name="modId"/>.</summary>
+    public static bool Unregister(string modId, string commandName)
+    {
+        if (string.IsNullOrEmpty(modId) || string.IsNullOrEmpty(commandName)) return false;
+        string canonical = $"{modId}.{commandName}";
+        if (!_byName.TryGetValue(canonical, out var entry) ||
+            !string.Equals(entry.ModId, modId, StringComparison.Ordinal))
+            return false;
+
+        _byName.Remove(canonical);
+        RemoveAliases(entry);
+        return true;
+    }
+
+    /// <summary>Removes every command registered by <paramref name="modId"/>.</summary>
+    public static int UnregisterAll(string modId)
+    {
+        if (string.IsNullOrEmpty(modId)) return 0;
+        var entries = _byName.Values
+            .Where(entry => string.Equals(entry.ModId, modId, StringComparison.Ordinal))
+            .Distinct()
+            .ToList();
+        foreach (var entry in entries)
+        {
+            _byName.Remove(entry.CanonicalName);
+            RemoveAliases(entry);
+        }
+        return entries.Count;
+    }
+
+    private static void RemoveAliases(Entry entry)
+    {
+        var aliases = _byAlias
+            .Where(pair => ReferenceEquals(pair.Value, entry))
+            .Select(pair => pair.Key)
+            .ToList();
+        foreach (var alias in aliases) _byAlias.Remove(alias);
+    }
+
     /// <summary>
     /// Splits arg string into tokens, respecting double-quoted segments so
     /// multi-word args can be passed as "hello world".

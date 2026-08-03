@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 1,
+  "Id": "example.hello",
+  "Name": "Hello Anomaly Module",
+  "Version": "1.0.0",
+  "ApiVersion": "1.0.0",
+  "MinimumApiVersion": "1.0.0",
+  "MaximumApiVersionExclusive": "2.0.0",
+  "SupportedGameVersions": [
+    "14.2.7^"
+  ],
+  "Dependencies": [],
+  "Conflicts": [],
+  "Capabilities": "None",
+  "Publisher": "Example publisher",
+  "Sha256": "REPLACE_WITH_LOWERCASE_ASSEMBLY_SHA256"
+}

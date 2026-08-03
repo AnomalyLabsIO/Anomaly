@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
@@ -8,133 +8,225 @@ namespace Anomaly.Server.Auth;
 
 public static class AuthHandler
 {
-    // Phase 1 handshake entries are ephemeral — a client that abandons Phase 2 would
-    // otherwise leak one entry per abandoned attempt. 60s covers the reconnect window
-    // used by the client (~2s) with wide margin for slow networks.
-    private static readonly TimeSpan HandshakeTtl = TimeSpan.FromSeconds(60);
-    private static readonly object _connectionsLock = new();
-
-    internal static Dictionary<string, Connection> _connections = new();
-
-    // CONCURRENCY: _storedPlayers is written from the off-main-thread preauth path
-    // (LiteNetLib4MirrorServer.ConnectionRequestLoop -> ProcessConnectionRequest, which
-    // runs on the dedicated "ConnectionRequestThread" in the live build) and read/removed
-    // from the main thread (PlayerAuthenticationManager.FixedUpdate). It MUST be a
-    // ConcurrentDictionary — a plain Dictionary mutated across threads can corrupt its
-    // bucket chain and freeze a reader in an infinite FindEntry loop. Access only through
-    // StorePlayer / TryTakePlayer so TTL eviction stays consistent.
-    internal static readonly ConcurrentDictionary<IPEndPoint, PlayerStorage> _storedPlayers = new();
+    private static readonly TimeSpan HandshakeTtl = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan StoredPlayerTtl = TimeSpan.FromSeconds(60);
+    private const int MaximumPendingConnections = 2048;
+    private const int MaximumPendingConnectionsPerAddress = 8;
+    private const int MaximumExpiryRemovalsPerOperation = 64;
+    private const int MaximumStoredPlayers = 2048;
 
-    /// <summary>
-    /// Records a preauthenticated player keyed by endpoint, stamping it for TTL eviction.
-    /// Called off the main thread from the preauth path.
-    /// </summary>
-    internal static void StorePlayer(IPEndPoint endPoint, PlayerStorage player)
+    private static readonly object ConnectionsLock = new object();
+    private static readonly Dictionary<string, Connection> Connections = new Dictionary<string, Connection>();
+    private static readonly Dictionary<string, int> PendingByAddress = new Dictionary<string, int>();
+    private static readonly LinkedList<string> ExpiryOrder = new LinkedList<string>();
+
+    // Written from LiteNetLib's connection-request thread and consumed from
+    // PlayerAuthenticationManager.FixedUpdate on Unity's main thread.
+    internal static readonly ConcurrentDictionary<IPEndPoint, PlayerStorage> _storedPlayers = new ConcurrentDictionary<IPEndPoint, PlayerStorage>();
+
+    internal static int PendingConnectionCount
     {
-        player.CreatedAtUtc = DateTime.UtcNow;
-        EvictExpiredStoredPlayers();
-        _storedPlayers[endPoint] = player;
-    }
-
-    /// <summary>
-    /// Atomically removes and returns the stored player for <paramref name="endPoint"/>.
-    /// Returns false if absent or past its TTL (a client that preauthed but never connected).
-    /// </summary>
-    internal static bool TryTakePlayer(IPEndPoint endPoint, out PlayerStorage player)
-    {
-        if (!_storedPlayers.TryRemove(endPoint, out player))
-            return false;
-
-        if (DateTime.UtcNow - player.CreatedAtUtc > StoredPlayerTtl)
+        get
         {
-            player = null;
-            return false;
-        }
-
-        return true;
-    }
-
-    private static void EvictExpiredStoredPlayers()
-    {
-        var now = DateTime.UtcNow;
-        foreach (var kvp in _storedPlayers) // ConcurrentDictionary enumeration is safe under concurrent mutation
-        {
-            if (now - kvp.Value.CreatedAtUtc > StoredPlayerTtl)
-                _storedPlayers.TryRemove(kvp.Key, out _);
+            lock (ConnectionsLock)
+                return Connections.Count;
         }
     }
 
-    internal static string AddConnection(ServerAuthSession session, ClientHandshake handshake, PasswordChallenge passwordChallenge = null)
+    internal static bool TryReserveConnection(
+        ClientHandshake handshake,
+        IPAddress sourceAddress,
+        PasswordChallenge passwordChallenge,
+        out string identifier,
+        out Connection connection)
     {
-        string random;
-        lock (_connectionsLock)
+        identifier = null;
+        connection = null;
+        if (handshake == null || sourceAddress == null)
+            return false;
+
+        var addressKey = NormalizeAddress(sourceAddress);
+        lock (ConnectionsLock)
         {
-            EvictExpiredLocked();
+            EvictExpiredLocked(DateTime.UtcNow, MaximumExpiryRemovalsPerOperation);
+            if (Connections.Count >= MaximumPendingConnections)
+                return false;
+            if (PendingByAddress.TryGetValue(addressKey, out var perAddress)
+                && perAddress >= MaximumPendingConnectionsPerAddress)
+                return false;
 
             do
             {
-                random = RandomGenerator.GetStringSecure(50);
+                identifier = RandomGenerator.GetStringSecure(50);
             }
-            while(_connections.ContainsKey(random));
+            while (Connections.ContainsKey(identifier));
 
-            _connections[random] = new Connection
+            var node = ExpiryOrder.AddLast(identifier);
+            connection = new Connection
             {
-                ServerEnv = session,
                 Handshake = handshake,
+                PasswordChallenge = passwordChallenge ?? PasswordChallenge.NotRequired(),
+                SourceAddress = new IPAddress(PreauthGate.NormalizeAddressBytes(sourceAddress)),
                 CreatedAtUtc = DateTime.UtcNow,
                 PasswordRequired = passwordChallenge?.Required == true,
                 PasswordSalt = passwordChallenge?.Salt,
                 PasswordIterations = passwordChallenge?.Iterations ?? 0,
                 PasswordNonce = passwordChallenge?.Nonce,
+                ExpiryNode = node,
             };
+            Connections.Add(identifier, connection);
+            PendingByAddress[addressKey] = perAddress + 1;
+            return true;
         }
-
-        return random;
     }
 
-    // Returns true only when the identifier exists AND is still within TTL.
-    // Expired entries are removed as a side effect.
-    internal static bool TryConsumeConnection(string identifier, out Connection connection)
+    /// <summary>
+    /// Atomically removes phase-one state before validation. The source IP is bound;
+    /// the UDP port is deliberately not, because the expected reconnect between phases
+    /// normally obtains a different ephemeral port.
+    /// </summary>
+    internal static bool TryConsumeConnection(string identifier, IPAddress sourceAddress, out Connection connection)
     {
-        lock (_connectionsLock)
+        connection = null;
+        if (string.IsNullOrEmpty(identifier) || sourceAddress == null)
+            return false;
+
+        lock (ConnectionsLock)
         {
-            if (!_connections.TryGetValue(identifier, out connection))
+            EvictExpiredLocked(DateTime.UtcNow, MaximumExpiryRemovalsPerOperation);
+            if (!Connections.TryGetValue(identifier, out var found))
                 return false;
 
-            if (DateTime.UtcNow - connection.CreatedAtUtc > HandshakeTtl)
+            if (DateTime.UtcNow - found.CreatedAtUtc > HandshakeTtl)
             {
-                _connections.Remove(identifier);
-                connection = null;
+                RemoveLocked(identifier, found);
                 return false;
             }
 
+            // A packet from the wrong endpoint must not consume the legitimate
+            // client's one-time phase-two state. Keep the check and removal in
+            // the same lock so only the bound endpoint can win the consume race.
+            if (!PreauthGate.AddressesEqual(found.SourceAddress, sourceAddress))
+                return false;
+
+            RemoveLocked(identifier, found);
+            connection = found;
             return true;
         }
     }
 
     internal static void RemoveConnection(string identifier)
     {
-        lock (_connectionsLock)
+        if (string.IsNullOrEmpty(identifier))
+            return;
+        lock (ConnectionsLock)
         {
-            _connections.Remove(identifier);
+            if (Connections.TryGetValue(identifier, out var connection))
+                RemoveLocked(identifier, connection);
         }
     }
 
-    private static void EvictExpiredLocked()
+    internal static bool StorePlayer(IPEndPoint endPoint, PlayerStorage player)
+    {
+        if (endPoint == null || player == null)
+            return false;
+        player.CreatedAtUtc = DateTime.UtcNow;
+        EvictExpiredStoredPlayers(MaximumExpiryRemovalsPerOperation);
+        if (_storedPlayers.Count >= MaximumStoredPlayers && !_storedPlayers.ContainsKey(endPoint))
+        {
+            player.ClearSecrets();
+            return false;
+        }
+        _storedPlayers.AddOrUpdate(
+            endPoint,
+            player,
+            (_, previous) =>
+            {
+                previous.ClearSecrets();
+                return player;
+            });
+        return true;
+    }
+
+    internal static bool TryTakePlayer(IPEndPoint endPoint, out PlayerStorage player)
+    {
+        if (!_storedPlayers.TryRemove(endPoint, out player))
+            return false;
+        if (DateTime.UtcNow - player.CreatedAtUtc > StoredPlayerTtl)
+        {
+            player.ClearSecrets();
+            player = null;
+            return false;
+        }
+        return true;
+    }
+
+    internal static void Reset()
+    {
+        lock (ConnectionsLock)
+        {
+            Connections.Clear();
+            PendingByAddress.Clear();
+            ExpiryOrder.Clear();
+        }
+        foreach (var player in _storedPlayers.Values)
+            player.ClearSecrets();
+        _storedPlayers.Clear();
+    }
+
+    private static void EvictExpiredLocked(DateTime now, int maximumRemovals)
+    {
+        var removed = 0;
+        while (ExpiryOrder.First != null && removed < maximumRemovals)
+        {
+            var identifier = ExpiryOrder.First.Value;
+            if (!Connections.TryGetValue(identifier, out var connection))
+            {
+                ExpiryOrder.RemoveFirst();
+                removed++;
+                continue;
+            }
+            if (now - connection.CreatedAtUtc <= HandshakeTtl)
+                break;
+            RemoveLocked(identifier, connection);
+            removed++;
+        }
+    }
+
+    private static void RemoveLocked(string identifier, Connection connection)
+    {
+        Connections.Remove(identifier);
+        if (connection.ExpiryNode?.List != null)
+            ExpiryOrder.Remove(connection.ExpiryNode);
+
+        var addressKey = NormalizeAddress(connection.SourceAddress);
+        if (PendingByAddress.TryGetValue(addressKey, out var count))
+        {
+            if (count <= 1)
+                PendingByAddress.Remove(addressKey);
+            else
+                PendingByAddress[addressKey] = count - 1;
+        }
+    }
+
+    private static void EvictExpiredStoredPlayers(int maximumRemovals)
     {
         var now = DateTime.UtcNow;
-        List<string> expired = null;
-        foreach (var kvp in _connections)
+        var removed = 0;
+        foreach (var pair in _storedPlayers)
         {
-            if (now - kvp.Value.CreatedAtUtc > HandshakeTtl)
+            if (removed >= maximumRemovals)
+                break;
+            if (now - pair.Value.CreatedAtUtc <= StoredPlayerTtl)
+                continue;
+            if (_storedPlayers.TryRemove(pair.Key, out var expired))
             {
-                expired ??= new List<string>();
-                expired.Add(kvp.Key);
+                expired.ClearSecrets();
+                removed++;
             }
         }
-        if (expired == null) return;
-        foreach (var key in expired)
-            _connections.Remove(key);
     }
+
+    private static string NormalizeAddress(IPAddress address)
+        => address == null ? string.Empty : new IPAddress(PreauthGate.NormalizeAddressBytes(address)).ToString();
 }

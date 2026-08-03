@@ -3,8 +3,10 @@ using System.IO;
 
 namespace Anomaly.Shared.Networking.Messages
 {
-    public class BoneTransformsMessage : IAnomalyMessage
+    public class BoneTransformsMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        public const int MaxBones = 128;
+        public override int MaxPayloadBytes => 4 + 1 + (MaxBones * 29);
         public string MessageName => "anomaly:bonetransforms";
         public MessageChannel TransportChannel => MessageChannel.Sequenced; // Sequenced -- only latest pose matters
 
@@ -13,10 +15,13 @@ namespace Anomaly.Shared.Networking.Messages
 
         public void Serialize(BinaryWriter writer)
         {
+            if (Bones == null || Bones.Count > MaxBones)
+                throw new InvalidDataException($"Bone count exceeded {MaxBones}.");
             writer.Write(NetId);
             writer.Write((byte)Bones.Count);
             foreach (var bone in Bones)
             {
+                ValidateBone(bone);
                 writer.Write(bone.Index);
                 writer.Write(bone.PositionX);
                 writer.Write(bone.PositionY);
@@ -32,6 +37,8 @@ namespace Anomaly.Shared.Networking.Messages
         {
             NetId = reader.ReadUInt32();
             int count = reader.ReadByte();
+            if (count > MaxBones)
+                throw new InvalidDataException($"Bone count exceeded {MaxBones}.");
             Bones = new List<BoneEntry>(count);
             for (int i = 0; i < count; i++)
             {
@@ -43,9 +50,21 @@ namespace Anomaly.Shared.Networking.Messages
                 float rotY = reader.ReadSingle();
                 float rotZ = reader.ReadSingle();
                 float rotW = reader.ReadSingle();
-                Bones.Add(new BoneEntry(index, posX, posY, posZ, rotX, rotY, rotZ, rotW));
+                var bone = new BoneEntry(index, posX, posY, posZ, rotX, rotY, rotZ, rotW);
+                ValidateBone(bone);
+                Bones.Add(bone);
             }
         }
+
+        private static void ValidateBone(BoneEntry bone)
+        {
+            if (!IsFinite(bone.PositionX) || !IsFinite(bone.PositionY) || !IsFinite(bone.PositionZ) ||
+                !IsFinite(bone.RotationX) || !IsFinite(bone.RotationY) ||
+                !IsFinite(bone.RotationZ) || !IsFinite(bone.RotationW))
+                throw new InvalidDataException("Bone transform contained a non-finite value.");
+        }
+
+        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         /// <summary>
         /// Primitive-float bone pose entry. Shared does not reference UnityEngine, so

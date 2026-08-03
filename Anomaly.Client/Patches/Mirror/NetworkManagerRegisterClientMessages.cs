@@ -9,6 +9,7 @@ using Anomaly.Client.Internal.Map;
 using Anomaly.Client.Internal.PlayerCustomization;
 using Anomaly.Client.Internal.Round;
 using Anomaly.Client.Patches.Audio;
+using Anomaly.Client.Patches.Auth;
 using Anomaly.Shared.Networking;
 using HarmonyLib;
 using Il2CppMirror;
@@ -64,11 +65,12 @@ public static class NetworkManagerRegisterClientMessages
                     // Drop per-channel replay state so the new session's counters
                     // start from zero instead of inheriting the old highWater.
                     AnomalyReplayTable.Reset();
+                    PlayerAuthenticationManagerPatch.ResetPendingClientMessages();
                 };
             }
 
-            // NetworkClient.handlers is rebuilt on reconnect, so these plain
-            // Mirror bootstrap handlers must be re-registered every time.
+            // v1 containment: this emits a degraded-state warning and intentionally
+            // does not register the former plain-Mirror pre-auth bootstrap handlers.
             FacilityRecipeClient.RegisterHandlers();
         }
         catch(Exception e)

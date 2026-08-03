@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using Anomaly.Shared.Auth;
 using LabApi.Loader;
 
@@ -67,8 +68,7 @@ internal static class PasswordStore
             return false;
         }
 
-        if (iterations < PasswordAuth.MinimumIterations)
-            iterations = PasswordAuth.MinimumIterations;
+        iterations = Math.Max(PasswordAuth.MinimumIterations, Math.Min(PasswordAuth.MaximumIterations, iterations));
 
         var salt = PasswordAuth.GenerateSalt();
         var verifier = PasswordAuth.DeriveVerifier(password, salt, iterations);
@@ -130,13 +130,29 @@ internal static class PasswordStore
         }
     }
 
-    public static bool TryCreateChallenge(out PasswordChallenge challenge, out string error)
+    public static bool TryCreateChallenge(IPAddress sourceAddress, out PasswordChallenge challenge, out string error)
     {
         challenge = PasswordChallenge.NotRequired();
         error = null;
 
         if (!IsRequired)
             return true;
+
+        var config = Plugin.Instance?.Config;
+        if (config?.EnableLegacyPasswordAuthOnLoopback != true)
+        {
+            error = "Password authentication is disabled: no vetted OPAQUE implementation supports the client/server target runtimes. The legacy proof is migration-only.";
+            return false;
+        }
+
+        var normalizedAddress = sourceAddress;
+        if (normalizedAddress?.IsIPv4MappedToIPv6 == true)
+            normalizedAddress = normalizedAddress.MapToIPv4();
+        if (normalizedAddress == null || !IPAddress.IsLoopback(normalizedAddress))
+        {
+            error = "Legacy password authentication is permitted only from a loopback address.";
+            return false;
+        }
 
         lock (Sync)
         {
@@ -175,7 +191,9 @@ internal static class PasswordStore
                 return false;
         }
 
-        var serverChallenge = connection.ServerEnv.CreateHandshake().challenge;
+        var serverChallenge = connection.ServerHandshake?.challenge;
+        if (serverChallenge == null || serverChallenge.Length != ServerHandshake.ChallengeSize)
+            return false;
         var expected = PasswordAuth.CreateProof(
             verifier,
             connection.Handshake.nonce,
@@ -262,7 +280,9 @@ internal static class PasswordStore
 
     private static bool IsStorageValid(PasswordStorageFile storage)
     {
-        if (storage == null || storage.Iterations < PasswordAuth.MinimumIterations)
+        if (storage == null
+            || storage.Iterations < PasswordAuth.MinimumIterations
+            || storage.Iterations > PasswordAuth.MaximumIterations)
             return false;
 
         try

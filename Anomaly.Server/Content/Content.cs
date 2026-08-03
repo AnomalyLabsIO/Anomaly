@@ -1,7 +1,6 @@
 using InventorySystem;
 using InventorySystem.Items;
 using LabApi.Features.Wrappers;
-using PlayerRoles;
 using Logger = LabApi.Features.Console.Logger;
 
 namespace Anomaly.Server.Content
@@ -10,7 +9,8 @@ namespace Anomaly.Server.Content
     /// Author-facing entry point for the Anomaly custom-content framework. A LabAPI server
     /// plugin references <c>Anomaly.Server.dll</c> + <c>Anomaly.Shared.dll</c> and calls
     /// <see cref="Register(CustomItemDefinition)"/> et al. from its <c>Enable()</c> to declare
-    /// custom content, then hands it out with <see cref="GiveItem"/> / <see cref="SetRole"/>.
+    /// custom content, then hands items out with <see cref="GiveItem"/>. Role and effect
+    /// activation are intentionally disabled in v1.
     /// Registration is collected eagerly and frozen once before the first spawn, so it does
     /// not depend on LabAPI plugin load order.
     /// </summary>
@@ -30,7 +30,7 @@ namespace Anomaly.Server.Content
             var hub = player?.ReferenceHub;
             if (hub == null)
                 return false;
-            if (!ContentRegistry.TryGetId(key, out int id))
+            if (!ContentRegistry.TryGetId(key, out int id) || !ContentRegistry.IsCustomItemId(id))
             {
                 Logger.Warn($"Anomaly.Content: GiveItem unknown key '{key}'.");
                 return false;
@@ -45,25 +45,13 @@ namespace Anomaly.Server.Content
         }
 
         /// <summary>
-        /// Assigns the custom role with the given key to a player. Gated on catalog ack.
+        /// Custom roles are not a safe v1 activation path and are rejected fail-closed.
         /// </summary>
         public static bool SetRole(Player player, string key)
         {
-            var hub = player?.ReferenceHub;
-            if (hub == null)
-                return false;
-            if (!ContentRegistry.TryGetId(key, out int id))
-            {
-                Logger.Warn($"Anomaly.Content: SetRole unknown key '{key}'.");
-                return false;
-            }
-            if (!ContentGrantGate.CanGrant(hub.netId, key))
-            {
-                Logger.Warn($"Anomaly.Content: '{player.Nickname}' has not acknowledged '{key}'; SetRole skipped.");
-                return false;
-            }
-            hub.roleManager.ServerSetRole((RoleTypeId)id, RoleChangeReason.RemoteAdmin);
-            return true;
+            Logger.Warn(
+                $"Anomaly.Content: SetRole('{key}') rejected; custom roles are disabled in the v1 items-only profile.");
+            return false;
         }
     }
 }

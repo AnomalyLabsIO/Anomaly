@@ -12,6 +12,9 @@ public static class PasswordAuth
     public const int VerifierSize = 32;
     public const int ProofSize = 32;
     public const int MinimumIterations = 10000;
+    // A hostile server controls the challenge fields seen by a client. Keep this
+    // ceiling strict so it cannot turn PBKDF2 into unbounded main-thread work.
+    public const int MaximumIterations = 600000;
     public const int DefaultIterations = 120000;
 
     public static byte[] GenerateSalt() => GetRandomBytes(SaltSize);
@@ -24,8 +27,10 @@ public static class PasswordAuth
             throw new ArgumentNullException(nameof(password));
         if (salt == null || salt.Length != SaltSize)
             throw new ArgumentException($"Password salt must be {SaltSize} bytes.", nameof(salt));
-        if (iterations < MinimumIterations)
-            throw new ArgumentOutOfRangeException(nameof(iterations), $"Password KDF iterations must be at least {MinimumIterations}.");
+        if (iterations < MinimumIterations || iterations > MaximumIterations)
+            throw new ArgumentOutOfRangeException(
+                nameof(iterations),
+                $"Password KDF iterations must be in [{MinimumIterations}, {MaximumIterations}].");
 
         using (var kdf = new Rfc2898DeriveBytes(password, salt, iterations, HashAlgorithmName.SHA256))
             return kdf.GetBytes(VerifierSize);
