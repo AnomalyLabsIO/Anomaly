@@ -68,7 +68,7 @@ namespace Anomaly.Client.Api.Assets
             try
             {
                 var path = FileCache.GetFilePath(hash);
-                var b = AssetBundle.LoadFromFile(path);
+                var b = AssetBundleLoader.LoadFromFile(path);
                 if (b == null)
                 {
                     MelonLogger.Warning($"AnomalyResources: AssetBundle.LoadFromFile returned null for {hex}.");
@@ -131,7 +131,7 @@ namespace Anomaly.Client.Api.Assets
 
             try
             {
-                asset = bundle.LoadAsset<T>(assetName);
+                asset = AssetBundleLoader.LoadAsset<T>(bundle, assetName);
                 return asset != null;
             }
             catch (Exception ex)

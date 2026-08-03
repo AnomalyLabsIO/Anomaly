@@ -164,6 +164,7 @@
 		</Reference>
 		<Reference Include="UnityEngine.CoreModule">
 			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.CoreModule.dll</HintPath>
+			<Aliases>global,UnityCoreModule</Aliases>
 		</Reference>
 		<Reference Include="UnityEngine.CrashReportingModule">
 			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.CrashReportingModule.dll</HintPath>
