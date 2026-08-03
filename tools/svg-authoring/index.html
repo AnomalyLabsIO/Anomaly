@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A local SVG tracing and logo authoring studio for Anomaly.">
+  <title>Anomaly Vector Studio</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand" aria-label="Anomaly Vector Studio">
+        <span class="brand-mark" aria-hidden="true">A</span>
+        <span class="brand-copy">
+          <strong>Anomaly</strong>
+          <span>Vector Studio</span>
+        </span>
+        <span class="local-badge" title="Images and projects stay in this browser">Local</span>
+      </div>
+
+      <div class="top-actions" role="toolbar" aria-label="File actions">
+        <button class="button ghost" id="new-project" type="button">New</button>
+        <button class="button ghost" id="open-project" type="button">Open project</button>
+        <button class="button ghost" id="import-svg" type="button">Import SVG</button>
+        <button class="button ghost" id="save-project" type="button">Save project</button>
+        <button class="button primary" id="quick-export-svg" type="button">Export SVG</button>
+      </div>
+    </header>
+
+    <main class="editor-grid">
+      <aside class="tool-rail" aria-label="Drawing tools">
+        <button class="tool-button active" type="button" data-tool="select" title="Select and transform (V)" aria-label="Select tool">
+          <span class="tool-glyph">↖</span><span>Select</span><kbd>V</kbd>
+        </button>
+        <button class="tool-button" type="button" data-tool="node" title="Edit vector nodes (A)" aria-label="Node tool">
+          <span class="tool-glyph">◇</span><span>Nodes</span><kbd>A</kbd>
+        </button>
+        <span class="tool-divider" aria-hidden="true"></span>
+        <button class="tool-button" type="button" data-tool="rect" title="Rectangle (R)" aria-label="Rectangle tool">
+          <span class="tool-glyph">□</span><span>Rect</span><kbd>R</kbd>
+        </button>
+        <button class="tool-button" type="button" data-tool="ellipse" title="Ellipse (E)" aria-label="Ellipse tool">
+          <span class="tool-glyph">○</span><span>Ellipse</span><kbd>E</kbd>
+        </button>
+        <button class="tool-button" type="button" data-tool="line" title="Line and exact circle arc (L)" aria-label="Line and exact circle arc tool">
+          <span class="tool-glyph">╱</span><span>Line</span><kbd>L</kbd>
+        </button>
+        <button class="tool-button" type="button" data-tool="polygon" title="Polygon (G)" aria-label="Polygon tool">
+          <span class="tool-glyph">⬡</span><span>Polygon</span><kbd>G</kbd>
+        </button>
+        <button class="tool-button" type="button" data-tool="pen" title="Bézier pen (P)" aria-label="Bezier pen tool">
+          <span class="tool-glyph">⌁</span><span>Pen</span><kbd>P</kbd>
+        </button>
+        <span class="tool-divider" aria-hidden="true"></span>
+        <button class="tool-button" type="button" data-tool="pan" title="Pan canvas (H or hold Space)" aria-label="Pan tool">
+          <span class="tool-glyph">✥</span><span>Pan</span><kbd>H</kbd>
+        </button>
+      </aside>
+
+      <section class="workspace" aria-label="Vector canvas">
+        <div class="canvas-toolbar">
+          <div class="toolbar-group">
+            <button class="button compact" id="choose-reference" type="button">＋ Reference</button>
+            <button class="icon-button" id="undo" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>↶</button>
+            <button class="icon-button" id="redo" type="button" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>↷</button>
+          </div>
+
+          <div class="toolbar-group zoom-controls" aria-label="Zoom controls">
+            <button class="icon-button" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+            <button class="zoom-readout" id="zoom-readout" type="button" title="Reset to 100%">100%</button>
+            <button class="icon-button" id="zoom-in" type="button" aria-label="Zoom in">＋</button>
+            <button class="button compact" id="zoom-fit" type="button">Fit</button>
+          </div>
+
+          <div class="toolbar-group toolbar-toggles">
+            <button class="toggle-button active" id="toggle-grid" type="button" aria-pressed="true">Grid</button>
+            <button class="toggle-button active" id="toggle-guides" type="button" aria-pressed="true">Center</button>
+            <button class="toggle-button" id="toggle-outline" type="button" aria-pressed="false">Outline</button>
+            <div class="segmented stage-theme" role="group" aria-label="Canvas surround">
+              <button type="button" data-stage-theme="checker" class="active" aria-label="Checkerboard canvas">▦</button>
+              <button type="button" data-stage-theme="dark" aria-label="Dark canvas">●</button>
+              <button type="button" data-stage-theme="light" aria-label="Light canvas">○</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-scroll theme-checker" id="stage-scroll" tabindex="0">
+          <div class="stage-space" id="stage-space">
+            <div class="artboard-shell" id="artboard-shell">
+              <svg id="artboard" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Editable SVG artboard">
+                <defs id="canvas-defs"></defs>
+                <g id="reference-layer" pointer-events="none"></g>
+                <g id="grid-layer" pointer-events="none"></g>
+                <g id="artwork-layer"></g>
+                <g id="draft-layer" pointer-events="none"></g>
+                <g id="selection-layer"></g>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <footer class="statusbar">
+          <span id="status-tool">Select</span>
+          <span id="status-hint">Drag a shape to move it. Use the corner handles to resize.</span>
+          <span class="status-spacer"></span>
+          <span id="status-cursor">x 0.0 · y 0.0</span>
+          <span id="status-size">512 × 512</span>
+        </footer>
+      </section>
+
+      <aside class="inspector" aria-label="Inspector">
+        <details class="panel" open>
+          <summary class="panel-title">Reference image <span class="panel-status" id="reference-status">None</span></summary>
+          <div class="panel-body">
+            <button class="reference-drop" id="reference-drop" type="button">
+              <span class="reference-drop-icon">＋</span>
+              <span><strong>Choose or drop an image</strong><small>PNG, JPG, WebP — never included in SVG</small></span>
+            </button>
+            <div class="reference-controls" id="reference-controls" hidden>
+              <div class="field range-field">
+                <label for="reference-opacity">Opacity <output id="reference-opacity-value">42%</output></label>
+                <input id="reference-opacity" type="range" min="0" max="100" value="42">
+              </div>
+              <div class="field-grid two">
+                <label class="field"><span>Padding</span><input id="reference-padding" type="number" min="0" max="45" step="1" value="0"></label>
+                <label class="field"><span>Filter</span>
+                  <select id="reference-filter">
+                    <option value="none">Original</option>
+                    <option value="grayscale">Grayscale</option>
+                    <option value="invert">Invert</option>
+                    <option value="contrast">High contrast</option>
+                  </select>
+                </label>
+              </div>
+              <div class="button-row">
+                <button class="button compact" id="fit-reference" type="button">Fit &amp; center</button>
+                <button class="button compact" id="size-from-reference" type="button">Use image size</button>
+                <button class="button compact danger-text" id="remove-reference" type="button">Remove</button>
+              </div>
+              <label class="toggle"><input id="reference-visible" type="checkbox" checked><span>Show reference</span></label>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel" open>
+          <summary class="panel-title">Artboard</summary>
+          <div class="panel-body">
+            <div class="field-grid two">
+              <label class="field"><span>Width</span><input id="artboard-width" type="number" min="1" max="16384" step="1" value="512"></label>
+              <label class="field"><span>Height</span><input id="artboard-height" type="number" min="1" max="16384" step="1" value="512"></label>
+            </div>
+            <div class="field-grid two">
+              <label class="field"><span>Minor spacing</span><input id="grid-size" type="number" min="0.25" max="1024" step="0.25" value="16"></label>
+              <label class="field"><span>Major every</span><input id="grid-major-every" type="number" min="2" max="16" step="1" value="4"></label>
+            </div>
+            <label class="field"><span>Snap</span>
+              <select id="snap-mode">
+                <option value="off">Off</option>
+                <option value="grid">Grid</option>
+                <option value="anchors">Endpoints &amp; anchors</option>
+                <option value="grid-anchors">Grid + endpoints</option>
+              </select>
+            </label>
+            <p class="panel-note grid-note">Spacing uses artboard units. Endpoint snapping makes separate lines meet exactly; hold Alt to bypass snapping temporarily.</p>
+            <div class="button-row">
+              <button class="button compact" id="apply-artboard-size" type="button">Apply size</button>
+              <button class="button compact danger-text" id="clear-artwork" type="button">Clear artwork</button>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel selection-panel" open>
+          <summary class="panel-title">Selection <span class="panel-status" id="selection-kind">None</span></summary>
+          <div class="panel-body empty-selection" id="selection-empty">
+            Select a shape to edit geometry and appearance.
+          </div>
+          <div class="panel-body" id="selection-controls" hidden>
+            <label class="field"><span>Name</span><input id="element-name" type="text" maxlength="80" value=""></label>
+            <div class="field-grid four geometry-fields">
+              <label class="field"><span>X</span><input id="element-x" type="number" step="0.1"></label>
+              <label class="field"><span>Y</span><input id="element-y" type="number" step="0.1"></label>
+              <label class="field"><span>W</span><input id="element-width" type="number" min="0.1" step="0.1"></label>
+              <label class="field"><span>H</span><input id="element-height" type="number" min="0.1" step="0.1"></label>
+            </div>
+
+            <div class="subsection" id="arc-controls" hidden>
+              <div class="subsection-title">Exact circle arc</div>
+              <div class="field-grid two">
+                <label class="field"><span>Center X</span><input id="arc-center-x" type="number" step="0.1"></label>
+                <label class="field"><span>Center Y</span><input id="arc-center-y" type="number" step="0.1"></label>
+              </div>
+              <div class="field-grid three">
+                <label class="field"><span>Radius</span><input id="arc-radius" type="number" min="0.001" step="0.1"></label>
+                <label class="field"><span>Start °</span><input id="arc-start-angle" type="number" step="0.1"></label>
+                <label class="field"><span>Sweep °</span><input id="arc-sweep-angle" type="number" min="-359.99" max="359.99" step="0.1"></label>
+              </div>
+              <p class="panel-note">Duplicate an arc and reuse the same center and radius to build separated sections of one ring.</p>
+            </div>
+
+            <div class="subsection">
+              <div class="subsection-title"><label class="toggle"><input id="fill-enabled" type="checkbox" checked><span>Fill</span></label></div>
+              <div class="style-row">
+                <input class="color-input" id="fill-color" type="color" value="#ffffff" aria-label="Fill color">
+                <label class="field grow"><span>Opacity</span><input id="fill-opacity" type="number" min="0" max="100" step="1" value="100"></label>
+              </div>
+            </div>
+
+            <div class="subsection">
+              <div class="subsection-title"><label class="toggle"><input id="stroke-enabled" type="checkbox" checked><span>Stroke</span></label></div>
+              <div class="style-row">
+                <input class="color-input" id="stroke-color" type="color" value="#101319" aria-label="Stroke color">
+                <label class="field grow"><span>Width</span><input id="stroke-width" type="number" min="0" max="500" step="0.25" value="2"></label>
+                <label class="field grow"><span>Opacity</span><input id="stroke-opacity" type="number" min="0" max="100" step="1" value="100"></label>
+              </div>
+              <div class="field-grid three">
+                <label class="field"><span>Join</span><select id="stroke-join"><option value="round">Round</option><option value="miter">Miter</option><option value="bevel">Bevel</option></select></label>
+                <label class="field"><span>Cap</span><select id="stroke-cap"><option value="round">Round</option><option value="butt">Butt</option><option value="square">Square</option></select></label>
+                <label class="field"><span>Dash</span><input id="stroke-dash" type="text" placeholder="e.g. 12 6"></label>
+              </div>
+            </div>
+
+            <div class="node-actions" id="node-actions" hidden>
+              <div class="subsection-title">Active node <span id="active-node-label">None</span></div>
+              <div class="button-row wrap">
+                <button class="button compact" id="node-smooth" type="button">Make smooth</button>
+                <button class="button compact" id="node-corner" type="button">Make corner</button>
+                <button class="button compact" id="node-add" type="button">Add after</button>
+                <button class="button compact danger-text" id="node-delete" type="button">Delete node</button>
+              </div>
+            </div>
+
+            <div class="button-grid selection-actions">
+              <button class="button compact" id="duplicate-element" type="button">Duplicate</button>
+              <button class="button compact" id="mirror-element" type="button">Mirror copy</button>
+              <button class="button compact" id="bring-forward" type="button">Forward</button>
+              <button class="button compact" id="send-backward" type="button">Backward</button>
+              <button class="button compact danger-text span-two" id="delete-element" type="button">Delete</button>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel" open>
+          <summary class="panel-title">Layers <span class="panel-status" id="layer-count">0</span></summary>
+          <div class="panel-body">
+            <div class="layers-list" id="layers-list">
+              <div class="layers-empty">Draw a shape to create the first layer.</div>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel export-panel" open>
+          <summary class="panel-title">Export <span class="panel-status">SVG · PNG</span></summary>
+          <div class="panel-body">
+            <p class="panel-note">The reference image and editing guides are always excluded.</p>
+            <div class="export-presets" aria-label="PNG size presets">
+              <button class="chip" type="button" data-export-size="64">64</button>
+              <button class="chip" type="button" data-export-size="128">128</button>
+              <button class="chip" type="button" data-export-size="256">256</button>
+              <button class="chip active" type="button" data-export-size="512">512</button>
+              <button class="chip" type="button" data-export-size="1024">1024</button>
+              <button class="chip" type="button" data-export-size="2048">2048</button>
+            </div>
+            <div class="field-grid two">
+              <label class="field"><span>PNG width</span><input id="export-width" type="number" min="1" max="16384" step="1" value="512"></label>
+              <label class="field"><span>PNG height</span><input id="export-height" type="number" min="1" max="16384" step="1" value="512"></label>
+            </div>
+            <div class="field-grid two">
+              <label class="field"><span>Background</span>
+                <select id="export-background">
+                  <option value="transparent">Transparent</option>
+                  <option value="#000000">Black</option>
+                  <option value="#ffffff">White</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <label class="field"><span>Custom</span><input id="export-background-color" type="color" value="#151922"></label>
+            </div>
+            <div class="button-grid export-actions">
+              <button class="button" id="copy-svg" type="button">Copy SVG</button>
+              <button class="button primary" id="export-svg" type="button">Download SVG</button>
+              <button class="button primary span-two" id="export-png" type="button">Download PNG</button>
+            </div>
+          </div>
+        </details>
+      </aside>
+    </main>
+  </div>
+
+  <input id="reference-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+  <input id="project-input" type="file" accept="application/json,.json,.avstudio" hidden>
+  <input id="svg-input" type="file" accept="image/svg+xml,.svg" hidden>
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="editor-core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

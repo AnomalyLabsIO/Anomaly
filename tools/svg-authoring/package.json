@@ -1,0 +1,10 @@
+{
+  "name": "anomaly-svg-authoring",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dependency-free SVG authoring tool for Anomaly artwork.",
+  "scripts": {
+    "start": "node serve.js",
+    "test": "node --test tests/editor-core.test.js tests/app-contract.test.js tests/server-smoke.test.js"
+  }
+}
