@@ -1,0 +1,10 @@
+[
+  {
+    "Kind": "Texture2D",
+    "AssetPath": "Texture2D/textures/GridBox_Default",
+    "OverrideAt": "Overrides/Texture2D/textures/GridBox_Default.png",
+    "Size": 13411,
+    "Sha256": "",
+    "Note": "Phase 2 \u2014 runtime hook not yet wired"
+  }
+]
