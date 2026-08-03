@@ -2,5 +2,24 @@ bin/
 obj/
 publish/
 /packages/
+
+# IDE and per-user state
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
 riderModule.iml
 /_ReSharper.Caches/
+
+# Local tooling and generated caches
+__pycache__/
+*.py[cod]
+.claude/settings.local.json
+steamdb_patch_manifest_map.csv
+
+# Private vanity-identity outputs (contain private key material)
+tools/vanity-results.jsonl*
