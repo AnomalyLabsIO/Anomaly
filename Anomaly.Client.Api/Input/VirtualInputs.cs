@@ -285,10 +285,9 @@ public static class VirtualInputs
     {
         if (string.IsNullOrEmpty(id))
             throw new ArgumentException("Provider id must be non-empty.", nameof(id));
-        if (ModNamespace.IsReserved(id)) return;
-        if (ModNamespace.IsValid(id)) return;
+        if (ModNamespace.IsValid(id) && !ModNamespace.IsReserved(id)) return;
         throw new ArgumentException(
-            $"Provider id '{id}' must be a dotted-lowercase namespace prefixed by your mod id (e.g. \"mymod.fire\").",
+            $"Provider id '{id}' must be a non-reserved dotted-lowercase namespace prefixed by your mod id (e.g. \"mymod.fire\").",
             nameof(id));
     }
 

@@ -12,18 +12,20 @@ public sealed class AcceptanceRuntimeTests
     public void Input_frame_is_snapshotted_and_edge_state_precedes_reentrant_callbacks()
     {
         var dispatcher = new InputFrameDispatcher();
-        var bindings = new List<KeyValuePair<string, InputKey>>
+        var bindings = new List<InputFrameBinding>
         {
-            new("example.first", default),
-            new("example.second", default),
+            new("example.first", default, new object()),
+            new("example.second", default, new object()),
         };
         var observed = new List<string>();
 
         dispatcher.Update(
             bindings,
             _ => true,
-            id =>
+            _ => true,
+            binding =>
             {
+                string id = binding.Id;
                 observed.Add(id);
                 if (id != "example.first")
                     return;
@@ -35,7 +37,8 @@ public sealed class AcceptanceRuntimeTests
                 dispatcher.Update(
                     bindings,
                     _ => true,
-                    observed.Add,
+                    _ => true,
+                    current => observed.Add(current.Id),
                     _ => throw new InvalidOperationException("unexpected release"));
                 bindings.Clear();
             },

@@ -7,12 +7,14 @@ using Anomaly.Client.Api.Scheduling;
 using Anomaly.Client.Api.UI.ModSettings;
 using Anomaly.Client.Api.UI.ModSettings.Internal;
 using Anomaly.Client.Components.ModSettings;
+using Anomaly.Client.Internal.UI;
 using Il2CppInterop.Runtime;
 using Il2CppTMPro;
 using MelonLoader;
 using MelonLoader.Preferences;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Anomaly.Client.Patches.Menu.ModSettings;
@@ -29,11 +31,8 @@ internal static class ModSettingsRenderer
 
     // Layout constants. Sized so the bold row label at 22pt fits comfortably with
     // a small amount of vertical breathing room, matching the vanilla tabs.
-    private const float RowHeight = 36f;
-    private const float RowSpacing = 4f;
-    private const float LabelPreferredWidth = 320f;
     private const float WidgetPreferredWidth = 320f;
-    private const float WidgetHeight = 32f;
+    private const float WidgetHeight = 48f;
     private const float HeaderHeight = 36f;
     private const float SubHeaderHeight = 24f;
     private const float CategoryGap = 20f;   // blank space before each category header (after the first)
@@ -42,20 +41,19 @@ internal static class ModSettingsRenderer
     private const float WidgetFontSize = 20f;
 
     // Palette.
-    private static readonly Color LabelBg = new Color(0.08f, 0.08f, 0.08f, 0.85f);
-    private static readonly Color InputBg = new Color(0f, 0f, 0f, 0.85f);
+    private static readonly Color LabelBg = AnomalyUiStyle.Panel;
+    private static readonly Color InputBg = AnomalyUiStyle.Input;
     private static readonly Color SliderTrackBg = new Color(0.05f, 0.05f, 0.05f, 0.85f);
-    private static readonly Color SliderFillColor = new Color(0.85f, 0.40f, 0.05f, 1f);
+    private static readonly Color SliderFillColor = AnomalyUiStyle.Accent;
     private static readonly Color SliderHandleColor = new Color(0.95f, 0.95f, 0.95f, 1f);
-    private static readonly Color DropdownBg = new Color(0.10f, 0.10f, 0.10f, 0.90f);
-    private static readonly Color HeaderColor = new Color(1f, 1f, 1f, 1f);
-    private static readonly Color TextColor = new Color(1f, 1f, 1f, 1f);
+    private static readonly Color DropdownBg = AnomalyUiStyle.Input;
+    private static readonly Color HeaderColor = AnomalyUiStyle.Text;
+    private static readonly Color TextColor = AnomalyUiStyle.Text;
 
     private static readonly HashSet<string> _loggedUnsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
 
     private static RectTransform _content;
     private static ModSettingsTemplateCache _templates;
-    private static int _lastRenderedRegistry = -1;
     private static ScheduledTask _pendingRebuild;
 
     internal static void Attach(RectTransform content, ModSettingsTemplateCache templates)
@@ -93,6 +91,10 @@ internal static class ModSettingsRenderer
             return;
         }
 
+        var selected = EventSystem.current?.currentSelectedGameObject;
+        string selectedRow = selected?.GetComponentInParent<ModSettingsRowState>()?.gameObject.name;
+        string selectedControl = selected?.name;
+        Vector2 scrollPosition = content.anchoredPosition;
         for (int i = content.childCount - 1; i >= 0; i--)
         {
             try { UnityEngine.Object.DestroyImmediate(content.GetChild(i).gameObject); }
@@ -111,7 +113,6 @@ internal static class ModSettingsRenderer
         if (categories.Count == 0)
         {
             SpawnLabelOnly(content, Tr.Get(TrKeys.Settings_ModsEmptyState), large: true);
-            _lastRenderedRegistry = ModSettingsRegistry.Revision;
             return;
         }
 
@@ -134,13 +135,27 @@ internal static class ModSettingsRenderer
                 if (entryMeta?.Group is { } group && !string.Equals(group, previousGroup, StringComparison.Ordinal))
                 {
                     SpawnLabelOnly(content, group, large: false);
-                    previousGroup = group;
                 }
+                previousGroup = entryMeta?.Group;
                 SpawnRow(content, entry, entryMeta);
             }
         }
 
-        _lastRenderedRegistry = ModSettingsRegistry.Revision;
+        Canvas.ForceUpdateCanvases();
+        content.anchoredPosition = scrollPosition;
+        if (selectedRow != null && EventSystem.current != null)
+        {
+            foreach (var control in content.GetComponentsInChildren<Selectable>(includeInactive: true))
+            {
+                if (control.name == selectedControl
+                    && control.GetComponentInParent<ModSettingsRowState>()?.gameObject.name == selectedRow
+                    && control.IsInteractable() && control.gameObject.activeInHierarchy)
+                {
+                    EventSystem.current.SetSelectedGameObject(control.gameObject);
+                    break;
+                }
+            }
+        }
     }
 
     // ---- Category / entry filtering ----
@@ -219,20 +234,32 @@ internal static class ModSettingsRenderer
     }
 
     private static bool IsNumeric(Type t)
-        => t == typeof(int) || t == typeof(float) || t == typeof(double)
-           || t == typeof(long) || t == typeof(short) || t == typeof(decimal);
+        => ModSettingValue.IsNumeric(t);
 
     // ---- Row dispatcher ----
 
     private static void SpawnRow(RectTransform content, MelonPreferences_Entry entry, ModSettingMetadata meta)
     {
-        var row = BuildRow(content, ResolveLabel(entry, meta));
+        var row = BuildRow(content, entry, meta, out var controls, out var value, out var feedback);
         if (row == null) return;
+        var rowState = row.AddComponent<ModSettingsRowState>();
+        BuildWidget(controls, entry, meta);
+        var reset = BuildSubButton(controls, "Reset", "Reset");
+        var resetLayout = reset.go.GetComponent<LayoutElement>();
+        resetLayout.minWidth = 112f;
+        resetLayout.preferredWidth = 112f;
+        resetLayout.flexibleWidth = 0f;
+        var retry = BuildSubButton(row.transform, "RetrySave", "Retry save");
+        rowState.Initialize(entry, value, feedback, reset.btn, retry.btn);
+        row.SetActive(true);
+    }
 
+    private static void BuildWidget(Transform parent, MelonPreferences_Entry entry, ModSettingMetadata meta)
+    {
         // meta.Choices forces a dropdown regardless of type.
         if (meta?.Choices is { Count: > 0 })
         {
-            BuildDropdownWidget(row.transform, entry, meta, meta.Choices, isEnum: false);
+            BuildDropdownWidget(parent, entry, meta, meta.Choices, isEnum: entry.GetReflectedType().IsEnum);
             MelonLogger.Msg($"ModSettings:     spawned dropdown (choices) row for '{entry.Identifier}'.");
             return;
         }
@@ -241,34 +268,36 @@ internal static class ModSettingsRenderer
 
         if (t == typeof(bool))
         {
-            BuildTwoButtonsWidget(row.transform, entry);
+            BuildTwoButtonsWidget(parent, entry);
             MelonLogger.Msg($"ModSettings:     spawned bool row for '{entry.Identifier}'.");
             return;
         }
 
         if (t.IsEnum)
         {
-            BuildDropdownWidget(row.transform, entry, meta, Enum.GetNames(t), isEnum: true);
+            BuildDropdownWidget(parent, entry, meta, Enum.GetNames(t), isEnum: true);
             MelonLogger.Msg($"ModSettings:     spawned enum row for '{entry.Identifier}'.");
             return;
         }
 
         if (IsNumeric(t))
         {
-            if (TryGetRange(entry, meta, out float min, out float max))
+            // Preserve exact long/decimal values with text input rather than a float slider.
+            if (t != typeof(long) && t != typeof(decimal)
+                && TryGetRange(entry, meta, out float min, out float max))
             {
-                BuildSliderWidget(row.transform, entry, meta, min, max,
+                BuildSliderWidget(parent, entry, meta, min, max,
                     wholeNumbers: t == typeof(int) || t == typeof(long) || t == typeof(short));
                 MelonLogger.Msg($"ModSettings:     spawned slider row for '{entry.Identifier}' ({min}..{max}).");
                 return;
             }
-            BuildInputField(row.transform, entry, meta);
+            BuildInputField(parent, entry, meta);
             MelonLogger.Msg($"ModSettings:     spawned numeric input row for '{entry.Identifier}'.");
             return;
         }
 
         // string (and anything else falling through)
-        BuildInputField(row.transform, entry, meta);
+        BuildInputField(parent, entry, meta);
         MelonLogger.Msg($"ModSettings:     spawned input row for '{entry.Identifier}'.");
     }
 
@@ -278,7 +307,7 @@ internal static class ModSettingsRenderer
         if (meta?.MinValue is { } mn && meta.MaxValue is { } mx && mx > mn)
         {
             min = (float)mn; max = (float)mx;
-            return true;
+            return float.IsFinite(min) && float.IsFinite(max) && max > min;
         }
         if (entry.Validator is IValueRange range)
         {
@@ -286,7 +315,7 @@ internal static class ModSettingsRenderer
             {
                 min = Convert.ToSingle(range.MinValue);
                 max = Convert.ToSingle(range.MaxValue);
-                return max > min;
+                return float.IsFinite(min) && float.IsFinite(max) && max > min;
             }
             catch { return false; }
         }
@@ -300,69 +329,64 @@ internal static class ModSettingsRenderer
 
     /// <summary>Make a UI GameObject that has a <see cref="RectTransform"/> from creation.</summary>
     private static GameObject MakeUi(string name)
-        => new GameObject(name, new Il2CppSystem.Type[] { Il2CppType.Of<RectTransform>() });
+        => AnomalyUiStyle.MakeUi(name);
 
-    private static GameObject BuildRow(RectTransform content, string labelText)
+    private static GameObject BuildRow(RectTransform content, MelonPreferences_Entry entry, ModSettingMetadata meta,
+        out Transform controls, out TMP_Text value, out TMP_Text feedback)
     {
+        controls = null;
+        value = null;
+        feedback = null;
         GameObject row;
-        try { row = MakeUi("ModSettings.Row"); }
+        try { row = MakeUi("ModSettings.Row." + entry.Category.Identifier + "." + entry.Identifier); }
         catch (Exception ex) { MelonLogger.Warning($"ModSettings: row construction failed: {ex.Message}"); return null; }
+        // Keep binding deterministic even when rebuilding a visible tab.
+        row.SetActive(false);
         row.transform.SetParent(content, worldPositionStays: false);
-
-        // Layout: label on the left (fixed width, dark bg), widget grows to fill
-        // the remaining horizontal space. childForceExpandWidth=true distributes
-        // extra space to children with flexibleWidth > 0 — only the widget has
-        // that, so the label stays at its preferredWidth.
-        var hlg = row.AddComponent<HorizontalLayoutGroup>();
+        var background = row.AddComponent<Image>();
+        background.color = LabelBg;
+        background.raycastTarget = false;
+        ApplyRoundedBg(background);
+        var layout = row.AddComponent<VerticalLayoutGroup>();
+        layout.padding = new RectOffset { left = 16, right = 16, top = 12, bottom = 12 };
+        layout.spacing = 8f;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+        BuildFlowText(row.transform, "Label", ResolveLabel(entry, meta), RowFontSize, TextColor);
+        string description = meta?.Description ?? entry.Description;
+        if (!string.IsNullOrWhiteSpace(description))
+            BuildFlowText(row.transform, "Description", description, 18f, AnomalyUiStyle.Secondary);
+        var controlsGo = MakeUi("Controls");
+        controlsGo.transform.SetParent(row.transform, false);
+        var hlg = controlsGo.AddComponent<HorizontalLayoutGroup>();
         hlg.childAlignment = TextAnchor.MiddleLeft;
         hlg.childControlWidth = true;
         hlg.childControlHeight = true;
         hlg.childForceExpandWidth = true;
         hlg.childForceExpandHeight = true;
-        hlg.spacing = 0f;
-
-        var le = row.AddComponent<LayoutElement>();
-        le.minHeight = RowHeight;
-        le.preferredHeight = RowHeight;
-        le.flexibleWidth = 1f;
-
-        BuildLabel(row.transform, labelText);
+        hlg.spacing = 12f;
+        controlsGo.AddComponent<LayoutElement>().minHeight = WidgetHeight;
+        controls = controlsGo.transform;
+        value = BuildFlowText(row.transform, "Value", "", 18f, AnomalyUiStyle.Secondary);
+        feedback = BuildFlowText(row.transform, "Feedback", "", 18f, AnomalyUiStyle.Error);
         return row;
     }
 
-    private static void BuildLabel(Transform parent, string text)
+    private static TMP_Text BuildFlowText(Transform parent, string name, string text, float size, Color color)
     {
-        var labelGo = MakeUi("Label");
-        labelGo.transform.SetParent(parent, worldPositionStays: false);
-
-        var le = labelGo.AddComponent<LayoutElement>();
-        le.preferredWidth = LabelPreferredWidth;
-        le.flexibleWidth = 0f;
-        le.minHeight = RowHeight;
-        le.preferredHeight = RowHeight;
-
-        var bg = labelGo.AddComponent<Image>();
-        bg.color = LabelBg;
-        bg.raycastTarget = false;
-        ApplyRoundedBg(bg);
-
-        // Inner text inset for visual padding.
-        var textGo = MakeUi("Text");
-        textGo.transform.SetParent(labelGo.transform, worldPositionStays: false);
-        var textRect = textGo.GetComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = new Vector2(16f, 0f);
-        textRect.offsetMax = new Vector2(-8f, 0f);
-
+        var textGo = MakeUi(name);
+        textGo.transform.SetParent(parent, false);
         var tmp = textGo.AddComponent<TextMeshProUGUI>();
         ApplyFont(tmp);
         tmp.text = text;
-        tmp.fontSize = RowFontSize;
+        tmp.fontSize = size;
         tmp.alignment = TextAlignmentOptions.MidlineLeft;
-        tmp.enableWordWrapping = false;
-        tmp.color = TextColor;
+        tmp.enableWordWrapping = true;
+        tmp.color = color;
         tmp.raycastTarget = false;
+        return tmp;
     }
 
     private static void SpawnLabelOnly(RectTransform parent, string text, bool large)
@@ -372,19 +396,16 @@ internal static class ModSettingsRenderer
             var go = MakeUi(large ? "ModSettings.Header" : "ModSettings.SubHeader");
             go.transform.SetParent(parent, worldPositionStays: false);
 
-            var le = go.AddComponent<LayoutElement>();
-            le.minHeight = large ? HeaderHeight : SubHeaderHeight;
-            le.preferredHeight = large ? HeaderHeight : SubHeaderHeight;
-            le.flexibleWidth = 1f;
+            go.AddComponent<LayoutElement>().minHeight = large ? HeaderHeight : SubHeaderHeight;
 
             var tmp = go.AddComponent<TextMeshProUGUI>();
             ApplyFont(tmp);
             // Match vanilla: category headers are uppercase and centered (see the
             // "PRIVACY" header in the Other tab). Sub-headers stay left-aligned.
-            tmp.text = large ? (text ?? string.Empty).ToUpperInvariant() : text;
+            tmp.text = text ?? string.Empty;
             tmp.fontSize = large ? HeaderFontSize : RowFontSize;
-            tmp.alignment = large ? TextAlignmentOptions.Center : TextAlignmentOptions.MidlineLeft;
-            tmp.enableWordWrapping = false;
+            tmp.alignment = TextAlignmentOptions.MidlineLeft;
+            tmp.enableWordWrapping = true;
             tmp.color = large ? HeaderColor : new Color(0.85f, 0.85f, 0.85f, 1f);
             tmp.raycastTarget = false;
         }
@@ -414,6 +435,7 @@ internal static class ModSettingsRenderer
 
     private static void ApplyFont(TMP_Text tmp)
     {
+        AnomalyUiStyle.ApplyText(tmp, WidgetFontSize);
         if (_templates?.Font != null)
         {
             tmp.font = _templates.Font;
@@ -493,9 +515,8 @@ internal static class ModSettingsRenderer
         ApplyRoundedBg(bg);
 
         var btn = go.AddComponent<Button>();
-        btn.transition = Selectable.Transition.None;
         btn.targetGraphic = bg;
-        var nav = btn.navigation; nav.mode = Navigation.Mode.None; btn.navigation = nav;
+        AnomalyUiStyle.ApplySelectable(btn);
 
         var textGo = MakeUi("Text");
         textGo.transform.SetParent(go.transform, worldPositionStays: false);
@@ -533,8 +554,6 @@ internal static class ModSettingsRenderer
         ApplyRoundedBg(bg);
 
         var slider = container.AddComponent<Slider>();
-        slider.transition = Selectable.Transition.None;
-        var nav = slider.navigation; nav.mode = Navigation.Mode.None; slider.navigation = nav;
 
         // Fill area.
         var fillArea = MakeUi("Fill Area");
@@ -578,6 +597,7 @@ internal static class ModSettingsRenderer
         ApplyRoundedBg(handleImage);
 
         slider.targetGraphic = handleImage;
+        AnomalyUiStyle.ApplySelectable(slider);
         slider.fillRect = fillRect;
         slider.handleRect = handleRect;
         slider.direction = Slider.Direction.LeftToRight;
@@ -605,8 +625,8 @@ internal static class ModSettingsRenderer
         ApplyRoundedBg(bg);
 
         var dropdown = container.AddComponent<TMP_Dropdown>();
-        dropdown.transition = Selectable.Transition.None;
-        var nav = dropdown.navigation; nav.mode = Navigation.Mode.None; dropdown.navigation = nav;
+        dropdown.targetGraphic = bg;
+        AnomalyUiStyle.ApplySelectable(dropdown);
 
         // Caption text (visible current selection).
         var captionGo = MakeUi("Label");
@@ -620,7 +640,7 @@ internal static class ModSettingsRenderer
         ApplyFont(caption);
         caption.fontSize = WidgetFontSize;
         caption.alignment = TextAlignmentOptions.MidlineLeft;
-        caption.enableWordWrapping = false;
+        caption.enableWordWrapping = true;
         caption.color = TextColor;
         caption.raycastTarget = false;
         dropdown.captionText = caption;
@@ -659,7 +679,7 @@ internal static class ModSettingsRenderer
         tRect.anchorMax = new Vector2(1f, 0f);
         tRect.pivot = new Vector2(0.5f, 1f);
         tRect.anchoredPosition = new Vector2(0f, 0f);
-        tRect.sizeDelta = new Vector2(0f, 150f);
+        tRect.sizeDelta = new Vector2(0f, 240f);
         var templateBg = template.AddComponent<Image>();
         templateBg.color = DropdownBg;
         ApplyRoundedBg(templateBg);
@@ -683,7 +703,14 @@ internal static class ModSettingsRenderer
         cRect.anchorMax = new Vector2(1f, 1f);
         cRect.pivot = new Vector2(0.5f, 1f);
         cRect.anchoredPosition = Vector2.zero;
-        cRect.sizeDelta = new Vector2(0f, 28f);
+        cRect.sizeDelta = new Vector2(0f, WidgetHeight);
+        var scroll = template.AddComponent<ScrollRect>();
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = 30f;
+        scroll.viewport = vRect;
+        scroll.content = cRect;
 
         // Item — TMP_Dropdown instantiates one per option using this as a template.
         var item = MakeUi("Item");
@@ -691,17 +718,12 @@ internal static class ModSettingsRenderer
         var iRect = item.GetComponent<RectTransform>();
         iRect.anchorMin = new Vector2(0f, 0.5f);
         iRect.anchorMax = new Vector2(1f, 0.5f);
-        iRect.sizeDelta = new Vector2(0f, 28f);
+        iRect.sizeDelta = new Vector2(0f, WidgetHeight);
         var itemBg = item.AddComponent<Image>();
-        itemBg.color = new Color(0f, 0f, 0f, 0f);
+        itemBg.color = DropdownBg;
         var itemToggle = item.AddComponent<Toggle>();
-        itemToggle.transition = Selectable.Transition.ColorTint;
         itemToggle.targetGraphic = itemBg;
-        var colors = itemToggle.colors;
-        colors.highlightedColor = new Color(0.85f, 0.40f, 0.05f, 0.5f);
-        colors.pressedColor = new Color(0.85f, 0.40f, 0.05f, 0.7f);
-        colors.selectedColor = new Color(0.85f, 0.40f, 0.05f, 0.5f);
-        itemToggle.colors = colors;
+        AnomalyUiStyle.ApplySelectable(itemToggle);
 
         var itemBgChild = MakeUi("Item Background");
         itemBgChild.transform.SetParent(item.transform, worldPositionStays: false);
@@ -723,7 +745,7 @@ internal static class ModSettingsRenderer
         ApplyFont(itemTmp);
         itemTmp.fontSize = WidgetFontSize;
         itemTmp.alignment = TextAlignmentOptions.MidlineLeft;
-        itemTmp.enableWordWrapping = false;
+        itemTmp.enableWordWrapping = true;
         itemTmp.color = TextColor;
         itemTmp.raycastTarget = false;
 
@@ -776,6 +798,9 @@ internal static class ModSettingsRenderer
 
         input.textViewport = taRect;
         input.textComponent = textTmp;
+        input.targetGraphic = bg;
+        input.lineType = TMP_InputField.LineType.SingleLine;
+        AnomalyUiStyle.ApplySelectable(input);
 
         var binder = inputGo.AddComponent<ModSettingsInputFieldBinder>();
         binder.Initialize(entry, meta);

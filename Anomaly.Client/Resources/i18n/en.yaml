@@ -10,10 +10,22 @@
 
 # ===== Authentication / connection overlays =====
 "anomaly.overlay.authenticating": "Authenticating, Please Wait..."
-"anomaly.overlay.connection_authenticating": "<size=80>Authenticating...</size>\nPlease wait while the server identifies you."
-"anomaly.overlay.password_required": "<size=80>Password Required</size>\nEnter the server password to continue."
+"anomaly.overlay.connection_authenticating": "Authenticating...\nPlease wait while the server identifies you."
+"anomaly.overlay.password_required": "Password required\nEnter the server password to continue."
 "anomaly.password_prompt.title": "Server Password Required"
 "anomaly.password_prompt.hint": "Type or paste the password, then press Enter. Press Esc to cancel."
+"anomaly.prompt.cancel": "Cancel"
+"anomaly.prompt.connect": "Connect"
+"anomaly.prompt.save": "Save nickname"
+"anomaly.prompt.dismiss": "Dismiss"
+"anomaly.prompt.trust_connect": "Trust and connect"
+"anomaly.prompt.allow_content": "Allow content"
+"anomaly.prompt.skip_content": "Skip content"
+"anomaly.prompt.save_error": "Could not save. Check that Anomaly's UserData folder is writable, then try again. Your input is still here."
+"anomaly.prompt.nickname_title": "Choose your Anomaly nickname"
+"anomaly.prompt.nickname_details": "This name is sent to servers. Anomaly will not use your Windows username. Enter 1–32 visible characters."
+"anomaly.prompt.nickname_invalid": "Enter 1–32 visible characters. Control characters are not allowed."
+"anomaly.prompt.keyboard_hint": "Tab: next control · Page Up/Down: scroll details · Esc: cancel"
 
 # ===== File transfer overlay =====
 "anomaly.overlay.file_transfer.preparing": "Preparing download..."
@@ -24,16 +36,18 @@
 "anomaly.overlay.file_transfer.loading_level": "Loading facility... ({0} assets)"
 
 # ===== News panel (in-game launcher news) =====
-"anomaly.news.anomaly.title": "<color=#ff3300>Anomaly</color>"
-"anomaly.news.anomaly.body": "<b><size=20>Welcome to Anomaly, a SCP:SL modded version.</size></b>\n\n<color=#ec0c02>Alpha Build</color>"
-"anomaly.news.anomaly.date": "April 5, 2026"
+"anomaly.news.anomaly.title": "<color=#d5660d>Anomaly early access</color>"
+"anomaly.news.anomaly.body": "<b>Welcome to Anomaly</b>\n\nTry community mods with a matching client and server release. Mod preferences are in Settings → Mods.\n\nDevelopers: start with the SDK's MelonMod sample. Run anomaly.status in the game console when reporting a problem.\n\nEarly access: APIs and game hooks may change between releases."
+# {0} = installed Anomaly version
+"anomaly.news.anomaly.date": "Anomaly {0} · Early access"
 
 # ===== Main menu =====
 # {0} = username
 "anomaly.menu.welcome": "Welcome back, {0}"
 # {0} = username
 "anomaly.menu.auth_connected": "Connected as {0}"
-"anomaly.menu.auth_not_signed_in": "Not signed in"
+"anomaly.menu.auth_ready": "Ready as {0}"
+"anomaly.menu.auth_not_signed_in": "Choose a nickname to connect"
 "anomaly.menu.auth_unavailable": "Authentication unavailable — files unchanged; repair the reported profile or trust-store error, then restart."
 
 # ===== Mods settings tab =====

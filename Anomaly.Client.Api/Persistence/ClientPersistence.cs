@@ -28,18 +28,17 @@ public static class ClientPersistence
     /// <summary>
     /// Returns (or creates) the persistence store for <paramref name="modId"/>.
     /// <paramref name="modId"/> must be a syntactically valid dotted-lowercase
-    /// namespace; the reserved <c>"anomaly"</c> prefix is accepted for the
-    /// framework's own stores.
+    /// namespace outside the reserved <c>"anomaly"</c> prefix.
     /// </summary>
     public static IPersistenceStore For(string modId)
     {
         if (string.IsNullOrEmpty(modId))
             throw new ArgumentException("Mod id must be non-empty.", nameof(modId));
 
-        if (!ModNamespace.IsReserved(modId) && !ModNamespace.IsValid(modId))
+        if (!ModNamespace.IsValid(modId) || ModNamespace.IsReserved(modId))
         {
             throw new ArgumentException(
-                $"ClientPersistence.For('{modId}'): id is not a valid namespace (lowercase dotted, e.g. \"mymod\").",
+                $"ClientPersistence.For('{modId}'): id must be a non-reserved namespace (lowercase dotted, e.g. \"mymod\").",
                 nameof(modId));
         }
 
@@ -55,7 +54,7 @@ public static class ClientPersistence
     /// Flushes every open store synchronously. Call on shutdown paths so
     /// debounced writes don't get lost.
     /// </summary>
-    public static void FlushAll()
+    internal static void FlushAll()
     {
         foreach (var store in _stores.Values)
         {

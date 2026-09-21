@@ -1,7 +1,6 @@
 using System;
-using System.Globalization;
 using Anomaly.Client.Api.UI.ModSettings;
-using Anomaly.Client.Patches.Menu.ModSettings;
+using Anomaly.Client.Api.UI.ModSettings.Internal;
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.Attributes;
 using Il2CppTMPro;
@@ -14,8 +13,7 @@ namespace Anomaly.Client.Components.ModSettings;
 /// <summary>
 /// Bidirectional binding between a TextMeshPro <see cref="TMP_InputField"/> and
 /// a <c>MelonPreferences_Entry</c> whose value is a string or a numeric type
-/// without a slider range. Parse errors on <c>onEndEdit</c> revert the field to
-/// the last known good value rather than writing garbage to the entry.
+/// without a slider range. Invalid input remains editable and never changes the entry.
 /// </summary>
 [RegisterTypeInIl2Cpp]
 public sealed class ModSettingsInputFieldBinder : MonoBehaviour
@@ -28,23 +26,33 @@ public sealed class ModSettingsInputFieldBinder : MonoBehaviour
     private LemonAction<object, object> _externalListener;
     private UnityAction<string> _uiListener;
     private TMP_InputField _input;
+    private ModSettingsRowState _row;
+    private bool _bound;
+    private ModSettingMetadata _metadata;
 
     [HideFromIl2Cpp]
-    internal void Initialize(MelonPreferences_Entry entry, ModSettingMetadata _ /* metadata reserved */)
+    internal void Initialize(MelonPreferences_Entry entry, ModSettingMetadata metadata)
     {
         _entry = entry;
         _entryType = entry?.GetReflectedType();
+        _metadata = metadata;
+        Bind();
     }
 
-    private void Awake()
+    private void Awake() => Bind();
+
+    [HideFromIl2Cpp]
+    private void Bind()
     {
-        if (_entry == null) return;
+        if (_entry == null || _bound) return;
         _input = GetComponentInChildren<TMP_InputField>(includeInactive: true);
         if (_input == null) return;
+        _row = GetComponentInParent<ModSettingsRowState>(includeInactive: true);
+        _bound = true;
 
         try
         {
-            _input.SetTextWithoutNotify(StringOf(_entry.BoxedValue));
+            _input.SetTextWithoutNotify(ModSettingValue.Format(_entry.BoxedValue));
             _input.contentType = ChooseContentType(_entryType);
         }
         catch (Exception ex) { MelonLogger.Warning($"ModSettings input init failed for '{_entry.Identifier}': {ex.Message}"); }
@@ -63,16 +71,23 @@ public sealed class ModSettingsInputFieldBinder : MonoBehaviour
         if (_entry == null || _input == null) return;
         try
         {
-            if (!TryParseAs(_entryType, text, out object typed))
+            if (!ModSettingValue.TryParse(_entryType, text, out object typed))
             {
-                // Revert to last known good value.
-                _input.SetTextWithoutNotify(StringOf(_entry.BoxedValue));
+                _row?.SetValidation("Enter a valid " + _entryType.Name + " value. The setting was not changed.");
                 return;
             }
 
-            if (Equals(_entry.BoxedValue, typed)) return;
-            _entry.BoxedValue = typed;
-            ModSettingsSaveScheduler.RequestSave(_entry.Category);
+            if (ModSettingValue.IsNumeric(_entryType) && _metadata?.MinValue is double minimum
+                && _metadata.MaxValue is double maximum
+                && (Convert.ToDouble(typed) < minimum || Convert.ToDouble(typed) > maximum))
+            {
+                _row?.SetValidation("Enter a value between " + ModSettingValue.Format(minimum)
+                    + " and " + ModSettingValue.Format(maximum) + ". The setting was not changed.");
+                return;
+            }
+
+            if (_row?.TryWrite(typed) == true)
+                _input.SetTextWithoutNotify(ModSettingValue.Format(_entry.BoxedValue));
         }
         catch (Exception ex)
         {
@@ -84,7 +99,7 @@ public sealed class ModSettingsInputFieldBinder : MonoBehaviour
     private void OnExternalChange(object _, object newVal)
     {
         if (_input == null) return;
-        try { _input.SetTextWithoutNotify(StringOf(newVal)); }
+        try { _input.SetTextWithoutNotify(ModSettingValue.Format(newVal)); }
         catch (Exception ex) { MelonLogger.Warning($"ModSettings input refresh failed: {ex.Message}"); }
     }
 
@@ -101,13 +116,6 @@ public sealed class ModSettingsInputFieldBinder : MonoBehaviour
     }
 
     [HideFromIl2Cpp]
-    private static string StringOf(object boxed)
-    {
-        if (boxed == null) return string.Empty;
-        return boxed is IFormattable f ? f.ToString(null, CultureInfo.InvariantCulture) : boxed.ToString();
-    }
-
-    [HideFromIl2Cpp]
     private static TMP_InputField.ContentType ChooseContentType(Type t)
     {
         if (t == null) return TMP_InputField.ContentType.Standard;
@@ -116,29 +124,4 @@ public sealed class ModSettingsInputFieldBinder : MonoBehaviour
         return TMP_InputField.ContentType.Standard;
     }
 
-    [HideFromIl2Cpp]
-    private static bool TryParseAs(Type t, string text, out object value)
-    {
-        value = null;
-        if (t == null) return false;
-        if (t == typeof(string)) { value = text ?? string.Empty; return true; }
-
-        try
-        {
-            if (t == typeof(int))    { value = int.Parse(text, CultureInfo.InvariantCulture); return true; }
-            if (t == typeof(long))   { value = long.Parse(text, CultureInfo.InvariantCulture); return true; }
-            if (t == typeof(short))  { value = short.Parse(text, CultureInfo.InvariantCulture); return true; }
-            if (t == typeof(float))  { value = float.Parse(text, CultureInfo.InvariantCulture); return true; }
-            if (t == typeof(double)) { value = double.Parse(text, CultureInfo.InvariantCulture); return true; }
-            if (t == typeof(decimal)){ value = decimal.Parse(text, CultureInfo.InvariantCulture); return true; }
-
-            value = Convert.ChangeType(text, t, CultureInfo.InvariantCulture);
-            return value != null;
-        }
-        catch
-        {
-            value = null;
-            return false;
-        }
-    }
 }

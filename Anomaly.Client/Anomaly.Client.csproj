@@ -377,7 +377,8 @@
 		<Compile Include="Auth\ServerConnection.cs" />
 		<Compile Include="Commands\NameCommand.cs" />
 		<Compile Include="Commands\IdentityCommand.cs" />
-		<Compile Include="Commands\WhoAmICommand.cs" />
+    <Compile Include="Commands\WhoAmICommand.cs" />
+    <Compile Include="Commands\StatusCommand.cs" />
 		<Compile Include="Content\ClientContentRegistrar.cs" />
 		<Compile Include="Content\ContentCatalogClient.cs" />
 		<Compile Include="Content\ContentConsentStore.cs" />
@@ -386,6 +387,8 @@
 		<Compile Include="Components\CreditsHookComponent.cs" />
 		<Compile Include="Components\FileTransferOverlayComponent.cs" />
 		<Compile Include="Components\ModSettings\ModSettingsDropdownBinder.cs" />
+        <Compile Include="Components\ModSettings\ModSettingsRowState.cs" />
+        <Compile Include="Components\ModSettings\ModSettingsNavigation.cs" />
 		<Compile Include="Components\ModSettings\ModSettingsInputFieldBinder.cs" />
 		<Compile Include="Components\ModSettings\ModSettingsSliderBinder.cs" />
 		<Compile Include="Components\ModSettings\ModSettingsToggleBinder.cs" />
@@ -410,6 +413,7 @@
 		<Compile Include="Internal\Modding\ManagedModRuntime.cs" />
 		<Compile Include="Internal\Modding\ModContext.cs" />
 		<Compile Include="Internal\UI\PreloaderSkinBootstrap.cs" />
+        <Compile Include="Internal\UI\AnomalyUiStyle.cs" />
 		<Compile Include="Internal\Networking\SilentRoleChangeHandler.cs" />
 		<Compile Include="Internal\Networking\EnrollmentIdentityReceiver.cs" />
 		<Compile Include="Internal\PlayerCustomization\PlayerColorTracker.cs" />

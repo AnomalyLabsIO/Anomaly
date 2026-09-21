@@ -91,7 +91,7 @@ public static class Scheduler
 
     /// <summary>
     /// Starts or refreshes a named cooldown. The key must be prefixed by a
-    /// registered mod id.
+    /// non-reserved mod id.
     /// </summary>
     public static void StartCooldown(string key, TimeSpan duration)
     {
@@ -261,11 +261,10 @@ public static class Scheduler
         if (string.IsNullOrEmpty(key))
             throw new ArgumentException("Cooldown key must be non-empty.", nameof(key));
 
-        if (ModNamespace.IsReserved(key)) return;
-        if (ModNamespace.IsValid(key)) return;
+        if (ModNamespace.IsValid(key) && !ModNamespace.IsReserved(key)) return;
 
         throw new ArgumentException(
-            $"Cooldown key '{key}' must be a dotted-lowercase namespace prefixed by your mod id (e.g. \"mymod.ability\").",
+            $"Cooldown key '{key}' must be a non-reserved dotted-lowercase namespace prefixed by your mod id (e.g. \"mymod.ability\").",
             nameof(key));
     }
 }

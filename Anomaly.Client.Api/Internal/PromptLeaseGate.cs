@@ -51,6 +51,16 @@ internal sealed class PromptLeaseGate
         }
     }
 
+    /// <summary>Retains an input prompt after validation/save errors; only success consumes its lease.</summary>
+    internal bool TrySubmit(PromptLease lease, Func<string> submit, out string error)
+    {
+        if (submit == null) throw new ArgumentNullException(nameof(submit));
+        error = null;
+        if (!IsCurrent(lease)) return false;
+        error = submit();
+        return string.IsNullOrEmpty(error) && TryConsume(lease);
+    }
+
     internal bool Invalidate(string owner)
     {
         if (string.IsNullOrWhiteSpace(owner))

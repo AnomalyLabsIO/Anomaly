@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using Anomaly.Client.Api.Modding;
 using Anomaly.Client.Api.Compatibility;
+using Anomaly.Client.Api.Internal;
 using MelonLoader;
 using MelonLoader.Utils;
 using Newtonsoft.Json;
@@ -125,27 +126,17 @@ internal static class ManagedModRuntime
 
     internal static void Shutdown()
     {
-        for (var i = Loaded.Count - 1; i >= 0; i--)
+        var modules = Loaded.ToArray();
+        Loaded.Clear();
+        for (var i = modules.Length - 1; i >= 0; i--)
         {
-            var loaded = Loaded[i];
-            var clean = true;
-            try { loaded.Module.OnDisable(); }
-            catch (Exception ex)
-            {
-                clean = false;
-                MelonLogger.Error($"Managed mod '{loaded.Manifest.Id}' disable failed: {ex}");
-            }
-            try { loaded.Module.Dispose(); }
-            catch (Exception ex)
-            {
-                clean = false;
-                MelonLogger.Error($"Managed mod '{loaded.Manifest.Id}' dispose failed: {ex}");
-            }
-            loaded.Context.Dispose();
+            var loaded = modules[i];
+            if (loaded.Disabled) continue;
+            loaded.Disabled = true;
+            bool clean = Teardown(loaded.Manifest.Id, loaded.Module, loaded.Context);
             if (clean) _state.ConsecutiveStartupFailures.Remove(loaded.Manifest.Id);
             else IncrementFailure(loaded.Manifest.Id);
         }
-        Loaded.Clear();
         TryDelete(_markerPath);
         SaveState();
     }
@@ -244,10 +235,9 @@ internal static class ManagedModRuntime
         {
             if (loaded != null) Loaded.Remove(loaded);
             IncrementFailure(manifest.Id);
-            MelonLogger.Error($"Managed mod '{manifest.Id}' failed during startup: {ex}");
-            try { module?.OnDisable(); } catch { }
-            try { module?.Dispose(); } catch { }
-            context?.Dispose();
+            LogError($"Managed mod '{manifest.Id}' failed during startup: {ex}");
+            if (loaded != null) loaded.Disabled = true;
+            Teardown(manifest.Id, module, context);
             // Context disposal clears owner-scoped records; publish the terminal lifecycle
             // failure afterwards so it remains visible to diagnostics.
             FeatureHealth.Report(manifest.Id, "lifecycle", FeatureHealthStatus.Failed, ex.GetType().Name);
@@ -278,16 +268,32 @@ internal static class ManagedModRuntime
         if (loaded == null || loaded.Disabled) return;
         loaded.Disabled = true;
         IncrementFailure(loaded.Manifest.Id);
-        MelonLogger.Error($"Managed mod '{loaded.Manifest.Id}' faulted and was disabled: {exception}");
-        try { loaded.Module.OnDisable(); }
-        catch (Exception ex) { MelonLogger.Error($"Managed mod '{loaded.Manifest.Id}' disable failed: {ex}"); }
-        try { loaded.Module.Dispose(); }
-        catch (Exception ex) { MelonLogger.Error($"Managed mod '{loaded.Manifest.Id}' dispose failed: {ex}"); }
-        loaded.Context.Dispose();
+        LogError($"Managed mod '{loaded.Manifest.Id}' faulted and was disabled: {exception}");
+        Teardown(loaded.Manifest.Id, loaded.Module, loaded.Context);
         Loaded.Remove(loaded);
         FeatureHealth.Report(loaded.Manifest.Id, "lifecycle", FeatureHealthStatus.Failed,
             exception.GetType().Name);
         SaveState();
+    }
+
+    private static bool Teardown(string modId, IAnomalyMod module, ModContext context)
+    {
+        bool clean = true;
+        IsolatedCleanup.Run((step, exception) =>
+        {
+            clean = false;
+            LogError($"Managed mod '{modId}' {step} failed: {exception}");
+        },
+            new CleanupStep("disable", () => module?.OnDisable()),
+            new CleanupStep("dispose", () => module?.Dispose()),
+            new CleanupStep("context cleanup", () => context?.Dispose()));
+        return clean && context?.TeardownFailed != true;
+    }
+
+    private static void LogError(string message)
+    {
+        try { MelonLogger.Error(message); }
+        catch { /* module teardown must not depend on loader logging */ }
     }
 
     private static void AttributeInterruptedStartup()

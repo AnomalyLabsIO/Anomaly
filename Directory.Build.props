@@ -4,6 +4,7 @@
 
     <!-- All machine-specific inputs are overridable MSBuild properties. The defaults
          describe the sibling layout used by local Anomaly development. -->
+    <AnomalyClientRoot Condition="'$(AnomalyClientRoot)' == '' And '$(AnomalyGameRoot)' != ''">$(AnomalyGameRoot)</AnomalyClientRoot>
     <AnomalyClientRoot Condition="'$(AnomalyClientRoot)' == ''">$([System.IO.Path]::GetFullPath('$(AnomalyRepositoryRoot)..\Client'))</AnomalyClientRoot>
     <AnomalyClientInteropDir Condition="'$(AnomalyClientInteropDir)' == ''">$(AnomalyClientRoot)\MelonLoader\Il2CppAssemblies</AnomalyClientInteropDir>
     <AnomalyClientMelonLibDir Condition="'$(AnomalyClientMelonLibDir)' == ''">$(AnomalyClientRoot)\MelonLoader\net6</AnomalyClientMelonLibDir>

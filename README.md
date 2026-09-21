@@ -14,7 +14,12 @@ game's EULA and for any consequences of using this modification.
 # Welcome to Anomaly
 
 Anomaly is a client-server modification framework for SCP: Secret Laboratory.
-Public v1 targets:
+This early access release is intended for mod developers to build and try client
+mods. Core and assembly versions remain `1.0.0`; the API has a deliberate
+pre-release compatibility reset, so rebuild existing mods against this SDK.
+See [API versioning and migration](Anomaly.Client.Api/API_VERSIONING.md).
+
+The current target is:
 
 - Anomaly core `1.0.0` and launcher `1.1.1`
 - MelonLoader `0.7.2`
@@ -131,14 +136,29 @@ AssetBundles, generic prefab spawning, or destructive content hot reload.
 
 ## Making a client mod
 
-1. Install and start the modded client once.
-2. Create a MelonLoader IL2CPP project pointed at the modded `SCPSL.exe`.
-3. Reference `Anomaly.Client.Api.dll` and `Anomaly.Shared.dll` from
-   `UserLibs/`. Do not reference `Anomaly.Client.dll`.
-4. Declare `[assembly: MelonAdditionalDependencies("Anomaly")]` when using the
-   API during initialization, and declare Anomaly's custom
-   `[assembly: SupportedGameVersion("14.2.7^")]` compatibility metadata.
-5. Follow [the client API guide](Anomaly.Client.Api/MODDING.md).
+1. Install and start the matching modded client once to generate its MelonLoader
+   references, then extract the developer SDK from the same release.
+2. Start with `samples/HelloAnomalyMod` in that SDK. It is an ordinary MelonLoader
+   mod with a command, disposable key binding, setting, events, and scheduled work.
+3. From the sample directory, build with
+   `dotnet build -c Release -p:AnomalyGameRoot="X:\Games\Anomaly" -p:DeployLocal=false`.
+   The sample finds its enclosing SDK automatically. If copied elsewhere, retain
+   `Anomaly.Sample.props` beside the sample folders and set `AnomalySdkRoot` too.
+4. Put the resulting mod DLL in the launcher's selected loadout `local/Mods/`,
+   approve that DLL through the existing trust flow, and launch the loadout.
+5. Follow the [starter walkthrough](samples/HelloAnomalyMod/README.md) and
+   [client API guide](Anomaly.Client.Api/MODDING.md). The source repository is not
+   required when using the extracted SDK.
+
+Reference `Anomaly.Client.Api.dll` and the matching `Anomaly.Shared.dll`, with
+their colocated XML documentation. Do not reference `Anomaly.Client.dll` or ship
+game, API, or loader references inside your mod. The starter declares both
+`MelonAdditionalDependencies("Anomaly.Client")` and Anomaly's
+`SupportedGameVersion("14.2.7^")` metadata.
+
+Ordinary MelonMods own their handles and subscriptions. The separate
+[managed-module starter](samples/HelloAnomalyModule/README.md) is an advanced
+option for framework-owned lifecycle and dependency resolution.
 
 Server companions are LabAPI plugins that reference `Anomaly.Server.dll` and
 `Anomaly.Shared.dll`.
@@ -171,6 +191,13 @@ automatically, and cleanup retains at most 20 artifact sets, 256 MiB total, and
 30 days. Native minidumps are disabled by default; setting
 `ANOMALY_ENABLE_MINIDUMPS=1` opts in to captures that can contain private process
 memory. Review every artifact before sharing it.
+
+For an early access bug report, run `anomaly.status` in the client console or
+`anomaly.status --copy` to copy its summary. It reports versions, connection and
+readiness state, feature status, and relative diagnostic locations without
+including your identity, server address, or arbitrary mod health details. Include
+that summary, your reproduction steps, and a reviewed log excerpt when reporting
+an issue to AnomalyLabs.
 
 ## License
 

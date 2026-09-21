@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>Anomaly.EarlyAccessUiSmoke</AssemblyName>
+  </PropertyGroup>
+  <Import Project="..\..\samples\Anomaly.Sample.props" />
+</Project>

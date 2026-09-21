@@ -5,6 +5,7 @@ using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Api.Internal.Localization;
 using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.UI.ModSettings.Internal;
+using Anomaly.Client.Components.ModSettings;
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppTMPro;
@@ -326,7 +327,7 @@ internal static class ModSettingsTabInstaller
         StretchToFillParent(scrollGo.GetComponent<RectTransform>());
 
         var scrollImage = scrollGo.AddComponent<Image>();
-        scrollImage.color = new Color(0f, 0f, 0f, 0f); // transparent — the Mods Group root already provides whatever panel background SCPSL renders
+        scrollImage.color = new Color(0.035f, 0.035f, 0.035f, 0.94f);
         scrollImage.raycastTarget = true;
 
         var scroll = scrollGo.AddComponent<ScrollRect>();
@@ -357,7 +358,7 @@ internal static class ModSettingsTabInstaller
         contentRect.sizeDelta = new Vector2(0f, 0f);
 
         var vlg = contentGo.AddComponent<VerticalLayoutGroup>();
-        vlg.spacing = 4f;
+        vlg.spacing = 12f;
         var padding = new RectOffset();
         padding.left = 16;
         padding.right = 16;
@@ -380,6 +381,7 @@ internal static class ModSettingsTabInstaller
 
         scroll.viewport = viewportGo.GetComponent<RectTransform>();
         scroll.content = contentRect;
+        contentGo.AddComponent<ModSettingsNavigation>();
 
         return contentRect;
     }

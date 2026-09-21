@@ -5,7 +5,7 @@ namespace HelloAnomalyModule;
 
 public sealed class HelloModule : IAnomalyMod
 {
-    private IModContext? _context;
+    private IModContext _context;
 
     public void Initialize(IModContext context)
     {

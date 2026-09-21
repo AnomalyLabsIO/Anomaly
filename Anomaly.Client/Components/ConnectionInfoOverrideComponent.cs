@@ -20,6 +20,8 @@ public class ConnectionInfoOverrideComponent : MonoBehaviour
 
     private bool _isOverrideActive;
     private string _overrideText;
+    private bool _originalRichText;
+    private bool _hasOriginalRichText;
 
     public ConnectionInfoOverrideComponent(IntPtr intPtr) : base(intPtr)
     {
@@ -37,8 +39,7 @@ public class ConnectionInfoOverrideComponent : MonoBehaviour
         if (!TryResolveLabel())
             return;
 
-        if (_label.text != _overrideText)
-            _label.text = _overrideText;
+        ApplyCurrent();
     }
 
     [HideFromIl2Cpp]
@@ -55,6 +56,8 @@ public class ConnectionInfoOverrideComponent : MonoBehaviour
     public void EndOverride()
     {
         _isOverrideActive = false;
+        if (_label != null && _hasOriginalRichText) _label.supportRichText = _originalRichText;
+        _hasOriginalRichText = false;
     }
 
     [HideFromIl2Cpp]
@@ -93,6 +96,13 @@ public class ConnectionInfoOverrideComponent : MonoBehaviour
         if (_label == null || !_isOverrideActive)
             return;
 
+        if (!_hasOriginalRichText)
+        {
+            _originalRichText = _label.supportRichText;
+            _hasOriginalRichText = true;
+        }
+        _label.supportRichText = false;
+
         if (_label.text != _overrideText)
             _label.text = _overrideText;
     }
@@ -100,6 +110,7 @@ public class ConnectionInfoOverrideComponent : MonoBehaviour
 
 public static class ConnectionInfoOverlay
 {
+    private const string FailurePromptOwner = "connection-failure";
     private const string AuthSpinnerMenuPath = "Servers/Auth Status/Loading";
     private const string ConnectionInfoContainerPath = "ConnectionInfo/Background/Container";
 
@@ -202,6 +213,16 @@ public static class ConnectionInfoOverlay
         var component = GetComponent();
         component?.EndOverride();
         SetSpinnerActive(false);
+    }
+
+    internal static void ShowFailure(string reason, string action, string code)
+    {
+        EndOverride();
+        // Authentication teardown only hides its own prompt. This terminal notice
+        // survives subsequent disconnect notifications until dismissed or replaced.
+        PasswordPrompt.ShowNotice(FailurePromptOwner, "Connection could not be completed",
+            reason + "\n\n" + action + "\n\nDiagnostic code: " + code
+                + "\nRun anomaly.status in the game console for diagnostic locations.", EndOverride);
     }
 
     private static void SetSpinnerActive(bool active)

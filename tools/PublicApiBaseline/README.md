@@ -14,3 +14,15 @@ dotnet run --project tools/PublicApiBaseline/PublicApiBaseline.csproj -- `
 The check exits nonzero for additions, removals, or signature changes. After a
 compatibility and semantic-version review, append `--update` to intentionally
 regenerate the baseline.
+
+Format v2 also records public/protected visibility (including nested protected
+types), abstract/sealed type modifiers, constant and enum values, parameter names,
+optional/default values, and in/out/params metadata. Values are escaped and
+formatted with invariant culture. Run the metadata mutation fixtures with:
+
+```powershell
+dotnet run --project tools/PublicApiBaseline/PublicApiBaseline.csproj -- --self-test
+```
+
+The complete release gate runs these fixtures separately from comparing the
+current assembly to the reviewed baseline.

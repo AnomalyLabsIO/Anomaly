@@ -9,6 +9,7 @@ using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Modding;
 using Anomaly.Client.Api.Persistence;
 using Anomaly.Client.Api.Scheduling;
+using MelonLoader;
 
 namespace Anomaly.Client.Internal.Modding;
 
@@ -30,6 +31,19 @@ internal sealed class ModContext : IModContext, IDisposable
         Action beginExecution,
         Action endExecution,
         Action<Exception> faultHandler)
+        : this(modId, rootDirectory, beginExecution, endExecution, faultHandler,
+            ClientConfig.For(modId), ClientPersistence.For(modId))
+    {
+    }
+
+    internal ModContext(
+        string modId,
+        string rootDirectory,
+        Action beginExecution,
+        Action endExecution,
+        Action<Exception> faultHandler,
+        IConfigSource config,
+        IPersistenceStore persistence)
     {
         ModId = modId;
         _beginExecution = beginExecution ?? throw new ArgumentNullException(nameof(beginExecution));
@@ -39,8 +53,8 @@ internal sealed class ModContext : IModContext, IDisposable
         ConfigDirectory = Path.Combine(rootDirectory, "Config", modId);
         Directory.CreateDirectory(DataDirectory);
         Directory.CreateDirectory(ConfigDirectory);
-        Config = ClientConfig.For(modId);
-        Persistence = ClientPersistence.For(modId);
+        Config = config ?? throw new ArgumentNullException(nameof(config));
+        Persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
     }
 
     public string ModId { get; }
@@ -49,6 +63,7 @@ internal sealed class ModContext : IModContext, IDisposable
     public CancellationToken CancellationToken => _cancellation.Token;
     public IConfigSource Config { get; }
     public IPersistenceStore Persistence { get; }
+    internal bool TeardownFailed { get; private set; }
 
     public ScheduledTask Schedule(TimeSpan delay, Action callback)
     {
@@ -117,33 +132,37 @@ internal sealed class ModContext : IModContext, IDisposable
         // OnDisable/Dispose callbacks may have queued persistence writes. Make
         // them durable before owner-scoped scheduler cleanup cancels debounce
         // handles for this context.
-        RuntimeTeardown.FlushBeforeCancel(
-            () =>
+        var steps = new List<CleanupStep>
+        {
+            new("persistence flush", Persistence.Flush),
+            new("cancellation callbacks", () => _cancellation.Cancel()),
+            new("scheduled task handles", () =>
             {
-                try { Persistence.Flush(); }
-                catch { /* the persistence store owns detailed failure logging */ }
-            },
-            () =>
-            {
-                _cancellation.Cancel();
                 foreach (var task in _scheduledTasks) task.Cancel();
-                Scheduler.ClearOwner(ModId);
-            });
-        CommandRegistry.UnregisterAll(ModId);
+            }),
+            new("scheduler ownership", () => Scheduler.ClearOwner(ModId)),
+            new("commands", () => CommandRegistry.UnregisterAll(ModId)),
+        };
 
         for (var i = _cleanup.Count - 1; i >= 0; i--)
         {
-            try { _cleanup[i](); }
-            catch { /* module cleanup is best-effort and attributed by its owner */ }
+            steps.Add(new CleanupStep("registered cleanup", _cleanup[i]));
         }
         for (var i = _resources.Count - 1; i >= 0; i--)
         {
-            try { _resources[i].Dispose(); }
-            catch { /* module cleanup is best-effort and attributed by its owner */ }
+            steps.Add(new CleanupStep("tracked resource", _resources[i].Dispose));
         }
 
-        FeatureHealth.ClearOwner(ModId);
-        _cancellation.Dispose();
+        steps.Add(new CleanupStep("feature health", () => FeatureHealth.ClearOwner(ModId)));
+        steps.Add(new CleanupStep("cancellation source", _cancellation.Dispose));
+        IsolatedCleanup.Run((step, exception) =>
+        {
+            TeardownFailed = true;
+            MelonLogger.Error($"Managed mod '{ModId}' {step} cleanup failed: {exception}");
+        }, steps.ToArray());
+        _scheduledTasks.Clear();
+        _cleanup.Clear();
+        _resources.Clear();
     }
 
     private void ThrowIfDisposed()

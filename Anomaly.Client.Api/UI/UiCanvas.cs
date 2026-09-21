@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using Anomaly.Client.Api.Internal.UI;
 
 namespace Anomaly.Client.Api.UI;
 
@@ -66,8 +67,11 @@ public static class UiCanvas
         newRt.anchorMax = Vector2.one;
         newRt.offsetMin = Vector2.zero;
         newRt.offsetMax = Vector2.zero;
-        newRt.SetSiblingIndex((int)layer);
         _layers[layer] = newRt;
+        UiLayerOrder.Apply(_layers.Keys, (key, index) =>
+        {
+            if (_layers[key] != null) _layers[key].SetSiblingIndex(index);
+        });
         return newRt;
     }
 

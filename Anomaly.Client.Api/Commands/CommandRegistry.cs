@@ -53,20 +53,25 @@ public static class CommandRegistry
     /// namespace (e.g. <c>"mymod"</c>, <c>"acme.wargames"</c>). Pick a unique
     /// prefix and use it consistently across all your Anomaly registrations.
     /// The reserved <c>"anomaly"</c> / <c>"anomaly.*"</c> prefix is used by
-    /// Anomaly's own built-in commands.
+    /// Anomaly's own built-in commands and cannot be registered by mods.
     /// </remarks>
     public static void Register(string modId, ICommand command)
     {
+        if (!ModNamespace.IsValid(modId) || ModNamespace.IsReserved(modId))
+            throw new ArgumentException(
+                $"CommandRegistry.Register: mod id '{modId}' must be a non-reserved lowercase dotted namespace (e.g. \"mymod\").",
+                nameof(modId));
+        RegisterCore(modId, command);
+    }
+
+    internal static void RegisterBuiltIn(ICommand command) => RegisterCore("anomaly", command);
+
+    private static void RegisterCore(string modId, ICommand command)
+    {
         if (command == null) throw new ArgumentNullException(nameof(command));
-        if (string.IsNullOrEmpty(modId)) throw new ArgumentException("modId must be non-empty.", nameof(modId));
         if (string.IsNullOrEmpty(command.Name)) throw new ArgumentException("Command.Name must be non-empty.");
         if (!NamePattern.IsMatch(command.Name))
             throw new ArgumentException($"Command name '{command.Name}' is invalid (lowercase alphanumeric/underscore, no dots).");
-
-        if (!ModNamespace.IsReserved(modId) && !ModNamespace.IsValid(modId))
-            throw new ArgumentException(
-                $"CommandRegistry.Register: mod id '{modId}' is not a valid namespace (lowercase dotted, e.g. \"mymod\").",
-                nameof(modId));
 
         string canonical = $"{modId}.{command.Name}";
         if (_byName.ContainsKey(canonical))
@@ -99,7 +104,8 @@ public static class CommandRegistry
             }
         }
 
-        MelonLogger.Msg($"CommandRegistry: Registered '{canonical}'.");
+        try { MelonLogger.Msg($"CommandRegistry: Registered '{canonical}'."); }
+        catch { /* a successfully registered command must not depend on loader logging */ }
     }
 
     /// <summary>

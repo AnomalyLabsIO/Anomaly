@@ -86,9 +86,10 @@ public class Core : MelonMod
 
         InitializeFeature("commands", () =>
         {
-            CommandRegistry.Register("anomaly", new NameCommand());
-            CommandRegistry.Register("anomaly", new IdentityCommand());
-            CommandRegistry.Register("anomaly", new WhoAmICommand());
+            CommandRegistry.RegisterBuiltIn(new NameCommand());
+            CommandRegistry.RegisterBuiltIn(new IdentityCommand());
+            CommandRegistry.RegisterBuiltIn(new WhoAmICommand());
+            CommandRegistry.RegisterBuiltIn(new StatusCommand());
         });
 
         LoggerInstance.Msg($"Initialized (locale: {Tr.ActiveLocale}).");

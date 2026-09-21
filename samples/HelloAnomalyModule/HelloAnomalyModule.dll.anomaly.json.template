@@ -1,6 +1,6 @@
 {
   "SchemaVersion": 1,
-  "Id": "example.hello",
+  "Id": "example.module",
   "Name": "Hello Anomaly Module",
   "Version": "1.0.0",
   "ApiVersion": "1.0.0",

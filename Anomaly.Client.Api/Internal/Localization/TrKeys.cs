@@ -12,6 +12,18 @@ internal static class TrKeys
     public const string Overlay_PasswordRequired = "anomaly.overlay.password_required";
     public const string PasswordPrompt_Title = "anomaly.password_prompt.title";
     public const string PasswordPrompt_Hint = "anomaly.password_prompt.hint";
+    public const string Prompt_Cancel = "anomaly.prompt.cancel";
+    public const string Prompt_Connect = "anomaly.prompt.connect";
+    public const string Prompt_Save = "anomaly.prompt.save";
+    public const string Prompt_Dismiss = "anomaly.prompt.dismiss";
+    public const string Prompt_TrustConnect = "anomaly.prompt.trust_connect";
+    public const string Prompt_AllowContent = "anomaly.prompt.allow_content";
+    public const string Prompt_SkipContent = "anomaly.prompt.skip_content";
+    public const string Prompt_SaveError = "anomaly.prompt.save_error";
+    public const string Prompt_NicknameTitle = "anomaly.prompt.nickname_title";
+    public const string Prompt_NicknameDetails = "anomaly.prompt.nickname_details";
+    public const string Prompt_NicknameInvalid = "anomaly.prompt.nickname_invalid";
+    public const string Prompt_KeyboardHint = "anomaly.prompt.keyboard_hint";
 
     // File transfer overlay
     public const string FileTransfer_Preparing = "anomaly.overlay.file_transfer.preparing";
@@ -27,6 +39,7 @@ internal static class TrKeys
     // Main menu customization
     public const string Menu_Welcome = "anomaly.menu.welcome";
     public const string Menu_AuthConnected = "anomaly.menu.auth_connected";
+    public const string Menu_AuthReady = "anomaly.menu.auth_ready";
     public const string Menu_AuthNotSignedIn = "anomaly.menu.auth_not_signed_in";
     public const string Menu_AuthUnavailable = "anomaly.menu.auth_unavailable";
 

@@ -155,8 +155,10 @@ internal static class ContentCatalogClient
         PasswordPrompt.ShowConfirmation(
             PromptOwner,
             "Approve this server's custom content?",
-            $"Server: {fingerprint}\nItems: {_catalog.Entries.Count}\nFiles: {_manifest.Files.Count}\nEncoded bytes: {totalBytes:N0}",
-            "Press Enter to approve this exact server/catalog/manifest tuple. Press Esc to decline.",
+            $"Server fingerprint:\n{ServerTrustStore.FormatFingerprint(fingerprint)}\n\nItems: {_catalog.Entries.Count:N0}\nFiles: {_manifest.Files.Count:N0}\nDownload: {totalBytes / 1048576d:N2} MiB ({totalBytes:N0} bytes)"
+                + "\n\nApproval is saved for this exact server and content version. Skipping may prevent joining servers that require this content.",
+            Anomaly.Client.Api.Localization.Tr.Get(Anomaly.Client.Api.Internal.Localization.TrKeys.Prompt_AllowContent),
+            Anomaly.Client.Api.Localization.Tr.Get(Anomaly.Client.Api.Internal.Localization.TrKeys.Prompt_SkipContent),
             () =>
             {
                 if (offerGeneration != _offerGeneration)
@@ -236,6 +238,7 @@ internal static class ContentCatalogClient
         AnomalyMessaging.FailClosedTransport("Required custom-content validation failed: " + reason);
         ReportHealth(FeatureHealthStatus.Failed, reason);
         SafeLogError("Required custom-content validation failed: " + reason);
+        ShowContentFailure("The server's custom content could not be validated.", "CONTENT-VALIDATION");
     }
 
     private static bool SendDecline()
@@ -314,6 +317,17 @@ internal static class ContentCatalogClient
         AnomalyMessaging.FailClosedTransport("Required custom content failed: " + reason);
         ReportHealth(FeatureHealthStatus.Failed, reason);
         SafeLogError("Required custom content failed: " + reason);
+        ShowContentFailure("The approved custom content could not be activated.", "CONTENT-ACTIVATION");
+    }
+
+    private static void ShowContentFailure(string reason, string code)
+    {
+        try
+        {
+            ConnectionInfoOverlay.ShowFailure(reason,
+                "Check the game log for the content error, then reconnect. If this repeats, ask the server operator to check the catalog and files.", code);
+        }
+        catch (Exception exception) { SafeLogError("Could not display content failure: " + exception); }
     }
 
     private static bool SendActivation(bool activated, IEnumerable<string> failedKeys)

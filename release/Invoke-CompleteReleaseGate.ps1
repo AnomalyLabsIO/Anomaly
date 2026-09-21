@@ -142,6 +142,13 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Shipped public API baseline verification failed.' }
     }
 
+    Invoke-RecordedGate 'public-api-fixtures' `
+        'dotnet run --project tools/PublicApiBaseline/PublicApiBaseline.csproj -c Release -- --self-test' {
+        & dotnet run --project (Join-Path $gateRepositoryRoot 'tools/PublicApiBaseline/PublicApiBaseline.csproj') `
+            -c Release -- --self-test
+        if ($LASTEXITCODE -ne 0) { throw 'Public API compatibility fixtures failed.' }
+    }
+
     Invoke-RecordedGate 'release-tool-tests' './release/Test-ReleaseTools.ps1' {
         & (Join-Path $PSScriptRoot 'Test-ReleaseTools.ps1')
     }

@@ -8,4 +8,5 @@
   <Project Path="Anomaly.Shared/Anomaly.Shared.csproj" Id="aafe496c-e163-48ff-bdb4-5c794ab76a05" />
   <Project Path="Anomaly.Shared.Tests/Anomaly.Shared.Tests.csproj" />
   <Project Path="samples/HelloAnomalyModule/HelloAnomalyModule.csproj" />
+  <Project Path="samples/HelloAnomalyMod/HelloAnomalyMod.csproj" />
 </Solution>

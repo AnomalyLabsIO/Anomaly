@@ -8,6 +8,7 @@ using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Assets;
 using Anomaly.Client.Auth;
 using Anomaly.Client.Components;
+using Anomaly.Client.Internal.UI;
 using Il2CppTMPro;
 using MelonLoader;
 using UnityEngine;
@@ -41,6 +42,18 @@ internal static class MainMenuCustomizer
         _hooked = true;
 
         ClientEvents.CanvasReady += OnCanvasReady;
+        ClientEvents.Connected += OnConnected;
+        ClientEvents.Disconnected += OnDisconnected;
+    }
+
+    private static void OnConnected(ClientConnectedEventArgs _) => TryApplyAuthStatus(ClientFeature.MainMenu, connected: true);
+    private static void OnDisconnected(ClientDisconnectedEventArgs _) => TryApplyAuthStatus(ClientFeature.MainMenu, connected: false);
+
+    internal static void RefreshIdentity()
+    {
+        var menu = ClientFeature.MainMenu;
+        TryApplyWelcome(menu);
+        TryApplyAuthStatus(menu);
     }
 
     private static void OnCanvasReady(CanvasReadyEventArgs args)
@@ -86,6 +99,8 @@ internal static class MainMenuCustomizer
                 username = DefaultUsername;
 
             label.text = Tr.Get(TrKeys.Menu_Welcome, username);
+            label.richText = false;
+            label.color = AnomalyUiStyle.Text;
         }
         catch (Exception ex)
         {
@@ -162,7 +177,7 @@ internal static class MainMenuCustomizer
         }
     }
 
-    private static void TryApplyAuthStatus(Il2Cpp.NewMainMenu menu)
+    private static void TryApplyAuthStatus(Il2Cpp.NewMainMenu menu, bool? connected = null)
     {
         try
         {
@@ -171,7 +186,7 @@ internal static class MainMenuCustomizer
             string text = AuthHandler.InitializationState == AuthInitializationState.Failed
                 ? Tr.Get(TrKeys.Menu_AuthUnavailable)
                 : IsAuthGood(out var username)
-                    ? Tr.Get(TrKeys.Menu_AuthConnected, username)
+                    ? Tr.Get((connected ?? ClientFeature.IsConnected) ? TrKeys.Menu_AuthConnected : TrKeys.Menu_AuthReady, username)
                     : Tr.Get(TrKeys.Menu_AuthNotSignedIn);
 
             AuthStatusOverlay.SetDefault(text);

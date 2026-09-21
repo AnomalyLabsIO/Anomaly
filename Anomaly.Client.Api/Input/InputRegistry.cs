@@ -21,14 +21,25 @@ namespace Anomaly.Client.Api.Input;
 /// collision — final say is the user's.</para>
 /// <para>Binding ids must be syntactically valid dotted-lowercase namespaces
 /// (e.g. <c>"mymod.jump"</c>). The reserved <c>"anomaly."</c> prefix is used
-/// by Anomaly's own built-in bindings.</para>
+/// by Anomaly and cannot be used by mods.</para>
+/// <para>Keep each registration handle and dispose it when your mod shuts down.
+/// Disposal removes the binding without firing a release event and preserves
+/// the user's saved key override. Call this API on the Unity main thread.</para>
 /// </remarks>
 public static class InputRegistry
 {
-    private sealed class Entry
+    private sealed class Entry : IDisposable
     {
         public InputBindingDefinition Definition;
         public InputKey ResolvedKey;   // default OR user override
+
+        public void Dispose() => Unregister(this);
+    }
+
+    private sealed class EmptyRegistration : IDisposable
+    {
+        internal static readonly EmptyRegistration Instance = new();
+        public void Dispose() { }
     }
 
     private static readonly Dictionary<string, Entry> _bindings =
@@ -48,10 +59,11 @@ public static class InputRegistry
     /// <summary>
     /// Registers a binding. The id must be a syntactically valid dotted-lowercase
     /// namespace (e.g. <c>"mymod.jump"</c>); the reserved <c>"anomaly."</c>
-    /// prefix is accepted for framework built-ins. Duplicate registrations are
-    /// rejected with a warning.
+    /// prefix is reserved. Duplicate registrations are rejected with a warning
+    /// and return an inert handle. Disposing a successful handle removes only
+    /// that registration and preserves saved user overrides.
     /// </summary>
-    public static void Register(InputBindingDefinition definition)
+    public static IDisposable Register(InputBindingDefinition definition)
     {
         if (definition == null) throw new ArgumentNullException(nameof(definition));
 
@@ -59,17 +71,19 @@ public static class InputRegistry
 
         if (_bindings.ContainsKey(definition.Id))
         {
-            MelonLogger.Warning($"InputRegistry: binding '{definition.Id}' already registered; ignoring duplicate.");
-            return;
+            LogWarning($"InputRegistry: binding '{definition.Id}' already registered; ignoring duplicate.");
+            return EmptyRegistration.Instance;
         }
 
         var resolved = InputConfigLoader.TryGetOverride(definition.Id, out var userKey)
             ? userKey
             : definition.DefaultKey;
 
-        _bindings[definition.Id] = new Entry { Definition = definition, ResolvedKey = resolved };
+        var entry = new Entry { Definition = definition, ResolvedKey = resolved };
+        _bindings[definition.Id] = entry;
 
         CheckForConflicts(definition.Id, resolved);
+        return entry;
     }
 
     /// <summary>All registered binding definitions.</summary>
@@ -132,26 +146,45 @@ public static class InputRegistry
 
     internal static void OnPressed(string id) => InvokeSafely(Pressed, id, "pressed");
     internal static void OnReleased(string id) => InvokeSafely(Released, id, "released");
+    internal static void OnPressed(InputFrameBinding binding) =>
+        InvokeSafely(Pressed, binding.Id, "pressed", binding.Registration);
+    internal static void OnReleased(InputFrameBinding binding) =>
+        InvokeSafely(Released, binding.Id, "released", binding.Registration);
+
+    internal static bool IsCurrent(InputFrameBinding binding) =>
+        IsCurrent(binding.Id, binding.Registration) &&
+        _bindings[binding.Id].ResolvedKey == binding.Key;
+
+    private static bool IsCurrent(string id, object registration) =>
+        _bindings.TryGetValue(id, out var entry) && ReferenceEquals(entry, registration);
+
+    private static void Unregister(Entry entry)
+    {
+        if (!IsCurrent(entry.Definition.Id, entry)) return;
+        _bindings.Remove(entry.Definition.Id);
+        InputPoller.Forget(entry);
+    }
 
     /// <summary>
     /// Exposes all resolved keys for the poller so it can compute transitions
     /// without re-walking our dictionary via public API.
     /// </summary>
-    internal static IReadOnlyList<KeyValuePair<string, InputKey>> ResolvedKeysSnapshot()
+    internal static IReadOnlyList<InputFrameBinding> ResolvedKeysSnapshot()
     {
-        var snapshot = new List<KeyValuePair<string, InputKey>>(_bindings.Count);
+        var snapshot = new List<InputFrameBinding>(_bindings.Count);
         foreach (var kvp in _bindings)
-            snapshot.Add(new KeyValuePair<string, InputKey>(kvp.Key, kvp.Value.ResolvedKey));
+            snapshot.Add(new InputFrameBinding(kvp.Key, kvp.Value.ResolvedKey, kvp.Value));
         return snapshot;
     }
 
-    private static void InvokeSafely(Action<string> handlers, string id, string transition)
+    private static void InvokeSafely(Action<string> handlers, string id, string transition, object registration = null)
     {
         if (handlers == null)
             return;
 
         foreach (Action<string> subscriber in handlers.GetInvocationList())
         {
+            if (registration != null && !IsCurrent(id, registration)) break;
             try { subscriber(id); }
             catch (Exception ex)
             {
@@ -174,11 +207,10 @@ public static class InputRegistry
         if (string.IsNullOrEmpty(id))
             throw new ArgumentException("Binding id must be non-empty.", nameof(id));
 
-        if (ModNamespace.IsReserved(id)) return;
-        if (ModNamespace.IsValid(id)) return;
+        if (ModNamespace.IsValid(id) && !ModNamespace.IsReserved(id)) return;
 
         throw new ArgumentException(
-            $"Binding id '{id}' must be a dotted-lowercase namespace prefixed by your mod id (e.g. \"mymod.jump\").",
+            $"Binding id '{id}' must be a non-reserved dotted-lowercase namespace prefixed by your mod id (e.g. \"mymod.jump\").",
             nameof(id));
     }
 
@@ -189,9 +221,15 @@ public static class InputRegistry
             if (kvp.Key == id) continue;
             if (kvp.Value.ResolvedKey == key)
             {
-                MelonLogger.Warning(
+                LogWarning(
                     $"InputRegistry: binding '{id}' conflicts with '{kvp.Key}' — both mapped to {key}.");
             }
         }
+    }
+
+    private static void LogWarning(string message)
+    {
+        try { MelonLogger.Warning(message); }
+        catch { /* registration ownership must not depend on loader logging */ }
     }
 }

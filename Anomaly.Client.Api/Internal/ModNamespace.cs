@@ -12,8 +12,8 @@ namespace Anomaly.Client.Api.Internal;
 /// Anomaly does not maintain a global registry of mods; it enforces only that
 /// caller-supplied ids look like a namespace so two mods using distinct ids
 /// can't collide by accident. The <c>anomaly</c> / <c>anomaly.</c> prefix is
-/// reserved for the framework's own built-ins and is accepted unconditionally
-/// by callers that check for it separately.
+/// reserved for the framework's own built-ins. Public registrations reject it;
+/// framework commands use a separate internal registration boundary.
 /// </remarks>
 internal static class ModNamespace
 {

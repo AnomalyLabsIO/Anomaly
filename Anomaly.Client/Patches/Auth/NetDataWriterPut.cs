@@ -77,4 +77,22 @@ public static class NetDataWriterPut
 
         AuthHandler.OnDisconnected();
     }
+
+    [HarmonyPatch(typeof(LiteNetLib4MirrorClient), nameof(LiteNetLib4MirrorClient.OnPeerDisconnected))]
+    [HarmonyPrefix]
+    public static void ObservePeerDisconnect(NetPeer peer, DisconnectInfo disconnectinfo)
+    {
+        // The transport queues its main-thread disconnect continuation. Capture
+        // only detached reason/identity here; never create UI in this callback.
+        try { AuthHandler.ObserveTransportDisconnect(peer, disconnectinfo.Reason); }
+        catch (Exception exception)
+        {
+            try { MelonLogger.Warning("Could not capture transport disconnect: " + exception.Message); }
+            catch { }
+        }
+    }
+
+    [HarmonyPatch(typeof(LiteNetLib4MirrorTransport), nameof(LiteNetLib4MirrorTransport.ClientDisconnect))]
+    [HarmonyPrefix]
+    public static void ObserveLocalDisconnect() => AuthHandler.ObserveLocalTransportStop();
 }

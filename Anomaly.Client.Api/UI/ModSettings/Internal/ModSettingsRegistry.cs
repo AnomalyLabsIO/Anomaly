@@ -34,7 +34,12 @@ internal static class ModSettingsRegistry
         lock (_lock)
         {
             if (metadata == null) _categories.Remove(categoryId);
-            else _categories[categoryId] = metadata;
+            else _categories[categoryId] = new ModSettingCategoryMetadata
+            {
+                DisplayName = metadata.DisplayName,
+                SortOrder = metadata.SortOrder,
+                Hidden = metadata.Hidden,
+            };
             Revision++;
         }
         NotifyChanged();
@@ -47,7 +52,17 @@ internal static class ModSettingsRegistry
         {
             var key = (categoryId, entryId);
             if (metadata == null) _entries.Remove(key);
-            else _entries[key] = metadata;
+            else _entries[key] = new ModSettingMetadata
+            {
+                DisplayName = metadata.DisplayName,
+                Description = metadata.Description,
+                Group = metadata.Group,
+                MinValue = metadata.MinValue,
+                MaxValue = metadata.MaxValue,
+                Choices = metadata.Choices == null ? null : new List<string>(metadata.Choices).AsReadOnly(),
+                Hidden = metadata.Hidden,
+                Order = metadata.Order,
+            };
             Revision++;
         }
         NotifyChanged();

@@ -1,10 +1,22 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string] $ReleaseOutput
+    [string] $ReleaseOutput,
+    [string] $AnomalyClientInteropDir = '',
+    [string] $AnomalyClientMelonLibDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
+$sdkRepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+# Resolve the same overridable host references used by repository builds.
+if (!$AnomalyClientInteropDir) {
+    $AnomalyClientInteropDir = (& dotnet msbuild (Join-Path $sdkRepositoryRoot 'Anomaly.Client.Api/Anomaly.Client.Api.csproj') -getProperty:AnomalyClientInteropDir).Trim()
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the SDK sample interop reference directory.' }
+}
+if (!$AnomalyClientMelonLibDir) {
+    $AnomalyClientMelonLibDir = (& dotnet msbuild (Join-Path $sdkRepositoryRoot 'Anomaly.Client.Api/Anomaly.Client.Api.csproj') -getProperty:AnomalyClientMelonLibDir).Trim()
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the SDK sample MelonLoader reference directory.' }
+}
 $ReleaseOutput = [System.IO.Path]::GetFullPath($ReleaseOutput)
 $sdkPayload = Join-Path $ReleaseOutput 'payloads/developer-sdk'
 if (-not (Test-Path -LiteralPath $sdkPayload -PathType Container)) {
@@ -79,6 +91,20 @@ public static class SdkCompileProbe
         -c Release -warnaserror --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Staged SDK compile closure is incomplete.' }
 
+    foreach ($xmlRelative in @('lib/net6.0/Anomaly.Client.Api.xml', 'lib/net48/Anomaly.Shared.xml')) {
+        if (!(Test-Path -LiteralPath (Join-Path $stagedSdk $xmlRelative) -PathType Leaf)) {
+            throw "SDK IntelliSense documentation is missing: $xmlRelative"
+        }
+    }
+    foreach ($sampleName in @('HelloAnomalyMod', 'HelloAnomalyModule')) {
+        $sampleProject = Join-Path $stagedSdk "samples/$sampleName/$sampleName.csproj"
+        if (!(Test-Path -LiteralPath $sampleProject -PathType Leaf)) { throw "SDK starter is missing: $sampleName" }
+        & dotnet build $sampleProject -c Release -warnaserror --nologo `
+            "-p:AnomalySdkRoot=$stagedSdk" "-p:AnomalyClientInteropDir=$AnomalyClientInteropDir" `
+            "-p:AnomalyClientMelonLibDir=$AnomalyClientMelonLibDir" -p:DeployLocal=false
+        if ($LASTEXITCODE -ne 0) { throw "Packaged SDK starter failed: $sampleName" }
+    }
+
     $bouncyCastlePath = Join-Path $stagedSdk 'lib/net48/BouncyCastle.Cryptography.dll'
     if (-not (Test-Path -LiteralPath $bouncyCastlePath -PathType Leaf)) {
         throw 'Staged SDK is missing BouncyCastle.Cryptography.dll.'
@@ -86,14 +112,19 @@ public static class SdkCompileProbe
     [IO.File]::Move($bouncyCastlePath, $bouncyCastlePath + '.missing')
     $negativeProject = Join-Path $sdkTestRoot 'negative'
     New-CompileProbe $negativeProject
-    & dotnet build (Join-Path $negativeProject 'SdkCompileProbe.csproj') `
-        -c Release -warnaserror --nologo
+    $negativeOutput = @(& dotnet build (Join-Path $negativeProject 'SdkCompileProbe.csproj') `
+        -c Release -warnaserror --nologo 2>&1)
     if ($LASTEXITCODE -eq 0) {
         throw 'SDK probe unexpectedly compiled without its public Bouncy Castle dependency.'
     }
+    $negativeText = $negativeOutput -join [Environment]::NewLine
+    if ($negativeText -notmatch 'MSB3245[^\r\n]*BouncyCastle\.Cryptography' -or
+        $negativeText -notmatch 'CS0246[^\r\n]*(Org|AsymmetricCipherKeyPair)') {
+        throw "Negative SDK probe failed for an unexpected reason: $negativeText"
+    }
 
     $global:LASTEXITCODE = 0
-    Write-Host 'SDK reference metadata and positive/negative Bouncy Castle compile-closure gates passed.'
+    Write-Host 'Both packaged starters, adjacent XML docs, and positive/negative SDK compile-closure gates passed.'
 }
 finally {
     $resolvedSdkTestRoot = [System.IO.Path]::GetFullPath($sdkTestRoot)

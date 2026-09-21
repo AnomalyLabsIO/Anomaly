@@ -1,0 +1,32 @@
+<Project>
+  <PropertyGroup>
+    <!-- In the release SDK, samples/ is next to lib/. Repository builds retain a project reference. -->
+    <AnomalySdkRoot Condition="'$(AnomalySdkRoot)' == '' And Exists('$(MSBuildThisFileDirectory)..\lib\net6.0\Anomaly.Client.Api.dll')">$(MSBuildThisFileDirectory)..</AnomalySdkRoot>
+    <AnomalyGameRoot Condition="'$(AnomalyGameRoot)' == ''">$(AnomalyClientRoot)</AnomalyGameRoot>
+    <AnomalyClientInteropDir Condition="'$(AnomalyClientInteropDir)' == '' And '$(AnomalyGameRoot)' != ''">$(AnomalyGameRoot)\MelonLoader\Il2CppAssemblies</AnomalyClientInteropDir>
+    <AnomalyClientMelonLibDir Condition="'$(AnomalyClientMelonLibDir)' == '' And '$(AnomalyGameRoot)' != ''">$(AnomalyGameRoot)\MelonLoader\net6</AnomalyClientMelonLibDir>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(AnomalySdkRoot)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\Anomaly.Client.Api\Anomaly.Client.Api.csproj" AdditionalProperties="DeployLocal=false" Private="false" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(AnomalySdkRoot)' != ''">
+    <Reference Include="Anomaly.Client.Api" HintPath="$(AnomalySdkRoot)\lib\net6.0\Anomaly.Client.Api.dll" Private="false" />
+    <Reference Include="Anomaly.Shared" HintPath="$(AnomalySdkRoot)\lib\net48\Anomaly.Shared.dll" Private="false" />
+    <Reference Include="BouncyCastle.Cryptography" HintPath="$(AnomalySdkRoot)\lib\net48\BouncyCastle.Cryptography.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="$(AnomalyClientInteropDir)\*.dll" Private="false" />
+    <Reference Include="MelonLoader" HintPath="$(AnomalyClientMelonLibDir)\MelonLoader.dll" Private="false" />
+    <Reference Include="Il2CppInterop.Runtime" HintPath="$(AnomalyClientMelonLibDir)\Il2CppInterop.Runtime.dll" Private="false" />
+  </ItemGroup>
+  <Target Name="ValidateSampleReferences" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(AnomalySdkRoot)' == '' And !Exists('$(MSBuildThisFileDirectory)..\Anomaly.Client.Api\Anomaly.Client.Api.csproj')"
+           Text="Set AnomalySdkRoot to the extracted matching Anomaly SDK (containing lib/net6.0/Anomaly.Client.Api.dll)." />
+    <Error Condition="'$(AnomalySdkRoot)' != '' And !Exists('$(AnomalySdkRoot)\lib\net6.0\Anomaly.Client.Api.dll')"
+           Text="AnomalySdkRoot is missing lib/net6.0/Anomaly.Client.Api.dll: '$(AnomalySdkRoot)'." />
+    <Error Condition="!Exists('$(AnomalyClientInteropDir)\Assembly-CSharp.dll')"
+           Text="Set AnomalyGameRoot to a matching game started once with MelonLoader, or set AnomalyClientInteropDir. Missing references at '$(AnomalyClientInteropDir)'." />
+    <Error Condition="!Exists('$(AnomalyClientMelonLibDir)\MelonLoader.dll')"
+           Text="MelonLoader references are missing at '$(AnomalyClientMelonLibDir)'. Set AnomalyGameRoot or AnomalyClientMelonLibDir." />
+  </Target>
+</Project>

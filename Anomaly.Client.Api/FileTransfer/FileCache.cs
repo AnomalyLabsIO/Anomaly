@@ -5,7 +5,7 @@ using MelonLoader;
 
 namespace Anomaly.Client.Api.FileTransfer;
 
-public static class FileCache
+internal static class FileCache
 {
     private static readonly object Lock = new();
     private static Dictionary<string, CacheEntry> _index = new();
@@ -471,7 +471,7 @@ public static class FileCache
         public Dictionary<string, CacheEntry> Files { get; set; } = new();
     }
 
-    public struct CacheEntry
+    private struct CacheEntry
     {
         public string OriginalPath { get; set; }
         public uint Size { get; set; }

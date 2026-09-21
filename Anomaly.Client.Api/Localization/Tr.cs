@@ -25,7 +25,7 @@ public static class Tr
     /// Lowercase dotted identifier (e.g., "mymod"). Reserved prefixes: "anomaly", "launcher".
     /// </param>
     /// <param name="i18nDirectoryPath">
-    /// Directory containing per-locale JSON files (en.json, fr.json, ...). All keys must use the mod's namespace prefix.
+    /// Directory containing per-locale YAML files (en.yaml, fr.yaml, ...). All keys must use the mod's namespace prefix.
     /// </param>
     /// <returns>True if registered; false on invalid namespace, duplicate, or missing directory.</returns>
     public static bool RegisterMod(string modNamespace, string i18nDirectoryPath)

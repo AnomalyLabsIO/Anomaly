@@ -50,11 +50,19 @@ public static class Client
     public static ushort ServerPort => LiteNetLib4MirrorTransport.Singleton.port;
 
     public static bool IsConnected => NetworkClient.isConnected;
+
+    /// <summary>
+    /// True after the client's scene-ready lifecycle callback, until a lifecycle
+    /// reset. This is not a guarantee that the local hub, world objects, or enrollment
+    /// are available; check the state required by each operation separately.
+    /// </summary>
+    /// <seealso cref="Anomaly.Client.Api.Events.Handlers.ClientEvents.Ready"/>
     public static bool IsClientReady { get; internal set; }
 
     /// <summary>
     /// Server-local enrollment id authenticated for the current connection, or
     /// <c>null</c> while disconnected/before the server publishes it.
+    /// It may still be <c>null</c> when <see cref="IsClientReady"/> becomes true.
     /// </summary>
     public static string EnrollmentId { get; internal set; }
 

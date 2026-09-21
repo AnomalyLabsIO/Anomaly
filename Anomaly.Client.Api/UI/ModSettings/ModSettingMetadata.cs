@@ -26,7 +26,7 @@ public sealed class ModSettingMetadata
     /// <summary>Label shown next to the widget. Falls back to <c>entry.DisplayName</c>, then <c>entry.Identifier</c>.</summary>
     public string DisplayName { get; set; }
 
-    /// <summary>Tooltip / secondary description (currently unused by the renderer; reserved for future tooltip support).</summary>
+    /// <summary>Wrapped description beneath the setting label. Falls back to the entry's Description.</summary>
     public string Description { get; set; }
 
     /// <summary>Optional sub-header within the entry's category — adjacent entries sharing a non-null Group are visually grouped.</summary>
@@ -42,6 +42,9 @@ public sealed class ModSettingMetadata
     /// When non-null, forces a dropdown widget. Each string is shown verbatim
     /// as a dropdown option. For numeric entries, the selected index is written
     /// back as the value; for string entries, the option string itself is written.
+    /// Enum choices must be declared enum names. Labels must be nonempty and unique.
+    /// Choices cannot be combined with slider bounds. Invalid stored values remain unchanged
+    /// until the user explicitly selects a valid choice or resets the setting.
     /// </summary>
     public IReadOnlyList<string> Choices { get; set; }
 

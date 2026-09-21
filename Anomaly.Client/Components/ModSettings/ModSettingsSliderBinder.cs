@@ -1,6 +1,5 @@
 using System;
 using Anomaly.Client.Api.UI.ModSettings;
-using Anomaly.Client.Patches.Menu.ModSettings;
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.Attributes;
 using MelonLoader;
@@ -30,6 +29,8 @@ public sealed class ModSettingsSliderBinder : MonoBehaviour
     private float _min, _max;
     private bool _wholeNumbers;
     private Slider _slider;
+    private ModSettingsRowState _row;
+    private bool _bound;
 
     [HideFromIl2Cpp]
     internal void Initialize(MelonPreferences_Entry entry, ModSettingMetadata metadata, float min, float max, bool wholeNumbers)
@@ -39,13 +40,19 @@ public sealed class ModSettingsSliderBinder : MonoBehaviour
         _min = min;
         _max = max;
         _wholeNumbers = wholeNumbers;
+        Bind();
     }
 
-    private void Awake()
+    private void Awake() => Bind();
+
+    [HideFromIl2Cpp]
+    private void Bind()
     {
-        if (_entry == null) return;
+        if (_entry == null || _bound) return;
         _slider = GetComponentInChildren<Slider>(includeInactive: true);
         if (_slider == null) return;
+        _row = GetComponentInParent<ModSettingsRowState>(includeInactive: true);
+        _bound = true;
 
         try
         {
@@ -53,6 +60,7 @@ public sealed class ModSettingsSliderBinder : MonoBehaviour
             _slider.minValue = _min;
             _slider.maxValue = _max;
             _slider.SetValueWithoutNotify(BoxedToFloat(_entry.BoxedValue));
+            CheckStoredRange();
         }
         catch (Exception ex) { MelonLogger.Warning($"ModSettings slider init failed for '{_entry.Identifier}': {ex.Message}"); }
 
@@ -71,9 +79,8 @@ public sealed class ModSettingsSliderBinder : MonoBehaviour
         try
         {
             object typed = ToEntryType(v);
-            if (Equals(_entry.BoxedValue, typed)) return;
-            _entry.BoxedValue = typed;
-            ModSettingsSaveScheduler.RequestSave(_entry.Category);
+            _row?.TryWrite(typed);
+            _slider.SetValueWithoutNotify(BoxedToFloat(_entry.BoxedValue));
         }
         catch (Exception ex)
         {
@@ -85,7 +92,11 @@ public sealed class ModSettingsSliderBinder : MonoBehaviour
     private void OnExternalChange(object _, object newVal)
     {
         if (_slider == null) return;
-        try { _slider.SetValueWithoutNotify(BoxedToFloat(newVal)); }
+        try
+        {
+            _slider.SetValueWithoutNotify(BoxedToFloat(newVal));
+            CheckStoredRange();
+        }
         catch (Exception ex) { MelonLogger.Warning($"ModSettings slider refresh failed: {ex.Message}"); }
     }
 
@@ -117,5 +128,14 @@ public sealed class ModSettingsSliderBinder : MonoBehaviour
         if (_entryType == typeof(int)) return (int)Math.Round(v);
         if (_entryType == typeof(long)) return (long)Math.Round(v);
         return Convert.ChangeType(v, _entryType);
+    }
+
+    [HideFromIl2Cpp]
+    private void CheckStoredRange()
+    {
+        double value = Convert.ToDouble(_entry.BoxedValue);
+        _row?.SetValidation(double.IsNaN(value) || double.IsInfinity(value) || value < _min || value > _max
+            ? "The stored value is outside this slider's range. Choose a value or Reset to change it."
+            : null);
     }
 }

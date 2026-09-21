@@ -1,6 +1,13 @@
 # Anomaly Client API versioning
 
-`Anomaly.Client.Api` follows semantic versioning for its public managed surface.
+This early access SDK establishes a new pre-release baseline while retaining
+core/API version `1.0.0`. Rebuild mods compiled against an earlier development
+build, even if its assembly version is also `1.0.0.0`. This is an intentional
+compatibility reset before the public contract is frozen; no existing release
+tag or published package is changed by this source update.
+
+Once frozen, `Anomaly.Client.Api` follows semantic versioning for its public
+managed surface.
 
 - Patch releases may add implementation fixes without changing public signatures.
 - Minor releases may add APIs and optional manifest fields while preserving existing callers.
@@ -12,3 +19,27 @@
 Managed-module manifests use schema version 1, declare an inclusive minimum and exclusive maximum API version, and must include at least one `SupportedGameVersions` expression. They are resolved as one deterministic dependency graph. The runtime writes `UserData/Anomaly/modules.lock.json` with the ordered ids, versions, and SHA-256 values used for the launch. Capability declarations describe full-trust behavior for review; they are not a process sandbox.
 
 Public API compatibility is covered by the `Anomaly.Client.Api.Tests` contract tests and the metadata-only `tools/PublicApiBaseline` check against `PublicAPI.Shipped.txt`. Review every baseline change; removals and signature changes require a major-version decision.
+
+## Migrating development mods
+
+- `InputRegistry.Register` now returns `IDisposable`. Keep the handle and dispose
+  it during mod deinitialization, after unsubscribing input handlers. Disposal is
+  silent, removes only that registration, and preserves the user's saved binding.
+  Duplicate registration still warns and returns an inert handle.
+- Public registrations reject `anomaly` and `anomaly.*` IDs. Use your own valid
+  lowercase dotted namespace for commands, bindings, virtual inputs, cooldowns,
+  config, and persistence.
+- `FileCache`, its entry type, `LocalizationService`, asset unloading, global
+  config disposal, and global persistence flushing are framework internals.
+  Use `AnomalyResources.TryGetTexture` / `TryGetAudioClip`, `Tr`, and your own
+  persistence store's `Flush()` instead.
+- Ordinary MelonLoader mods are the primary starter. Managed modules remain an
+  advanced option and can track the new input handle with `IModContext.Track`.
+- Keep raw MelonPreferences category IDs free of dots: the starter uses
+  `example_hello` for preferences and `example.hello` for Anomaly registrations.
+  The supported loader treats dots as TOML paths, which can lose saved entries.
+  Anomaly's config/persistence facades still accept dotted mod IDs.
+
+Use DLLs and XML documentation from one release set. The checked baseline also
+records constant values, parameter defaults, visibility, and type modifiers so
+compatibility reviews cover more than member names.

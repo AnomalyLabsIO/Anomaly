@@ -79,7 +79,8 @@ internal static class InputConfigLoader
         }
         catch (Exception ex)
         {
-            MelonLogger.Warning($"InputConfigLoader: failed to load bindings.json: {ex.Message}");
+            try { MelonLogger.Warning($"InputConfigLoader: failed to load bindings.json: {ex.Message}"); }
+            catch { /* unavailable loader logging must not prevent default bindings */ }
         }
     }
 
@@ -97,7 +98,8 @@ internal static class InputConfigLoader
         }
         catch (Exception ex)
         {
-            MelonLogger.Error($"InputConfigLoader: failed to save bindings.json: {ex.Message}");
+            try { MelonLogger.Error($"InputConfigLoader: failed to save bindings.json: {ex.Message}"); }
+            catch { /* keep the in-memory binding usable when loader logging is unavailable */ }
         }
     }
 

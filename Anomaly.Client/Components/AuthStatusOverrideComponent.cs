@@ -99,6 +99,7 @@ public class AuthStatusOverrideComponent : MonoBehaviour
             return false;
 
         _label = labelTransform.GetComponent<TMP_Text>();
+        if (_label != null) _label.richText = false;
         return _label != null;
     }
 

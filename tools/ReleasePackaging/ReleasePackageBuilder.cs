@@ -621,8 +621,16 @@ internal static class ReleasePackageBuilder
             [
                 "lib/net6.0/Anomaly.Client.Api.dll",
                 "lib/net48/Anomaly.Shared.dll",
-                "docs/Anomaly.Client.Api.xml",
-                "docs/Anomaly.Shared.xml",
+                "lib/net6.0/Anomaly.Client.Api.xml",
+                "lib/net48/Anomaly.Shared.xml",
+                "samples/Anomaly.Sample.props",
+                "samples/HelloAnomalyMod/HelloAnomalyMod.csproj",
+                "samples/HelloAnomalyMod/Core.cs",
+                "samples/HelloAnomalyMod/README.md",
+                "samples/HelloAnomalyModule/HelloAnomalyModule.csproj",
+                "samples/HelloAnomalyModule/HelloModule.cs",
+                "samples/HelloAnomalyModule/HelloAnomalyModule.dll.anomaly.json.template",
+                "samples/HelloAnomalyModule/README.md",
                 "lib/net48/BouncyCastle.Cryptography.dll",
                 "reference/Anomaly.Client.Api.PublicAPI.Shipped.txt",
                 "reference/sdk-reference-metadata.json",
@@ -647,7 +655,9 @@ internal static class ReleasePackageBuilder
                 ValidateRelativePath(entry.Source, "package source");
                 ValidateRelativePath(entry.Path, "package path");
                 var normalizedPath = NormalizeRelativePath(entry.Path);
-                if (!paths.Add(normalizedPath) || !names.Add(Path.GetFileName(normalizedPath)))
+                if (!paths.Add(normalizedPath) ||
+                    (!names.Add(Path.GetFileName(normalizedPath)) &&
+                     (package.Target != "developer-sdk" || normalizedPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))))
                     throw new InvalidDataException($"Package '{package.PackageId}' has duplicate paths or filenames.");
             }
             if (contract.Paths.Any(path => !paths.Contains(path)))
@@ -908,6 +918,7 @@ internal static class ReleasePackageBuilder
             "primary-package-build",
             "package-closure",
             "sdk-compile-closure",
+            "public-api-fixtures",
             "reproducibility-rebuild",
             "reproducibility-package-build",
             "reproducibility-comparison",

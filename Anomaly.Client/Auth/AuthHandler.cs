@@ -41,6 +41,7 @@ public static class AuthHandler
     private const byte RetryCookieResponseCode = 101;
     private static Dictionary<string, ServerConnection> _connections = new();
     private static readonly ConnectionAttemptGate AttemptGate = new();
+    private static readonly TransportDisconnectGate TransportDisconnects = new();
     private static PlayerAuthProfileStore _profileStore;
     
     public static bool UsingAnomalyAuth { get; internal set; }
@@ -112,11 +113,15 @@ public static class AuthHandler
             {
                 MelonLogger.Error(
                     "Authentication is disabled because required Anomaly lifecycle or Harmony hooks are not healthy.");
+                ShowAuthenticationFailure("Required Anomaly features are unavailable.",
+                    "Restart with a matching Anomaly release and check anomaly.status for the failed feature.", "AUTH-FEATURES");
                 return;
             }
             if (!Anomaly.Client.Patches.Mirror.NetworkManagerRegisterClientMessages.IsReady)
             {
                 MelonLogger.Error("Authentication is disabled because required Anomaly networking services are not ready.");
+                ShowAuthenticationFailure("Anomaly networking is not ready.",
+                    "Wait for initialization to finish, then reconnect. If this repeats, restart the game.", "AUTH-NETWORK-INIT");
                 return;
             }
             if (!Anomaly.Client.Patches.Mirror.EncryptedChannelHandlerFix.IsReady)
@@ -124,6 +129,8 @@ public static class AuthHandler
                 MelonLogger.Error(
                     "Authentication is disabled because the required encrypted-channel receive bridge is not ready: " +
                     (Anomaly.Client.Patches.Mirror.EncryptedChannelHandlerFix.LastError ?? "unknown failure"));
+                ShowAuthenticationFailure("The authenticated message receiver is unavailable.",
+                    "Restart with a matching Anomaly release and check anomaly.status for the failed networking feature.", "AUTH-RECEIVER");
                 return;
             }
             if (InitializationState != AuthInitializationState.Ready)
@@ -131,6 +138,8 @@ public static class AuthHandler
                 MelonLogger.Error(
                     "Authentication is disabled because the client identity profile is not ready: "
                     + (InitializationError ?? InitializationState.ToString()));
+                ShowAuthenticationFailure("The local identity profile could not be opened.",
+                    "Check the game log for the profile error, repair the reported file or permissions, then restart. Your existing profile was left unchanged.", "AUTH-PROFILE");
                 return;
             }
 
@@ -153,6 +162,7 @@ public static class AuthHandler
                 catch { }
                 return;
             }
+            TransportDisconnects.Begin(AttemptGate.Generation);
 
             // Every re-entry issued by Anomaly is explicitly scheduled and is
             // single-use. Anything else is a fresh user connection and must
@@ -269,6 +279,8 @@ public static class AuthHandler
             CancelAuthentication(connectionKey, clearAllConnections: true);
             AnomalyMessaging.FailClosedTransport(
                 "Connection authentication failed: " + e.GetType().Name + ".");
+            ShowAuthenticationFailure("Authentication could not be prepared.",
+                "Check the game log and use a matching client/server release before reconnecting.", "AUTH-PREPARE");
             try
             {
                 FeatureHealth.Report(
@@ -287,11 +299,17 @@ public static class AuthHandler
     {
         AttemptGate.CompleteWriterAttempt();
         MelonLogger.Warning($"Rejected Auth - Reason: {info.Reason}");
-        var pos = info.AdditionalData._position;
         var data = info.AdditionalData;
         var server = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.clientAddress;
         var port = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.port.ToString();
         var connectionKey = BuildTrustEndpoint(server, port);
+        if (data == null)
+        {
+            FailAuthentication(connectionKey, "The server connection ended: " + info.Reason + ".",
+                "Check that the server is available and uses a matching Anomaly release, then reconnect.", "AUTH-NO-RESPONSE");
+            return true;
+        }
+        var pos = data._position;
         byte requestType;
         try
         {
@@ -302,6 +320,8 @@ public static class AuthHandler
             info.AdditionalData._position = pos;
             CancelAuthentication(connectionKey);
             MelonLogger.Error($"Server rejection did not contain a response code: {ex}");
+            ShowAuthenticationFailure("The server connection ended: " + info.Reason + ".",
+                "Check that the server is available and uses a matching Anomaly release, then reconnect.", "AUTH-NO-RESPONSE");
             return true;
         }
         if (requestType == RetryCookieResponseCode)
@@ -323,7 +343,8 @@ public static class AuthHandler
             catch (Exception ex)
             {
                 MelonLogger.Error($"Failed to process the Anomaly retry cookie: {ex}");
-                CancelAuthentication(connectionKey);
+                FailAuthentication(connectionKey, "The server retry response was invalid.",
+                    "Reconnect once. If this repeats, ask the server operator to check its Anomaly release and logs.", "AUTH-RETRY");
             }
             return false;
         }
@@ -333,13 +354,16 @@ public static class AuthHandler
             info.AdditionalData._position = pos;
             CancelAuthentication(connectionKey);
             MelonLogger.Warning($"Server rejected with code {requestType}. Passing to base handler.");
+            ShowAuthenticationFailure("The server rejected the connection.",
+                "Check the server's connection requirements and password, then reconnect. The game log contains the server rejection.", "AUTH-REJECT-" + requestType);
             return true; // Not our rejection, let original handler process it
         }
 
         if (!_connections.TryGetValue(connectionKey, out var connection))
         {
             MelonLogger.Error("Received a server handshake without a matching client session.");
-            CancelAuthentication(connectionKey);
+            FailAuthentication(connectionKey, "The server reply did not match this connection attempt.",
+                "Reconnect to start a fresh authentication attempt.", "AUTH-SESSION");
             return false;
         }
 
@@ -364,13 +388,15 @@ public static class AuthHandler
         catch (AnomalyProtocolVersionMismatchException pv)
         {
             MelonLogger.Error($"Server speaks a different Anomaly protocol version. {pv.Message}");
-            CancelAuthentication(connectionKey);
+            FailAuthentication(connectionKey, "The client and server use different Anomaly protocol versions.",
+                "Install the matching Anomaly release requested by the server operator.", "AUTH-VERSION");
             return false;
         }
         catch (Exception ex)
         {
             MelonLogger.Error($"Rejected unauthenticated or malformed server handshake: {ex}");
-            CancelAuthentication(connectionKey);
+            FailAuthentication(connectionKey, "The server identity response could not be verified.",
+                "Ask the server operator to check its release and identity configuration before retrying.", "AUTH-HANDSHAKE");
             return false;
         }
 
@@ -401,13 +427,15 @@ public static class AuthHandler
                 + $"Automatic rotation was rejected: {rotationError}. Connection blocked. "
                 + "Verify the fingerprint out of band and use a future launcher/operator trust-reset workflow; "
                 + "the in-game client will not replace a changed pin.");
-            CancelAuthentication(connectionKey);
+            FailAuthentication(connectionKey, "The remembered server identity has changed.",
+                "Verify the new fingerprint with the operator using another trusted channel. Anomaly has kept the existing trusted key and blocked this connection.", "AUTH-KEY-CHANGED");
             return false;
         }
         if (trustState == ServerTrustState.Unavailable)
         {
             MelonLogger.Error("Server trust store is unavailable; connection blocked rather than silently forgetting pins.");
-            CancelAuthentication(connectionKey);
+            FailAuthentication(connectionKey, "The local server trust store could not be opened.",
+                "Check the game log for the file error and repair it before reconnecting. Existing trusted keys have not been replaced.", "AUTH-TRUST-STORE");
             return false;
         }
 
@@ -418,7 +446,10 @@ public static class AuthHandler
             PasswordPrompt.ShowConfirmation(
                 PromptOwner,
                 "Trust this Anomaly server key?",
-                trustEndpoint + "\n\n" + formattedFingerprint,
+                "Server: " + trustEndpoint + "\n\nIdentity fingerprint:\n" + formattedFingerprint
+                    + "\n\nCheck this fingerprint with the server operator before trusting it. This key will be remembered for future connections.",
+                Tr.Get(TrKeys.Prompt_TrustConnect),
+                Tr.Get(TrKeys.Prompt_Cancel),
                 () =>
                 {
                     if (!IsCurrentConnection(connectionKey, connection, trustGeneration))
@@ -430,7 +461,8 @@ public static class AuthHandler
                             out var pinError))
                     {
                         MelonLogger.Error($"Failed to save server key pin: {pinError}");
-                        CancelAuthentication(connectionKey);
+                        FailAuthentication(connectionKey, "The server trust decision could not be saved.",
+                            "Check that Anomaly's UserData folder is writable, then reconnect and review the fingerprint again.", "AUTH-TRUST-SAVE");
                         return;
                     }
                     ContinueAfterServerTrust(connectionKey, server, port, connection);
@@ -563,7 +595,8 @@ public static class AuthHandler
         catch (Exception ex)
         {
             MelonLogger.Error($"Failed to prepare bounded password proof: {ex}");
-            CancelAuthentication(connectionKey);
+            FailAuthentication(connectionKey, "The password response could not be prepared.",
+                "Reconnect and try again. If this repeats, check the game log for the password proof error.", "AUTH-PASSWORD");
         }
     }
 
@@ -598,6 +631,18 @@ public static class AuthHandler
         {
             SafeLogError("Failed to clear connection details during cancellation: " + exception);
         }
+    }
+
+    private static void FailAuthentication(string connectionKey, string reason, string action, string code)
+    {
+        CancelAuthentication(connectionKey);
+        ShowAuthenticationFailure(reason, action, code);
+    }
+
+    private static void ShowAuthenticationFailure(string reason, string action, string code)
+    {
+        try { ConnectionInfoOverlay.ShowFailure(reason, action, code); }
+        catch (Exception exception) { SafeLogError("Failed to show terminal authentication details: " + exception); }
     }
 
     private static void SafeLogError(string message)
@@ -679,7 +724,8 @@ public static class AuthHandler
         catch (Exception exception)
         {
             MelonLogger.Error("Failed to initiate the authenticated reconnect: " + exception);
-            CancelAuthentication(connectionKey);
+            FailAuthentication(connectionKey, "The authenticated reconnect could not be started.",
+                "Return to the server browser and connect again.", "AUTH-RECONNECT");
         }
     }
 
@@ -765,32 +811,31 @@ public static class AuthHandler
 
         PasswordPrompt.ShowTextInput(
             PromptOwner,
-            "Choose your Anomaly nickname",
-            "This name is sent to servers. Anomaly will not use your Windows username. Enter 1-32 visible characters.",
+            Tr.Get(TrKeys.Prompt_NicknameTitle),
+            Tr.Get(TrKeys.Prompt_NicknameDetails),
+            PlayerAuth.Username,
             nickname =>
             {
                 nickname = (nickname ?? string.Empty).Trim();
                 if (nickname.Length < 1 || nickname.Length > 32 || nickname.Any(char.IsControl))
                 {
-                    MelonLogger.Warning("Nickname must contain 1-32 visible characters.");
-                    PromptForFirstRunNickname();
-                    return;
+                    return Tr.Get(TrKeys.Prompt_NicknameInvalid);
                 }
 
-                var previousAuth = PlayerAuth;
-                var auth = previousAuth;
+                var auth = PlayerAuth;
                 auth.Username = nickname;
-                PlayerAuth = auth;
                 try
                 {
-                    _profileStore.Save(PlayerAuth);
+                    _profileStore.Save(auth);
+                    PlayerAuth = auth;
                     MelonLogger.Msg("Anomaly nickname saved.");
+                    Anomaly.Client.Patches.Menu.MainMenuCustomizer.RefreshIdentity();
+                    return null;
                 }
                 catch (Exception ex)
                 {
-                    PlayerAuth = previousAuth;
                     MelonLogger.Error($"Failed to save nickname and identity: {ex}");
-                    PromptForFirstRunNickname();
+                    return Tr.Get(TrKeys.Prompt_SaveError);
                 }
             },
             () => MelonLogger.Warning("Nickname selection cancelled; Anomaly authentication remains disabled."));
@@ -798,6 +843,27 @@ public static class AuthHandler
 
     public static void OnDisconnected()
     {
+        // LiteNetLib bypasses OnConncetionRefused for timeout/unreachable errors.
+        // Its callback may originate off-thread, so only capture there and show
+        // the terminal notice here, before ordinary main-thread teardown.
+        try
+        {
+            var host = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorCore.Host;
+            bool transportFailed = TransportDisconnects.TryConsume(
+                AttemptGate.Generation, host?.Pointer.ToInt64() ?? 0, out string transportReason);
+            if (transportFailed && UsingAnomalyAuth)
+            {
+                FailAuthentication(null, "The server did not respond (" + transportReason + ").",
+                    "Check the server address and that the server is running, then reconnect. If it is reachable, check that client and server use matching Anomaly releases.",
+                    "AUTH-NO-RESPONSE");
+            }
+        }
+        catch (Exception exception)
+        {
+            // Presentation/interop failures must never prevent authentication teardown.
+            TransportDisconnects.TryConsume(AttemptGate.Generation, 0, out _);
+            SafeLogError("Could not display transport disconnect details: " + exception);
+        }
         AttemptGate.CompleteWriterAttempt();
         UsingAnomalyAuth = false;
 
@@ -837,4 +903,21 @@ public static class AuthHandler
 
         MelonLogger.Msg("OnDisconnected");
     }
+
+    internal static void ObserveTransportDisconnect(NetPeer peer, DisconnectReason reason)
+    {
+        int generation = AttemptGate.Generation;
+        var host = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorCore.Host;
+        // Native peer/manager identity rejects late events from an older transport,
+        // including when a same-generation authenticated reconnect has begun.
+        if (peer == null || host == null || peer.NetManager == null) return;
+        bool networkFailure = reason == DisconnectReason.ConnectionFailed
+            || reason == DisconnectReason.Timeout
+            || reason == DisconnectReason.HostUnreachable
+            || reason == DisconnectReason.NetworkUnreachable;
+        TransportDisconnects.Observe(generation, host.Pointer.ToInt64(), peer.NetManager.Pointer.ToInt64(),
+            networkFailure, reason.ToString());
+    }
+
+    internal static void ObserveLocalTransportStop() => TransportDisconnects.Cancel(AttemptGate.Generation);
 }

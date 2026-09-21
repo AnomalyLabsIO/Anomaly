@@ -25,18 +25,17 @@ public static class ClientConfig
     /// <summary>
     /// Returns (or creates) the config store for <paramref name="modId"/>.
     /// <paramref name="modId"/> must be a syntactically valid dotted-lowercase
-    /// namespace; the reserved <c>"anomaly"</c> prefix is accepted for the
-    /// framework's own config.
+    /// namespace outside the reserved <c>"anomaly"</c> prefix.
     /// </summary>
     public static IConfigSource For(string modId)
     {
         if (string.IsNullOrEmpty(modId))
             throw new ArgumentException("Mod id must be non-empty.", nameof(modId));
 
-        if (!ModNamespace.IsReserved(modId) && !ModNamespace.IsValid(modId))
+        if (!ModNamespace.IsValid(modId) || ModNamespace.IsReserved(modId))
         {
             throw new ArgumentException(
-                $"ClientConfig.For('{modId}'): id is not a valid namespace (lowercase dotted, e.g. \"mymod\").",
+                $"ClientConfig.For('{modId}'): id must be a non-reserved namespace (lowercase dotted, e.g. \"mymod\").",
                 nameof(modId));
         }
 
@@ -52,7 +51,7 @@ public static class ClientConfig
     /// Clears cached config source instances. MelonPreferences owns file IO and
     /// watchers; this only resets Anomaly's compatibility facade cache.
     /// </summary>
-    public static void DisposeAll()
+    internal static void DisposeAll()
     {
         _sources.Clear();
     }

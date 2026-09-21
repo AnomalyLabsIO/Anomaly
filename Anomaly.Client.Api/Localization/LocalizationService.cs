@@ -14,13 +14,13 @@ using YamlDotNet.Serialization;
 namespace Anomaly.Client.Api.Localization;
 
 /// <summary>
-/// Public localization service. Loads translation files, resolves the active locale from the
+/// Framework localization service. Loads translation files, resolves the active locale from the
 /// SCPSL registry (authoritative) or config overrides, and supports registration of additional
 /// namespaces by third-party mods.
 ///
-/// Mod authors typically should not construct this directly — use <see cref="Tr.RegisterMod(string)"/>.
+/// Mod authors use <see cref="Tr.RegisterMod(string)"/>.
 /// </summary>
-public class LocalizationService
+internal class LocalizationService
 {
     private readonly string _anomalyI18nDir;
     private readonly string _userDataDir;

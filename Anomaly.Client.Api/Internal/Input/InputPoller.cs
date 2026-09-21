@@ -22,11 +22,14 @@ internal static class InputPoller
         Dispatcher.Update(
             InputRegistry.ResolvedKeysSnapshot(),
             IsHeld,
+            InputRegistry.IsCurrent,
             InputRegistry.OnPressed,
             InputRegistry.OnReleased);
     }
 
     internal static void Reset() => Dispatcher.Reset();
+
+    internal static void Forget(object registration) => Dispatcher.Forget(registration);
 
     /// <summary>True iff the primary key is held AND every required modifier is held
     /// AND no disallowed modifier is held.</summary>

@@ -1,6 +1,5 @@
 using System;
 using Anomaly.Client.Api.UI.ModSettings;
-using Anomaly.Client.Patches.Menu.ModSettings;
 using Il2CppInterop.Runtime.Attributes;
 using MelonLoader;
 using UnityEngine;
@@ -30,6 +29,8 @@ public sealed class ModSettingsToggleBinder : MonoBehaviour
     private Image _trueImage;
     private Image _falseImage;
     private LemonAction<object, object> _externalListener;
+    private ModSettingsRowState _row;
+    private bool _bound;
 
     [HideFromIl2Cpp]
     internal void Initialize(MelonPreferences_Entry entry, Image trueImage, Image falseImage)
@@ -37,11 +38,17 @@ public sealed class ModSettingsToggleBinder : MonoBehaviour
         _entry = entry;
         _trueImage = trueImage;
         _falseImage = falseImage;
+        Bind();
     }
 
-    private void Awake()
+    private void Awake() => Bind();
+
+    [HideFromIl2Cpp]
+    private void Bind()
     {
-        if (_entry == null) return;
+        if (_entry == null || _bound) return;
+        _bound = true;
+        _row = GetComponentInParent<ModSettingsRowState>(includeInactive: true);
 
         ApplyVisuals(CurrentBool());
 
@@ -57,10 +64,8 @@ public sealed class ModSettingsToggleBinder : MonoBehaviour
         if (_entry == null) return;
         try
         {
-            if (Equals(_entry.BoxedValue, value)) return;
-            _entry.BoxedValue = value;
-            ApplyVisuals(value);
-            ModSettingsSaveScheduler.RequestSave(_entry.Category);
+            _row?.TryWrite(value);
+            ApplyVisuals(CurrentBool());
         }
         catch (Exception ex)
         {
@@ -85,8 +90,20 @@ public sealed class ModSettingsToggleBinder : MonoBehaviour
     [HideFromIl2Cpp]
     private void ApplyVisuals(bool isOn)
     {
-        if (_trueImage != null) _trueImage.color = isOn ? ActiveColor : InactiveColor;
-        if (_falseImage != null) _falseImage.color = isOn ? InactiveColor : ActiveColor;
+        ApplyColor(_trueImage, isOn);
+        ApplyColor(_falseImage, !isOn);
+    }
+
+    [HideFromIl2Cpp]
+    private static void ApplyColor(Image image, bool selected)
+    {
+        if (image == null) return;
+        var button = image.GetComponent<Button>();
+        if (button == null) return;
+        var colors = button.colors;
+        colors.normalColor = selected ? ActiveColor : InactiveColor;
+        colors.selectedColor = new Color(1f, 0.58f, 0.20f, 1f);
+        button.colors = colors;
     }
 
     private void OnDestroy()

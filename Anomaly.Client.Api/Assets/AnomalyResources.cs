@@ -10,10 +10,10 @@ using UnityEngine;
 namespace Anomaly.Client.Api.Assets
 {
     /// <summary>
-    /// Content-addressed, lazy typed loader over <see cref="FileCache"/>. Bytes are
-    /// kept on disk by the file-transfer layer; we materialize them as Unity
-    /// objects on first request and cache the result until
-    /// <see cref="UnloadAll"/> is called (e.g. on disconnect).
+    /// Loads approved server textures and audio by SHA-256. Returned Unity
+    /// objects are shared, borrowed resources for the current connection; mods
+    /// must not destroy them. The framework releases them during teardown.
+    /// Call these methods on the Unity main thread.
     /// </summary>
     public static class AnomalyResources
     {
@@ -38,6 +38,7 @@ namespace Anomaly.Client.Api.Assets
             }
         }
 
+        /// <summary>Gets an approved PNG texture, or false if unavailable or invalid.</summary>
         public static bool TryGetTexture(byte[] hash, out Texture2D texture)
         {
             texture = null;
@@ -81,6 +82,7 @@ namespace Anomaly.Client.Api.Assets
             }
         }
 
+        /// <summary>Gets an approved OGG audio clip, or false if unavailable or invalid.</summary>
         public static bool TryGetAudioClip(byte[] hash, out AudioClip clip)
         {
             clip = null;
@@ -132,7 +134,7 @@ namespace Anomaly.Client.Api.Assets
         /// Drops the cached Unity object for a specific hash so the next lookup
         /// rebuilds it from disk.
         /// </summary>
-        public static void UnloadOne(byte[] hash)
+        internal static void UnloadOne(byte[] hash)
         {
             if (hash == null) return;
             string hex = FileCache.ToHex(hash);
@@ -153,7 +155,7 @@ namespace Anomaly.Client.Api.Assets
             }
         }
 
-        public static void UnloadAll()
+        internal static void UnloadAll()
         {
             foreach (var entry in _textures)
             {

@@ -67,7 +67,7 @@ public override void OnInitializeMelon()
 
 Use `Tr.RegisterMod("mymod", customDirectory)` only when your translations intentionally live outside the conventional `UserData/i18n/<namespace>/` path.
 
-**Important:** Anomaly initializes its own localization in `Core.OnInitializeMelon()`, which means yours must run after it. Declare the dependency explicitly with `[assembly: MelonAdditionalDependencies("Anomaly")]` — CLR assembly references do not affect MelonLoader's `OnInitializeMelon` order. See [MODDING.md](../MODDING.md) for the full load-order contract.
+**Important:** Anomaly initializes its own localization in `Core.OnInitializeMelon()`, which means yours must run after it. Declare the dependency explicitly with `[assembly: MelonAdditionalDependencies("Anomaly.Client")]`, using the runtime assembly's simple name rather than its display name. See [MODDING.md](../MODDING.md) for the full load-order contract.
 
 ### 4. Look up translations
 

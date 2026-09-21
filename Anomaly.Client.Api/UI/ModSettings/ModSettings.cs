@@ -57,6 +57,7 @@ public static class ModSettings
                 "Entry is not attached to a category. Create it via MelonPreferences_Category.CreateEntry(...).",
                 nameof(entry));
 
+        ModSettingValue.ValidateMetadata(entry.GetReflectedType(), metadata);
         ModSettingsRegistry.SetEntry(entry.Category.Identifier, entry.Identifier, metadata);
     }
 

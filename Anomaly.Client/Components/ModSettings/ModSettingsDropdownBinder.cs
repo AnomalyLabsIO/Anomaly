@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Anomaly.Client.Api.UI.ModSettings;
-using Anomaly.Client.Patches.Menu.ModSettings;
+using Anomaly.Client.Api.UI.ModSettings.Internal;
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.Attributes;
 using Il2CppTMPro;
@@ -25,7 +25,9 @@ public sealed class ModSettingsDropdownBinder : MonoBehaviour
     private MelonPreferences_Entry _entry;
     private Type _entryType;
     private string[] _options;       // dropdown labels (enum names or Choices)
-    private bool _isEnum;
+    private bool _invalidPlaceholder;
+    private bool _bound;
+    private ModSettingsRowState _row;
     private LemonAction<object, object> _externalListener;
     private UnityAction<int> _uiListener;
     private TMP_Dropdown _dropdown;
@@ -35,7 +37,6 @@ public sealed class ModSettingsDropdownBinder : MonoBehaviour
     {
         _entry = entry;
         _entryType = entry?.GetReflectedType();
-        _isEnum = isEnum;
 
         if (options != null)
         {
@@ -46,22 +47,23 @@ public sealed class ModSettingsDropdownBinder : MonoBehaviour
         {
             _options = Array.Empty<string>();
         }
+        Bind();
     }
 
-    private void Awake()
+    private void Awake() => Bind();
+
+    [HideFromIl2Cpp]
+    private void Bind()
     {
-        if (_entry == null) return;
+        if (_entry == null || _bound) return;
         _dropdown = GetComponentInChildren<TMP_Dropdown>(includeInactive: true);
         if (_dropdown == null) return;
+        _bound = true;
+        _row = GetComponentInParent<ModSettingsRowState>(includeInactive: true);
 
         try
         {
-            _dropdown.ClearOptions();
-            var list = new Il2CppSystem.Collections.Generic.List<string>();
-            for (int i = 0; i < _options.Length; i++) list.Add(_options[i]);
-            _dropdown.AddOptions(list);
-            _dropdown.SetValueWithoutNotify(ResolveCurrentIndex());
-            _dropdown.RefreshShownValue();
+            RefreshOptions();
         }
         catch (Exception ex) { MelonLogger.Warning($"ModSettings dropdown init failed for '{_entry.Identifier}': {ex.Message}"); }
 
@@ -77,13 +79,13 @@ public sealed class ModSettingsDropdownBinder : MonoBehaviour
     private void OnUiChanged(int index)
     {
         if (_entry == null) return;
+        if (_invalidPlaceholder) index--;
         if (index < 0 || index >= _options.Length) return;
         try
         {
-            object typed = OptionAt(index);
-            if (Equals(_entry.BoxedValue, typed)) return;
-            _entry.BoxedValue = typed;
-            ModSettingsSaveScheduler.RequestSave(_entry.Category);
+            object typed = ModSettingValue.ChoiceValue(_entryType, _options, index);
+            _row?.TryWrite(typed);
+            RefreshOptions(clearValidation: false);
         }
         catch (Exception ex)
         {
@@ -97,8 +99,7 @@ public sealed class ModSettingsDropdownBinder : MonoBehaviour
         if (_dropdown == null) return;
         try
         {
-            _dropdown.SetValueWithoutNotify(ResolveCurrentIndex());
-            _dropdown.RefreshShownValue();
+            RefreshOptions();
         }
         catch (Exception ex) { MelonLogger.Warning($"ModSettings dropdown refresh failed: {ex.Message}"); }
     }
@@ -116,37 +117,20 @@ public sealed class ModSettingsDropdownBinder : MonoBehaviour
     }
 
     [HideFromIl2Cpp]
-    private int ResolveCurrentIndex()
+    private void RefreshOptions(bool clearValidation = true)
     {
-        object current = _entry.BoxedValue;
-        if (current == null) return 0;
-
-        if (_isEnum)
-        {
-            string name = current.ToString();
-            for (int i = 0; i < _options.Length; i++)
-            {
-                if (string.Equals(_options[i], name, StringComparison.Ordinal)) return i;
-            }
-            return 0;
-        }
-
-        // Numeric or string Choice → match by string representation.
-        string repr = current.ToString();
-        for (int i = 0; i < _options.Length; i++)
-        {
-            if (string.Equals(_options[i], repr, StringComparison.Ordinal)) return i;
-        }
-        return 0;
-    }
-
-    [HideFromIl2Cpp]
-    private object OptionAt(int index)
-    {
-        string raw = _options[index];
-        if (_isEnum && _entryType != null) return Enum.Parse(_entryType, raw, ignoreCase: false);
-        if (_entryType == typeof(string)) return raw;
-        if (_entryType != null && _entryType.IsValueType) return Convert.ChangeType(raw, _entryType);
-        return raw;
+        int index = ModSettingValue.ChoiceIndex(_entryType, _options, _entry.BoxedValue);
+        _invalidPlaceholder = index < 0;
+        _dropdown.ClearOptions();
+        var list = new Il2CppSystem.Collections.Generic.List<string>();
+        if (_invalidPlaceholder) list.Add("Select a valid value…");
+        foreach (string option in _options) list.Add(option);
+        _dropdown.AddOptions(list);
+        _dropdown.SetValueWithoutNotify(_invalidPlaceholder ? 0 : index);
+        _dropdown.RefreshShownValue();
+        if (_invalidPlaceholder)
+            _row?.SetValidation("The stored value is not an available choice. Select a value or Reset to change it.");
+        else if (clearValidation)
+            _row?.SetValidation(null);
     }
 }
