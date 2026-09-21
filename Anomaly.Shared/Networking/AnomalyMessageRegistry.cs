@@ -32,21 +32,23 @@ namespace Anomaly.Shared.Networking
         private static readonly Dictionary<string, uint> NameToHash = new Dictionary<string, uint>();
         private static readonly Dictionary<uint, MessageChannel> HashToChannel = new Dictionary<uint, MessageChannel>();
         private static readonly Dictionary<uint, AnomalyMessagePolicy> HashToPolicy = new Dictionary<uint, AnomalyMessagePolicy>();
+        private static readonly Dictionary<uint, Type> HashToType = new Dictionary<uint, Type>();
 
         public static void Register<T>(string name, Func<T> factory) where T : IAnomalyMessage
         {
-            uint hash = ComputeHash(name);
+            RegisterCore(name, factory, builtIn: false);
+        }
 
-            if (HashToName.TryGetValue(hash, out var existing))
-            {
-                if (existing == name)
-                {
-                    Warn($"AnomalyMessageRegistry: '{name}' is already registered, skipping.");
-                    return;
-                }
-                throw new InvalidOperationException(
-                    $"AnomalyMessageRegistry: FNV-1a hash collision between '{existing}' and '{name}' (hash=0x{hash:X8}). Rename one of them.");
-            }
+        private static void RegisterBuiltIn<T>(string name, Func<T> factory) where T : IAnomalyMessage
+        {
+            RegisterCore(name, factory, builtIn: true);
+        }
+
+        private static void RegisterCore<T>(string name, Func<T> factory, bool builtIn) where T : IAnomalyMessage
+        {
+            ValidateName(name, builtIn);
+            if (factory == null)
+                throw new ArgumentNullException(nameof(factory));
 
             // Sample one instance so the receive path can read TransportChannel from a
             // static lookup rather than allocating a fresh message per packet (which an
@@ -55,6 +57,9 @@ namespace Anomaly.Shared.Networking
             if (sample == null)
                 throw new InvalidOperationException(
                     $"AnomalyMessageRegistry: '{name}' factory returned null.");
+            if (!string.Equals(sample.MessageName, name, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"AnomalyMessageRegistry: factory message name '{sample.MessageName}' did not match registration '{name}'.");
 
             var directional = sample as IDirectionalAnomalyMessage;
             var bounded = sample as IBoundedAnomalyMessage;
@@ -85,6 +90,34 @@ namespace Anomaly.Shared.Networking
                 maxPayloadBytes,
                 sample is IRoundScopedAnomalyMessage);
 
+            uint hash = ComputeHash(name);
+            if (HashToName.TryGetValue(hash, out var existing))
+            {
+                if (!string.Equals(existing, name, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"AnomalyMessageRegistry: FNV-1a hash collision between '{existing}' and '{name}' (hash=0x{hash:X8}). Rename one of them.");
+                }
+
+                bool sameContract = HashToType.TryGetValue(hash, out Type existingType) &&
+                                    existingType == sample.GetType() &&
+                                    HashToChannel.TryGetValue(hash, out MessageChannel existingChannel) &&
+                                    existingChannel == sample.TransportChannel &&
+                                    HashToPolicy.TryGetValue(hash, out AnomalyMessagePolicy existingPolicy) &&
+                                    existingPolicy.Direction == policy.Direction &&
+                                    existingPolicy.AuthPhase == policy.AuthPhase &&
+                                    existingPolicy.MaxPayloadBytes == policy.MaxPayloadBytes &&
+                                    existingPolicy.IsRoundScoped == policy.IsRoundScoped;
+                if (!sameContract)
+                {
+                    throw new InvalidOperationException(
+                        $"AnomalyMessageRegistry: '{name}' is already registered with a different message contract.");
+                }
+
+                InvokeLogSafely(Warn, $"AnomalyMessageRegistry: '{name}' is already registered with the same contract, skipping.");
+                return;
+            }
+
             // Commit all lookup tables only after the factory and policy have
             // passed validation, so a failed registration cannot leave a partial
             // hash entry behind.
@@ -93,8 +126,41 @@ namespace Anomaly.Shared.Networking
             NameToHash[name] = hash;
             HashToChannel[hash] = sample.TransportChannel;
             HashToPolicy[hash] = policy;
+            HashToType[hash] = sample.GetType();
 
-            Log($"AnomalyMessageRegistry: Registered '{name}' (hash=0x{hash:X8}, channel={sample.TransportChannel}, direction={policy.Direction}, phase={policy.AuthPhase}, max={policy.MaxPayloadBytes})");
+            InvokeLogSafely(
+                Log,
+                $"AnomalyMessageRegistry: Registered '{name}' (hash=0x{hash:X8}, channel={sample.TransportChannel}, direction={policy.Direction}, phase={policy.AuthPhase}, max={policy.MaxPayloadBytes})");
+        }
+
+        private static void InvokeLogSafely(Action<string> sink, string message)
+        {
+            try { sink?.Invoke(message); }
+            catch { /* diagnostics must not invalidate a committed registry entry */ }
+        }
+
+        private static void ValidateName(string name, bool builtIn)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.Length > 128)
+                throw new ArgumentException("Message name must be a non-empty namespaced identifier of at most 128 characters.", nameof(name));
+
+            string[] segments = name.Split(':');
+            if (segments.Length < 2 || Array.Exists(segments, segment => segment.Length == 0))
+                throw new ArgumentException("Message name must contain non-empty colon-separated namespace segments.", nameof(name));
+            foreach (char character in name)
+            {
+                bool allowed = character is >= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '_' or '.' or ':';
+                if (!allowed)
+                    throw new ArgumentException("Message names may contain only lowercase ASCII letters, digits, '.', '-', '_', and ':'.", nameof(name));
+            }
+
+            bool reserved = name.StartsWith("anomaly:", StringComparison.Ordinal);
+            if (builtIn != reserved)
+            {
+                throw new InvalidOperationException(builtIn
+                    ? "Built-in message names must use the reserved 'anomaly:' namespace."
+                    : "The 'anomaly:' message namespace is reserved for built-in protocol messages.");
+            }
         }
 
         public static bool TryCreate(uint hash, out IAnomalyMessage message)
@@ -131,36 +197,30 @@ namespace Anomaly.Shared.Networking
         /// </summary>
         public static void RegisterDefaults()
         {
-            Register("anomaly:blendshapes", () => new EmotionBlendShapesMessage());
-            Register("anomaly:bonetransforms", () => new BoneTransformsMessage());
-            Register("anomaly:silentrolechange", () => new SilentRoleChangeMessage());
-            Register("anomaly:round:state", () => new RoundStateMessage());
-            Register("anomaly:filemanifest", () => new FileManifestMessage());
-            Register("anomaly:filerequest", () => new FileRequestMessage());
-            Register("anomaly:filechunk", () => new FileChunkMessage());
-            Register("anomaly:filecomplete", () => new FileTransferCompleteMessage());
-            Register("anomaly:fileack", () => new FileAckMessage());
+            RegisterBuiltIn("anomaly:silentrolechange", () => new SilentRoleChangeMessage());
+            RegisterBuiltIn("anomaly:round:state", () => new RoundStateMessage());
+            RegisterBuiltIn("anomaly:filemanifest", () => new FileManifestMessage());
+            RegisterBuiltIn("anomaly:filerequest", () => new FileRequestMessage());
+            RegisterBuiltIn("anomaly:filechunk", () => new FileChunkMessage());
+            RegisterBuiltIn("anomaly:filecomplete", () => new FileTransferCompleteMessage());
+            RegisterBuiltIn("anomaly:fileack", () => new FileAckMessage());
 
-            Register("anomaly:asset:spawn", () => new AssetSpawnMessage());
-            Register("anomaly:asset:despawn", () => new AssetDespawnMessage());
-            Register("anomaly:asset:transform", () => new AssetSetTransformMessage());
-            Register("anomaly:asset:texture", () => new AssetSetTextureMessage());
-            Register("anomaly:asset:active", () => new AssetSetActiveMessage());
-            Register("anomaly:asset:reload", () => new AssetReloadMessage());
-            Register("anomaly:asset:override-texture", () => new AssetOverrideTextureMessage());
-            Register("anomaly:asset:override-clear", () => new AssetClearOverrideMessage());
-            Register("anomaly:asset:override-clearall", () => new AssetClearAllOverridesMessage());
+            RegisterBuiltIn("anomaly:asset:override-texture", () => new AssetOverrideTextureMessage());
+            RegisterBuiltIn("anomaly:asset:override-clear", () => new AssetClearOverrideMessage());
+            RegisterBuiltIn("anomaly:asset:override-clearall", () => new AssetClearAllOverridesMessage());
 
-            Register("anomaly:announcer:vocabulary", () => new AnnouncerVocabularyMessage());
+            RegisterBuiltIn("anomaly:announcer:vocabulary", () => new AnnouncerVocabularyMessage());
 
-            Register("anomaly:player:setfavoritecolor", () => new SetFavoriteColorMessage());
-            Register("anomaly:player:colorchanged", () => new PlayerColorChangedMessage());
+            RegisterBuiltIn("anomaly:player:setfavoritecolor", () => new SetFavoriteColorMessage());
+            RegisterBuiltIn("anomaly:player:colorchanged", () => new PlayerColorChangedMessage());
 
-            Register("anomaly:content:catalog", () => new ContentCatalogMessage());
-            Register("anomaly:content:catalogack", () => new ContentCatalogAckMessage());
+            RegisterBuiltIn("anomaly:content:catalog", () => new ContentCatalogMessage());
+            RegisterBuiltIn("anomaly:content:decision", () => new ContentCatalogDecisionMessage());
+            RegisterBuiltIn("anomaly:content:catalogack", () => new ContentCatalogAckMessage());
+            RegisterBuiltIn("anomaly:identity:enrollment", () => new EnrollmentIdentityMessage());
 
-            Register("anomaly:capability:challenge", () => new CapabilityChallengeMessage());
-            Register("anomaly:capability:snapshot", () => new CapabilitySnapshotMessage());
+            RegisterBuiltIn("anomaly:capability:challenge", () => new CapabilityChallengeMessage());
+            RegisterBuiltIn("anomaly:capability:snapshot", () => new CapabilitySnapshotMessage());
         }
 
         /// <summary>

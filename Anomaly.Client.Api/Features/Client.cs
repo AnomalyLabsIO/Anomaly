@@ -52,6 +52,12 @@ public static class Client
     public static bool IsConnected => NetworkClient.isConnected;
     public static bool IsClientReady { get; internal set; }
 
+    /// <summary>
+    /// Server-local enrollment id authenticated for the current connection, or
+    /// <c>null</c> while disconnected/before the server publishes it.
+    /// </summary>
+    public static string EnrollmentId { get; internal set; }
+
     public static void QuitGame() => Application.Quit();
 
     public static void Connect(string address)

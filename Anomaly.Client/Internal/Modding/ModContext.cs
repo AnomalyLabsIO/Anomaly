@@ -4,6 +4,8 @@ using System.IO;
 using System.Threading;
 using Anomaly.Client.Api.Commands;
 using Anomaly.Client.Api.Config;
+using Anomaly.Client.Api.Events;
+using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Modding;
 using Anomaly.Client.Api.Persistence;
 using Anomaly.Client.Api.Scheduling;
@@ -73,13 +75,21 @@ internal sealed class ModContext : IModContext, IDisposable
         CommandRegistry.Register(ModId, new OwnedCommand(this, command));
     }
 
-    public void Subscribe(Action subscribe, Action unsubscribe)
+    public void Subscribe<TEventArgs>(
+        Action<AnomalyEventHandler<TEventArgs>> subscribe,
+        Action<AnomalyEventHandler<TEventArgs>> unsubscribe,
+        AnomalyEventHandler<TEventArgs> handler)
+        where TEventArgs : EventArgs
     {
         ThrowIfDisposed();
         if (subscribe == null) throw new ArgumentNullException(nameof(subscribe));
         if (unsubscribe == null) throw new ArgumentNullException(nameof(unsubscribe));
-        subscribe();
-        _cleanup.Add(unsubscribe);
+        if (handler == null) throw new ArgumentNullException(nameof(handler));
+
+        AnomalyEventHandler<TEventArgs> ownedHandler =
+            args => InvokeOwned(() => handler(args));
+        subscribe(ownedHandler);
+        _cleanup.Add(() => unsubscribe(ownedHandler));
     }
 
     public void Track(IDisposable resource)
@@ -103,8 +113,22 @@ internal sealed class ModContext : IModContext, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _cancellation.Cancel();
-        foreach (var task in _scheduledTasks) task.Cancel();
+
+        // OnDisable/Dispose callbacks may have queued persistence writes. Make
+        // them durable before owner-scoped scheduler cleanup cancels debounce
+        // handles for this context.
+        RuntimeTeardown.FlushBeforeCancel(
+            () =>
+            {
+                try { Persistence.Flush(); }
+                catch { /* the persistence store owns detailed failure logging */ }
+            },
+            () =>
+            {
+                _cancellation.Cancel();
+                foreach (var task in _scheduledTasks) task.Cancel();
+                Scheduler.ClearOwner(ModId);
+            });
         CommandRegistry.UnregisterAll(ModId);
 
         for (var i = _cleanup.Count - 1; i >= 0; i--)

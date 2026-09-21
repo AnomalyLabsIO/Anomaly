@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Anomaly.Client.Api.Internal.Wrappers;
 using Il2Cpp;
 using Il2CppInventorySystem.Items;
 using Il2CppInventorySystem.Items.Pickups;
@@ -10,7 +11,7 @@ namespace Anomaly.Client.Api.Features;
 public class Pickup
 {
     private static readonly Dictionary<ItemPickupBase, Pickup> _pickups = new();
-    private static readonly Dictionary<ushort, Pickup> _serialCache = new();
+    private static readonly SerialOwnershipIndex<Pickup> _serialCache = new();
     private static readonly Dictionary<System.Type, System.Func<ItemPickupBase, Pickup>> _subtypeFactories = new()
     {
         // ThrownProjectile keeps its own cache — route through Projectile.Get so both stay in sync.
@@ -193,7 +194,7 @@ public class Pickup
     {
         if (serial == 0)
             return null;
-        _serialCache.TryGetValue(serial, out Pickup pickup);
+        _serialCache.TryGet(serial, out Pickup pickup);
         return pickup;
     }
 
@@ -205,7 +206,7 @@ public class Pickup
             pickup = null;
             return false;
         }
-        return _serialCache.TryGetValue(serial, out pickup);
+        return _serialCache.TryGet(serial, out pickup);
     }
 
     /// <summary>
@@ -261,8 +262,7 @@ public class Pickup
             _pickups.Remove(Base);
 
         ushort serial = SafeSerial();
-        if (serial != 0 && _serialCache.TryGetValue(serial, out Pickup cached) && ReferenceEquals(cached, this))
-            _serialCache.Remove(serial);
+        _serialCache.RemoveIfOwned(serial, this);
     }
 
     /// <summary>
@@ -276,8 +276,9 @@ public class Pickup
         if (serial == 0)
             return;
 
-        if (!_serialCache.TryGetValue(serial, out Pickup existing) || !ReferenceEquals(existing, pickup))
-            _serialCache[serial] = pickup;
+        Pickup existing = _serialCache.Assign(serial, pickup);
+        if (existing != null)
+            _pickups.Remove(existing.Base);
     }
 
     /// <summary>

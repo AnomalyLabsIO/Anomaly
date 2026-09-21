@@ -1,62 +1,182 @@
-﻿# Disclaimer
-Anomaly is not affiliated with SCPSL or NorthWood studios. If you experience any issues do not bother them.
-This is an unsupported client modification of the game.
+# Disclaimer
 
-Central Authentication (Steam/Discord) and local Anti-Cheat are disabled, only Anomaly-enabled servers will allow you to connect.
-The SCPSL EULA allows this type of modified client. However, NorthWood holds the right to ban you for stepping out of bounds such as the following:
+Anomaly is not affiliated with SCP: Secret Laboratory or Northwood Studios. If
+you experience an Anomaly problem, report it to AnomalyLabs rather than to
+Northwood. This is an unsupported modification of the game.
 
-- Do not attempt to re-enable Central Authentication or local Anti-Cheat
-- Do not attempt to make further modifications to the client unless you have read the EULA and know what you are doing.
-- Do not attempt to connect to public/online servers
-- Do not use this framework for the creation, distribution, or use of hacked clients or features that provide an unfair advantage.
-- Do not attempt to spoof other users
-- Do not attempt to bypass bans
-- Do not be the reason I have to write more rules.
+Central Authentication (Steam/Discord) and local anti-cheat are disabled in the
+modded copy. Only Anomaly-enabled servers accept Anomaly clients. Do not try to
+connect the modified client to public/online servers, re-enable Central
+Authentication or anti-cheat, spoof another user, bypass a ban, or build or
+distribute unfair-advantage features. You are responsible for complying with the
+game's EULA and for any consequences of using this modification.
 
-The developers and those associated with Anomaly are not responsible for any bans or other consequences that may occur from using this modification. Use at your own risk.
+# Welcome to Anomaly
 
-# Welcome to Anomaly!
-## What is Anomaly?
-Anomaly is a client-server modification framework for SCP: Secret Laboratory. 
-It allows you to create custom content and features for the Client that can be used on Anomaly-enabled servers. It is designed to be easy to use and flexible, allowing you to create a wide variety of mods.
+Anomaly is a client-server modification framework for SCP: Secret Laboratory.
+Public v1 targets:
 
-## How do I install the client?
-We provide a Launcher that will create and patch a modded copy of the game with Anomaly installed. This leaves the original game untouched and allows you to easily switch between modded and vanilla versions. The Launcher also handles updates.
+- Anomaly core `1.0.0` and launcher `1.1.1`
+- MelonLoader `0.7.2`
+- Windows and Proton
+- SCP:SL `14.2.7^`, exactly `>=14.2.7 && <14.3.0`
+
+Anomaly uses its own `SupportedGameVersion("14.2.7^")` metadata. The launcher
+enforces that declaration before installing or materializing the official core,
+and the managed-module loader enforces the equivalent manifest field before
+loading an assembly. Do not add or rely on MelonLoader's `MelonGameVersion`
+attribute.
+
+## Installing the client
+
+The launcher creates a separate modded copy of the game, leaves the Steam copy
+untouched, and manages official Anomaly updates. The official core is tracked by
+default and must be complete, signed by a trusted Anomaly release key, and
+compatible with the selected game. Missing, unsigned, tampered, or incompatible
+core files block a modded launch; the launcher does not silently start without
+Anomaly.
 
 Prerequisites:
-- Must be on a modern version of Windows or Linux that supports the base game.
-- Steam must be installed
-- SCP: Secret Laboratory must be installed through Steam.
-- Have the directory for the SCP:SL installation ready. This can be found from your Steam library.
 
-1. Download the latest Anomaly.Launcher.exe from the releases page.
-2. Place the Launcher in a new directory on your computer, this is where the modded game will live.
-3. Run the Launcher, select your SCP:SL installation directory, and click "Install Anomaly". This will create a copy of the game in the Launcher directory with Anomaly installed.
-4. Click Start Modded once to allow MelonLoader to generate the required files. Following lanches of the game will be much faster.
-5. (Optional) Add Anomaly.Launcher.exe as a non-steam game to your library for easy access.
+- Steam and SCP: Secret Laboratory installed
+- A supported Windows environment, or Proton with an unambiguous Wine prefix
+- The path to the Steam SCP:SL installation
 
-## Where do I get mods?
-**A public, trusted mod source is in the works.** Be careful when downloading mods from untrusted sources, as they may contain malicious code. Always scan files with antivirus software and only download from reputable creators.
+1. Download the current Anomaly launcher from the official release.
+2. Put it in a new directory; the launcher will place the modded game there.
+3. Select the Steam SCP:SL directory and choose **Install Anomaly**.
+4. Start the modded copy once so MelonLoader can generate its runtime files.
 
-## How do I make my own mods?
-1. Follow the instructions to install the client above. (Must have started the game once to generate the required files)
-2. Follow the instructions for setting up a [Melon Loader](https://melonwiki.xyz/#/modders/quickstart) project. Targeting IL2Cpp and the latest version.
-   3. The easiest way is the Visual Studio template, select the SCPSL.exe from the MODDED directory.
-   4. Once the template project is created you can any IDE you'd like. I prefer JetBrains Rider.
-5. Add references to `Anomaly.Client.Api.dll` and `Anomaly.Shared.dll` from the MODDED directory's `UserLibs/` folder. You do not need to reference `Anomaly.Client.dll` — it loads as a peer mod from `Mods/` at runtime, and declaring `[assembly: MelonAdditionalDependencies("Anomaly")]` in your mod enforces the load order.
-6. Follow any guides on creating a IL2Cpp Melon mod, and use the Anomaly API documentation to learn how to use the Anomaly features.
+The client runtime package is materialized with this layout, relative to the
+modded game directory:
 
-If you would like to add a server component to your mod, create a LabAPI plugin and reference Anomaly.Server.dll and Anomaly.Shared.dll. EXILED should work as well, but note that Anomaly uses LabAPI types you may need to unwrap.
+```text
+Plugins/Anomaly.Bootstrap.dll
+Mods/Anomaly.Client.dll
+UserLibs/Anomaly.Client.Api.dll
+UserLibs/Anomaly.Shared.dll
+```
 
-### Why Melon Loader?
-Melon Loader is a popular modding framework for Unity games, and it provides a lot of features biggest of which are IL2Cpp support and easy install. 
+The signed package also contains its generated runtime dependency closure. A
+public third-party repository, repository UI, and deep-link installation are
+planned but disabled for v1; they are separate from signed official-core
+delivery.
 
-BepInEx 6.0.0-pre.2 is the competitor to Melon Loader. It is confirmed to work with the patched client created by the installer. However, Anomaly is only built for ML. Please provide your feedback if you want to see BepInEx support in the future.
+## Installing the server
 
-## Is there Server support?
-Yes, Anomaly.Server.dll is a LabAPI plugin that will configure your server automatically to support Anomaly Clients. Note that this will put the server in offline mode, and will not allow Vanilla clients to connect.
+`Anomaly.Server.dll` is a LabAPI plugin. Install the server package relative to
+the LabAPI root as follows:
 
-Anomaly uses a custom decentralized authentication system that does not touch NorthWood servers or Steam. Credit to the [Axon](https://github.com/AxonSL/Axon) team for this system.
-All users are identified by a "@anomaly" user id. This can be used similar to your "@steam" ID for remote admin permissions. This ID is verified by an Asymmetric handshake on server connection and cannot be spoofed. It is unique to the user profile on your computer.
-You can find your ID by right-clicking your name in the Anomaly Client Launcher.
+```text
+plugins/global/Anomaly.Server.dll
+dependencies/global/Anomaly.Shared.dll
+```
 
+Install any additional runtime dependencies included by the signed server
+package. EXILED compatibility is not part of the v1 server contract.
+
+On enable, the server applies its offline/modded/IP-passthrough state only at
+runtime. It does not persist `online_mode=false` or rewrite `config_gameplay`,
+and it restores the captured runtime state on disable. Admission fails closed
+while required Anomaly authentication services are unavailable, and vanilla
+clients are rejected while Anomaly is operational.
+
+Public remote password authentication is disabled. Setting `RequirePassword`
+continues to reject remote clients until a vetted OPAQUE implementation is
+available; the legacy verifier is limited to explicit loopback/migration use.
+
+## Identity and enrollment
+
+Anomaly uses a decentralized authenticated handshake and does not contact
+Northwood or Steam authentication services. A server assigns an opaque,
+server-local enrollment id after authentication. It is not a global launcher id
+and is not derived for display from the client's public key.
+
+After connecting, run `anomaly.whoami` (alias `whoami`) in the client console to
+display the current server's enrollment id and copy it to the clipboard. The
+value is cleared on disconnect. Server operators can use that same id for
+server-local moderation records.
+
+The client profile is `<MelonLoader UserData>/Anomaly/user.json`, normally
+`UserData/Anomaly/user.json` beneath the game directory. It stores the identity,
+nickname, and identity rotation history for that game instance. The first launch
+without a local profile creates a new identity; subsequent launches reuse it.
+Existing `%APPDATA%/Anomaly` data is left untouched: Anomaly does not import it,
+fall back to it, or delete it. A new identity receives a fresh server enrollment.
+
+Private identity material remains protected for the current Windows user with
+DPAPI; under Proton it is tied to the Wine prefix running the game. Moving the
+file to a different Windows user or Wine prefix may make it undecryptable.
+Anomaly preserves an unreadable profile and fails closed rather than replacing
+it. The additive `identity_public` profile field is non-secret fingerprint/health
+material and is not an `@anomaly` enrollment id.
+
+## Public-v1 custom content
+
+Remote custom content is items-only. A server plugin registers a stable
+`modid:name` key, a stock base item, display text, and an optional PNG icon.
+Each custom item inherits its base item's model, pickup behavior, and weight.
+The only remotely transferred v1 formats are PNG textures and OGG audio; custom
+item definitions consume PNG icons only.
+
+An authenticated server offers a frozen catalog. The user explicitly approves
+the server-fingerprint/catalog/manifest tuple before any missing files are
+requested, and the client activates the staged catalog all-or-nothing. Declining
+requests no files and activates nothing. Catalog or file changes apply to future
+connections and require consent for the changed tuple; active-session hot reload
+is not supported.
+
+Public v1 does not provide remote custom roles, effects, models, weights,
+AssetBundles, generic prefab spawning, or destructive content hot reload.
+
+## Making a client mod
+
+1. Install and start the modded client once.
+2. Create a MelonLoader IL2CPP project pointed at the modded `SCPSL.exe`.
+3. Reference `Anomaly.Client.Api.dll` and `Anomaly.Shared.dll` from
+   `UserLibs/`. Do not reference `Anomaly.Client.dll`.
+4. Declare `[assembly: MelonAdditionalDependencies("Anomaly")]` when using the
+   API during initialization, and declare Anomaly's custom
+   `[assembly: SupportedGameVersion("14.2.7^")]` compatibility metadata.
+5. Follow [the client API guide](Anomaly.Client.Api/MODDING.md).
+
+Server companions are LabAPI plugins that reference `Anomaly.Server.dll` and
+`Anomaly.Shared.dll`.
+
+## Trust, quarantine, and local data
+
+Third-party DLL approval is a SHA-256 full-process trust decision, not a
+sandbox. Before process creation, the launcher validates every MelonLoader path
+it owns, including `Plugins`, `UserLibs`, `Mods`, reclassified nested DLLs, and
+managed modules. Runtime trust state is stored under the modded game at
+`UserData/Anomaly/mod-trust.json`; unapproved or unhealthy modules are moved
+under `UserData/Anomaly/Quarantine/`. Repeated managed-module startup failures
+use `Quarantine/managed-runtime/repeated-startup-failure/`.
+
+Anomaly-owned client storage uses `<MelonLoader UserData>/Anomaly` for this
+game instance. Accepted server identities are saved in `server-trust.json`.
+Downloaded server content is cached by SHA-256 under `FileCache/`; corrupt,
+orphaned, or temporary blobs are reconciled or moved into its `.quarantine/`
+directory. Consent provenance is stored separately in `content-consent.json`.
+This cache contains server assets, not game installations.
+
+Bindings, overrides, managed modules and their config/data directories keep
+their existing locations beneath this root. Skins remain in `UserData/Skins`,
+translations in `UserData/i18n`, and mod settings/state accessed through
+`ClientConfig` or `ClientPersistence` remain backed by MelonPreferences.
+
+Crash diagnostics remain local under `UserData/Anomaly/CrashReports/`. JSON
+reports are bounded and redacted on a best-effort basis, no report is uploaded
+automatically, and cleanup retains at most 20 artifact sets, 256 MiB total, and
+30 days. Native minidumps are disabled by default; setting
+`ANOMALY_ENABLE_MINIDUMPS=1` opts in to captures that can contain private process
+memory. Review every artifact before sharing it.
+
+## License
+
+Anomaly core and its in-repository documentation are licensed
+`LGPL-2.1-or-later`.
+
+Copyright (c) 2026 AnomalyLabs contributors.
+
+The separate Anomaly launcher retains its GPL-3.0 license.

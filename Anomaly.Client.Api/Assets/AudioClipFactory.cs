@@ -46,6 +46,30 @@ namespace Anomaly.Client.Api.Assets
         public static AudioClip TryDecode(byte[] bytes, string clipName) =>
             TryDecode(bytes, clipName, null);
 
+        /// <summary>
+        /// Remote v1 content is OGG-only even though the local helper retains
+        /// WAV support. Validate the content signature, not only the manifest
+        /// filename, before entering the decoder.
+        /// </summary>
+        internal static AudioClip TryDecodeRemoteOgg(
+            byte[] bytes,
+            string clipName,
+            string liveBudgetKey)
+        {
+            if (!HasOggHeader(bytes))
+            {
+                try { MelonLogger.Warning($"AudioClipFactory: remote audio for '{clipName}' was not OGG Vorbis."); }
+                catch { /* format rejection must not depend on diagnostics */ }
+                return null;
+            }
+
+            return TryDecode(bytes, clipName, liveBudgetKey);
+        }
+
+        internal static bool HasOggHeader(byte[] bytes) =>
+            bytes != null && bytes.Length >= 4 &&
+            bytes[0] == 'O' && bytes[1] == 'g' && bytes[2] == 'g' && bytes[3] == 'S';
+
         internal static AudioClip TryDecode(byte[] bytes, string clipName, string liveBudgetKey)
         {
             if (bytes == null || bytes.Length < 4 ||
@@ -56,7 +80,7 @@ namespace Anomaly.Client.Api.Assets
             bool ok;
             RemoteAssetDecodeBudget.Reservation reservation;
 
-            if (bytes[0] == 'O' && bytes[1] == 'g' && bytes[2] == 'g' && bytes[3] == 'S')
+            if (HasOggHeader(bytes))
             {
                 ok = OggLoader.TryDecode(bytes, out pcm, out reservation);
             }

@@ -80,5 +80,26 @@ public class PlayerStatsWrapper
         return wrapper;
     }
 
+    internal static bool Unregister(PlayerStats playerStats)
+    {
+        if (playerStats == null)
+            return false;
+
+        try
+        {
+            foreach (StatBase statBase in playerStats.StatModules)
+                PlayerStat.Unregister(statBase);
+        }
+        catch
+        {
+            // The parent wrapper can still be evicted when an IL2CPP child
+            // collection is already being torn down.
+        }
+
+        return _wrappers.Remove(playerStats);
+    }
+
+    internal static void ClearAll() => _wrappers.Clear();
+
     public override string ToString() => $"PlayerStatsWrapper(Health={Health}, Hume={HumeShield}, AHP={ArtificialHealth})";
 }

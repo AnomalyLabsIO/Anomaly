@@ -1,0 +1,8 @@
+Anomaly
+SPDX-License-Identifier: LGPL-2.1-or-later
+Copyright (c) 2026 AnomalyLabs contributors
+
+The Anomaly core, public API, shared protocol library, server plugin, bootstrap,
+and release tooling are licensed under GNU LGPL version 2.1 or, at your option,
+any later version. See LICENSE for the complete license text and
+THIRD_PARTY_DEPENDENCIES.md for separately licensed dependencies.

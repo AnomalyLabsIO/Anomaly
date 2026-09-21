@@ -1,5 +1,7 @@
 # Anomaly — Framework Readiness Review (Pre-Release)
 
+> **Superseded for release decisions on 2026-08-22.** This file is retained as historical audit evidence. Its findings describe an older codebase and must not be treated as the current public-v1 contract; use `anomaly-docs/RELEASE_REVIEW_2026-08-22.md` for the current classification and release gates.
+
 **Date:** 2026-07-01
 **Author:** Claude (Fable 5), synthesized from an 8-agent parallel deep-dive audit + first-hand verification
 **Scope:** All four framework projects (`Anomaly.Client`, `Anomaly.Client.Api`, `Anomaly.Server`, `Anomaly.Shared`), the separate `anomaly-launcher` repo (`Anomaly.Launcher` + `Anomaly.InstallerCore`), the `anomaly-docs` Astro site, and the modder-facing distribution story.

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Anomaly.Client.Api.Internal.Wrappers;
 using Il2Cpp;
 using Il2CppInventorySystem;
 using Il2CppInventorySystem.Items;
@@ -10,7 +11,7 @@ namespace Anomaly.Client.Api.Features;
 public class Item
 {
     private static readonly Dictionary<ItemBase, Item> _items = new();
-    private static readonly Dictionary<ushort, Item> _serialCache = new();
+    private static readonly SerialOwnershipIndex<Item> _serialCache = new();
     private static readonly Dictionary<System.Type, System.Func<ItemBase, Item>> _subtypeFactories = new()
     {
         { typeof(Il2CppInventorySystem.Items.Firearms.Firearm), b => new FirearmItem((Il2CppInventorySystem.Items.Firearms.Firearm)b) },
@@ -147,7 +148,7 @@ public class Item
     {
         if (serial == 0)
             return null;
-        _serialCache.TryGetValue(serial, out Item item);
+        _serialCache.TryGet(serial, out Item item);
         return item;
     }
 
@@ -159,7 +160,7 @@ public class Item
             item = null;
             return false;
         }
-        return _serialCache.TryGetValue(serial, out item);
+        return _serialCache.TryGet(serial, out item);
     }
 
     /// <summary>
@@ -213,10 +214,59 @@ public class Item
         _items.Remove(itemBase);
 
         ushort serial = item.SafeSerial();
-        if (serial != 0 && _serialCache.TryGetValue(serial, out Item cached) && ReferenceEquals(cached, item))
-            _serialCache.Remove(serial);
+        _serialCache.RemoveIfOwned(serial, item);
 
         return true;
+    }
+
+    internal static bool Unregister(ushort serial)
+    {
+        if (!_serialCache.TryGet(serial, out Item item))
+            return false;
+        return Unregister(item.Base);
+    }
+
+    /// <summary>
+    /// Removes cached wrappers for items that are no longer present in one
+    /// player's replicated inventory snapshot.
+    /// </summary>
+    internal static void ReconcileInventory(Inventory inventory)
+    {
+        if (inventory?._hub == null)
+            return;
+
+        var live = new HashSet<ItemBase>();
+        foreach (var pair in inventory.UserInventory.Items)
+            if (pair.Value != null) live.Add(pair.Value);
+
+        var stale = new List<ItemBase>();
+        foreach (var pair in _items)
+        {
+            ItemBase itemBase = pair.Key;
+            if (itemBase == null)
+            {
+                stale.Add(itemBase);
+                continue;
+            }
+
+            try
+            {
+                if (itemBase.Owner == inventory._hub && !live.Contains(itemBase))
+                    stale.Add(itemBase);
+            }
+            catch
+            {
+                stale.Add(itemBase);
+            }
+        }
+
+        foreach (var itemBase in stale)
+        {
+            if (itemBase == null)
+                RemoveNullOrDestroyedEntries();
+            else
+                Unregister(itemBase);
+        }
     }
 
     /// <summary>
@@ -229,14 +279,26 @@ public class Item
         _serialCache.Clear();
     }
 
+    private static void RemoveNullOrDestroyedEntries()
+    {
+        var stale = new List<ItemBase>();
+        foreach (var itemBase in _items.Keys)
+            if (itemBase == null) stale.Add(itemBase);
+        foreach (var itemBase in stale)
+            _items.Remove(itemBase);
+
+        _serialCache.RemoveWhere(item => item?.Base == null);
+    }
+
     private static void RefreshSerialIndex(Item item)
     {
         ushort serial = item.SafeSerial();
         if (serial == 0)
             return;
 
-        if (!_serialCache.TryGetValue(serial, out Item existing) || !ReferenceEquals(existing, item))
-            _serialCache[serial] = item;
+        Item existing = _serialCache.Assign(serial, item);
+        if (existing != null)
+            _items.Remove(existing.Base);
     }
 
     private ushort SafeSerial()

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Anomaly.Client.Api.Events;
 
 namespace Anomaly.Client.Api.UI.ModSettings.Internal;
 
@@ -36,7 +37,7 @@ internal static class ModSettingsRegistry
             else _categories[categoryId] = metadata;
             Revision++;
         }
-        OnChanged?.Invoke();
+        NotifyChanged();
     }
 
     internal static void SetEntry(string categoryId, string entryId, ModSettingMetadata metadata)
@@ -49,7 +50,7 @@ internal static class ModSettingsRegistry
             else _entries[key] = metadata;
             Revision++;
         }
-        OnChanged?.Invoke();
+        NotifyChanged();
     }
 
     internal static ModSettingCategoryMetadata GetCategory(string categoryId)
@@ -87,6 +88,9 @@ internal static class ModSettingsRegistry
     internal static void RaiseChangedForRefresh()
     {
         lock (_lock) { Revision++; }
-        OnChanged?.Invoke();
+        NotifyChanged();
     }
+
+    private static void NotifyChanged() =>
+        EventInvoker.Invoke(OnChanged, "ModSettingsRegistry.OnChanged");
 }

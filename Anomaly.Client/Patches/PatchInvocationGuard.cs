@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using Anomaly.Client.Api.Internal;
 using UnityEngine;
 
 namespace Anomaly.Client.Patches;
@@ -14,8 +14,8 @@ namespace Anomaly.Client.Patches;
 /// </summary>
 internal static class PatchInvocationGuard
 {
-    private static readonly HashSet<long> _fired = new();
-    private static int _currentFrame = -1;
+    private static readonly FrameInvocationGate GeneralGate = new();
+    private static readonly FrameInvocationGate AuthenticationGate = new();
 
     // Kind codes — small ints so they pack into the upper byte of the dedup key.
     public const int PlayerAdded = 1;
@@ -26,20 +26,27 @@ internal static class PatchInvocationGuard
     public const int AdminToyRemoved = 6;
     public const int InventoryStart = 7;
     public const int RoleInitialized = 8;
+    public const int ConnectionRefused = 9;
+    public const int ClientDisconnect = 10;
 
     public static bool ShouldFire(UnityEngine.Object instance, int kind)
     {
         if (instance == null)
             return false;
 
-        int frame = Time.frameCount;
-        if (frame != _currentFrame)
-        {
-            _fired.Clear();
-            _currentFrame = frame;
-        }
+        return GeneralGate.ShouldFire(instance.GetInstanceID(), kind, Time.frameCount);
+    }
 
-        long key = ((long)instance.GetInstanceID() << 8) | (uint)(kind & 0xFF);
-        return _fired.Add(key);
+    public static bool ShouldFireAuthentication(UnityEngine.Object instance, int kind)
+    {
+        if (instance == null)
+            return false;
+
+        return AuthenticationGate.ShouldFire(instance.GetInstanceID(), kind, Time.frameCount);
+    }
+
+    public static void BeginAuthenticationScope()
+    {
+        AuthenticationGate.Reset();
     }
 }

@@ -6,7 +6,7 @@ using System.Text;
 namespace Anomaly.Shared.Auth;
 
 /// <summary>
-/// Canonical protocol-v2 handshake transcript. Both peers sign or authenticate
+/// Canonical application-protocol-v3 handshake transcript. Both peers sign or authenticate
 /// exactly these bytes; changing any key, nonce, policy field, or session identifier
 /// therefore invalidates the login attempt.
 /// </summary>

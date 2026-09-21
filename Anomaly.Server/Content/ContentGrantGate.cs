@@ -1,47 +1,106 @@
 using System.Collections.Generic;
+using Anomaly.Shared.Content;
 
 namespace Anomaly.Server.Content
 {
-    /// <summary>
-    /// Tracks, per connected client, whether it acknowledged the content catalog with a
-    /// matching hash and which entries it failed to register. The server grants a custom id
-    /// to a client only when the gate marks that client ready for the entry's key — so a
-    /// client that never registered the content can't be sent an item/role it can't render.
-    /// </summary>
+    /// <summary>Per-client consent and all-or-nothing activation state.</summary>
     internal static class ContentGrantGate
     {
-        private sealed class Ack
+        private sealed class State
         {
-            public bool HashMatches;
-            public readonly HashSet<string> FailedKeys = new HashSet<string>();
+            public ContentReadiness Readiness;
+            public byte[] CatalogSha256;
+            public byte[] ManifestSha256;
         }
 
-        // Keyed by ReferenceHub.netId so we don't hold hub references across the session.
-        private static readonly Dictionary<uint, Ack> _byNetId = new Dictionary<uint, Ack>();
+        private static readonly Dictionary<uint, State> ByNetId = new Dictionary<uint, State>();
 
-        internal static bool TryRecordAck(uint netId, bool hashMatches, IEnumerable<string> failedKeys)
+        internal static void RecordOffer(uint netId, ContentCatalog catalog)
         {
-            if (_byNetId.ContainsKey(netId))
-                return false;
-
-            var ack = new Ack { HashMatches = hashMatches };
-            if (failedKeys != null)
+            ByNetId[netId] = new State
             {
-                foreach (var key in failedKeys)
-                    ack.FailedKeys.Add(key);
-            }
-            _byNetId[netId] = ack;
+                Readiness = ContentReadiness.Offered,
+                CatalogSha256 = (byte[])catalog.CatalogSha256.Clone(),
+                ManifestSha256 = (byte[])catalog.ManifestSha256.Clone(),
+            };
+        }
+
+        internal static bool TryRecordDecision(
+            uint netId,
+            byte[] catalogSha256,
+            byte[] manifestSha256,
+            bool approved)
+        {
+            if (!TryMatch(netId, catalogSha256, manifestSha256, out State state) ||
+                state.Readiness != ContentReadiness.Offered)
+                return false;
+            state.Readiness = approved ? ContentReadiness.Approved : ContentReadiness.Declined;
             return true;
         }
 
-        internal static bool IsReady(uint netId) =>
-            _byNetId.TryGetValue(netId, out var ack) && ack.HashMatches;
+        internal static bool TryBeginTransfer(uint netId)
+        {
+            if (!ByNetId.TryGetValue(netId, out State state) ||
+                state.Readiness != ContentReadiness.Approved)
+                return false;
+            state.Readiness = ContentReadiness.Transferring;
+            return true;
+        }
+
+        internal static bool TryCompleteTransfer(uint netId)
+        {
+            if (!ByNetId.TryGetValue(netId, out State state) ||
+                state.Readiness != ContentReadiness.Transferring)
+                return false;
+            state.Readiness = ContentReadiness.Transferred;
+            return true;
+        }
+
+        internal static bool TryRecordActivation(
+            uint netId,
+            byte[] catalogSha256,
+            byte[] manifestSha256,
+            bool activated)
+        {
+            if (!TryMatch(netId, catalogSha256, manifestSha256, out State state))
+                return false;
+
+            if (activated)
+            {
+                if (state.Readiness != ContentReadiness.Transferred)
+                    return false;
+                state.Readiness = ContentReadiness.Activated;
+                return true;
+            }
+
+            if (state.Readiness != ContentReadiness.Approved &&
+                state.Readiness != ContentReadiness.Transferring &&
+                state.Readiness != ContentReadiness.Transferred)
+                return false;
+            state.Readiness = ContentReadiness.Failed;
+            return true;
+        }
+
+        internal static ContentReadiness GetReadiness(uint netId) =>
+            ByNetId.TryGetValue(netId, out State state) ? state.Readiness : ContentReadiness.Unknown;
 
         internal static bool CanGrant(uint netId, string key) =>
-            _byNetId.TryGetValue(netId, out var ack) && ack.HashMatches && !ack.FailedKeys.Contains(key);
+            ByNetId.TryGetValue(netId, out State state) &&
+            state.Readiness == ContentReadiness.Activated &&
+            ContentRegistry.TryGetId(key, out _);
 
-        internal static void Remove(uint netId) => _byNetId.Remove(netId);
+        internal static void Remove(uint netId) => ByNetId.Remove(netId);
+        internal static void Reset() => ByNetId.Clear();
 
-        internal static void Reset() => _byNetId.Clear();
+        private static bool TryMatch(
+            uint netId,
+            byte[] catalogSha256,
+            byte[] manifestSha256,
+            out State state)
+        {
+            return ByNetId.TryGetValue(netId, out state) &&
+                   CatalogBuilder.HashesEqual(state.CatalogSha256, catalogSha256) &&
+                   CatalogBuilder.HashesEqual(state.ManifestSha256, manifestSha256);
+        }
     }
 }

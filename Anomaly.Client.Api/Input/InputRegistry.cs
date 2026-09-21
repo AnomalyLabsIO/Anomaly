@@ -130,17 +130,43 @@ public static class InputRegistry
         InputConfigLoader.RemoveOverride(id);
     }
 
-    internal static void OnPressed(string id) => Pressed?.Invoke(id);
-    internal static void OnReleased(string id) => Released?.Invoke(id);
+    internal static void OnPressed(string id) => InvokeSafely(Pressed, id, "pressed");
+    internal static void OnReleased(string id) => InvokeSafely(Released, id, "released");
 
     /// <summary>
     /// Exposes all resolved keys for the poller so it can compute transitions
     /// without re-walking our dictionary via public API.
     /// </summary>
-    internal static IEnumerable<KeyValuePair<string, InputKey>> ResolvedKeys()
+    internal static IReadOnlyList<KeyValuePair<string, InputKey>> ResolvedKeysSnapshot()
     {
+        var snapshot = new List<KeyValuePair<string, InputKey>>(_bindings.Count);
         foreach (var kvp in _bindings)
-            yield return new KeyValuePair<string, InputKey>(kvp.Key, kvp.Value.ResolvedKey);
+            snapshot.Add(new KeyValuePair<string, InputKey>(kvp.Key, kvp.Value.ResolvedKey));
+        return snapshot;
+    }
+
+    private static void InvokeSafely(Action<string> handlers, string id, string transition)
+    {
+        if (handlers == null)
+            return;
+
+        foreach (Action<string> subscriber in handlers.GetInvocationList())
+        {
+            try { subscriber(id); }
+            catch (Exception ex)
+            {
+                try
+                {
+                    MelonLogger.Error(
+                        $"InputRegistry: {transition} handler for '{id}' threw and was isolated: {ex}");
+                }
+                catch
+                {
+                    // The loader logger is unavailable in metadata/unit-test
+                    // hosts; logging must not defeat subscriber isolation.
+                }
+            }
+        }
     }
 
     private static void ValidateId(string id)

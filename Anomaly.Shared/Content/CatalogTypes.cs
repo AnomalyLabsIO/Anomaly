@@ -4,143 +4,133 @@ using System.Text;
 
 namespace Anomaly.Shared.Content
 {
-    /// <summary>Which game system a catalog entry materializes into.</summary>
-    public enum CatalogEntryKind : byte
-    {
-        Item = 0,
-        Role = 1,
-        Effect = 2,
-    }
-
     /// <summary>
-    /// Wire IO helpers shared by the catalog DTOs and messages. Length-prefixed UTF-8
-    /// strings (ushort length) and optional 32-byte content hashes (1-byte length, 0 = absent).
+    /// Strict wire helpers for the items-only content catalog. All text is
+    /// length-prefixed UTF-8 and all hashes are fixed-width SHA-256 values.
     /// </summary>
     internal static class CatalogIo
     {
-        public static void WriteStr(BinaryWriter w, string s)
+        private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
+
+        public static void WriteStr(BinaryWriter writer, string value)
         {
-            var b = Encoding.UTF8.GetBytes(s ?? "");
-            w.Write((ushort)b.Length);
-            w.Write(b);
+            byte[] bytes = Utf8.GetBytes(value ?? string.Empty);
+            if (bytes.Length > ushort.MaxValue)
+                throw new InvalidDataException("Catalog text exceeded the wire length limit.");
+            writer.Write((ushort)bytes.Length);
+            writer.Write(bytes);
         }
 
-        public static string ReadStr(BinaryReader r)
+        public static string ReadStr(BinaryReader reader)
         {
-            int len = r.ReadUInt16();
-            return Encoding.UTF8.GetString(r.ReadBytes(len));
+            int length = reader.ReadUInt16();
+            return Utf8.GetString(ReadExactly(reader, length, "Catalog text was truncated."));
         }
 
-        public static void WriteHash(BinaryWriter w, byte[] h)
+        public static void WriteRequiredHash(BinaryWriter writer, byte[] hash)
         {
-            if (h == null || h.Length == 0)
+            if (hash == null || hash.Length != ContentCatalog.Sha256Bytes)
+                throw new InvalidDataException("Catalog hashes must be 32-byte SHA-256 values.");
+            writer.Write(hash);
+        }
+
+        public static byte[] ReadRequiredHash(BinaryReader reader) =>
+            ReadExactly(reader, ContentCatalog.Sha256Bytes, "Catalog hash was truncated.");
+
+        public static void WriteOptionalHash(BinaryWriter writer, byte[] hash)
+        {
+            if (hash == null || hash.Length == 0)
             {
-                w.Write((byte)0);
+                writer.Write((byte)0);
                 return;
             }
-            w.Write((byte)h.Length);
-            w.Write(h);
+
+            if (hash.Length != ContentCatalog.Sha256Bytes)
+                throw new InvalidDataException("Catalog asset hashes must be 32-byte SHA-256 values.");
+            writer.Write((byte)hash.Length);
+            writer.Write(hash);
         }
 
-        public static byte[] ReadHash(BinaryReader r)
+        public static byte[] ReadOptionalHash(BinaryReader reader)
         {
-            int len = r.ReadByte();
-            return len == 0 ? null : r.ReadBytes(len);
+            int length = reader.ReadByte();
+            if (length == 0)
+                return null;
+            if (length != ContentCatalog.Sha256Bytes)
+                throw new InvalidDataException("Catalog asset hash length was invalid.");
+            return ReadExactly(reader, length, "Catalog asset hash was truncated.");
+        }
+
+        private static byte[] ReadExactly(BinaryReader reader, int length, string message)
+        {
+            byte[] bytes = reader.ReadBytes(length);
+            if (bytes.Length != length)
+                throw new EndOfStreamException(message);
+            return bytes;
         }
     }
 
     /// <summary>
-    /// One server-defined custom content definition as it crosses the wire and is applied
-    /// by a per-runtime registrar. Pure data — carries no logic-type token (server logic
-    /// stays in the author's plugin and never ships to clients). Field set is a flat
-    /// superset across kinds; unused fields keep their defaults per kind.
+    /// One custom item in the public-v1 catalog. The client clones the stock
+    /// base template, so model and weight are deliberately not configurable.
     /// </summary>
     public sealed class CatalogEntry
     {
-        /// <summary>Namespaced stable key, e.g. "mymod:magic_coin". Drives deterministic ordering.</summary>
-        public string Key = "";
+        /// <summary>Namespaced stable key, e.g. <c>mymod:magic_coin</c>.</summary>
+        public string Key = string.Empty;
 
-        public CatalogEntryKind Kind;
-
-        /// <summary>
-        /// Server-assigned concrete id: an ItemType / RoleTypeId value for items/roles, or the
-        /// per-controller append index for effects. Assigned by <see cref="CatalogBuilder"/>.
-        /// </summary>
+        /// <summary>Server-assigned ItemType value. Public v1 is limited to 0-127.</summary>
         public int AssignedId;
 
-        /// <summary>Vanilla template to clone (ItemType/RoleTypeId value). -1 for effects.</summary>
-        public int BaseTemplateId = -1;
+        /// <summary>Stock ItemType whose runtime template, model, and weight are inherited.</summary>
+        public int BaseTemplateId;
 
-        /// <summary>Display name (already resolved through the author's i18n, server locale).</summary>
-        public string DisplayName = "";
+        public string DisplayName = string.Empty;
+        public string Description = string.Empty;
 
-        /// <summary>Optional item description; "" if unused.</summary>
-        public string Description = "";
-
-        /// <summary>32-byte SHA-256 of the AssetBundle carrying the model, or null.</summary>
-        public byte[] ModelBundleHash;
-
-        /// <summary>Asset name within the bundle; "" if no custom model.</summary>
-        public string ModelAssetName = "";
-
-        /// <summary>32-byte SHA-256 of the icon PNG, or null (items).</summary>
+        /// <summary>Optional icon PNG content hash and encoded byte size.</summary>
         public byte[] IconHash;
+        public uint IconSize;
 
-        // Item attributes
-        public float Weight;
-
-        // Role attributes
-        public uint ColorRgba;
-        public byte Team;
-
-        // Effect attributes
-        public byte EffectClassification;
-        public float EffectSpeedMultiplier = 1f;
-
-        public void WriteTo(BinaryWriter w)
+        public void WriteTo(BinaryWriter writer)
         {
-            w.Write((byte)Kind);
-            w.Write(AssignedId);
-            w.Write(BaseTemplateId);
-            CatalogIo.WriteStr(w, Key);
-            CatalogIo.WriteStr(w, DisplayName);
-            CatalogIo.WriteStr(w, Description);
-            CatalogIo.WriteHash(w, ModelBundleHash);
-            CatalogIo.WriteStr(w, ModelAssetName);
-            CatalogIo.WriteHash(w, IconHash);
-            w.Write(Weight);
-            w.Write(ColorRgba);
-            w.Write(Team);
-            w.Write(EffectClassification);
-            w.Write(EffectSpeedMultiplier);
+            writer.Write(AssignedId);
+            writer.Write(BaseTemplateId);
+            CatalogIo.WriteStr(writer, Key);
+            CatalogIo.WriteStr(writer, DisplayName);
+            CatalogIo.WriteStr(writer, Description);
+            CatalogIo.WriteOptionalHash(writer, IconHash);
+            writer.Write(IconSize);
         }
 
-        public static CatalogEntry ReadFrom(BinaryReader r)
+        public static CatalogEntry ReadFrom(BinaryReader reader)
         {
             return new CatalogEntry
             {
-                Kind = (CatalogEntryKind)r.ReadByte(),
-                AssignedId = r.ReadInt32(),
-                BaseTemplateId = r.ReadInt32(),
-                Key = CatalogIo.ReadStr(r),
-                DisplayName = CatalogIo.ReadStr(r),
-                Description = CatalogIo.ReadStr(r),
-                ModelBundleHash = CatalogIo.ReadHash(r),
-                ModelAssetName = CatalogIo.ReadStr(r),
-                IconHash = CatalogIo.ReadHash(r),
-                Weight = r.ReadSingle(),
-                ColorRgba = r.ReadUInt32(),
-                Team = r.ReadByte(),
-                EffectClassification = r.ReadByte(),
-                EffectSpeedMultiplier = r.ReadSingle(),
+                AssignedId = reader.ReadInt32(),
+                BaseTemplateId = reader.ReadInt32(),
+                Key = CatalogIo.ReadStr(reader),
+                DisplayName = CatalogIo.ReadStr(reader),
+                Description = CatalogIo.ReadStr(reader),
+                IconHash = CatalogIo.ReadOptionalHash(reader),
+                IconSize = reader.ReadUInt32(),
             };
         }
     }
 
-    /// <summary>The frozen set of custom content for a server session, plus its integrity hash.</summary>
+    /// <summary>
+    /// Canonical items-only catalog offered by an authenticated server. The
+    /// server identity is authenticated out-of-band and is intentionally not
+    /// duplicated in this payload.
+    /// </summary>
     public sealed class ContentCatalog
     {
-        public uint CatalogHash;
+        public const byte CurrentSchemaVersion = 1;
+        public const int Sha256Bytes = 32;
+
+        public byte SchemaVersion = CurrentSchemaVersion;
+        public byte[] CatalogSha256 = new byte[Sha256Bytes];
+        public byte[] ManifestSha256 = new byte[Sha256Bytes];
         public List<CatalogEntry> Entries = new List<CatalogEntry>();
     }
 }

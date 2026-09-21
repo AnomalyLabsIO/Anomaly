@@ -15,6 +15,7 @@ namespace Anomaly.Shared.Networking.Messages
         IAnomalyMessage,
         IRoundScopedAnomalyMessage
     {
+        private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
         public const int MaxCapabilities = 32;
 
         public string MessageName => "anomaly:capability:snapshot";
@@ -92,7 +93,7 @@ namespace Anomaly.Shared.Networking.Messages
                     byte[] bytes = reader.ReadBytes(byteCount);
                     if (bytes.Length != byteCount)
                         throw new EndOfStreamException("Capability id was truncated.");
-                    return Encoding.UTF8.GetString(bytes);
+                    return Utf8.GetString(bytes);
                 }
                 shift += 7;
             }

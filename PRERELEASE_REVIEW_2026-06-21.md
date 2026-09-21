@@ -1,5 +1,7 @@
 # Anomaly — Pre-Release Framework Review
 
+> **Superseded for release decisions on 2026-08-22.** This file is retained as historical audit evidence. Its findings describe an older codebase and must not be treated as the current public-v1 contract; use `anomaly-docs/RELEASE_REVIEW_2026-08-22.md` for the current classification and release gates.
+
 **Date:** 2026-06-21
 **Reviewer:** Claude (Opus 4.8) + 4 parallel deep-dive review agents
 **Scope:** `Anomaly.Client`, `Anomaly.Client.Api`, `Anomaly.Server`, `Anomaly.Shared` (the four projects in `Anomaly.slnx`). Launcher and Installer were out of scope.

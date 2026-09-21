@@ -4,7 +4,11 @@ using Anomaly.Client.Api.Assets;
 using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
+using Anomaly.Client.Api.Internal;
+using Anomaly.Client.Api.Modding;
+using Anomaly.Shared.Assets;
 using Anomaly.Shared.Networking.Messages;
+using Il2CppMirror;
 using MelonLoader;
 using UnityEngine;
 
@@ -18,6 +22,9 @@ namespace Anomaly.Client.Assets
     /// </summary>
     public static class OverrideRegistry
     {
+        private const int MaximumOverrides = 1024;
+        private const int MaximumOverridesPerNetId = 32;
+
         private readonly struct Key : IEquatable<Key>
         {
             public readonly uint NetId;
@@ -47,15 +54,25 @@ namespace Anomaly.Client.Assets
         }
 
         private static readonly Dictionary<Key, Entry> _overrides = new();
+        private static readonly RemoteStateCapacityGuard<uint, Key> Capacity =
+            new(MaximumOverrides, MaximumOverridesPerNetId);
+        private static readonly TransactionalInitializer Initializer = new();
 
         public static void Init()
         {
-            AnomalyMessaging.MessageReceived += OnMessage;
-
-            // After the initial file transfer completes any pending overrides that
-            // were waiting on a not-yet-cached texture hash might now be resolvable.
-            FileTransferEvents.Complete += _ => ReapplyAll();
+            Initializer.Initialize(
+                new InitializationStep(
+                    () => AnomalyMessaging.MessageReceived += OnMessage,
+                    () => AnomalyMessaging.MessageReceived -= OnMessage),
+                // After the initial file transfer completes any pending overrides
+                // that were waiting on a not-yet-cached texture hash might now be
+                // resolvable.
+                new InitializationStep(
+                    () => FileTransferEvents.Complete += HandleTransferComplete,
+                    () => FileTransferEvents.Complete -= HandleTransferComplete));
         }
+
+        private static void HandleTransferComplete(FileTransferCompleteEventArgs _) => ReapplyAll();
 
         /// <summary>
         /// Re-resolve and re-apply all overrides. Call this after events that
@@ -64,8 +81,11 @@ namespace Anomaly.Client.Assets
         /// </summary>
         public static void ReapplyAll()
         {
-            foreach (var kv in _overrides)
+            foreach (var kv in new List<KeyValuePair<Key, Entry>>(_overrides))
+            {
+                Restore(kv.Value, $"reapply for netId {kv.Key.NetId}");
                 Apply(kv.Key, kv.Value);
+            }
         }
 
         /// <summary>
@@ -75,10 +95,13 @@ namespace Anomaly.Client.Assets
         /// </summary>
         public static void ReapplyForNetId(uint netId)
         {
-            foreach (var kv in _overrides)
+            foreach (var kv in new List<KeyValuePair<Key, Entry>>(_overrides))
             {
                 if (kv.Key.NetId == netId)
+                {
+                    Restore(kv.Value, $"object replacement for netId {kv.Key.NetId}");
                     Apply(kv.Key, kv.Value);
+                }
             }
         }
 
@@ -89,12 +112,19 @@ namespace Anomaly.Client.Assets
         /// </summary>
         public static void Clear()
         {
-            foreach (var kv in _overrides)
-            {
-                if (kv.Value.Applied && kv.Value.AppliedMaterial != null)
-                    kv.Value.AppliedMaterial.mainTexture = kv.Value.OriginalTexture;
-            }
+            var snapshot = new List<KeyValuePair<Key, Entry>>(_overrides);
             _overrides.Clear();
+            Capacity.Clear();
+
+            foreach (var kv in snapshot)
+            {
+                try { Restore(kv.Value, $"disconnect cleanup for netId {kv.Key.NetId}"); }
+                catch (Exception exception)
+                {
+                    try { MelonLogger.Warning($"OverrideRegistry isolated cleanup failure: {exception}"); }
+                    catch { }
+                }
+            }
         }
 
         private static void OnMessage(Shared.Networking.IAnomalyMessage msg)
@@ -104,22 +134,34 @@ namespace Anomaly.Client.Assets
                 case AssetOverrideTextureMessage ot: HandleOverride(ot); break;
                 case AssetClearOverrideMessage co: HandleClearOne(co); break;
                 case AssetClearAllOverridesMessage cao: HandleClearAll(cao); break;
-                case AssetReloadMessage rl: HandleReload(rl); break;
             }
         }
 
         private static void HandleOverride(AssetOverrideTextureMessage msg)
         {
+            byte[] textureHash = msg.TextureHash == null ? null : (byte[])msg.TextureHash.Clone();
+            if (msg.NetId == 0 ||
+                !AnomalyResources.IsRemoteAssetAuthorized(textureHash, AssetKind.Texture2D))
+            {
+                RejectRemoteState("received a texture override outside the activated manifest");
+                return;
+            }
+
             var key = new Key(msg.NetId, msg.ComponentPath, msg.MaterialIndex);
+            if (!Capacity.TryAdd(msg.NetId, key))
+            {
+                RejectRemoteState(
+                    $"texture override capacity exceeded ({MaximumOverrides} total, " +
+                    $"{MaximumOverridesPerNetId} per object)");
+                return;
+            }
 
             // If one was applied previously, revert first so we don't lose the
             // "original before any override" reference.
-            if (_overrides.TryGetValue(key, out var existing) && existing.Applied && existing.AppliedMaterial != null)
-            {
-                existing.AppliedMaterial.mainTexture = existing.OriginalTexture;
-            }
+            if (_overrides.TryGetValue(key, out var existing))
+                Restore(existing, $"replacement for netId {key.NetId}");
 
-            var entry = new Entry { TextureHash = msg.TextureHash };
+            var entry = new Entry { TextureHash = textureHash };
             _overrides[key] = entry;
             Apply(key, entry);
         }
@@ -130,48 +172,71 @@ namespace Anomaly.Client.Assets
             if (!_overrides.TryGetValue(key, out var entry))
                 return;
 
-            if (entry.Applied && entry.AppliedMaterial != null)
-                entry.AppliedMaterial.mainTexture = entry.OriginalTexture;
-
             _overrides.Remove(key);
+            Capacity.Remove(key.NetId, key);
+            Restore(entry, $"clear for netId {key.NetId}");
             AssetEvents.OnOverrideCleared(new AssetOverrideClearedEventArgs(msg.NetId, msg.ComponentPath, msg.MaterialIndex));
         }
 
         private static void HandleClearAll(AssetClearAllOverridesMessage msg)
         {
-            var toRemove = new List<Key>();
-            foreach (var kv in _overrides)
+            var toRemove = new List<KeyValuePair<Key, Entry>>();
+            foreach (var kv in new List<KeyValuePair<Key, Entry>>(_overrides))
             {
                 if (kv.Key.NetId != msg.NetId) continue;
-                if (kv.Value.Applied && kv.Value.AppliedMaterial != null)
-                    kv.Value.AppliedMaterial.mainTexture = kv.Value.OriginalTexture;
-                toRemove.Add(kv.Key);
+                toRemove.Add(kv);
             }
-            foreach (var k in toRemove)
+            Capacity.RemoveScope(msg.NetId);
+            foreach (var pair in toRemove)
             {
-                _overrides.Remove(k);
-                AssetEvents.OnOverrideCleared(new AssetOverrideClearedEventArgs(k.NetId, k.ComponentPath, k.MaterialIndex));
+                _overrides.Remove(pair.Key);
+                Restore(pair.Value, $"clear-all for netId {pair.Key.NetId}");
+                AssetEvents.OnOverrideCleared(new AssetOverrideClearedEventArgs(
+                    pair.Key.NetId,
+                    pair.Key.ComponentPath,
+                    pair.Key.MaterialIndex));
             }
         }
 
-        private static void HandleReload(AssetReloadMessage msg)
+        private static void Restore(Entry entry, string context)
         {
-            int affected = 0;
-            foreach (var kv in _overrides)
-            {
-                if (kv.Value.TextureHash == null) continue;
-                if (!HashesEqual(kv.Value.TextureHash, msg.OldHash)) continue;
+            if (!entry.Applied)
+                return;
 
-                kv.Value.TextureHash = msg.NewHash;
-                // Force re-resolution & re-apply so the new bytes replace the old in-place.
-                AnomalyResources.UnloadOne(msg.OldHash);
-                Apply(kv.Key, kv.Value);
-                affected++;
+            try
+            {
+                if (entry.AppliedMaterial != null)
+                    entry.AppliedMaterial.mainTexture = entry.OriginalTexture;
             }
-            // Spawn-side registry reports its own counts via its own OnReloaded;
-            // we don't fire again here.
-            if (affected > 0)
-                MelonLogger.Msg($"OverrideRegistry: swapped {affected} override(s) to new hash.");
+            catch (Exception exception)
+            {
+                try { MelonLogger.Warning($"OverrideRegistry failed to restore {context}: {exception}"); }
+                catch { }
+            }
+            finally
+            {
+                entry.Applied = false;
+                entry.AppliedMaterial = null;
+                entry.OriginalTexture = null;
+            }
+        }
+
+        private static void RejectRemoteState(string reason)
+        {
+            // Revoke logical capacity and restore every applied override before
+            // relying on a disconnect callback that may never arrive.
+            try { Clear(); }
+            catch { _overrides.Clear(); Capacity.Clear(); }
+            try { AnomalyMessaging.ClearTransportSession(); }
+            catch { /* disconnect remains mandatory */ }
+            try { NetworkClient.connection?.Disconnect(); }
+            catch { /* the transport may already be closing */ }
+            try
+            {
+                FeatureHealth.Report("anomaly", "networking", FeatureHealthStatus.Failed, reason);
+                MelonLogger.Error("Authenticated remote state was rejected: " + reason);
+            }
+            catch { /* diagnostics must not weaken fail-closed teardown */ }
         }
 
         private static void Apply(Key key, Entry entry)
@@ -204,12 +269,5 @@ namespace Anomaly.Client.Assets
                 key.NetId, key.ComponentPath, key.MaterialIndex, entry.TextureHash));
         }
 
-        private static bool HashesEqual(byte[] a, byte[] b)
-        {
-            if (a == null || b == null || a.Length != b.Length) return false;
-            for (int i = 0; i < a.Length; i++)
-                if (a[i] != b[i]) return false;
-            return true;
-        }
     }
 }

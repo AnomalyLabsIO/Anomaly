@@ -4,6 +4,7 @@ using System.Text;
 using Anomaly.Shared.Networking;
 using GameCore;
 using Mirror;
+using Mirror.LiteNetLib4Mirror;
 using NetworkManagerUtils.Dummies;
 using UnityEngine;
 using Logger = LabApi.Features.Console.Logger;
@@ -17,7 +18,7 @@ public static class AnomalyMessaging
     /// <summary>
     /// Fires once per newly-authenticated hub the moment the Anomaly encrypted
     /// channel is ready to carry messages to that client (i.e. its directional
-    /// protocol-v2 transport session has been registered).
+    /// directional authenticated transport session has been registered).
     /// Subsystems that need to push per-player state immediately after auth —
     /// before the round-start snapshot goes out — hook this.
     /// </summary>
@@ -25,8 +26,13 @@ public static class AnomalyMessaging
 
     internal static void RaiseClientReady(ReferenceHub hub)
     {
-        try { ClientReady?.Invoke(hub); }
-        catch (Exception ex) { Logger.Error($"AnomalyMessaging.ClientReady handler threw: {ex}"); }
+        foreach (Delegate subscriber in ClientReady?.GetInvocationList() ?? Array.Empty<Delegate>())
+        {
+            if (!Plugin.IsAuthenticatedAdmissionCurrent(hub))
+                return;
+            try { ((Action<ReferenceHub>)subscriber)(hub); }
+            catch (Exception ex) { SafeLogError($"AnomalyMessaging.ClientReady subscriber threw: {ex}"); }
+        }
     }
 
     internal static uint CurrentRoundEpoch { get; set; }
@@ -42,34 +48,66 @@ public static class AnomalyMessaging
         if (hub == null) return false;
         if (hub.IsDummy) return false;
         var conn = hub.connectionToClient;
-        if (conn == null) return false;
+        if (conn == null) return AuthenticatedTransportSessions.IsActive(hub);
         if (conn is DummyNetworkConnection) return false;
         return true;
     }
 
     public static void SendToClient(ReferenceHub hub, IAnomalyMessage msg)
     {
-        if (!IsAnomalyTarget(hub)) return;
+        if (!TrySendToClient(hub, msg))
+            throw new InvalidOperationException(
+                $"Anomaly message '{msg?.MessageName ?? "<null>"}' could not be delivered.");
+    }
+
+    internal static bool TrySendToClient(ReferenceHub hub, IAnomalyMessage msg)
+    {
+        if (!IsAnomalyTarget(hub)) return false;
+
+        bool localTransport = hub.encryptedChannelManager.isLocalPlayer;
+        bool authenticatedTransportRequired =
+            !localTransport && AuthenticatedTransportSessions.IsActive(hub);
+        if (!localTransport && !authenticatedTransportRequired)
+        {
+            SafeLogWarning(
+                "AnomalyMessaging.SendToClient: No authenticated session is active; " +
+                "treating the send as pre-admission API misuse.");
+            return false;
+        }
+        if (hub.connectionToClient == null)
+        {
+            FailClosedDisconnect(
+                hub,
+                "AnomalyMessaging.SendToClient: Authenticated connection disappeared before delivery.");
+            return false;
+        }
 
         uint hash = AnomalyMessageRegistry.GetHash(msg.MessageName);
         if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var policy))
         {
-            Logger.Warn($"AnomalyMessaging.SendToClient: No policy registered for '{msg.MessageName}'.");
-            return;
+            SafeLogWarning($"AnomalyMessaging.SendToClient: No policy registered for '{msg.MessageName}'.");
+            return false;
         }
         if (policy.Direction == AnomalyMessageDirection.ClientToServer)
         {
-            Logger.Warn($"AnomalyMessaging.SendToClient: '{msg.MessageName}' is client-to-server only.");
-            return;
+            SafeLogWarning($"AnomalyMessaging.SendToClient: '{msg.MessageName}' is client-to-server only.");
+            return false;
         }
 
         var state = AnomalyReplayTable.GetOrCreate(hub);
         uint counter = state.NextTxCounter(msg.TransportChannel);
+        if (counter == 0 || counter == uint.MaxValue)
+        {
+            FailClosedDisconnect(
+                hub,
+                "AnomalyMessaging.SendToClient: Counter exhausted; disconnecting before counter reuse.");
+            return false;
+        }
         var data = BuildPayload(msg, counter, hash, policy);
-        if (data == null) return;
+        if (data == null) return false;
 
         EncryptedChannelManager.EncryptedMessageOutside packed;
-        if (hub.encryptedChannelManager.isLocalPlayer)
+        if (localTransport)
         {
             packed = new EncryptedChannelManager.EncryptedMessageOutside(
                 EncryptedChannelManager.SecurityLevel.Unsecured, data);
@@ -81,28 +119,73 @@ public static class AnomalyMessaging
             {
                 if (!AuthenticatedTransportSessions.TryEncryptToClient(hub, data, out encrypted))
                 {
-                    Logger.Warn($"AnomalyMessaging.SendToClient: No protocol-v2 transport session for {hub.LoggedNameFromRefHub()}");
-                    return;
+                    FailClosedDisconnect(
+                        hub,
+                        "AnomalyMessaging.SendToClient: Directional authenticated transport disappeared before encryption.");
+                    return false;
                 }
             }
             catch (Exception ex)
             {
-                Logger.Warn($"AnomalyMessaging.SendToClient: Encryption failed for {hub.LoggedNameFromRefHub()}: {ex.GetType().Name}: {ex.Message}");
-                return;
+                FailClosedDisconnect(
+                    hub,
+                    "AnomalyMessaging.SendToClient: Required authenticated encryption failed.");
+                SafeLogWarning(
+                    $"AnomalyMessaging.SendToClient: Encryption failed: {ex.GetType().Name}: {ex.Message}");
+                return false;
             }
             packed = new EncryptedChannelManager.EncryptedMessageOutside(
                 EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encrypted);
         }
 
-        hub.connectionToClient.Send(packed, (int)msg.TransportChannel);
+        if (!FitsDeployedTransport(
+                msg.TransportChannel,
+                packed.Data?.Length ?? 0,
+                out string transportFailure))
+        {
+            if (authenticatedTransportRequired)
+            {
+                FailClosedDisconnect(
+                    hub,
+                    "AnomalyMessaging.SendToClient: Required payload did not fit the deployed transport.");
+            }
+            SafeLogWarning(transportFailure);
+            return false;
+        }
+        try
+        {
+            hub.connectionToClient.Send(packed, (int)msg.TransportChannel);
+        }
+        catch (Exception exception)
+        {
+            if (authenticatedTransportRequired)
+            {
+                FailClosedDisconnect(
+                    hub,
+                    "AnomalyMessaging.SendToClient: Required authenticated delivery threw.");
+            }
+            SafeLogWarning(
+                $"AnomalyMessaging.SendToClient: Delivery threw: {exception.GetType().Name}: {exception.Message}");
+            return false;
+        }
+        return true;
     }
 
     public static void SendToAll(IAnomalyMessage msg)
     {
         foreach (var hub in ReferenceHub.AllHubs)
         {
-            if (!IsAnomalyTarget(hub)) continue;
-            SendToClient(hub, msg);
+            try
+            {
+                if (!IsAnomalyTarget(hub))
+                    continue;
+                SendToClient(hub, msg);
+            }
+            catch (Exception exception)
+            {
+                SafeLogError(
+                    $"AnomalyMessaging.SendToAll isolated failure for {DescribeHub(hub)}: {exception}");
+            }
         }
     }
 
@@ -110,9 +193,19 @@ public static class AnomalyMessaging
     {
         foreach (var hub in ReferenceHub.AllHubs)
         {
-            if (!IsAnomalyTarget(hub)) continue;
-            if (hub.connectionToClient == exclude) continue;
-            SendToClient(hub, msg);
+            try
+            {
+                if (!IsAnomalyTarget(hub))
+                    continue;
+                if (hub.connectionToClient == exclude)
+                    continue;
+                SendToClient(hub, msg);
+            }
+            catch (Exception exception)
+            {
+                SafeLogError(
+                    $"AnomalyMessaging.SendToAllExcept isolated failure for {DescribeHub(hub)}: {exception}");
+            }
         }
     }
 
@@ -158,6 +251,14 @@ public static class AnomalyMessaging
         if (sender == null)
         {
             Logger.Warn("AnomalyMessaging.OnReceived: Dropping message with no sender hub.");
+            return;
+        }
+
+        if (counter == uint.MaxValue)
+        {
+            FailClosedDisconnect(
+                sender,
+                "AnomalyMessaging.OnReceived: Counter exhausted; disconnecting before wrap.");
             return;
         }
 
@@ -301,13 +402,13 @@ public static class AnomalyMessaging
             }
         }
 
-        try
+        foreach (Delegate subscriber in MessageReceived?.GetInvocationList() ?? Array.Empty<Delegate>())
         {
-            MessageReceived?.Invoke(sender, message);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"AnomalyMessaging.OnReceived: Handler exception for '{message.MessageName}': {ex}");
+            try { ((Action<ReferenceHub, IAnomalyMessage>)subscriber)(sender, message); }
+            catch (Exception ex)
+            {
+                SafeLogError($"AnomalyMessaging.OnReceived: Isolated handler exception for '{message.MessageName}': {ex}");
+            }
         }
     }
 
@@ -318,7 +419,7 @@ public static class AnomalyMessaging
     {
         if (sender == null)
         {
-            Logger.Warn(message + ".");
+            SafeLogWarning(message + ".");
             return;
         }
 
@@ -332,22 +433,47 @@ public static class AnomalyMessaging
         string message,
         bool localTransport)
     {
+        if (result.ShouldDisconnect && !localTransport)
+        {
+            FailClosedDisconnect(
+                sender,
+                "AnomalyMessaging.OnReceived: Disconnecting after sustained invalid or over-limit traffic.");
+        }
         if (result.ShouldLog)
-            Logger.Warn($"{message} (drops={result.DroppedInWindow}).");
-        if (!result.ShouldDisconnect || localTransport || sender?.connectionToClient == null)
-            return;
+            SafeLogWarning($"{message} (drops={result.DroppedInWindow}).");
+    }
 
-        Logger.Error(
-            $"AnomalyMessaging.OnReceived: Disconnecting {sender.LoggedNameFromRefHub()} after " +
-            "sustained invalid or over-limit traffic.");
-        try
+    private static void FailClosedDisconnect(ReferenceHub hub, string message)
+    {
+        Plugin.QuarantineAuthenticatedPlayer(hub, "anomaly-message-transport-failure");
+        try { hub?.connectionToClient?.Disconnect(); }
+        catch (Exception exception)
         {
-            sender.connectionToClient.Disconnect();
+            try { Logger.Warn($"AnomalyMessaging disconnect failed: {exception.Message}"); }
+            catch { }
         }
-        catch (Exception ex)
-        {
-            Logger.Warn($"AnomalyMessaging.OnReceived: Rate-limit disconnect failed: {ex.Message}");
-        }
+        try { Logger.Error(message); }
+        catch { }
+    }
+
+    private static void SafeLogError(string message)
+    {
+        try { Logger.Error(message); }
+        catch { }
+    }
+
+    private static void SafeLogWarning(string message)
+    {
+        try { Logger.Warn(message); }
+        catch { }
+    }
+
+    private static string DescribeHub(ReferenceHub hub)
+    {
+        if (hub == null)
+            return "<null>";
+        try { return hub.LoggedNameFromRefHub(); }
+        catch { return "<unavailable>"; }
     }
 
     private static byte[] BuildPayload(
@@ -375,6 +501,44 @@ public static class AnomalyMessaging
                 return null;
             }
             return ms.ToArray();
+        }
+    }
+
+    private static bool FitsDeployedTransport(
+        MessageChannel channel,
+        int encodedBytes,
+        out string failure)
+    {
+        failure = null;
+        try
+        {
+            var transport = LiteNetLib4MirrorTransport.Singleton;
+            if (transport == null)
+            {
+                failure = "AnomalyMessaging.SendToClient: No deployed transport is active.";
+                return false;
+            }
+            bool fits = TransportPacketPolicy.FitsReportedChannel(
+                channel,
+                encodedBytes,
+                transport.GetMaxPacketSize,
+                out int maximum);
+            // Reserve framing space for Mirror's message id/length and the encrypted wrapper.
+            if (fits)
+                return true;
+            int required = encodedBytes > int.MaxValue - TransportPacketPolicy.FramingReserveBytes
+                ? int.MaxValue
+                : encodedBytes + TransportPacketPolicy.FramingReserveBytes;
+            failure =
+                $"AnomalyMessaging.SendToClient: encoded packet exceeded deployed channel {channel} " +
+                $"capacity ({required}/{maximum} bytes).";
+            return false;
+        }
+        catch (Exception exception)
+        {
+            failure =
+                $"AnomalyMessaging.SendToClient: transport ceiling query failed closed: {exception.Message}";
+            return false;
         }
     }
 }

@@ -12,86 +12,153 @@ using Il2CppLiteNetLib.Utils;
 using Il2CppLiteNetLib;
 using System.Collections;
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Internal.Localization;
 using Anomaly.Client.Api.Localization;
+using Anomaly.Client.Api.Modding;
 using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Components;
+using Anomaly.Client.Patches;
 using Anomaly.Shared.Auth;
 using Anomaly.Shared.Networking;
 using Il2CppMEC;
-using Newtonsoft.Json;
 using UnityEngine;
 using Action = Il2CppSystem.Action;
 
 namespace Anomaly.Client.Auth;
 
+internal enum AuthInitializationState
+{
+    Uninitialized,
+    Ready,
+    Failed,
+}
+
 public static class AuthHandler
 {
+    private const string PromptOwner = "authentication";
     private const byte HandshakeResponseCode = 100;
     private const byte RetryCookieResponseCode = 101;
     private static Dictionary<string, ServerConnection> _connections = new();
+    private static readonly ConnectionAttemptGate AttemptGate = new();
+    private static PlayerAuthProfileStore _profileStore;
     
     public static bool UsingAnomalyAuth { get; internal set; }
 
     public static string AuthFilePath { get; private set; }
     public static PlayerAuth PlayerAuth { get; private set; }
+    internal static AuthInitializationState InitializationState { get; private set; }
+    internal static string InitializationError { get; private set; }
+    internal static string CurrentServerFingerprint { get; private set; }
 
     internal static void Init()
     {
+        AttemptGate.Invalidate();
+        PatchInvocationGuard.BeginAuthenticationScope();
+        _connections.Clear();
+        _phase2Sent = false;
+        UsingAnomalyAuth = false;
+        InitializationState = AuthInitializationState.Uninitialized;
+        InitializationError = null;
+        PlayerAuth = default;
+        CurrentServerFingerprint = null;
+        ClearCurrentKeys();
+        try { PasswordPrompt.HideAll(); }
+        catch (Exception exception)
+        {
+            MelonLogger.Error("Failed to clear stale authentication prompts during initialization: " + exception);
+        }
+        AuthFilePath = Path.Combine(Paths.AnomalyPath, "user.json");
+        _profileStore = new PlayerAuthProfileStore(AuthFilePath);
+
         try
         {
-            AuthFilePath = Path.Combine(Paths.AnomalyPath, "user.json");
             ServerTrustStore.Load();
-            if (!File.Exists(AuthFilePath))
-                CreateNew();
-
-            var auth = File.Exists(AuthFilePath) ? JsonConvert.DeserializeObject<PlayerAuth>(File.ReadAllText(AuthFilePath)) : CreateNew();
-
-            if (string.IsNullOrEmpty(auth.Identity) || auth.Identity == "pending")
-            {
-                auth = CreateNew(auth.Username);
-            }
-
-            if (string.IsNullOrEmpty(auth.IdentityProtection))
-            {
-                var legacyIdentity = auth.GetIdentity();
-                try
-                {
-                    auth.SetIdentity(legacyIdentity);
-                    SavePlayerAuth(auth);
-                    MelonLogger.Msg("Migrated the client identity from plaintext storage to Windows DPAPI current-user protection.");
-                }
-                finally
-                {
-                    Array.Clear(legacyIdentity, 0, legacyIdentity.Length);
-                }
-            }
-
-            ValidateStoredIdentityLineage(auth);
+            bool existingProfile = _profileStore.Exists;
+            bool migrated = false;
+            var auth = existingProfile
+                ? _profileStore.LoadExisting(out migrated)
+                : CreateAndSaveNewProfile();
 
             PlayerAuth = auth;
+            InitializationState = AuthInitializationState.Ready;
             MelonLogger.Msg(
                 $"Auth initialized. Nickname selected: {!string.IsNullOrWhiteSpace(auth.Username)}, " +
                 $"protected identity present: {!string.IsNullOrWhiteSpace(auth.Identity)}.");
+            if (existingProfile && migrated)
+                MelonLogger.Msg("Migrated the client identity profile to protected storage with a public identity field.");
             if (string.IsNullOrWhiteSpace(auth.Username))
                 PromptForFirstRunNickname();
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
+            PlayerAuth = default;
+            InitializationState = AuthInitializationState.Failed;
+            InitializationError = ex.GetType().Name + ": " + ex.Message;
             MelonLogger.Error("Failed to initialize auth: " + ex);
+            throw new InvalidOperationException(
+                "Client identity initialization failed. The existing profile was left unchanged.", ex);
         }
     }
 
-    private static bool _authWriteCalled;
     private static bool _phase2Sent;
-    private static int _connectionGeneration;
 
     internal static void AuthWrite(NetDataWriter writer)
     {
+        string connectionKey = null;
         try
         {
-            MelonLogger.Msg("AuthWrite called");
-            var server = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.clientAddress;
+            if (!Core.RequiredConnectionFeaturesReady)
+            {
+                MelonLogger.Error(
+                    "Authentication is disabled because required Anomaly lifecycle or Harmony hooks are not healthy.");
+                return;
+            }
+            if (!Anomaly.Client.Patches.Mirror.NetworkManagerRegisterClientMessages.IsReady)
+            {
+                MelonLogger.Error("Authentication is disabled because required Anomaly networking services are not ready.");
+                return;
+            }
+            if (!Anomaly.Client.Patches.Mirror.EncryptedChannelHandlerFix.IsReady)
+            {
+                MelonLogger.Error(
+                    "Authentication is disabled because the required encrypted-channel receive bridge is not ready: " +
+                    (Anomaly.Client.Patches.Mirror.EncryptedChannelHandlerFix.LastError ?? "unknown failure"));
+                return;
+            }
+            if (InitializationState != AuthInitializationState.Ready)
+            {
+                MelonLogger.Error(
+                    "Authentication is disabled because the client identity profile is not ready: "
+                    + (InitializationError ?? InitializationState.ToString()));
+                return;
+            }
+
+            var transport = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton;
+            var server = transport.clientAddress;
+            var port = transport.port.ToString();
+            connectionKey = BuildTrustEndpoint(server, port);
+
+            // Bind deduplication to the concrete native writer and normalized
+            // endpoint. A distinct writer is a new attempt even if a stale
+            // disconnect callback has not yet cleared the previous writer.
+            if (writer == null)
+                throw new InvalidOperationException("LiteNetLib did not provide an authentication writer.");
+            var disposition = AttemptGate.BeginWriterAttempt(
+                connectionKey,
+                writer.Pointer.ToInt64());
+            if (disposition == ConnectionWriterDisposition.Duplicate)
+            {
+                try { MelonLogger.Warning("AuthWrite called again for the same native writer — ignoring duplicate GetConnectData call"); }
+                catch { }
+                return;
+            }
+
+            // Every re-entry issued by Anomaly is explicitly scheduled and is
+            // single-use. Anything else is a fresh user connection and must
+            // revoke stale handshakes, prompt callbacks, catalog state, and keys.
+            if (disposition == ConnectionWriterDisposition.NewUserAttempt)
+                BeginUserConnectionScope();
 
             if (string.IsNullOrWhiteSpace(PlayerAuth.Username))
             {
@@ -100,20 +167,9 @@ public static class AuthHandler
                 return;
             }
 
-            // Dedup: LiteNetLib invokes GetConnectData twice per logical connect
-            // (~30ms apart, likely IPv4+IPv6 or internal retry) and IL2CPP adds
-            // its own vtable-dispatch duplicates. Second+ calls must be no-ops
-            // so the writer keeps the phase data written by the first call.
-            if (_authWriteCalled)
-            {
-                MelonLogger.Warning("AuthWrite called again for same connection — ignoring duplicate GetConnectData call");
-                return;
-            }
-            _authWriteCalled = true;
-
             var isSecondTime = false;
 
-            if (_connections.TryGetValue(server, out var connection))
+            if (_connections.TryGetValue(connectionKey, out var connection))
             {
                 if (connection.Handshake != null)
                 {
@@ -121,7 +177,7 @@ public static class AuthHandler
                 }
                 else if (connection.RetryCookie == null)
                 {
-                    _connections.Remove(server);
+                    _connections.Remove(connectionKey);
                 }
             }
 
@@ -137,14 +193,14 @@ public static class AuthHandler
             //Writes how long this Request is valid
             writer.Put(TimeBehaviour.CurrentUnixTimestamp + 30);
 
-            MelonLogger.Msg($"AuthWrite phase: {(isSecondTime ? "2 (login)" : "1 (handshake)")}, server: {server}");
+            MelonLogger.Msg($"AuthWrite phase: {(isSecondTime ? "2 (login)" : "1 (handshake)")}, server: {connectionKey}");
 
             UsingAnomalyAuth = true;
 
             if (!isSecondTime)
             {
                 AuthStatusOverlay.BeginAuthenticating();
-                if (!_connections.TryGetValue(server, out connection))
+                if (!_connections.TryGetValue(connectionKey, out connection))
                 {
                     var identity = PlayerAuth.GetIdentity();
                     ClientAuthSession clientEnv;
@@ -152,8 +208,6 @@ public static class AuthHandler
                     {
                         clientEnv = ClientAuthSession.Generate(identity);
                         clientEnv.BindIdentityRotationChain(PlayerAuth.GetIdentityRotationChain());
-                        int serverPort = Convert.ToInt32(
-                            Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.port);
                         clientEnv.BindConnectionContext(
                             Il2CppGameCore.Version.Major,
                             Il2CppGameCore.Version.Minor,
@@ -162,14 +216,14 @@ public static class AuthHandler
                             Il2CppGameCore.Version.BackwardCompatibility
                                 ? Il2CppGameCore.Version.BackwardRevision
                                 : (byte)0,
-                            AuthConnectionContext.NormalizeEndpoint(server, serverPort));
+                            connectionKey);
                     }
                     finally
                     {
                         Array.Clear(identity, 0, identity.Length);
                     }
                     connection = new ServerConnection { Session = clientEnv };
-                    _connections[server] = connection;
+                    _connections[connectionKey] = connection;
                 }
 
                 var clientHandshake = connection.Session.CreateHandshake(connection.RetryCookie);
@@ -203,7 +257,7 @@ public static class AuthHandler
                         keys.SessionId,
                         keys.TranscriptHash);
                 }
-                // Don't remove _connections[server] here — LiteNetLib calls
+                // Don't remove _connections[connectionKey] here — LiteNetLib calls
                 // GetConnectData twice per connect and the duplicate must
                 // still see the entry so it dedups instead of re-entering
                 // phase-1. OnDisconnected clears the entry after phase-2.
@@ -212,17 +266,32 @@ public static class AuthHandler
         }
         catch(Exception e)
         {
-            MelonLogger.Error("Error during authentication to server: " + e);
+            CancelAuthentication(connectionKey, clearAllConnections: true);
+            AnomalyMessaging.FailClosedTransport(
+                "Connection authentication failed: " + e.GetType().Name + ".");
+            try
+            {
+                FeatureHealth.Report(
+                    "anomaly",
+                    "authentication",
+                    FeatureHealthStatus.Failed,
+                    "Connection authentication failed: " + e.GetType().Name);
+                MelonLogger.Error("Error during authentication to server: " + e);
+            }
+            catch { }
         }
     }
 
     /// <returns>true to run the original handler, false to skip it</returns>
     internal static bool RejectAuth(DisconnectInfo info)
     {
-        _authWriteCalled = false;
+        AttemptGate.CompleteWriterAttempt();
         MelonLogger.Warning($"Rejected Auth - Reason: {info.Reason}");
         var pos = info.AdditionalData._position;
         var data = info.AdditionalData;
+        var server = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.clientAddress;
+        var port = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.port.ToString();
+        var connectionKey = BuildTrustEndpoint(server, port);
         byte requestType;
         try
         {
@@ -230,13 +299,11 @@ public static class AuthHandler
         }
         catch (Exception ex)
         {
-            MelonLogger.Error($"Server rejection did not contain a response code: {ex}");
             info.AdditionalData._position = pos;
+            CancelAuthentication(connectionKey);
+            MelonLogger.Error($"Server rejection did not contain a response code: {ex}");
             return true;
         }
-
-        var server = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.clientAddress;
-        var port = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.port.ToString();
         if (requestType == RetryCookieResponseCode)
         {
             try
@@ -244,35 +311,35 @@ public static class AuthHandler
                 var cookie = data.GetBytesWithLength();
                 if (cookie == null || cookie.Length != ClientHandshake.RetryCookieSize)
                     throw new InvalidDataException($"Retry cookie length was {cookie?.Length ?? 0}, expected {ClientHandshake.RetryCookieSize}.");
-                if (!_connections.TryGetValue(server, out var retryConnection)
+                if (!_connections.TryGetValue(connectionKey, out var retryConnection)
                     || retryConnection.Session == null
                     || retryConnection.Handshake != null)
                     throw new InvalidOperationException("No matching phase-one client session exists.");
 
                 retryConnection.RetryCookie = cookie;
                 ConnectionInfoOverlay.BeginOverride(Tr.Get(TrKeys.Overlay_ConnectionAuthenticating));
-                MelonCoroutines.Start(ConnectAgain(server, port));
+                MelonCoroutines.Start(ConnectAgain(server, port, connectionKey));
             }
             catch (Exception ex)
             {
-                MelonLogger.Error($"Failed to process protocol-v2 retry cookie: {ex}");
-                CancelAuthentication(server);
+                MelonLogger.Error($"Failed to process the Anomaly retry cookie: {ex}");
+                CancelAuthentication(connectionKey);
             }
             return false;
         }
 
         if (requestType != HandshakeResponseCode)
         {
-            AuthStatusOverlay.EndAuthenticating();
-            ConnectionInfoOverlay.EndOverride();
-            MelonLogger.Warning($"Server rejected with code {requestType}. Passing to base handler.");
             info.AdditionalData._position = pos;
+            CancelAuthentication(connectionKey);
+            MelonLogger.Warning($"Server rejected with code {requestType}. Passing to base handler.");
             return true; // Not our rejection, let original handler process it
         }
 
-        if (!_connections.TryGetValue(server, out var connection))
+        if (!_connections.TryGetValue(connectionKey, out var connection))
         {
             MelonLogger.Error("Received a server handshake without a matching client session.");
+            CancelAuthentication(connectionKey);
             return false;
         }
 
@@ -297,17 +364,17 @@ public static class AuthHandler
         catch (AnomalyProtocolVersionMismatchException pv)
         {
             MelonLogger.Error($"Server speaks a different Anomaly protocol version. {pv.Message}");
-            CancelAuthentication(server);
+            CancelAuthentication(connectionKey);
             return false;
         }
         catch (Exception ex)
         {
             MelonLogger.Error($"Rejected unauthenticated or malformed server handshake: {ex}");
-            CancelAuthentication(server);
+            CancelAuthentication(connectionKey);
             return false;
         }
 
-        var trustEndpoint = BuildTrustEndpoint(server, port);
+        var trustEndpoint = connectionKey;
         var trustState = ServerTrustStore.Evaluate(
             trustEndpoint,
             connection.ServerFingerprint,
@@ -324,7 +391,7 @@ public static class AuthHandler
                 MelonLogger.Msg(
                     $"Accepted an old-key-signed server identity rotation for {trustEndpoint}: "
                     + $"{expectedFingerprint} -> {connection.ServerFingerprint}.");
-                ContinueAfterServerTrust(server, port, connection);
+                ContinueAfterServerTrust(connectionKey, server, port, connection);
                 return false;
             }
 
@@ -334,24 +401,28 @@ public static class AuthHandler
                 + $"Automatic rotation was rejected: {rotationError}. Connection blocked. "
                 + "Verify the fingerprint out of band and use a future launcher/operator trust-reset workflow; "
                 + "the in-game client will not replace a changed pin.");
-            CancelAuthentication(server);
+            CancelAuthentication(connectionKey);
             return false;
         }
         if (trustState == ServerTrustState.Unavailable)
         {
             MelonLogger.Error("Server trust store is unavailable; connection blocked rather than silently forgetting pins.");
-            CancelAuthentication(server);
+            CancelAuthentication(connectionKey);
             return false;
         }
 
         if (trustState == ServerTrustState.FirstSeen)
         {
             var formattedFingerprint = ServerTrustStore.FormatFingerprint(connection.ServerFingerprint);
+            int trustGeneration = AttemptGate.Generation;
             PasswordPrompt.ShowConfirmation(
+                PromptOwner,
                 "Trust this Anomaly server key?",
                 trustEndpoint + "\n\n" + formattedFingerprint,
                 () =>
                 {
+                    if (!IsCurrentConnection(connectionKey, connection, trustGeneration))
+                        return;
                     if (!ServerTrustStore.TryPinFirstSeen(
                             trustEndpoint,
                             connection.ServerFingerprint,
@@ -359,12 +430,16 @@ public static class AuthHandler
                             out var pinError))
                     {
                         MelonLogger.Error($"Failed to save server key pin: {pinError}");
-                        CancelAuthentication(server);
+                        CancelAuthentication(connectionKey);
                         return;
                     }
-                    ContinueAfterServerTrust(server, port, connection);
+                    ContinueAfterServerTrust(connectionKey, server, port, connection);
                 },
-                () => CancelAuthentication(server));
+                () =>
+                {
+                    if (IsCurrentConnection(connectionKey, connection, trustGeneration))
+                        CancelAuthentication(connectionKey);
+                });
             return false;
         }
 
@@ -380,20 +455,25 @@ public static class AuthHandler
             MelonLogger.Warning($"Could not upgrade the trusted server key record: {rememberError}");
         }
 
-        ContinueAfterServerTrust(server, port, connection);
+        ContinueAfterServerTrust(connectionKey, server, port, connection);
         return false;
     }
 
-    private static void ContinueAfterServerTrust(string server, string port, ServerConnection connection)
+    private static void ContinueAfterServerTrust(
+        string connectionKey,
+        string server,
+        string port,
+        ServerConnection connection)
     {
+        CurrentServerFingerprint = connection.ServerFingerprint;
         if (connection.PasswordChallenge?.Required == true)
         {
-            PromptForPassword(server, port, connection);
+            PromptForPassword(connectionKey, server, port, connection);
             return;
         }
 
         ConnectionInfoOverlay.BeginOverride(Tr.Get(TrKeys.Overlay_ConnectionAuthenticating));
-        MelonCoroutines.Start(ConnectAgain(server, port));
+        MelonCoroutines.Start(ConnectAgain(server, port, connectionKey));
     }
 
     private static PasswordChallenge ReadPasswordChallenge(NetDataReader data)
@@ -426,25 +506,43 @@ public static class AuthHandler
         };
     }
 
-    private static void PromptForPassword(string server, string port, ServerConnection connection)
+    private static void PromptForPassword(
+        string connectionKey,
+        string server,
+        string port,
+        ServerConnection connection)
     {
         ConnectionInfoOverlay.BeginOverride(Tr.Get(TrKeys.Overlay_PasswordRequired));
+        int promptGeneration = AttemptGate.Generation;
         PasswordPrompt.Show(
+            PromptOwner,
             password =>
             {
+                if (!IsCurrentConnection(connectionKey, connection, promptGeneration))
+                    return;
                 ConnectionInfoOverlay.BeginOverride(Tr.Get(TrKeys.Overlay_ConnectionAuthenticating));
-                var generation = _connectionGeneration;
                 var proofTask = Task.Run(() => connection.Session.CreatePasswordProof(
                         password,
                         connection.Handshake,
                         connection.ServerIdentifier,
                         connection.PasswordChallenge));
-                MelonCoroutines.Start(CompletePasswordProof(server, port, connection, generation, proofTask));
+                MelonCoroutines.Start(CompletePasswordProof(
+                    connectionKey,
+                    server,
+                    port,
+                    connection,
+                    promptGeneration,
+                    proofTask));
             },
-            () => CancelAuthentication(server));
+            () =>
+            {
+                if (IsCurrentConnection(connectionKey, connection, promptGeneration))
+                    CancelAuthentication(connectionKey);
+            });
     }
 
     private static IEnumerator CompletePasswordProof(
+        string connectionKey,
         string server,
         string port,
         ServerConnection connection,
@@ -454,30 +552,97 @@ public static class AuthHandler
         while (!proofTask.IsCompleted)
             yield return null;
 
-        if (generation != _connectionGeneration)
+        if (!AttemptGate.IsCurrent(generation))
             yield break;
 
         try
         {
             connection.PasswordProof = proofTask.GetAwaiter().GetResult();
-            MelonCoroutines.Start(ConnectAgain(server, port));
+            MelonCoroutines.Start(ConnectAgain(server, port, connectionKey));
         }
         catch (Exception ex)
         {
             MelonLogger.Error($"Failed to prepare bounded password proof: {ex}");
-            CancelAuthentication(server);
+            CancelAuthentication(connectionKey);
         }
     }
 
-    private static void CancelAuthentication(string server)
+    private static void CancelAuthentication(string connectionKey, bool clearAllConnections = false)
     {
-        PasswordPrompt.Hide();
-        _connections.Remove(server);
-        ClearCurrentKeys();
+        try { AttemptGate.Invalidate(); }
+        catch { AttemptGate.CompleteWriterAttempt(); }
+        if (clearAllConnections || string.IsNullOrEmpty(connectionKey))
+            _connections.Clear();
+        else
+            _connections.Remove(connectionKey);
+        CurrentServerFingerprint = null;
+        UsingAnomalyAuth = false;
         _phase2Sent = false;
-        _connectionGeneration++;
-        AuthStatusOverlay.EndAuthenticating();
-        ConnectionInfoOverlay.EndOverride();
+        try { ClearCurrentKeys(); }
+        catch (Exception exception)
+        {
+            SafeLogError("Failed to clear authentication keys during cancellation: " + exception);
+        }
+        try { PasswordPrompt.Hide(PromptOwner); }
+        catch (Exception exception)
+        {
+            SafeLogError("Failed to hide the authentication prompt during cancellation: " + exception);
+        }
+        try { AuthStatusOverlay.EndAuthenticating(); }
+        catch (Exception exception)
+        {
+            SafeLogError("Failed to clear authentication status during cancellation: " + exception);
+        }
+        try { ConnectionInfoOverlay.EndOverride(); }
+        catch (Exception exception)
+        {
+            SafeLogError("Failed to clear connection details during cancellation: " + exception);
+        }
+    }
+
+    private static void SafeLogError(string message)
+    {
+        try { MelonLogger.Error(message); }
+        catch { }
+    }
+
+    private static bool IsCurrentConnection(
+        string connectionKey,
+        ServerConnection connection,
+        int generation) =>
+        AttemptGate.IsCurrent(generation) &&
+        _connections.TryGetValue(connectionKey, out ServerConnection current) &&
+        ReferenceEquals(current, connection);
+
+    private static void BeginUserConnectionScope()
+    {
+        PatchInvocationGuard.BeginAuthenticationScope();
+        _connections.Clear();
+        CurrentServerFingerprint = null;
+        UsingAnomalyAuth = false;
+        _phase2Sent = false;
+        ClearCurrentKeys();
+
+        try { Anomaly.Client.Content.ContentCatalogClient.Reset(); }
+        catch (Exception exception)
+        {
+            SafeLogError("Failed to clear stale content state before a new connection: " + exception);
+        }
+        try { PasswordPrompt.HideAll(); }
+        catch (Exception exception)
+        {
+            SafeLogError("Failed to hide stale connection prompts before a new connection: " + exception);
+        }
+        try { AuthStatusOverlay.EndAuthenticating(); }
+        catch (Exception exception)
+        {
+            SafeLogError("Failed to clear stale authentication status before a new connection: " + exception);
+        }
+        try { ConnectionInfoOverlay.EndOverride(); }
+        catch (Exception exception)
+        {
+            SafeLogError("Failed to clear stale connection details before a new connection: " + exception);
+        }
     }
 
     private static string BuildTrustEndpoint(string server, string port)
@@ -489,41 +654,65 @@ public static class AuthHandler
 
     private static void ClearCurrentKeys()
     {
+        CurrentServerFingerprint = null;
         AnomalyMessaging.ClearTransportSession();
     }
 
-    private static IEnumerator ConnectAgain(string ip, string port)
+    private static IEnumerator ConnectAgain(string ip, string port, string connectionKey)
     {
-        int gen = _connectionGeneration;
+        int gen = AttemptGate.Generation;
         yield return new WaitForSeconds(2);
         // If a disconnect/reconnect happened during the wait, don't proceed
         // with stale phase 2 data — the server session is gone.
-        if (gen != _connectionGeneration)
+        if (!AttemptGate.IsCurrent(gen))
         {
             MelonLogger.Msg("ConnectAgain cancelled — connection generation changed (likely round restart)");
             yield break;
         }
-        _authWriteCalled = false;
-        Il2CppGameCore.Console.Singleton.TypeCommand("connect " + ip + ":" + port);
+        if (!AttemptGate.TryScheduleReconnect(connectionKey, gen))
+            yield break;
+        AttemptGate.CompleteWriterAttempt();
+        try
+        {
+            Il2CppGameCore.Console.Singleton.TypeCommand("connect " + ip + ":" + port);
+        }
+        catch (Exception exception)
+        {
+            MelonLogger.Error("Failed to initiate the authenticated reconnect: " + exception);
+            CancelAuthentication(connectionKey);
+        }
     }
 
-    private static PlayerAuth CreateNew(string name = "")
+    private static PlayerAuth CreateNewProfile(string name = "")
     {
-        MelonLogger.Msg("Create new");
+        MelonLogger.Msg("Creating a new client identity profile.");
         var auth = new PlayerAuth()
         {
             Username = (name ?? string.Empty).Trim(),
         };
-        auth.SetIdentity(AuthCrypto.CreateIdentity());
+        var identity = AuthCrypto.CreateIdentity();
+        try { auth.SetIdentity(identity); }
+        finally { Array.Clear(identity, 0, identity.Length); }
 
-        SavePlayerAuth(auth);
+        return auth;
+    }
 
+    private static PlayerAuth CreateAndSaveNewProfile(string name = "")
+    {
+        var auth = CreateNewProfile(name);
+        _profileStore.Save(auth);
         return auth;
     }
 
     internal static bool TryRotateClientIdentity(out string error)
     {
         error = null;
+        if (InitializationState != AuthInitializationState.Ready)
+        {
+            error = "The client identity profile is not ready: "
+                + (InitializationError ?? InitializationState.ToString());
+            return false;
+        }
         if (UsingAnomalyAuth || _connections.Count != 0)
         {
             error = "Disconnect from the server before rotating the client identity.";
@@ -548,7 +737,7 @@ public static class AuthHandler
             // Persist the new private key and its old-key authorization together
             // before changing the live identity. A partial rotation must never
             // strand the player with an unprovable enrollment change.
-            SavePlayerAuth(updated);
+            _profileStore.Save(updated);
             PlayerAuth = updated;
             return true;
         }
@@ -566,28 +755,16 @@ public static class AuthHandler
         }
     }
 
-    private static void ValidateStoredIdentityLineage(PlayerAuth auth)
-    {
-        var chain = auth.GetIdentityRotationChain();
-        if (chain == null)
-            return;
-
-        byte[] identity = auth.GetIdentity();
-        try
-        {
-            byte[] currentPublic = AuthCrypto.WritePublic(AuthCrypto.ReadIdentity(identity));
-            if (!chain.TryValidate(currentPublic, out _, out var error))
-                throw new InvalidDataException("Stored client identity rotation chain is invalid: " + error);
-        }
-        finally
-        {
-            Array.Clear(identity, 0, identity.Length);
-        }
-    }
-
     private static void PromptForFirstRunNickname()
     {
+        if (InitializationState != AuthInitializationState.Ready)
+        {
+            MelonLogger.Error("Nickname selection is unavailable because the client identity profile failed to initialize.");
+            return;
+        }
+
         PasswordPrompt.ShowTextInput(
+            PromptOwner,
             "Choose your Anomaly nickname",
             "This name is sent to servers. Anomaly will not use your Windows username. Enter 1-32 visible characters.",
             nickname =>
@@ -606,7 +783,7 @@ public static class AuthHandler
                 PlayerAuth = auth;
                 try
                 {
-                    SavePlayerAuth(PlayerAuth);
+                    _profileStore.Save(PlayerAuth);
                     MelonLogger.Msg("Anomaly nickname saved.");
                 }
                 catch (Exception ex)
@@ -619,45 +796,16 @@ public static class AuthHandler
             () => MelonLogger.Warning("Nickname selection cancelled; Anomaly authentication remains disabled."));
     }
 
-    private static void SavePlayerAuth(PlayerAuth auth)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(AuthFilePath));
-        var tempPath = AuthFilePath + ".tmp";
-        try
-        {
-            File.WriteAllText(tempPath, JsonConvert.SerializeObject(auth));
-            if (File.Exists(AuthFilePath))
-                File.Replace(tempPath, AuthFilePath, null);
-            else
-                File.Move(tempPath, AuthFilePath);
-        }
-        catch
-        {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch
-            {
-                // The durable identity remains the previous file. A stale
-                // temporary file is never read by the authentication path.
-            }
-            throw;
-        }
-    }
-
     public static void OnDisconnected()
     {
-        _authWriteCalled = false;
+        AttemptGate.CompleteWriterAttempt();
         UsingAnomalyAuth = false;
-        AuthStatusOverlay.EndAuthenticating();
 
         // A disconnect BEFORE phase-2 was sent is the transient reject that
         // happens between phase-1 (handshake) and phase-2 (login) — the
         // server rejects the phase-1 packet on purpose to push the handshake
         // back in the rejection data. We need to preserve _connections and
-        // _connectionGeneration so ConnectAgain can use the stored handshake.
+        // connection-attempt generation so ConnectAgain can use the stored handshake.
         // The ConnectionInfoOverlay must ALSO stay active across the transient
         // — vanilla SCPSL's OnClientDisconnect runs right after this prefix
         // and writes its kick text into ReasonContent; the LateUpdate-based
@@ -668,11 +816,23 @@ public static class AuthHandler
         // it and bump the generation to cancel any stale ConnectAgain.
         if (_phase2Sent)
         {
-            ConnectionInfoOverlay.EndOverride();
             _connections.Clear();
+            CurrentServerFingerprint = null;
             ClearCurrentKeys();
-            _connectionGeneration++;
+            AttemptGate.Invalidate();
             _phase2Sent = false;
+            PasswordPrompt.Hide(PromptOwner);
+            try { ConnectionInfoOverlay.EndOverride(); }
+            catch (Exception exception)
+            {
+                MelonLogger.Error("Failed to clear the terminal connection overlay: " + exception);
+            }
+        }
+
+        try { AuthStatusOverlay.EndAuthenticating(); }
+        catch (Exception exception)
+        {
+            MelonLogger.Error("Failed to clear the authentication overlay after logical teardown: " + exception);
         }
 
         MelonLogger.Msg("OnDisconnected");

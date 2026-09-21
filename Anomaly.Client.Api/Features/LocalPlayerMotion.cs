@@ -1,4 +1,5 @@
 using UnityEngine;
+using Anomaly.Client.Api.Events;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -111,14 +112,7 @@ public static class LocalPlayerMotion
             LastSequences[ownerId] = motion.Sequence;
         }
 
-        try
-        {
-            Applied?.Invoke(motion);
-        }
-        catch (Exception ex)
-        {
-            MelonLoader.MelonLogger.Error($"LocalPlayerMotion.Applied handler threw: {ex}");
-        }
+        EventInvoker.Invoke(Applied, motion, "LocalPlayerMotion.Applied");
         failure = MotionFailure.None;
         return true;
     }

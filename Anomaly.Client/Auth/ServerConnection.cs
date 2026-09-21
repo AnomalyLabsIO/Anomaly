@@ -61,7 +61,7 @@ internal static class ServerTrustStore
                 _loadError = ex.Message;
                 MelonLogger.Error(
                     $"Server trust store could not be read; server authentication will fail closed: {ex}");
-                return;
+                throw new InvalidDataException("Server trust store could not be read.", ex);
             }
             try
             {
@@ -80,6 +80,7 @@ internal static class ServerTrustStore
                     _pins.Clear();
                     MelonLogger.Error(
                         $"Server trust store could not be loaded; server authentication will fail closed: {_loadError}");
+                    throw new InvalidDataException("Server trust store could not be decoded.", currentError);
                 }
             }
         }

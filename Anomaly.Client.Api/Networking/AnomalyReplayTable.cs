@@ -8,15 +8,18 @@ namespace Anomaly.Client.Api.Networking;
 /// <see cref="Reset"/> is wired on <c>ClientEvents.Disconnected</c> alongside
 /// the other per-session cleanup so a reconnect starts fresh.
 /// </summary>
-public static class AnomalyReplayTable
+internal static class AnomalyReplayTable
 {
-    public static AnomalyReplayState Instance { get; private set; } = new AnomalyReplayState();
-    public static AnomalyInboundRateLimiter InboundRateLimiter { get; private set; } =
+    internal static AnomalyReplayState Instance { get; private set; } = new AnomalyReplayState();
+    internal static AnomalyInboundRateLimiter InboundRateLimiter { get; private set; } =
+        new AnomalyInboundRateLimiter();
+    internal static AnomalyInboundRateLimiter RawInboundRateLimiter { get; private set; } =
         new AnomalyInboundRateLimiter();
 
-    public static void Reset()
+    internal static void Reset()
     {
         Instance = new AnomalyReplayState();
         InboundRateLimiter = new AnomalyInboundRateLimiter();
+        RawInboundRateLimiter = new AnomalyInboundRateLimiter();
     }
 }

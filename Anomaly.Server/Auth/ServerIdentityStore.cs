@@ -7,7 +7,7 @@ using LabApi.Loader;
 
 namespace Anomaly.Server.Auth;
 
-/// <summary>Owns the persistent server signing identity used by protocol v2.</summary>
+/// <summary>Owns the persistent server signing identity used by the authenticated handshake.</summary>
 internal static class ServerIdentityStore
 {
     private const string IdentityFileName = "server_identity";

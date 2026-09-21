@@ -19,7 +19,7 @@ namespace Anomaly.Client.Api.Features;
 /// construction is required — that's deferred to a future batch and tracked
 /// in the docs queue as the <c>ScreenEffects.Pulse</c> follow-up.</para>
 /// <para>The current implementation uses a single shared overlay
-/// <see cref="GameObject"/>; calling <see cref="Tint"/> while a flash is
+/// <see cref="GameObject"/>; calling <see cref="Tint(Color)"/> while a flash is
 /// running, or starting two flashes back-to-back, will replace the current
 /// effect. Mods that need layered effects should manage their own
 /// <see cref="Image"/> children of <see cref="UiLayer.Overlay"/>.</para>

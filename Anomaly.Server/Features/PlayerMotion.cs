@@ -161,13 +161,18 @@ namespace Anomaly.Server.Features
                 }
             }
 
-            try
+            Delegate[] subscribers = Applied?.GetInvocationList() ?? Array.Empty<Delegate>();
+            foreach (Delegate subscriber in subscribers)
             {
-                Applied?.Invoke(player, motion);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"PlayerMotion.Applied handler threw: {ex}");
+                try
+                {
+                    ((Action<ReferenceHub, MotionDiscontinuity>)subscriber)(player, motion);
+                }
+                catch (Exception ex)
+                {
+                    try { Logger.Error($"PlayerMotion.Applied handler threw: {ex}"); }
+                    catch { /* logging must not suppress later subscribers */ }
+                }
             }
 
             failure = MotionFailure.None;

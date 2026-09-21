@@ -34,6 +34,7 @@
 # {0} = username
 "anomaly.menu.auth_connected": "Connected as {0}"
 "anomaly.menu.auth_not_signed_in": "Not signed in"
+"anomaly.menu.auth_unavailable": "Authentication unavailable — files unchanged; repair the reported profile or trust-store error, then restart."
 
 # ===== Mods settings tab =====
 "anomaly.settings.tab_mods": "Mods"

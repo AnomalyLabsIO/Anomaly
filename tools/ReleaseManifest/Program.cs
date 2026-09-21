@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -26,19 +27,27 @@ catch (Exception ex)
 
 static int Create(string[] args)
 {
-    if (args.Length < 8)
-        throw new ArgumentException("create requires: <release-id> <version> <source-commit> <dependency-inventory> <output.json> <private-key.pem> <artifact> [...]");
+    if (args.Length < 11)
+    {
+        throw new ArgumentException(
+            "create requires: <key-id> <target> <package-id> <release-id> <version> <source-commit> <dependency-inventory> <output.json> <private-key.pem> <artifact> [...]");
+    }
 
-    var inventoryPath = Path.GetFullPath(args[4]);
-    if (!File.Exists(inventoryPath)) throw new FileNotFoundException("Dependency inventory not found.", inventoryPath);
-    var outputPath = Path.GetFullPath(args[5]);
-    var keyPath = Path.GetFullPath(args[6]);
-    var artifacts = args.Skip(7)
+    var inventoryPath = Path.GetFullPath(args[7]);
+    if (!File.Exists(inventoryPath))
+        throw new FileNotFoundException("Dependency inventory not found.", inventoryPath);
+    var outputPath = Path.GetFullPath(args[8]);
+    var keyPath = Path.GetFullPath(args[9]);
+    if (!File.Exists(keyPath))
+        throw new FileNotFoundException("Release signing key not found.", keyPath);
+
+    var artifacts = args.Skip(10)
         .Select(Path.GetFullPath)
         .OrderBy(path => Path.GetFileName(path), StringComparer.Ordinal)
         .Select(path =>
         {
-            if (!File.Exists(path)) throw new FileNotFoundException("Artifact not found.", path);
+            if (!File.Exists(path))
+                throw new FileNotFoundException("Artifact not found.", path);
             using var stream = File.OpenRead(path);
             return new Artifact
             {
@@ -48,29 +57,32 @@ static int Create(string[] args)
             };
         }).ToList();
 
-    if (artifacts.Select(x => x.Name).Distinct(StringComparer.Ordinal).Count() != artifacts.Count)
+    if (artifacts.Select(artifact => artifact.Name).Distinct(StringComparer.Ordinal).Count() != artifacts.Count)
         throw new InvalidOperationException("Artifact filenames must be unique.");
 
     var manifest = new Manifest
     {
-        ReleaseId = args[1],
-        Version = args[2],
-        SourceCommit = args[3].ToLowerInvariant(),
+        KeyId = args[1],
+        Target = args[2],
+        PackageId = args[3],
+        ReleaseId = args[4],
+        Version = args[5],
+        SourceCommit = args[6].ToLowerInvariant(),
         DependencyInventorySha256 = HashFile(inventoryPath),
-        GeneratedUtc = DateTimeOffset.UtcNow,
+        GeneratedUtc = GetGeneratedUtc(),
         Artifacts = artifacts,
     };
     Validate(manifest);
 
     var bytes = JsonSerializer.SerializeToUtf8Bytes(manifest, Serialization.Options);
-    Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-    File.WriteAllBytes(outputPath, bytes);
-
     using var signer = ECDsa.Create();
     signer.ImportFromPem(File.ReadAllText(keyPath));
+    EnsureP256(signer, "Release signing key");
     var signature = signer.SignData(bytes, HashAlgorithmName.SHA256);
-    File.WriteAllText(outputPath + ".sig", Convert.ToBase64String(signature));
-    Console.WriteLine($"Created {outputPath} with {artifacts.Count} artifact(s).");
+
+    WriteAtomically(outputPath, bytes);
+    WriteAtomically(outputPath + ".sig", System.Text.Encoding.ASCII.GetBytes(Convert.ToBase64String(signature)));
+    Console.WriteLine($"Created schema-v2 manifest {outputPath} with {artifacts.Count} artifact(s).");
     return 0;
 }
 
@@ -89,6 +101,7 @@ static int Verify(string[] args)
 
     using var verifier = ECDsa.Create();
     verifier.ImportFromPem(File.ReadAllText(keyPath));
+    EnsureP256(verifier, "Release verification key");
     var signature = Convert.FromBase64String(File.ReadAllText(signaturePath).Trim());
     if (!verifier.VerifyData(bytes, signature, HashAlgorithmName.SHA256))
         throw new CryptographicException("Release manifest signature is invalid.");
@@ -97,22 +110,42 @@ static int Verify(string[] args)
     {
         var artifactDirectory = Path.GetFullPath(args[4]);
         var inventoryPath = Path.GetFullPath(args[5]);
-        if (!string.Equals(HashFile(inventoryPath), manifest.DependencyInventorySha256,
-                StringComparison.Ordinal))
+        if (!Directory.Exists(artifactDirectory))
+            throw new DirectoryNotFoundException($"Artifact directory not found: {artifactDirectory}");
+        if (!string.Equals(HashFile(inventoryPath), manifest.DependencyInventorySha256, StringComparison.Ordinal))
             throw new CryptographicException("Dependency inventory hash does not match the signed manifest.");
+
+        var artifactFiles = Directory.EnumerateFiles(artifactDirectory, "*", SearchOption.AllDirectories)
+            .Select(path => new { Name = GetRequiredFileName(path), Path = path })
+            .GroupBy(file => file.Name, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Count() == 1
+                    ? group.Single().Path
+                    : throw new InvalidDataException($"Artifact directory contains duplicate filename '{group.Key}'."),
+                StringComparer.Ordinal);
         foreach (var artifact in manifest.Artifacts)
         {
-            var artifactPath = Path.Combine(artifactDirectory, artifact.Name);
-            if (!File.Exists(artifactPath))
-                throw new FileNotFoundException("Signed release artifact is missing.", artifactPath);
+            if (!artifactFiles.TryGetValue(artifact.Name, out var artifactPath))
+                throw new FileNotFoundException("Signed release artifact is missing.", artifact.Name);
             var info = new FileInfo(artifactPath);
             if (info.Length != artifact.SizeBytes ||
                 !string.Equals(HashFile(artifactPath), artifact.Sha256, StringComparison.Ordinal))
+            {
                 throw new CryptographicException($"Artifact '{artifact.Name}' does not match the signed manifest.");
+            }
         }
     }
-    Console.WriteLine($"Verified {manifest.ReleaseId} {manifest.Version} ({manifest.Artifacts.Count} artifact(s)).");
+
+    Console.WriteLine(
+        $"Verified {manifest.PackageId}/{manifest.Target} {manifest.Version} with key {manifest.KeyId} ({manifest.Artifacts.Count} artifact(s)).");
     return 0;
+}
+
+static string GetRequiredFileName(string path)
+{
+    return Path.GetFileName(path)
+           ?? throw new InvalidDataException($"Artifact path does not contain a filename: {path}");
 }
 
 static int GenerateKey(string[] args)
@@ -123,41 +156,82 @@ static int GenerateKey(string[] args)
     var publicPath = Path.GetFullPath(args[2]);
     if (File.Exists(privatePath) || File.Exists(publicPath))
         throw new IOException("Refusing to overwrite an existing signing key.");
-    Directory.CreateDirectory(Path.GetDirectoryName(privatePath)!);
-    Directory.CreateDirectory(Path.GetDirectoryName(publicPath)!);
+
     using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-    File.WriteAllText(privatePath, key.ExportECPrivateKeyPem());
-    File.WriteAllText(publicPath, key.ExportSubjectPublicKeyInfoPem());
+    WriteAtomically(privatePath, System.Text.Encoding.ASCII.GetBytes(key.ExportECPrivateKeyPem()));
+    WriteAtomically(publicPath, System.Text.Encoding.ASCII.GetBytes(key.ExportSubjectPublicKeyInfoPem()));
     Console.WriteLine("Generated an ECDSA P-256 release-signing keypair.");
     return 0;
 }
 
 static void Validate(Manifest manifest)
 {
-    if (manifest.SchemaVersion != 1) throw new InvalidDataException("Unsupported manifest schema.");
-    if (string.IsNullOrWhiteSpace(manifest.ReleaseId) || manifest.ReleaseId.Length > 128)
-        throw new InvalidDataException("ReleaseId is invalid.");
+    if (manifest.SchemaVersion != 2)
+        throw new InvalidDataException("Unsupported manifest schema; schemaVersion 2 is required.");
+    ValidateIdentifier(manifest.KeyId, "keyId", 128);
+    ValidateIdentifier(manifest.Target, "target", 64);
+    ValidateIdentifier(manifest.PackageId, "packageId", 128);
+    ValidateIdentifier(manifest.ReleaseId, "releaseId", 128);
     if (string.IsNullOrWhiteSpace(manifest.Version) || manifest.Version.Length > 64)
-        throw new InvalidDataException("Version is invalid.");
+        throw new InvalidDataException("version is invalid.");
     if (!IsLowerHex(manifest.SourceCommit, 40) && !IsLowerHex(manifest.SourceCommit, 64))
-        throw new InvalidDataException("SourceCommit must be a lowercase Git object id.");
+        throw new InvalidDataException("sourceCommit must be a lowercase Git object id.");
     if (!IsLowerHex(manifest.DependencyInventorySha256, 64))
-        throw new InvalidDataException("DependencyInventorySha256 is invalid.");
+        throw new InvalidDataException("dependencyInventorySha256 is invalid.");
+    if (manifest.GeneratedUtc == default || manifest.GeneratedUtc.Offset != TimeSpan.Zero)
+        throw new InvalidDataException("generatedUtc must be a non-default UTC timestamp.");
     if (manifest.Artifacts.Count is < 1 or > 256)
         throw new InvalidDataException("Artifact count is invalid.");
+
+    var names = new HashSet<string>(StringComparer.Ordinal);
+    string? previousName = null;
     foreach (var artifact in manifest.Artifacts)
     {
-        if (string.IsNullOrWhiteSpace(artifact.Name) || artifact.Name != Path.GetFileName(artifact.Name))
-            throw new InvalidDataException("Artifact names must be bare filenames.");
-        if (artifact.SizeBytes <= 0 || artifact.Sha256.Length != 64 ||
-            artifact.Sha256.Any(c => c is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')))
+        if (string.IsNullOrWhiteSpace(artifact.Name) || artifact.Name != Path.GetFileName(artifact.Name) ||
+            artifact.Name.Contains('/') || artifact.Name.Contains('\\') || !names.Add(artifact.Name))
+        {
+            throw new InvalidDataException("Artifact names must be unique bare filenames.");
+        }
+        if (previousName is not null && StringComparer.Ordinal.Compare(previousName, artifact.Name) >= 0)
+            throw new InvalidDataException("Artifacts must use canonical ordinal filename ordering.");
+        previousName = artifact.Name;
+
+        if (artifact.SizeBytes <= 0 || !IsLowerHex(artifact.Sha256, 64))
             throw new InvalidDataException($"Artifact '{artifact.Name}' metadata is invalid.");
     }
 }
 
-static bool IsLowerHex(string value, int length) =>
+static void ValidateIdentifier(string value, string name, int maximumLength)
+{
+    if (string.IsNullOrWhiteSpace(value) || value.Length > maximumLength ||
+        value.Any(character => !(char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-')))
+    {
+        throw new InvalidDataException($"{name} is invalid.");
+    }
+}
+
+static DateTimeOffset GetGeneratedUtc()
+{
+    var sourceDateEpoch = Environment.GetEnvironmentVariable("SOURCE_DATE_EPOCH");
+    if (string.IsNullOrWhiteSpace(sourceDateEpoch))
+        return DateTimeOffset.UtcNow;
+    if (!long.TryParse(sourceDateEpoch, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds) || seconds < 0)
+        throw new InvalidDataException("SOURCE_DATE_EPOCH must be a non-negative Unix timestamp.");
+    return DateTimeOffset.FromUnixTimeSeconds(seconds);
+}
+
+static void EnsureP256(ECDsa key, string label)
+{
+    const string NistP256Oid = "1.2.840.10045.3.1.7";
+    var parameters = key.ExportParameters(false);
+    if (key.KeySize != 256 ||
+        !string.Equals(parameters.Curve.Oid.Value, NistP256Oid, StringComparison.Ordinal))
+        throw new CryptographicException($"{label} must be ECDSA P-256.");
+}
+
+static bool IsLowerHex(string? value, int length) =>
     value is not null && value.Length == length &&
-    value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
+    value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
 
 static string HashFile(string path)
 {
@@ -165,10 +239,33 @@ static string HashFile(string path)
     return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
 }
 
+static void WriteAtomically(string path, ReadOnlySpan<byte> bytes)
+{
+    var fullPath = Path.GetFullPath(path);
+    Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+    var temporaryPath = fullPath + ".tmp";
+    try
+    {
+        using (var stream = new FileStream(
+                   temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096,
+                   FileOptions.WriteThrough))
+        {
+            stream.Write(bytes);
+            stream.Flush(true);
+        }
+        File.Move(temporaryPath, fullPath, true);
+    }
+    finally
+    {
+        if (File.Exists(temporaryPath))
+            File.Delete(temporaryPath);
+    }
+}
+
 static int Usage()
 {
     Console.Error.WriteLine("Usage:");
-    Console.Error.WriteLine("  create <release-id> <version> <source-commit> <dependency-inventory> <output.json> <private-key.pem> <artifact> [...]");
+    Console.Error.WriteLine("  create <key-id> <target> <package-id> <release-id> <version> <source-commit> <dependency-inventory> <output.json> <private-key.pem> <artifact> [...]");
     Console.Error.WriteLine("  verify <manifest.json> <signature> <public-key.pem> [artifact-directory dependency-inventory]");
     Console.Error.WriteLine("  generate-key <private-key.pem> <public-key.pem>");
     return 2;
@@ -181,12 +278,16 @@ static class Serialization
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
 }
 
 sealed class Manifest
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
+    public string KeyId { get; set; } = string.Empty;
+    public string Target { get; set; } = string.Empty;
+    public string PackageId { get; set; } = string.Empty;
     public string ReleaseId { get; set; } = string.Empty;
     public string Version { get; set; } = string.Empty;
     public string SourceCommit { get; set; } = string.Empty;

@@ -33,6 +33,8 @@ public static class AuthHandler
         }
     }
 
+    internal static int StoredPlayerCount => _storedPlayers.Count;
+
     internal static bool TryReserveConnection(
         ClientHandshake handshake,
         IPAddress sourceAddress,
@@ -134,6 +136,7 @@ public static class AuthHandler
         EvictExpiredStoredPlayers(MaximumExpiryRemovalsPerOperation);
         if (_storedPlayers.Count >= MaximumStoredPlayers && !_storedPlayers.ContainsKey(endPoint))
         {
+            EnrollmentSessionRegistry.Cancel(player.UserId, player.EnrollmentReservation);
             player.ClearSecrets();
             return false;
         }
@@ -142,6 +145,7 @@ public static class AuthHandler
             player,
             (_, previous) =>
             {
+                EnrollmentSessionRegistry.Cancel(previous.UserId, previous.EnrollmentReservation);
                 previous.ClearSecrets();
                 return player;
             });
@@ -154,11 +158,40 @@ public static class AuthHandler
             return false;
         if (DateTime.UtcNow - player.CreatedAtUtc > StoredPlayerTtl)
         {
+            EnrollmentSessionRegistry.Cancel(player.UserId, player.EnrollmentReservation);
             player.ClearSecrets();
             player = null;
             return false;
         }
         return true;
+    }
+
+    internal static void RemoveStoredPlayer(IPEndPoint endPoint)
+    {
+        if (endPoint == null || !_storedPlayers.TryRemove(endPoint, out var player))
+            return;
+        EnrollmentSessionRegistry.Cancel(player.UserId, player.EnrollmentReservation);
+        player.ClearSecrets();
+    }
+
+    /// <summary>
+    /// Drains accepted phase-two handoffs that have not yet been claimed by
+    /// PlayerAuthenticationManager.FixedUpdate. Callers use the returned count
+    /// to decide whether Harmony admission/authentication patches must remain
+    /// installed until those already-accepted peers are rejected.
+    /// </summary>
+    internal static int DrainStoredPlayers()
+    {
+        int drained = 0;
+        foreach (var pair in _storedPlayers)
+        {
+            if (!_storedPlayers.TryRemove(pair.Key, out var player))
+                continue;
+            EnrollmentSessionRegistry.Cancel(player.UserId, player.EnrollmentReservation);
+            player.ClearSecrets();
+            drained++;
+        }
+        return drained;
     }
 
     internal static void Reset()
@@ -169,9 +202,7 @@ public static class AuthHandler
             PendingByAddress.Clear();
             ExpiryOrder.Clear();
         }
-        foreach (var player in _storedPlayers.Values)
-            player.ClearSecrets();
-        _storedPlayers.Clear();
+        DrainStoredPlayers();
     }
 
     private static void EvictExpiredLocked(DateTime now, int maximumRemovals)
@@ -221,6 +252,7 @@ public static class AuthHandler
                 continue;
             if (_storedPlayers.TryRemove(pair.Key, out var expired))
             {
+                EnrollmentSessionRegistry.Cancel(expired.UserId, expired.EnrollmentReservation);
                 expired.ClearSecrets();
                 removed++;
             }

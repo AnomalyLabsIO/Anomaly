@@ -15,8 +15,8 @@ internal static class Program
         {
             Console.Error.WriteLine("Usage: AssetCatalog <path-to-ExportedProject> [--out <dir>] [--docs <anomaly-docs-root>]");
             Console.Error.WriteLine();
-            Console.Error.WriteLine("Walks an AssetRipper export and emits asset catalogs (audio + texture + mesh)");
-            Console.Error.WriteLine("as JSON to <out>/ and as Starlight .mdx pages into <docs>/src/content/docs/reference/.");
+            Console.Error.WriteLine("Walks an AssetRipper export and emits the supported local-audio catalog");
+            Console.Error.WriteLine("as JSON to <out>/ and as a Starlight .mdx page into <docs>/src/content/docs/reference/.");
             return 64;
         }
 
@@ -50,12 +50,6 @@ internal static class Program
         var audio = AudioCatalog.Build(exportRoot);
         Console.WriteLine($"Audio    : {audio.Count} entries ({audio.Count(e => e.Category == "Cassie")} CASSIE).");
 
-        var textures = PlaceholderCatalog.BuildTextures(exportRoot);
-        Console.WriteLine($"Textures : {textures.Count} entries (engine-loadable scope).");
-
-        var meshes = PlaceholderCatalog.BuildMeshes(exportRoot);
-        Console.WriteLine($"Meshes   : {meshes.Count} entries (enumeration only — overrides not yet supported).");
-
         var jsonOpts = new JsonSerializerOptions
         {
             WriteIndented = true,
@@ -63,9 +57,7 @@ internal static class Program
         };
 
         File.WriteAllText(Path.Combine(outDir, "audio_catalog.json"), JsonSerializer.Serialize(audio, jsonOpts));
-        File.WriteAllText(Path.Combine(outDir, "texture_catalog.json"), JsonSerializer.Serialize(textures, jsonOpts));
-        File.WriteAllText(Path.Combine(outDir, "mesh_catalog.json"), JsonSerializer.Serialize(meshes, jsonOpts));
-        Console.WriteLine($"Wrote JSON catalogs to {outDir}");
+        Console.WriteLine($"Wrote the audio JSON catalog to {outDir}");
 
         if (docsRoot != null)
         {
@@ -77,9 +69,7 @@ internal static class Program
             else
             {
                 File.WriteAllText(Path.Combine(docsRefDir, "07-asset-catalog-audio.mdx"), AudioCatalog.RenderMdx(audio, exportRoot));
-                File.WriteAllText(Path.Combine(docsRefDir, "08-asset-catalog-textures.mdx"), PlaceholderCatalog.RenderTexturesMdx(textures, exportRoot));
-                File.WriteAllText(Path.Combine(docsRefDir, "09-asset-catalog-meshes.mdx"), PlaceholderCatalog.RenderMeshesMdx(meshes, exportRoot));
-                Console.WriteLine($"Wrote .mdx pages to {docsRefDir}");
+                Console.WriteLine($"Wrote the audio .mdx page to {docsRefDir}");
             }
         }
 
@@ -300,8 +290,8 @@ internal static class AudioCatalog
         sb.AppendLine();
         sb.AppendLine("This page lists every overridable audio clip in SCP:SL. Drop your replacement file at the listed override path under `MelonLoader/UserData/Anomaly/Overrides/` to substitute it. Both `.ogg` (Vorbis, the game's native format) and `.wav` (PCM int16/24/32 or float32) are accepted.");
         sb.AppendLine();
-        sb.AppendLine("<Aside type=\"note\" title=\"Precedence\">");
-        sb.AppendLine("When the server pushes an override at the same path, the server wins by default. Servers can opt-in per asset to allow your local override to take priority — see the [Asset and File-Transfer Lifecycle](/reference/04-asset-lifecycle/) chapter.");
+        sb.AppendLine("<Aside type=\"note\" title=\"Local-only surface\">");
+        sb.AppendLine("Authenticated server content is hash-addressed and does not use or replace these local audio paths.");
         sb.AppendLine("</Aside>");
         sb.AppendLine();
         sb.AppendLine($"**Total entries:** {entries.Count}.");
@@ -424,138 +414,4 @@ internal static class CassieWordsParser
         if (apiName != null && guid != null)
             yield return new CassieWordEntry(apiName, guid, type, duration);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Texture / Mesh placeholder catalogs (Phase 1)
-// ---------------------------------------------------------------------------
-
-internal sealed record AssetEntry(string Kind, string AssetPath, string OverrideAt, long Size, string Sha256, string? Note);
-
-internal static class PlaceholderCatalog
-{
-    public static List<AssetEntry> BuildTextures(string exportRoot)
-    {
-        var entries = new List<AssetEntry>();
-        string resourcesDir = Path.Combine(exportRoot, "Assets", "Resources");
-        if (!Directory.Exists(resourcesDir))
-            return entries;
-
-        foreach (var png in Directory.EnumerateFiles(resourcesDir, "*.png", SearchOption.AllDirectories))
-        {
-            string rel = Path.GetRelativePath(resourcesDir, png).Replace('\\', '/');
-            string assetPath = "Texture2D/" + StripExt(rel);
-            entries.Add(new AssetEntry(
-                Kind: "Texture2D",
-                AssetPath: assetPath,
-                OverrideAt: "Overrides/Texture2D/" + rel,
-                Size: new FileInfo(png).Length,
-                Sha256: "",
-                Note: "Phase 2 — runtime hook not yet wired"));
-        }
-
-        return entries.OrderBy(e => e.AssetPath, StringComparer.OrdinalIgnoreCase).ToList();
-    }
-
-    public static List<AssetEntry> BuildMeshes(string exportRoot)
-    {
-        var entries = new List<AssetEntry>();
-        string meshDir = Path.Combine(exportRoot, "Assets", "Mesh");
-        if (!Directory.Exists(meshDir))
-            return entries;
-
-        foreach (var f in Directory.EnumerateFiles(meshDir, "*.*", SearchOption.AllDirectories))
-        {
-            var ext = Path.GetExtension(f).ToLowerInvariant();
-            if (ext != ".obj" && ext != ".fbx" && ext != ".asset")
-                continue;
-            string rel = Path.GetRelativePath(meshDir, f).Replace('\\', '/');
-            string assetPath = "Mesh/" + StripExt(rel);
-            entries.Add(new AssetEntry(
-                Kind: "Mesh",
-                AssetPath: assetPath,
-                OverrideAt: "Overrides/Mesh/" + rel,
-                Size: new FileInfo(f).Length,
-                Sha256: "",
-                Note: "Mesh overrides not yet supported — use AssetBundles via the spawn pipeline"));
-        }
-
-        return entries.OrderBy(e => e.AssetPath, StringComparer.OrdinalIgnoreCase).ToList();
-    }
-
-    public static string RenderTexturesMdx(List<AssetEntry> entries, string exportRoot)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("---");
-        sb.AppendLine("title: Asset Catalog — Textures");
-        sb.AppendLine("description: Engine-loadable textures and sprites in SCP:SL by replacement path. Path-keyed texture overrides land in Phase 2.");
-        sb.AppendLine("---");
-        sb.AppendLine();
-        sb.AppendLine($"{{/* @generated by tools/AssetCatalog from {Path.GetFileName(exportRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))} on {DateTime.UtcNow:yyyy-MM-dd}. Do not edit manually. */}}");
-        sb.AppendLine();
-        sb.AppendLine("import { Aside } from '@astrojs/starlight/components';");
-        sb.AppendLine();
-        sb.AppendLine("Engine-loadable textures (those reachable via `Resources.Load<Texture2D>`) that will be overridable once the path-keyed texture hook lands in Phase 2.");
-        sb.AppendLine();
-        sb.AppendLine("<Aside type=\"caution\" title=\"Phase 2\">");
-        sb.AppendLine("Path-keyed texture overrides are not yet wired at runtime. The existing per-NetId texture pipeline (player skins, specific door textures) continues to work via `AssetOverrideTextureMessage`. This catalog enumerates the assets that *will* be overridable via the unified `Overrides/Texture2D/` directory once Phase 2 ships.");
-        sb.AppendLine("</Aside>");
-        sb.AppendLine();
-        sb.AppendLine($"**Total entries:** {entries.Count}.");
-        sb.AppendLine();
-        sb.AppendLine("| Asset | Override Path | Size |");
-        sb.AppendLine("| --- | --- | --- |");
-        foreach (var e in entries)
-        {
-            sb.AppendLine($"| `{Escape(e.AssetPath)}` | `{Escape(e.OverrideAt)}` | {FormatSize(e.Size)} |");
-        }
-        return sb.ToString();
-    }
-
-    public static string RenderMeshesMdx(List<AssetEntry> entries, string exportRoot)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("---");
-        sb.AppendLine("title: Asset Catalog — Meshes");
-        sb.AppendLine("description: Mesh assets in SCP:SL. Mesh overrides are not yet supported — use AssetBundles via the spawn pipeline.");
-        sb.AppendLine("---");
-        sb.AppendLine();
-        sb.AppendLine($"{{/* @generated by tools/AssetCatalog from {Path.GetFileName(exportRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))} on {DateTime.UtcNow:yyyy-MM-dd}. Do not edit manually. */}}");
-        sb.AppendLine();
-        sb.AppendLine("import { Aside } from '@astrojs/starlight/components';");
-        sb.AppendLine();
-        sb.AppendLine("<Aside type=\"caution\" title=\"Not yet supported\">");
-        sb.AppendLine("Mesh overrides via the `Overrides/Mesh/` directory are not implemented. Pure-managed `.obj`/`.fbx` parsing in Il2CppInterop is non-trivial; for now, ship custom geometry via the existing AssetBundle spawn pipeline.");
-        sb.AppendLine();
-        sb.AppendLine("This page lists known mesh assets so the directory layout is documented for the future.");
-        sb.AppendLine("</Aside>");
-        sb.AppendLine();
-        sb.AppendLine($"**Total entries:** {entries.Count}.");
-        sb.AppendLine();
-        sb.AppendLine("| Asset | Reserved Override Path | Size |");
-        sb.AppendLine("| --- | --- | --- |");
-        foreach (var e in entries.Take(500))
-        {
-            sb.AppendLine($"| `{Escape(e.AssetPath)}` | `{Escape(e.OverrideAt)}` | {FormatSize(e.Size)} |");
-        }
-        if (entries.Count > 500)
-            sb.AppendLine($"\n_(showing first 500 of {entries.Count}.)_");
-        return sb.ToString();
-    }
-
-    private static string FormatSize(long bytes)
-    {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return (bytes / 1024.0).ToString("0.0", CultureInfo.InvariantCulture) + " KB";
-        return (bytes / (1024.0 * 1024.0)).ToString("0.0", CultureInfo.InvariantCulture) + " MB";
-    }
-
-    private static string StripExt(string p)
-    {
-        int dot = p.LastIndexOf('.');
-        int slash = p.LastIndexOf('/');
-        return dot > slash && dot >= 0 ? p.Substring(0, dot) : p;
-    }
-
-    private static string Escape(string s) => s.Replace("|", "\\|").Replace("`", "\\`");
 }

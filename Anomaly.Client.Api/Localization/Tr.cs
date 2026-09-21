@@ -5,7 +5,7 @@ using MelonLoader.Utils;
 namespace Anomaly.Client.Api.Localization;
 
 /// <summary>
-/// Public translation facade. Third-party mods should call <see cref="RegisterMod"/>
+/// Public translation facade. Third-party mods should call <see cref="RegisterMod(string)"/>
 /// to register their own namespace, then use <see cref="Get(string)"/> / <see cref="Get(string, object[])"/>
 /// to look up keys.
 ///

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Events;
 using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Auth;
 using Anomaly.Client.Components;
@@ -35,7 +36,9 @@ public static class PlayerAuthenticationManagerPatch
     private const int MaxPendingClientMessages = 64;
     private const int MaxPendingClientBytes = 2 * 1024 * 1024;
     private const uint GenericTransportRateKeyPrefix = 0xFFF00000u;
+    private const uint RawTransportRateKey = 0xFFE00000u;
     private static readonly Dictionary<EncryptedChannelManager.EncryptedChannel, List<PendingEncryptedMessage>> PendingClientMessages = new();
+    private static readonly InboundEnvelopeDispatchCoalescer ReceiveDispatchCoalescer = new();
     private static int _pendingClientMessageCount;
     private static int _pendingClientBytes;
 
@@ -47,9 +50,9 @@ public static class PlayerAuthenticationManagerPatch
         if (!AuthHandler.UsingAnomalyAuth) return;
         AuthStatusOverlay.EndAuthenticating();
         ConnectionInfoOverlay.EndOverride();
-        // Protocol v2 never places a bidirectional session key on the game's
-        // public EncryptedChannelManager object. Our prefixes below encrypt
-        // each direction with its dedicated key.
+        // Anomaly's directional authenticated transport never places a
+        // bidirectional session key on the game's public EncryptedChannelManager
+        // object. Our prefixes below encrypt each direction with its dedicated key.
         __instance._hub.encryptedChannelManager.EncryptionKey = null;
         FlushPendingClientMessages();
     }
@@ -102,9 +105,8 @@ public static class PlayerAuthenticationManagerPatch
         _lastSendFrame = frame;
         _lastSendFingerprint = fp;
 
-        if (__instance._txCounter == 4294967295U)
-            __instance._txCounter = 0;
-        __instance._txCounter++;
+        if (!TryAdvanceTransportCounter(__instance))
+            return false;
 
         // `data` is a managed byte[]. `using Il2CppSystem.Text;` makes the bare
         // `Encoding.UTF8` resolve to the IL2CPP wrapper, which marshals managed
@@ -135,7 +137,10 @@ public static class PlayerAuthenticationManagerPatch
         {
             if (!AnomalyMessaging.TryEncryptClientEnvelope(data, out var encryptedData))
             {
-                MelonLogger.Warning("Tried to send encrypted message without a protocol-v2 transport session.");
+                AnomalyMessaging.FailClosedTransport(
+                    "The client-to-server encrypted send path lost its directional authenticated transport session.");
+                SafeLogWarning(
+                    "Tried to send encrypted message without a directional authenticated transport session.");
                 result = false;
                 return false;
             }
@@ -144,11 +149,20 @@ public static class PlayerAuthenticationManagerPatch
                 EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
                 encryptedData,
                 0);
+            if (!result)
+            {
+                AnomalyMessaging.FailClosedTransport(
+                    "The required client-to-server encrypted delivery path rejected the packet.");
+                SafeLogWarning("Encrypted client-to-server delivery returned false.");
+            }
             return false;
         }
         catch (Exception ex)
         {
-            MelonLogger.Warning($"Failed to encrypt client-to-server message: {ex.GetType().Name}: {ex.Message}");
+            AnomalyMessaging.FailClosedTransport(
+                "The required client-to-server encrypted send path failed.");
+            SafeLogWarning(
+                $"Failed to encrypt or deliver client-to-server message: {ex.GetType().Name}: {ex.Message}");
             result = false;
             return false;
         }
@@ -169,24 +183,62 @@ public static class PlayerAuthenticationManagerPatch
         // state on AnomalyReplayTable), which naturally rejects the duplicate
         // dispatches as replays.
 
-        ReferenceHub hub = LocalPlayer.Instance?.ReferenceHub;
-        if (hub == null && !PlayerRegistry.TryGetLocalHub(out hub))
+        byte[] packedData = packed.Data;
+        var rawLimiter = AnomalyReplayTable.RawInboundRateLimiter;
+        var dispatchDisposition = ReceiveDispatchCoalescer.Observe(
+            UnityEngine.Time.frameCount,
+            (byte)packed.Level,
+            packedData);
+        if (dispatchDisposition == InboundEnvelopeDispatchCoalescer.DispatchDisposition.IgnoreExpectedDuplicate)
+            return false;
+        if (dispatchDisposition == InboundEnvelopeDispatchCoalescer.DispatchDisposition.ChargeExcessDuplicate)
         {
-            MelonLogger.Warning("Got encrypted message before the local player hub was ready.");
+            HandleRawTransportResult(
+                rawLimiter.RegisterProtocolViolation(),
+                "Encrypted-channel receive exceeded the expected duplicate Harmony invocation count.");
             return false;
         }
 
-        byte[] packedData = packed.Data;
-        if (packedData == null || packedData.Length == 0)
+        if (packedData == null)
         {
-            MelonLogger.Warning("Got encrypted channel message with an empty payload.");
+            HandleRawTransportResult(
+                rawLimiter.RegisterProtocolViolation(),
+                "Encrypted-channel payload was null.");
+            return false;
+        }
+        if (packedData.Length == 0)
+        {
+            HandleRawTransportResult(
+                rawLimiter.RegisterProtocolViolation(),
+                "Encrypted-channel payload was empty.");
             return false;
         }
         if (packedData.Length > AnomalyChannel.MaxEncryptedEnvelopeBytes)
         {
-            MelonLogger.Warning(
-                $"Dropping encrypted-channel message over the absolute ceiling " +
+            HandleRawTransportResult(
+                rawLimiter.RegisterProtocolViolation(),
+                $"Encrypted-channel payload exceeded the absolute ceiling " +
                 $"({packedData.Length}/{AnomalyChannel.MaxEncryptedEnvelopeBytes} bytes).");
+            return false;
+        }
+
+        var rawRateResult = rawLimiter.TryAccept(
+            RawTransportRateKey,
+            Math.Min(packedData.Length, AnomalyChannel.MaxEnvelopeBytes));
+        if (!rawRateResult.Allowed)
+        {
+            HandleRawTransportResult(
+                rawRateResult,
+                $"Pre-decrypt traffic exceeded bounded packet/byte limits ({packedData.Length} bytes).");
+            return false;
+        }
+
+        ReferenceHub hub = LocalPlayer.Instance?.ReferenceHub;
+        if (hub == null && !PlayerRegistry.TryGetLocalHub(out hub))
+        {
+            HandleRawTransportResult(
+                rawLimiter.RegisterProtocolViolation(),
+                "Encrypted message arrived before the local player hub was ready.");
             return false;
         }
 
@@ -195,7 +247,9 @@ public static class PlayerAuthenticationManagerPatch
         {
             if (!AuthTransportCrypto.IsVersion2Envelope(packedData))
             {
-                MelonLogger.Warning("Rejected a legacy/bidirectional encrypted envelope during protocol-v2 authentication.");
+                HandleRawTransportResult(
+                    rawLimiter.RegisterProtocolViolation(),
+                    "Rejected a legacy or malformed directional AEAD v2 envelope for application protocol v3.");
                 return false;
             }
 
@@ -203,13 +257,17 @@ public static class PlayerAuthenticationManagerPatch
             {
                 if (!AnomalyMessaging.TryDecryptServerEnvelope(packedData, out decryptedData))
                 {
-                    MelonLogger.Warning("Got an encrypted message before the protocol-v2 transport session was ready.");
+                    HandleRawTransportResult(
+                        rawLimiter.RegisterProtocolViolation(),
+                        "Encrypted message had no directional authenticated transport session.");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"Failed to decrypt encrypted-channel message ({packedData.Length} bytes): {ex.GetType().Name}: {ex.Message}");
+                HandleRawTransportResult(
+                    rawLimiter.RegisterProtocolViolation(),
+                    $"Encrypted message authentication failed ({packedData.Length} bytes, error={ex.GetType().Name}).");
                 return false;
             }
         }
@@ -217,7 +275,9 @@ public static class PlayerAuthenticationManagerPatch
         {
             if (!NetworkServer.active)
             {
-                MelonLogger.Warning("Dropping unsecured encrypted-channel message from a remote server.");
+                HandleRawTransportResult(
+                    rawLimiter.RegisterProtocolViolation(),
+                    "Rejected an unsecured encrypted-channel message from a remote server.");
                 return false;
             }
 
@@ -225,13 +285,17 @@ public static class PlayerAuthenticationManagerPatch
         }
         else
         {
-            MelonLogger.Warning($"Dropping encrypted-channel message with unknown security level {packed.Level}.");
+            HandleRawTransportResult(
+                rawLimiter.RegisterProtocolViolation(),
+                $"Rejected an encrypted-channel message with unknown security level {packed.Level}.");
             return false;
         }
 
         if (decryptedData == null || decryptedData.Length < EncryptedMessageHeaderSize)
         {
-            MelonLogger.Warning($"Decoded encrypted-channel message was too short ({decryptedData?.Length ?? 0} bytes).");
+            HandleRawTransportResult(
+                rawLimiter.RegisterProtocolViolation(),
+                $"Decoded encrypted-channel message was too short ({decryptedData?.Length ?? 0} bytes).");
             return false;
         }
 
@@ -258,17 +322,16 @@ public static class PlayerAuthenticationManagerPatch
             var rateResult = AnomalyReplayTable.InboundRateLimiter.TryAccept(rateKey, payloadBytes);
             if (!rateResult.Allowed)
             {
-                if (rateResult.ShouldLog)
-                {
-                    MelonLogger.Warning(
-                        $"Rate-limited generic encrypted channel {channel} " +
-                        $"({payloadBytes} bytes, drops={rateResult.DroppedInWindow}).");
-                }
                 if (rateResult.ShouldDisconnect)
                 {
-                    MelonLogger.Error(
-                        "Disconnecting after sustained generic encrypted-channel traffic exceeded bounded limits.");
-                    NetworkClient.connection?.Disconnect();
+                    AnomalyMessaging.FailClosedTransport(
+                        "Sustained generic encrypted-channel traffic exceeded bounded limits.");
+                }
+                if (rateResult.ShouldLog)
+                {
+                    SafeLogWarning(
+                        $"Rate-limited generic encrypted channel {channel} " +
+                        $"({payloadBytes} bytes, drops={rateResult.DroppedInWindow}).");
                 }
                 return false;
             }
@@ -279,16 +342,26 @@ public static class PlayerAuthenticationManagerPatch
         Array.Copy(decryptedData, EncryptedMessageHeaderSize, content, 0, content.Length);
         EncryptedChannelManager.EncryptedMessage message = new EncryptedChannelManager.EncryptedMessage(channel, content, counter);
 
-        if (hub.encryptedChannelManager._rxCounter == 4294967295U)
-            hub.encryptedChannelManager._rxCounter = 0;
+        if (counter == 0U || counter == uint.MaxValue)
+        {
+            FailTransportCounter("Received an invalid or exhausted generic transport counter.");
+            return false;
+        }
 
         if(counter <= hub.encryptedChannelManager._rxCounter)
         {
-            MelonLogger.Warning(string.Format("Received message with counter {0}, which is lower or equal to last received message counter {1}. Discarding message!", counter, hub.encryptedChannelManager._rxCounter));
+            HandleRawTransportResult(
+                rawLimiter.RegisterProtocolViolation(),
+                $"Rejected encrypted counter {counter}; high-water mark is {hub.encryptedChannelManager._rxCounter}.");
             return false;
         }
 
         hub.encryptedChannelManager._rxCounter = counter;
+        if (counter >= uint.MaxValue - 1U)
+        {
+            FailTransportCounter("Generic receive counter reached its final usable value.");
+            return false;
+        }
 
 
         if (!EncryptedChannelManager.ClientChannelHandlers.ContainsKey(channel))
@@ -297,17 +370,43 @@ public static class PlayerAuthenticationManagerPatch
             return false;
         }
 
-        try
-        {
-            FlushPendingClientMessages(channel);
-            EncryptedChannelManager.ClientChannelHandlers[channel].Invoke(message, packed.Level);
-        }
-        catch(Exception ex)
-        {
-            Il2CppGameCore.Console.AddLog(string.Format("Exception while handling encrypted message on channel {0} (client, running a handler). Exception: {1}", channel, ex.Message), Color.red, false, ConsoleLogType.Log);
-            Il2CppGameCore.Console.AddLog(ex.StackTrace, Color.red, false, ConsoleLogType.Log);
-        }
+        FlushPendingClientMessages(channel);
+        InvokeClientChannelHandler(
+            channel,
+            EncryptedChannelManager.ClientChannelHandlers[channel],
+            message,
+            packed.Level);
         return false;
+    }
+
+    internal static bool TryAdvanceTransportCounter(EncryptedChannelManager manager)
+    {
+        if (manager == null || manager._txCounter >= uint.MaxValue - 1U)
+        {
+            FailTransportCounter("Authenticated transport counter exhausted before wrap.");
+            return false;
+        }
+
+        manager._txCounter++;
+        return true;
+    }
+
+    private static void FailTransportCounter(string reason)
+    {
+        AnomalyMessaging.FailClosedTransport(reason);
+    }
+
+    private static void HandleRawTransportResult(AnomalyRateLimitResult result, string message)
+    {
+        if (result.ShouldDisconnect && !NetworkServer.active)
+        {
+            AnomalyMessaging.FailClosedTransport(
+                "Sustained invalid or excessive pre-decrypt traffic was rejected.");
+        }
+        if (result.ShouldLog)
+        {
+            SafeLogWarning($"{message} Drops={result.DroppedInWindow}.");
+        }
     }
 
     private static long ComputeSendFingerprint(string content, EncryptedChannelManager.EncryptedChannel channel)
@@ -371,17 +470,16 @@ public static class PlayerAuthenticationManagerPatch
         int byteCount)
     {
         var violation = AnomalyReplayTable.InboundRateLimiter.RegisterProtocolViolation();
-        if (violation.ShouldLog)
-        {
-            MelonLogger.Warning(
-                $"Dropped encrypted channel {channel} while its handler was unavailable because the bounded " +
-                $"pending queue was full (messageBytes={byteCount}, drops={violation.DroppedInWindow}).");
-        }
         if (violation.ShouldDisconnect && !NetworkServer.active)
         {
-            MelonLogger.Error(
-                "Disconnecting after sustained encrypted-channel pending-queue overflow from the server.");
-            NetworkClient.connection?.Disconnect();
+            AnomalyMessaging.FailClosedTransport(
+                "Sustained encrypted-channel pending-queue overflow was rejected.");
+        }
+        if (violation.ShouldLog)
+        {
+            SafeLogWarning(
+                $"Dropped encrypted channel {channel} while its handler was unavailable because the bounded " +
+                $"pending queue was full (messageBytes={byteCount}, drops={violation.DroppedInWindow}).");
         }
     }
 
@@ -402,16 +500,49 @@ public static class PlayerAuthenticationManagerPatch
             return;
 
         var handler = EncryptedChannelManager.ClientChannelHandlers[channel];
-        MelonLogger.Msg($"Flushing {pending.Count} queued encrypted messages for client channel {channel}.");
+        int pendingCount = pending.Count;
         PendingClientMessages.Remove(channel);
         _pendingClientMessageCount = Math.Max(0, _pendingClientMessageCount - pending.Count);
         foreach (var pendingMessage in pending)
             _pendingClientBytes = Math.Max(0, _pendingClientBytes - pendingMessage.ByteCount);
 
         foreach (var pendingMessage in pending)
-            handler.Invoke(pendingMessage.Message, pendingMessage.SecurityLevel);
+        {
+            InvokeClientChannelHandler(
+                channel,
+                handler,
+                pendingMessage.Message,
+                pendingMessage.SecurityLevel);
+        }
 
         pending.Clear();
+        try { MelonLogger.Msg($"Flushed {pendingCount} queued encrypted messages for client channel {channel}."); }
+        catch { }
+    }
+
+    private static void InvokeClientChannelHandler(
+        EncryptedChannelManager.EncryptedChannel channel,
+        EncryptedChannelManager.EncryptedMessageClientHandler handler,
+        EncryptedChannelManager.EncryptedMessage message,
+        EncryptedChannelManager.SecurityLevel securityLevel)
+    {
+        foreach (Il2CppSystem.Delegate subscriber in handler.GetInvocationList())
+        {
+            try
+            {
+                ((EncryptedChannelManager.EncryptedMessageClientHandler)subscriber)
+                    .Invoke(message, securityLevel);
+            }
+            catch (Exception exception)
+            {
+                try
+                {
+                    MelonLogger.Error(
+                        $"Encrypted client channel {channel} handler threw: {exception}");
+                }
+                catch { }
+            }
+        }
     }
 
     internal static void ResetPendingClientMessages()
@@ -419,6 +550,15 @@ public static class PlayerAuthenticationManagerPatch
         PendingClientMessages.Clear();
         _pendingClientMessageCount = 0;
         _pendingClientBytes = 0;
+        ReceiveDispatchCoalescer.Reset();
+        _lastSendFrame = -1;
+        _lastSendFingerprint = 0;
+    }
+
+    private static void SafeLogWarning(string message)
+    {
+        try { MelonLogger.Warning(message); }
+        catch { }
     }
 }
 
@@ -503,9 +643,8 @@ internal static class OptionalByteArrayClientSendPatch
         _lastSendFrame = frame;
         _lastSendFingerprint = fingerprint;
 
-        if (__instance._txCounter == uint.MaxValue)
-            __instance._txCounter = 0;
-        __instance._txCounter++;
+        if (!PlayerAuthenticationManagerPatch.TryAdvanceTransportCounter(__instance))
+            return false;
 
         var data = new byte[content.Length + 5];
         data[0] = (byte)channel;

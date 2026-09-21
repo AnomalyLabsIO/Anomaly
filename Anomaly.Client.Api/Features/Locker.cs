@@ -13,7 +13,7 @@ namespace Anomaly.Client.Api.Features;
 /// </summary>
 /// <remarks>
 /// <para>Lockers are <c>SpawnableStructure</c>s placed by the map generator;
-/// the wrapper enumerates via <see cref="Object.FindObjectsOfType{T}()"/>.
+/// the wrapper enumerates via <c>UnityEngine.Object.FindObjectsOfType&lt;T&gt;()</c>.
 /// Chamber state is replicated through the locker's <c>OpenedChambers</c>
 /// SyncVar (a flag bitmask).</para>
 /// </remarks>
@@ -147,7 +147,7 @@ public sealed class LockerChamberWrapper
     public Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppStructArray<ItemType> AcceptableItems =>
         Base?.AcceptableItems;
 
-    /// <summary>The current contents of the chamber as raw <see cref="ItemPickupBase"/> instances.</summary>
+    /// <summary>The current contents of the chamber as raw <see cref="Il2CppInventorySystem.Items.Pickups.ItemPickupBase"/> instances.</summary>
     public Il2CppSystem.Collections.Generic.List<Il2CppInventorySystem.Items.Pickups.ItemPickupBase> Contents =>
         Base?.Content;
 

@@ -11,8 +11,54 @@ using Anomaly.Shared.Networking.Messages;
 
 public sealed class ReferenceHub
 {
+    public uint netId { get; set; }
     public Mirror.NetworkConnectionToClient connectionToClient { get; set; } =
         new Mirror.NetworkConnectionToClient { isReady = true };
+}
+
+namespace Anomaly.Server.Content
+{
+    internal static class ServerContentRegistrar
+    {
+        public static bool RegisterItems(IEnumerable<Anomaly.Shared.Content.CatalogEntry> entries) => true;
+        public static bool Reset() => true;
+    }
+
+    public sealed class CustomItemDefinition
+    {
+        public string Key { get; set; }
+        public InventorySystem.ItemType BaseTemplate { get; set; } = InventorySystem.ItemType.Coin;
+        public string DisplayName { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string IconPath { get; set; }
+        public ItemLogicBase Logic { get; set; }
+    }
+
+    public abstract class ItemLogicBase
+    {
+    }
+}
+
+namespace InventorySystem
+{
+    public enum ItemType
+    {
+        Coin = 0,
+    }
+
+    public static class InventoryItemLoader
+    {
+        public static Dictionary<ItemType, object> AvailableItems { get; } =
+            new Dictionary<ItemType, object>();
+    }
+}
+
+namespace Anomaly.Server.Assets
+{
+    internal static class AssetRegistry
+    {
+        public static byte[] GetHashByPath(string path) => null;
+    }
 }
 
 public static class ReferenceHubStressTestExtensions
@@ -20,11 +66,40 @@ public static class ReferenceHubStressTestExtensions
     public static string LoggedNameFromRefHub(this ReferenceHub hub) => "stress-test-peer";
 }
 
+namespace Anomaly.Server
+{
+    internal static class Plugin
+    {
+        public static int QuarantineCount { get; private set; }
+        public static ReferenceHub LastQuarantinedHub { get; private set; }
+        public static string LastQuarantineContext { get; private set; }
+
+        public static void QuarantineAuthenticatedPlayer(ReferenceHub hub, string context)
+        {
+            QuarantineCount++;
+            LastQuarantinedHub = hub;
+            LastQuarantineContext = context;
+        }
+
+        public static void ResetForTests()
+        {
+            QuarantineCount = 0;
+            LastQuarantinedHub = null;
+            LastQuarantineContext = null;
+        }
+    }
+}
+
 namespace Mirror
 {
     public sealed class NetworkConnectionToClient
     {
         public bool isReady;
+
+        public void Disconnect()
+        {
+            isReady = false;
+        }
     }
 }
 
@@ -38,14 +113,22 @@ namespace MEC
     public static class Timing
     {
         public static float WaitForOneFrame => 0f;
+        public static bool ThrowOnKill { get; set; }
+        public static bool ThrowOnRun { get; set; }
 
         public static float WaitForSeconds(float seconds) => seconds;
 
         public static CoroutineHandle RunCoroutine(IEnumerator<float> routine)
-            => new CoroutineHandle { IsRunning = routine != null };
+        {
+            if (ThrowOnRun)
+                throw new InvalidOperationException("injected coroutine-start failure");
+            return new CoroutineHandle { IsRunning = routine != null };
+        }
 
         public static void KillCoroutines(CoroutineHandle handle)
         {
+            if (ThrowOnKill)
+                throw new InvalidOperationException("injected coroutine-cancellation failure");
         }
     }
 }
@@ -91,11 +174,31 @@ namespace Anomaly.Server.Networking
     internal static class AnomalyMessaging
     {
         public static readonly List<IAnomalyMessage> Sent = new List<IAnomalyMessage>();
+        public static Func<IAnomalyMessage, bool> TrySendResult =
+            _ => true;
+        public static Func<IAnomalyMessage, Exception> TrySendException =
+            _ => null;
 
         public static void SendToClient(ReferenceHub hub, IAnomalyMessage message)
             => Sent.Add(message);
 
-        public static void ResetForTests() => Sent.Clear();
+        public static bool TrySendToClient(ReferenceHub hub, IAnomalyMessage message)
+        {
+            Exception exception = TrySendException(message);
+            if (exception != null)
+                throw exception;
+            bool delivered = TrySendResult(message);
+            if (delivered)
+                Sent.Add(message);
+            return delivered;
+        }
+
+        public static void ResetForTests()
+        {
+            Sent.Clear();
+            TrySendResult = _ => true;
+            TrySendException = _ => null;
+        }
     }
 }
 
@@ -130,11 +233,21 @@ namespace Anomaly.Server.FileTransfer
                     asset.Size,
                     asset.Kind));
             }
+            message.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(message.Files);
             return message;
         }
 
         public static string ToHex(byte[] hash)
             => BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+
+        public static byte[] ComputeCurrentManifestSha256()
+            => FileManifestMessage.ComputeManifestSha256(Array.Empty<FileManifestMessage.FileEntry>());
+
+        public static bool TryGetAsset(byte[] hash, out AssetInfo asset)
+        {
+            asset = default;
+            return hash != null && Assets.TryGetValue(ToHex(hash), out asset);
+        }
 
         public struct AssetInfo
         {
@@ -158,10 +271,22 @@ namespace Anomaly.Client.Api.Features
     }
 }
 
+namespace Anomaly.Client.Api.Assets
+{
+    internal static class AnomalyResources
+    {
+        public static void SetRemoteAssetAuthorization(Func<byte[], AssetKind, bool> authorization)
+        {
+        }
+    }
+}
+
 namespace Anomaly.Client.Api.FileTransfer
 {
     internal static class FileCache
     {
+        public static bool ThrowOnImport { get; set; }
+
         public static string ToHex(byte[] hash)
             => BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
 
@@ -177,6 +302,8 @@ namespace Anomaly.Client.Api.FileTransfer
             string originalPath,
             uint expectedSize)
         {
+            if (ThrowOnImport)
+                throw new IOException("injected cache-import failure");
             if (!File.Exists(tempPath) || new FileInfo(tempPath).Length != expectedSize)
                 return false;
 
@@ -199,6 +326,14 @@ namespace Anomaly.Client.Api.FileTransfer
 
 namespace Anomaly.Client.Api.Events.Args
 {
+    internal sealed class ClientConnectedEventArgs
+    {
+    }
+
+    internal sealed class ClientReadyEventArgs
+    {
+    }
+
     internal sealed class FileTransferProgressEventArgs
     {
         public FileTransferProgressEventArgs(
@@ -224,13 +359,13 @@ namespace Anomaly.Client.Api.Events.Handlers
 {
     internal static class ClientEvents
     {
-        public static event Action<object> Connected
+        public static event Action<Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs> Connected
         {
             add { }
             remove { }
         }
 
-        public static event Action<object> Ready
+        public static event Action<Anomaly.Client.Api.Events.Args.ClientReadyEventArgs> Ready
         {
             add { }
             remove { }
@@ -239,6 +374,8 @@ namespace Anomaly.Client.Api.Events.Handlers
 
     internal static class FileTransferEvents
     {
+        public static bool ThrowOnComplete { get; set; }
+
         public static void OnProgress(
             Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs args)
         {
@@ -247,6 +384,8 @@ namespace Anomaly.Client.Api.Events.Handlers
         public static void OnComplete(
             Anomaly.Client.Api.Events.Args.FileTransferCompleteEventArgs args)
         {
+            if (ThrowOnComplete)
+                throw new InvalidOperationException("injected completion-event failure");
         }
     }
 }
@@ -281,6 +420,12 @@ namespace Anomaly.Client.Api.Networking
 
         public static void Send(IAnomalyMessage message) => Sent.Add(message);
 
+        public static bool TrySend(IAnomalyMessage message)
+        {
+            Sent.Add(message);
+            return true;
+        }
+
         public static void ResetForTests() => Sent.Clear();
     }
 }
@@ -289,12 +434,16 @@ namespace Anomaly.Client.Components
 {
     internal static class FileTransferOverlay
     {
+        public static bool ThrowOnHide { get; set; }
+
         public static void Show()
         {
         }
 
         public static void Hide()
         {
+            if (ThrowOnHide)
+                throw new InvalidOperationException("injected overlay failure");
         }
 
         public static void SetStatus(string status)
@@ -323,16 +472,23 @@ namespace MelonLoader
 {
     internal static class MelonLogger
     {
+        public static bool ThrowOnError { get; set; }
+        public static bool ThrowOnWarning { get; set; }
+
         public static void Msg(string message)
         {
         }
 
         public static void Warning(string message)
         {
+            if (ThrowOnWarning)
+                throw new InvalidOperationException("injected warning-logger failure");
         }
 
         public static void Error(string message)
         {
+            if (ThrowOnError)
+                throw new InvalidOperationException("injected logger failure");
         }
     }
 

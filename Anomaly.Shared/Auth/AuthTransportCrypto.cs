@@ -6,7 +6,7 @@ using System.Text;
 namespace Anomaly.Shared.Auth;
 
 /// <summary>
-/// Directional AEAD envelope for protocol-v2 encrypted-channel traffic.
+/// Directional AEAD envelope format v2 for authenticated encrypted-channel traffic.
 /// The marker is intentionally outside the ciphertext so receivers can reject
 /// legacy bidirectional envelopes without first trying a legacy key.
 /// </summary>
@@ -56,7 +56,7 @@ public static class AuthTransportCrypto
     {
         ValidateContext(key, sessionId, transcriptHash, direction);
         if (!IsVersion2Envelope(envelope) || envelope.Length < EnvelopeOverhead)
-            throw new CryptographicException("Protocol-v2 encrypted-channel envelope is malformed.");
+            throw new CryptographicException("Directional AEAD v2 encrypted-channel envelope is malformed.");
 
         var nonce = new byte[NonceSize];
         var ciphertext = new byte[envelope.Length - MarkerSize - NonceSize];

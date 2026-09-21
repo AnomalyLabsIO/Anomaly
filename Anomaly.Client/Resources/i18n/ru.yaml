@@ -30,6 +30,7 @@
 # {0} = имя пользователя
 "anomaly.menu.auth_connected": "Подключён как {0}"
 "anomaly.menu.auth_not_signed_in": "Вход не выполнен"
+"anomaly.menu.auth_unavailable": "Аутентификация недоступна — файлы не изменены; исправьте указанную ошибку профиля или хранилища доверия и перезапустите игру."
 
 # ===== Mods settings tab =====
 "anomaly.settings.tab_mods": "Моды"

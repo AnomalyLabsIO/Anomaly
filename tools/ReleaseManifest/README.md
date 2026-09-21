@@ -1,15 +1,33 @@
 # Signed release manifests
 
-This tool creates and verifies deterministic artifact inventories signed with an operator-owned ECDSA private key. Private keys must remain outside the repository and CI logs.
+This tool creates and verifies canonical schema-v2 artifact inventories signed
+with an operator-owned ECDSA P-256 private key and SHA-256. Private keys must
+remain outside the repository and CI logs.
 
 ```powershell
 dotnet run --project tools/ReleaseManifest -- generate-key private-key.pem public-key.pem
-dotnet run --project tools/ReleaseManifest -- create anomaly-client 1.0.0 <commit> THIRD_PARTY_DEPENDENCIES.md release.json private-key.pem Anomaly.Client.dll Anomaly.Client.Api.dll Anomaly.Shared.dll Anomaly.Bootstrap.dll
-dotnet run --project tools/ReleaseManifest -- verify release.json release.json.sig public-key.pem <artifact-directory> THIRD_PARTY_DEPENDENCIES.md
+$env:SOURCE_DATE_EPOCH = '<release commit time>'
+dotnet run --project tools/ReleaseManifest -- create `
+  production-2026 client-runtime anomaly-client anomaly-client 1.0.0 `
+  <commit> dependency-inventory.json release.json private-key.pem `
+  <artifact> [...]
+dotnet run --project tools/ReleaseManifest -- verify `
+  release.json release.json.sig public-key.pem `
+  <artifact-directory> dependency-inventory.json
 ```
 
-The signed manifest binds the source commit, dependency/license inventory hash,
-and bare artifact filenames, sizes, and lowercase SHA-256 values. Passing the
-optional artifact directory to `verify` checks every payload before
-materialization or execution. Private signing keys are ignored by repository
-policy and must remain in an operator-owned keystore outside the source tree.
+The exact camel-case manifest contract is:
+
+`schemaVersion`, `keyId`, `target`, `packageId`, `releaseId`, `version`,
+`sourceCommit`, `dependencyInventorySha256`, `generatedUtc`, and `artifacts`.
+
+Artifacts are canonically ordered bare filenames with `sizeBytes` and lowercase
+`sha256`. For the launcher's mandatory official core, use `target` =
+`client-runtime` and both `packageId` and `releaseId` = `anomaly-client`.
+`SOURCE_DATE_EPOCH` makes the manifest timestamp reproducible. The detached
+signature remains separate from deterministic payload archives.
+
+Verification rejects unknown JSON fields, non-P-256 keys, malformed metadata,
+signature or inventory mismatches, duplicate filenames, and missing or changed
+payload bytes. Private signing keys are ignored by repository policy and belong
+in an operator-controlled keystore, never the source tree.

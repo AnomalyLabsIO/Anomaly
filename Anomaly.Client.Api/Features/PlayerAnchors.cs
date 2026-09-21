@@ -205,4 +205,9 @@ public static class PlayerAnchors
         }
         return null;
     }
+
+    internal static bool Unregister(CharacterModel model) =>
+        model != null && _childCache.Remove(model);
+
+    internal static void ClearAll() => _childCache.Clear();
 }

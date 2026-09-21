@@ -38,5 +38,10 @@ public class PlayerStat
         return stat;
     }
 
+    internal static bool Unregister(StatBase statBase) =>
+        statBase != null && _stats.Remove(statBase);
+
+    internal static void ClearAll() => _stats.Clear();
+
     public override string ToString() => $"PlayerStat({Name}, {Value}/{MaxValue})";
 }

@@ -64,7 +64,7 @@ public class FirearmItem : Item
 
     /// <summary>
     /// Returns the typed module of <typeparamref name="T"/> if present, mirroring
-    /// the engine's <see cref="ModularAutosyncItem.TryGetModule{T}(out T)"/>.
+    /// the engine's <c>ModularAutosyncItem.TryGetModule&lt;T&gt;</c> method.
     /// Use for any module not directly exposed by this wrapper.
     /// </summary>
     public bool TryGetModule<T>(out T module) where T : ModuleBase

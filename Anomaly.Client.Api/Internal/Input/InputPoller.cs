@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Anomaly.Client.Api.Input;
 using UnityEngine;
 
@@ -16,25 +15,18 @@ namespace Anomaly.Client.Api.Internal.Input;
 /// </remarks>
 internal static class InputPoller
 {
-    // Previous-frame pressed state per binding id; used to detect transitions.
-    private static readonly Dictionary<string, bool> _previous = new Dictionary<string, bool>();
+    private static readonly InputFrameDispatcher Dispatcher = new();
 
     internal static void Update()
     {
-        foreach (var kvp in InputRegistry.ResolvedKeys())
-        {
-            string id = kvp.Key;
-            InputKey key = kvp.Value;
-
-            bool held = IsHeld(key);
-            _previous.TryGetValue(id, out bool wasHeld);
-
-            if (held && !wasHeld) InputRegistry.OnPressed(id);
-            else if (!held && wasHeld) InputRegistry.OnReleased(id);
-
-            _previous[id] = held;
-        }
+        Dispatcher.Update(
+            InputRegistry.ResolvedKeysSnapshot(),
+            IsHeld,
+            InputRegistry.OnPressed,
+            InputRegistry.OnReleased);
     }
+
+    internal static void Reset() => Dispatcher.Reset();
 
     /// <summary>True iff the primary key is held AND every required modifier is held
     /// AND no disallowed modifier is held.</summary>

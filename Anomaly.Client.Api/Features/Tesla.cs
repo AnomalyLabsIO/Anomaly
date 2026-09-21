@@ -82,6 +82,9 @@ public class Tesla
         return wrapper;
     }
 
+    internal static bool Unregister(TeslaGate teslaBase) =>
+        teslaBase != null && _teslas.Remove(teslaBase);
+
     internal static void ClearAll() => _teslas.Clear();
 
     public override string ToString() => $"Tesla(InProgress={InProgress}, InactiveTime={InactiveTime:F1}s)";

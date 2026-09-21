@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text;
 using Anomaly.Shared.Networking;
 
@@ -169,15 +168,6 @@ public class ClientHandshake
                gameRevision == revision &&
                gameBackwardCompatibility == backwardCompatibility &&
                gameBackwardRevision == (backwardCompatibility ? backwardRevision : (byte)0);
-    }
-
-    public string GetUserId()
-    {
-        using (var sha = SHA256.Create())
-        {
-            var hash = sha.ComputeHash(identityPublic);
-            return Base58.Encode(hash) + "@anomaly";
-        }
     }
 
     /// <summary>

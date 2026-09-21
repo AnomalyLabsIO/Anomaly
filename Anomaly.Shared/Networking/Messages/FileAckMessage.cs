@@ -6,7 +6,10 @@ namespace Anomaly.Shared.Networking.Messages
     {
         public override int MaxPayloadBytes => 8 + 32 + 1;
         public string MessageName => "anomaly:fileack";
-        public MessageChannel TransportChannel => MessageChannel.ReliableUnordered;
+        // Keep the final file acknowledgement ordered with consent, the file
+        // request, and catalog activation. The server must observe transfer
+        // completion before it can accept an activation acknowledgement.
+        public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 
         public ulong SessionId { get; set; }
         public byte[] Hash { get; set; }

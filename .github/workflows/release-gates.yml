@@ -1,0 +1,56 @@
+name: Core release gates
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-x64:
+    # Proprietary SCP:SL/LabAPI references are installed only on the controlled
+    # release runner. Directory.Build.targets fails clearly if any are absent.
+    runs-on: [self-hosted, windows, x64, anomaly-release]
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      CI: 'true'
+      AnomalyClientRoot: ${{ vars.ANOMALY_CLIENT_ROOT }}
+      AnomalyServerRoot: ${{ vars.ANOMALY_SERVER_ROOT }}
+      AnomalyServerGameDir: ${{ vars.ANOMALY_SERVER_GAME_DIR }}
+      AnomalyServerReferenceDir: ${{ vars.ANOMALY_SERVER_REFERENCE_DIR }}
+      AnomalyLabApiDir: ${{ vars.ANOMALY_LABAPI_DIR }}
+      AnomalyHarmonyPath: ${{ vars.ANOMALY_HARMONY_PATH }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore solution and release tools
+        shell: pwsh
+        run: |
+          dotnet restore Anomaly.slnx
+          dotnet restore tools/PublicApiBaseline/PublicApiBaseline.csproj
+          dotnet restore tools/ReferencePublicizer/ReferencePublicizer.csproj
+          dotnet restore tools/ReleaseManifest/ReleaseManifest.csproj
+          dotnet restore tools/ReleasePackaging/ReleasePackaging.csproj
+
+      - name: Run complete unsigned release gate twice
+        shell: pwsh
+        run: |
+          $epoch = [long](git show -s --format=%ct $env:GITHUB_SHA)
+          ./release/Invoke-CompleteReleaseGate.ps1 -Version 1.0.0 -SourceCommit $env:GITHUB_SHA -SourceDateEpoch $epoch -OutputDirectory '${{ runner.temp }}/anomaly-release'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anomaly-unsigned-release-evidence
+          path: ${{ runner.temp }}/anomaly-release
+          if-no-files-found: error

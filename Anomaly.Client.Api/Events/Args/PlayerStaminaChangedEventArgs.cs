@@ -3,7 +3,7 @@ using Anomaly.Client.Api.Features;
 namespace Anomaly.Client.Api.Events.Args;
 
 /// <summary>
-/// Fires when a tracked player's <see cref="StaminaStat"/> value crosses
+/// Fires when a tracked player's <c>StaminaStat</c> value crosses
 /// a polling tick boundary. Delta is signed — negative for stamina drain,
 /// positive for regeneration.
 /// </summary>

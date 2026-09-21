@@ -2,6 +2,7 @@
 	<PropertyGroup>
 		<TargetFramework>net6.0</TargetFramework>
 		<PlatformTarget>x64</PlatformTarget>
+		<Prefer32Bit>false</Prefer32Bit>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>disable</Nullable>
 		<RootNamespace>Anomaly.Client</RootNamespace>
@@ -17,340 +18,340 @@
 
 	<ItemGroup>
 		<Reference Include="Assembly-CSharp-firstpass">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Assembly-CSharp-firstpass.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Assembly-CSharp-firstpass.dll</HintPath>
 		</Reference>
 		<Reference Include="Assembly-CSharp">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Assembly-CSharp.dll</HintPath>
 		</Reference>
 		<Reference Include="BouncyCastle.Cryptography">
-		  <HintPath>..\..\Server\server\SCPSL_Data\Managed\BouncyCastle.Cryptography.dll</HintPath>
+		  <HintPath>$(AnomalyServerReferenceDir)\BouncyCastle.Cryptography.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppCaress">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppCaress.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppCaress.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppCommandSystem.Core">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppCommandSystem.Core.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppCommandSystem.Core.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppCustomPasses">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppCustomPasses.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppCustomPasses.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppCustomPostProcessing.Runtime">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppCustomPostProcessing.Runtime.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppCustomPostProcessing.Runtime.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppDnsClient">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppDnsClient.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppDnsClient.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppFacepunch.Steamworks.Win64">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppFacepunch.Steamworks.Win64.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppFacepunch.Steamworks.Win64.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppInterop">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppInterop.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppInterop.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppMirror.Components">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppMirror.Components.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppMirror.Components.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppMirror">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppMirror.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppMirror.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppMono.Security">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppMono.Security.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppMono.Security.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2Cppmscorlib">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2Cppmscorlib.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2Cppmscorlib.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppNorthwoodLib">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppNorthwoodLib.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppNorthwoodLib.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppPooling">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppPooling.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppPooling.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppSnake">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppSnake.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppSnake.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppSystem.Configuration">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppSystem.Configuration.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppSystem.Configuration.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppSystem.Core">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppSystem.Core.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppSystem.Core.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppSystem">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppSystem.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppSystem.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppSystem.Numerics">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppSystem.Numerics.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppSystem.Numerics.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppSystem.Runtime.Serialization">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppSystem.Runtime.Serialization.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppSystem.Runtime.Serialization.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppSystem.Xml">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppSystem.Xml.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppSystem.Xml.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppYamlDotNet">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2CppYamlDotNet.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2CppYamlDotNet.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2Cppzxing">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2Cppzxing.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2Cppzxing.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2Cpp__Generated">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Il2Cpp__Generated.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Il2Cpp__Generated.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.Burst">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.Burst.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.Burst.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.Burst.Unsafe">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.Burst.Unsafe.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.Burst.Unsafe.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.Collections">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.Collections.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.Collections.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.Mathematics">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.Mathematics.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.Mathematics.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.ProBuilder">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.ProBuilder.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.ProBuilder.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.ProBuilder.KdTree">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.ProBuilder.KdTree.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.ProBuilder.KdTree.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.ProBuilder.Poly2Tri">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.ProBuilder.Poly2Tri.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.ProBuilder.Poly2Tri.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.RenderPipelines.Core.Runtime">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.RenderPipelines.Core.Runtime.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.RenderPipelines.Core.Runtime.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.RenderPipelines.GPUDriven.Runtime">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.RenderPipelines.GPUDriven.Runtime.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.RenderPipelines.GPUDriven.Runtime.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.RenderPipelines.HighDefinition.Config.Runtime">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.RenderPipelines.HighDefinition.Config.Runtime.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.RenderPipelines.HighDefinition.Config.Runtime.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.RenderPipelines.HighDefinition.Runtime">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.RenderPipelines.HighDefinition.Runtime.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.RenderPipelines.HighDefinition.Runtime.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.TextMeshPro">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.TextMeshPro.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.TextMeshPro.dll</HintPath>
 		</Reference>
 		<Reference Include="Unity.VisualEffectGraph.Runtime">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\Unity.VisualEffectGraph.Runtime.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\Unity.VisualEffectGraph.Runtime.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.AccessibilityModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.AccessibilityModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.AccessibilityModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.AIModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.AIModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.AIModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.AndroidJNIModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.AndroidJNIModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.AndroidJNIModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.AnimationModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.AnimationModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.AnimationModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.ARModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.ARModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.ARModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.AssetBundleModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.AssetBundleModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.AssetBundleModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.AudioModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.AudioModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.AudioModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.ClothModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.ClothModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.ClothModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.ContentLoadModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.ContentLoadModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.ContentLoadModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.CoreModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.CoreModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.CoreModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.CrashReportingModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.CrashReportingModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.CrashReportingModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.DirectorModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.DirectorModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.DirectorModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.DSPGraphModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.DSPGraphModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.DSPGraphModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.GameCenterModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.GameCenterModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.GameCenterModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.GIModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.GIModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.GIModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.GraphicsStateCollectionSerializerModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.GraphicsStateCollectionSerializerModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.GraphicsStateCollectionSerializerModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.GridModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.GridModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.GridModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.HierarchyCoreModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.HierarchyCoreModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.HierarchyCoreModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.HotReloadModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.HotReloadModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.HotReloadModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.IMGUIModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.IMGUIModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.IMGUIModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.InputForUIModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.InputForUIModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.InputForUIModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.InputLegacyModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.InputLegacyModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.InputLegacyModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.InputModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.InputModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.InputModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.JSONSerializeModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.JSONSerializeModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.JSONSerializeModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.LocalizationModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.LocalizationModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.LocalizationModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.MarshallingModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.MarshallingModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.MarshallingModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.MultiplayerModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.MultiplayerModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.MultiplayerModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.ParticleSystemModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.ParticleSystemModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.ParticleSystemModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.PerformanceReportingModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.PerformanceReportingModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.PerformanceReportingModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.Physics2DModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.Physics2DModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.Physics2DModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.PhysicsModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.PhysicsModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.PhysicsModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.PropertiesModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.PropertiesModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.PropertiesModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.RuntimeInitializeOnLoadManagerInitializerModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.RuntimeInitializeOnLoadManagerInitializerModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.RuntimeInitializeOnLoadManagerInitializerModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.ScreenCaptureModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.ScreenCaptureModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.ScreenCaptureModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.ShaderVariantAnalyticsModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.ShaderVariantAnalyticsModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.ShaderVariantAnalyticsModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.SharedInternalsModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.SharedInternalsModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.SharedInternalsModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.SpriteMaskModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.SpriteMaskModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.SpriteMaskModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.SpriteShapeModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.SpriteShapeModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.SpriteShapeModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.StreamingModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.StreamingModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.StreamingModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.SubstanceModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.SubstanceModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.SubstanceModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.SubsystemsModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.SubsystemsModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.SubsystemsModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.TerrainModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.TerrainModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.TerrainModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.TerrainPhysicsModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.TerrainPhysicsModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.TerrainPhysicsModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.TextCoreFontEngineModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.TextCoreFontEngineModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.TextCoreFontEngineModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.TextCoreTextEngineModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.TextCoreTextEngineModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.TextCoreTextEngineModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.TextRenderingModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.TextRenderingModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.TextRenderingModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.TilemapModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.TilemapModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.TilemapModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.TLSModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.TLSModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.TLSModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UI">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UI.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UI.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UIElementsModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UIElementsModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UIElementsModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UIModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UIModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UIModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UmbraModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UmbraModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UmbraModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UnityAnalyticsCommonModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UnityAnalyticsCommonModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UnityAnalyticsCommonModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UnityAnalyticsModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UnityAnalyticsModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UnityAnalyticsModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UnityConnectModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UnityConnectModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UnityConnectModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UnityCurlModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UnityCurlModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UnityCurlModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UnityTestProtocolModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UnityTestProtocolModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UnityTestProtocolModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UnityWebRequestAssetBundleModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestAssetBundleModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UnityWebRequestAssetBundleModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UnityWebRequestAudioModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UnityWebRequestModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UnityWebRequestModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UnityWebRequestTextureModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestTextureModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UnityWebRequestTextureModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.UnityWebRequestWWWModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestWWWModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.UnityWebRequestWWWModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.VehiclesModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.VehiclesModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.VehiclesModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.VFXModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.VFXModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.VFXModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.VideoModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.VideoModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.VideoModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.VRModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.VRModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.VRModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.WindModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.WindModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.WindModule.dll</HintPath>
 		</Reference>
 		<Reference Include="UnityEngine.XRModule">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\Il2CppAssemblies\UnityEngine.XRModule.dll</HintPath>
+			<HintPath>$(AnomalyClientInteropDir)\UnityEngine.XRModule.dll</HintPath>
 		</Reference>
 		<Reference Include="MelonLoader">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\net6\MelonLoader.dll</HintPath>
+			<HintPath>$(AnomalyClientMelonLibDir)\MelonLoader.dll</HintPath>
 		</Reference>
 		<Reference Include="0Harmony">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\net6\0Harmony.dll</HintPath>
+			<HintPath>$(AnomalyClientMelonLibDir)\0Harmony.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppInterop.Runtime">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\net6\Il2CppInterop.Runtime.dll</HintPath>
+			<HintPath>$(AnomalyClientMelonLibDir)\Il2CppInterop.Runtime.dll</HintPath>
 		</Reference>
 		<Reference Include="Il2CppInterop.Common">
-			<HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\net6\Il2CppInterop.Common.dll</HintPath>
+			<HintPath>$(AnomalyClientMelonLibDir)\Il2CppInterop.Common.dll</HintPath>
 		</Reference>
 
 	</ItemGroup>
@@ -369,14 +370,17 @@
 		<Compile Include="Assets\OverrideApplier.cs" />
 		<Compile Include="Assets\OverrideRegistry.cs" />
 		<Compile Include="Assets\PathOverrideRegistry.cs" />
-		<Compile Include="Assets\ScriptStripper.cs" />
 		<Compile Include="Assets\ShaderRemapper.cs" />
-		<Compile Include="Assets\SpawnedObjectRegistry.cs" />
 		<Compile Include="Auth\AuthHandler.cs" />
 		<Compile Include="Auth\PlayerAuth.cs" />
+		<Compile Include="Auth\PlayerAuthProfileStore.cs" />
 		<Compile Include="Auth\ServerConnection.cs" />
 		<Compile Include="Commands\NameCommand.cs" />
 		<Compile Include="Commands\IdentityCommand.cs" />
+		<Compile Include="Commands\WhoAmICommand.cs" />
+		<Compile Include="Content\ClientContentRegistrar.cs" />
+		<Compile Include="Content\ContentCatalogClient.cs" />
+		<Compile Include="Content\ContentConsentStore.cs" />
 		<Compile Include="Components\AuthStatusOverrideComponent.cs" />
 		<Compile Include="Components\ConnectionInfoOverrideComponent.cs" />
 		<Compile Include="Components\CreditsHookComponent.cs" />
@@ -407,6 +411,7 @@
 		<Compile Include="Internal\Modding\ModContext.cs" />
 		<Compile Include="Internal\UI\PreloaderSkinBootstrap.cs" />
 		<Compile Include="Internal\Networking\SilentRoleChangeHandler.cs" />
+		<Compile Include="Internal\Networking\EnrollmentIdentityReceiver.cs" />
 		<Compile Include="Internal\PlayerCustomization\PlayerColorTracker.cs" />
 		<Compile Include="Internal\Round\RoundStateReceiver.cs" />
 		<Compile Include="Internal\SilentRoleChange.cs" />
@@ -418,6 +423,7 @@
 		<Compile Include="Patches\Auth\NetDataWriterPut.cs" />
 		<Compile Include="Patches\Auth\PlayerAuthenticationManagerPatch.cs" />
 		<Compile Include="Patches\Command\ConsoleTypeCommandPatch.cs" />
+		<Compile Include="Patches\Content\ItemTranslationReaderPatch.cs" />
 		<Compile Include="Patches\Credits\NewCreditsPatch.cs" />
 		<Compile Include="Patches\Loader\LoaderPatch.cs" />
 		<Compile Include="Patches\Loader\LauncherVersionPatch.cs" />
@@ -445,7 +451,6 @@
 		<Compile Include="Patches\Runtime\PlayerRoleManagerPatch.cs" />
 		<Compile Include="Patches\Runtime\Scp079GeneratorPatch.cs" />
 		<Compile Include="Patches\Runtime\SilentRoleChangePatch.cs" />
-		<Compile Include="Patches\Runtime\PlayerStatsPatch.cs" />
 		<Compile Include="Patches\Runtime\ReferenceHubPatch.cs" />
 		<Compile Include="Patches\Runtime\ThrownProjectilePatch.cs" />
 		<Compile Include="Patches\Runtime\SimpleTriggerModulePatch.cs" />
@@ -491,7 +496,6 @@
 	-->
 	<PropertyGroup>
 		<DeployLocal Condition="'$(DeployLocal)' == ''">false</DeployLocal>
-		<AnomalyClientModsDir Condition="'$(AnomalyClientModsDir)' == ''">E:\Projects\AnomalyLabs\ModdedFiles\loadouts\dev\local\Mods</AnomalyClientModsDir>
 	</PropertyGroup>
 	<Target Name="CopyToLocalClient" AfterTargets="Build" Condition="'$(DeployLocal)' == 'true'">
 		<Message Importance="high" Text="Anomaly.Client: copying $(TargetFileName) -&gt; $(AnomalyClientModsDir)" Condition="Exists('$(AnomalyClientModsDir)')" />

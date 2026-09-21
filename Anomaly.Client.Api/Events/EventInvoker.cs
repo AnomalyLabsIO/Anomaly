@@ -4,6 +4,24 @@ namespace Anomaly.Client.Api.Events;
 
 internal static class EventInvoker
 {
+    internal static void Invoke(Action eventHandler, string context)
+    {
+        if (eventHandler == null)
+            return;
+
+        foreach (Action subscriber in eventHandler.GetInvocationList())
+            InvokeSubscriber(subscriber, context);
+    }
+
+    internal static void Invoke<T>(Action<T> eventHandler, T args, string context)
+    {
+        if (eventHandler == null)
+            return;
+
+        foreach (Action<T> subscriber in eventHandler.GetInvocationList())
+            InvokeSubscriber(() => subscriber(args), context);
+    }
+
     internal static void Invoke<TEventArgs>(AnomalyEventHandler<TEventArgs> eventHandler, TEventArgs args)
         where TEventArgs : EventArgs
     {
@@ -18,7 +36,35 @@ internal static class EventInvoker
             }
             catch (Exception ex)
             {
-                MelonLogger.Error($"Client event handler threw an exception while processing {typeof(TEventArgs).Name}: {ex}");
+                try
+                {
+                    MelonLogger.Error(
+                        $"Client event handler threw an exception while processing {typeof(TEventArgs).Name}: {ex}");
+                }
+                catch
+                {
+                    // Metadata/unit-test hosts may not have a usable loader
+                    // logger. Logging must never suppress later subscribers.
+                }
+            }
+        }
+    }
+
+    private static void InvokeSubscriber(Action subscriber, string context)
+    {
+        try
+        {
+            subscriber();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                MelonLogger.Error($"Client event handler threw while processing {context}: {ex}");
+            }
+            catch
+            {
+                // Logging must never suppress later subscribers.
             }
         }
     }

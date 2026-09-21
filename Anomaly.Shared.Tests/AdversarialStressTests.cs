@@ -3,12 +3,17 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Anomaly.Client.FileTransfer;
 using Anomaly.Server.Auth;
+using Anomaly.Server.Content;
 using Anomaly.Server.FileTransfer;
+using Anomaly.Server.Networking;
 using Anomaly.Server.Utils;
 using Anomaly.Shared.Assets;
 using Anomaly.Shared.Auth;
+using Anomaly.Shared.Content;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
 using Xunit;
@@ -150,6 +155,115 @@ public sealed class AdversarialStressTests : IDisposable
     }
 
     [Fact]
+    public void TeardownDrainRemovesAcceptedPendingHandoffsAndClearsSecrets()
+    {
+        AuthHandler.Reset();
+        var endpoint = new IPEndPoint(IPAddress.Parse("192.0.2.42"), 7777);
+        var player = new PlayerStorage
+        {
+            UserId = "pending@anomaly",
+            ClientToServerKey = Enumerable.Repeat((byte)0x11, 32).ToArray(),
+            ServerToClientKey = Enumerable.Repeat((byte)0x22, 32).ToArray(),
+            SessionId = Enumerable.Repeat((byte)0x33, AuthTransportCrypto.SessionIdSize).ToArray(),
+            TranscriptHash = Enumerable.Repeat((byte)0x44, AuthTransportCrypto.TranscriptHashSize).ToArray(),
+        };
+
+        Assert.True(AuthHandler.StorePlayer(endpoint, player));
+        Assert.Equal(1, AuthHandler.StoredPlayerCount);
+        Assert.Equal(1, AuthHandler.DrainStoredPlayers());
+        Assert.Equal(0, AuthHandler.StoredPlayerCount);
+        Assert.False(AuthHandler.TryTakePlayer(endpoint, out _));
+        Assert.Null(player.ClientToServerKey);
+        Assert.Null(player.ServerToClientKey);
+        Assert.Null(player.SessionId);
+        Assert.Null(player.TranscriptHash);
+    }
+
+    [Fact]
+    public async Task TransportQuarantineTransitionIsNeverInvisibleToTeardownSnapshot()
+    {
+        var hub = new ReferenceHub { netId = 42 };
+        AuthenticatedTransportSessions.Remove(hub);
+        AuthenticatedTransportSessions.Register(hub, ValidTransportPlayer());
+
+        int missingSnapshots = 0;
+        using (var start = new ManualResetEventSlim(false))
+        {
+            Task mutator = Task.Run(() =>
+            {
+                start.Wait();
+                for (int index = 0; index < 10_000; index++)
+                {
+                    AuthenticatedTransportSessions.Quarantine(hub);
+                    AuthenticatedTransportSessions.Register(hub, ValidTransportPlayer());
+                }
+            });
+            Task observer = Task.Run(() =>
+            {
+                start.Wait();
+                while (!mutator.IsCompleted)
+                {
+                    if (!AuthenticatedTransportSessions.SnapshotHubs().Contains(hub))
+                        Interlocked.Increment(ref missingSnapshots);
+                }
+            });
+
+            start.Set();
+            await Task.WhenAll(mutator, observer);
+        }
+
+        try
+        {
+            Assert.Equal(0, missingSnapshots);
+            Assert.Contains(hub, AuthenticatedTransportSessions.SnapshotHubs());
+        }
+        finally
+        {
+            AuthenticatedTransportSessions.Remove(hub);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Invalid_only_content_registration_cannot_be_offered_as_an_empty_catalog(bool registerNull)
+    {
+        ContentRegistry.Reset();
+        try
+        {
+            ContentRegistry.Add(registerNull
+                ? null
+                : new CustomItemDefinition { Key = "INVALID KEY" });
+
+            Assert.Throws<InvalidOperationException>(() =>
+                ContentRegistry.CreateOfferCatalog(new byte[32]));
+            Assert.False(ContentRegistry.Materialized);
+        }
+        finally
+        {
+            ContentRegistry.Reset();
+        }
+    }
+
+    [Fact]
+    public void Deliberately_empty_content_catalog_freezes_and_offers_successfully()
+    {
+        ContentRegistry.Reset();
+        try
+        {
+            ContentCatalog offer = ContentRegistry.CreateOfferCatalog(
+                FileManifestMessage.ComputeManifestSha256(Array.Empty<FileManifestMessage.FileEntry>()));
+
+            Assert.True(ContentRegistry.Materialized);
+            Assert.Empty(offer.Entries);
+        }
+        finally
+        {
+            ContentRegistry.Reset();
+        }
+    }
+
+    [Fact]
     public void ServerTransferIgnoresUnsolicitedAndDuplicateAcknowledgements()
     {
         byte[] bytes = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
@@ -177,6 +291,7 @@ public sealed class AdversarialStressTests : IDisposable
             FileTransferSession.StartForPlayer(hub);
             FileManifestMessage manifest = Assert.IsType<FileManifestMessage>(
                 Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+            ApproveServerTransfer(hub, manifest);
 
             FileTransferSession.HandleMessage(hub, new FileAckMessage
             {
@@ -212,10 +327,144 @@ public sealed class AdversarialStressTests : IDisposable
             Assert.Equal(0, ActiveTransferCount());
             Assert.Equal(0, ReservedTransferCount());
             Assert.Equal(1, completions);
+            Assert.True(FileTransferSession.IsAssetApproved(hub, hash, AssetKind.AudioClip));
+            Assert.False(FileTransferSession.IsAssetApproved(hub, hash, AssetKind.Texture2D));
+
+            FileTransferSession.CleanupPlayer(hub);
+            Assert.False(FileTransferSession.IsAssetApproved(hub, hash, AssetKind.AudioClip));
         }
         finally
         {
             FileTransferSession.SessionCompleted -= completed;
+            FileTransferSession.Reset();
+            Anomaly.Server.Networking.AnomalyMessaging.ResetForTests();
+            ServerAssetManager.SetAssets();
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ServerCompletionMarkerSendFailureAbortsAndReleasesBudget(bool throwOnSend)
+    {
+        byte[] bytes = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        string path = Path.GetTempFileName();
+        File.WriteAllBytes(path, bytes);
+        byte[] hash;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+            hash = sha.ComputeHash(bytes);
+
+        ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
+        {
+            FullPath = path,
+            RelativePath = "audio/completion-failure.ogg",
+            Hash = hash,
+            Size = (uint)bytes.Length,
+            Kind = AssetKind.AudioClip,
+        });
+        var hub = new ReferenceHub();
+        int completions = 0;
+        Action<ReferenceHub> completed = _ => completions++;
+        FileTransferSession.SessionCompleted += completed;
+
+        try
+        {
+            FileTransferSession.StartForPlayer(hub);
+            var manifest = Assert.IsType<FileManifestMessage>(
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+            ApproveServerTransfer(hub, manifest);
+            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            {
+                SessionId = manifest.SessionId,
+                RequestedHashes = { hash },
+            });
+            Assert.Equal(1, ReservedTransferCount());
+
+            if (throwOnSend)
+            {
+                Anomaly.Server.Networking.AnomalyMessaging.TrySendException = message =>
+                    message is FileTransferCompleteMessage
+                        ? new InvalidOperationException("injected completion send failure")
+                        : null;
+            }
+            else
+            {
+                Anomaly.Server.Networking.AnomalyMessaging.TrySendResult =
+                    message => !(message is FileTransferCompleteMessage);
+            }
+
+            DrainCurrentServerFile(ActiveTransferFor(hub));
+
+            Assert.Equal(0, ActiveTransferCount());
+            Assert.Equal(0, ReservedTransferCount());
+            Assert.Equal(0L, ReservedTransferBytes());
+            Assert.Equal(0, completions);
+            Assert.Equal(1, Anomaly.Server.Plugin.QuarantineCount);
+            Assert.Same(hub, Anomaly.Server.Plugin.LastQuarantinedHub);
+            Assert.False(hub.connectionToClient.isReady);
+            Assert.Equal(ContentReadiness.Unknown, ContentGrantGate.GetReadiness(hub.netId));
+            Assert.DoesNotContain(
+                Anomaly.Server.Networking.AnomalyMessaging.Sent,
+                message => message is FileTransferCompleteMessage);
+        }
+        finally
+        {
+            FileTransferSession.SessionCompleted -= completed;
+            FileTransferSession.Reset();
+            Anomaly.Server.Networking.AnomalyMessaging.ResetForTests();
+            ServerAssetManager.SetAssets();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ServerTransferReleasesLogicalOwnershipBeforeCoroutineCancellationFailures()
+    {
+        byte[] bytes = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        string path = Path.GetTempFileName();
+        File.WriteAllBytes(path, bytes);
+        byte[] hash;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+            hash = sha.ComputeHash(bytes);
+
+        ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
+        {
+            FullPath = path,
+            RelativePath = "audio/cancellation-failure.ogg",
+            Hash = hash,
+            Size = (uint)bytes.Length,
+            Kind = AssetKind.AudioClip,
+        });
+        var hub = new ReferenceHub();
+
+        try
+        {
+            FileTransferSession.StartForPlayer(hub);
+            var manifest = Assert.IsType<FileManifestMessage>(
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+            ApproveServerTransfer(hub, manifest);
+            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            {
+                SessionId = manifest.SessionId,
+                RequestedHashes = { hash },
+            });
+            Assert.Equal(1, ActiveTransferCount());
+            Assert.Equal(1, ReservedTransferCount());
+
+            MEC.Timing.ThrowOnKill = true;
+            FileTransferSession.CleanupPlayer(hub);
+
+            Assert.Equal(0, ActiveTransferCount());
+            Assert.Equal(0, ReservedTransferCount());
+            Assert.Equal(0L, ReservedTransferBytes());
+            Assert.False(FileTransferSession.IsAssetApproved(hub, hash, AssetKind.AudioClip));
+            Assert.Equal(0, Anomaly.Server.Plugin.QuarantineCount);
+            Assert.True(hub.connectionToClient.isReady);
+        }
+        finally
+        {
+            MEC.Timing.ThrowOnKill = false;
             FileTransferSession.Reset();
             Anomaly.Server.Networking.AnomalyMessaging.ResetForTests();
             ServerAssetManager.SetAssets();
@@ -247,6 +496,7 @@ public sealed class AdversarialStressTests : IDisposable
             FileTransferSession.StartForPlayer(hub);
             var manifest = Assert.IsType<FileManifestMessage>(
                 Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+            ApproveServerTransfer(hub, manifest);
             FileTransferSession.HandleMessage(hub, new FileRequestMessage
             {
                 SessionId = manifest.SessionId,
@@ -282,6 +532,178 @@ public sealed class AdversarialStressTests : IDisposable
     }
 
     [Fact]
+    public void ServerTransferCoroutineStartFailureRevokesAdmissionAfterReleasingState()
+    {
+        byte[] bytes = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        string path = Path.GetTempFileName();
+        File.WriteAllBytes(path, bytes);
+        byte[] hash;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+            hash = sha.ComputeHash(bytes);
+
+        ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
+        {
+            FullPath = path,
+            RelativePath = "audio/coroutine-start-failure.ogg",
+            Hash = hash,
+            Size = (uint)bytes.Length,
+            Kind = AssetKind.AudioClip,
+        });
+        var hub = new ReferenceHub();
+
+        try
+        {
+            FileTransferSession.StartForPlayer(hub);
+            var manifest = Assert.IsType<FileManifestMessage>(
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+            ApproveServerTransfer(hub, manifest);
+            MEC.Timing.ThrowOnRun = true;
+
+            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            {
+                SessionId = manifest.SessionId,
+                RequestedHashes = { hash },
+            });
+
+            Assert.Equal(0, ActiveTransferCount());
+            Assert.Equal(0, ReservedTransferCount());
+            Assert.Equal(0L, ReservedTransferBytes());
+            Assert.Equal(ContentReadiness.Unknown, ContentGrantGate.GetReadiness(hub.netId));
+            Assert.Equal(1, Anomaly.Server.Plugin.QuarantineCount);
+            Assert.Same(hub, Anomaly.Server.Plugin.LastQuarantinedHub);
+            Assert.False(hub.connectionToClient.isReady);
+        }
+        finally
+        {
+            MEC.Timing.ThrowOnRun = false;
+            FileTransferSession.Reset();
+            Anomaly.Server.Networking.AnomalyMessaging.ResetForTests();
+            ServerAssetManager.SetAssets();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ServerTransferRetryCancellationFailureRevokesAdmissionAfterReleasingState()
+    {
+        byte[] bytes = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        string path = Path.GetTempFileName();
+        File.WriteAllBytes(path, bytes);
+        byte[] hash;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+            hash = sha.ComputeHash(bytes);
+
+        ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
+        {
+            FullPath = path,
+            RelativePath = "audio/retry-cancellation-failure.ogg",
+            Hash = hash,
+            Size = (uint)bytes.Length,
+            Kind = AssetKind.AudioClip,
+        });
+        var hub = new ReferenceHub();
+
+        try
+        {
+            FileTransferSession.StartForPlayer(hub);
+            var manifest = Assert.IsType<FileManifestMessage>(
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+            ApproveServerTransfer(hub, manifest);
+            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            {
+                SessionId = manifest.SessionId,
+                RequestedHashes = { hash },
+            });
+            Assert.Equal(1, ReservedTransferCount());
+
+            SetTransferState(ActiveTransferFor(hub), "AwaitingAck");
+            MEC.Timing.ThrowOnKill = true;
+            FileTransferSession.HandleMessage(hub, new FileAckMessage
+            {
+                SessionId = manifest.SessionId,
+                Hash = hash,
+                Status = 1,
+            });
+
+            Assert.Equal(0, ActiveTransferCount());
+            Assert.Equal(0, ReservedTransferCount());
+            Assert.Equal(0L, ReservedTransferBytes());
+            Assert.Equal(ContentReadiness.Unknown, ContentGrantGate.GetReadiness(hub.netId));
+            Assert.Equal(1, Anomaly.Server.Plugin.QuarantineCount);
+            Assert.Same(hub, Anomaly.Server.Plugin.LastQuarantinedHub);
+            Assert.False(hub.connectionToClient.isReady);
+        }
+        finally
+        {
+            MEC.Timing.ThrowOnKill = false;
+            FileTransferSession.Reset();
+            Anomaly.Server.Networking.AnomalyMessaging.ResetForTests();
+            ServerAssetManager.SetAssets();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ServerTransferCompletionStateMismatchRevokesAdmission()
+    {
+        byte[] bytes = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        string path = Path.GetTempFileName();
+        File.WriteAllBytes(path, bytes);
+        byte[] hash;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+            hash = sha.ComputeHash(bytes);
+
+        ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
+        {
+            FullPath = path,
+            RelativePath = "audio/completion-state-mismatch.ogg",
+            Hash = hash,
+            Size = (uint)bytes.Length,
+            Kind = AssetKind.AudioClip,
+        });
+        var hub = new ReferenceHub();
+
+        try
+        {
+            FileTransferSession.StartForPlayer(hub);
+            var manifest = Assert.IsType<FileManifestMessage>(
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+            ApproveServerTransfer(hub, manifest);
+            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            {
+                SessionId = manifest.SessionId,
+                RequestedHashes = { hash },
+            });
+            Assert.Equal(1, ReservedTransferCount());
+
+            object session = ActiveTransferFor(hub);
+            SetTransferState(session, "AwaitingAck");
+            ContentGrantGate.Remove(hub.netId);
+            FileTransferSession.HandleMessage(hub, new FileAckMessage
+            {
+                SessionId = manifest.SessionId,
+                Hash = hash,
+                Status = 0,
+            });
+
+            Assert.Equal(0, ActiveTransferCount());
+            Assert.Equal(0, ReservedTransferCount());
+            Assert.Equal(0L, ReservedTransferBytes());
+            Assert.Equal(1, Anomaly.Server.Plugin.QuarantineCount);
+            Assert.Same(hub, Anomaly.Server.Plugin.LastQuarantinedHub);
+            Assert.False(hub.connectionToClient.isReady);
+            Assert.False(FileTransferSession.IsAssetApproved(hub, hash, AssetKind.AudioClip));
+        }
+        finally
+        {
+            FileTransferSession.Reset();
+            Anomaly.Server.Networking.AnomalyMessaging.ResetForTests();
+            ServerAssetManager.SetAssets();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void ClientTransferRejectsUnsolicitedDuplicateOutOfOrderAndMalformedChunks()
     {
         byte[] complete = Enumerable.Range(0, FileChunkMessage.MaxChunkBytes + 17)
@@ -305,7 +727,9 @@ public sealed class AdversarialStressTests : IDisposable
                     AssetKind.AudioClip),
             },
         };
+        manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
         InvokeClientTransfer("HandleManifest", manifest);
+        ApproveClientTransfer(manifest.ManifestSha256);
         Assert.Single(Anomaly.Client.Api.Networking.AnomalyMessaging.Sent);
 
         byte[] unsolicitedHash = Enumerable.Repeat((byte)0xA5, 32).ToArray();
@@ -368,6 +792,78 @@ public sealed class AdversarialStressTests : IDisposable
     }
 
     [Fact]
+    public void ClientTransferAbortSignalsFailureBeforeLoggerUiAndPublicEventFailures()
+    {
+        FileTransferClient.Reset();
+        bool failureObserved = false;
+        Action<bool> handler = successful => failureObserved = !successful;
+        FileTransferClient.TransferFinished += handler;
+        Anomaly.Client.Api.Events.Handlers.FileTransferEvents.ThrowOnComplete = true;
+        Anomaly.Client.Components.FileTransferOverlay.ThrowOnHide = true;
+        MelonLoader.MelonLogger.ThrowOnError = true;
+
+        try
+        {
+            MethodInfo abort = typeof(FileTransferClient).GetMethod(
+                "Abort",
+                BindingFlags.NonPublic | BindingFlags.Static)
+                ?? throw new InvalidOperationException("Missing FileTransferClient.Abort.");
+            abort.Invoke(null, new object[] { "injected failure" });
+
+            Assert.True(failureObserved);
+            Assert.Equal("Aborted", ClientTransferState());
+        }
+        finally
+        {
+            FileTransferClient.TransferFinished -= handler;
+            Anomaly.Client.Api.Events.Handlers.FileTransferEvents.ThrowOnComplete = false;
+            Anomaly.Client.Components.FileTransferOverlay.ThrowOnHide = false;
+            MelonLoader.MelonLogger.ThrowOnError = false;
+            FileTransferClient.Reset();
+        }
+    }
+
+    [Fact]
+    public void ClientConsentDeclineSendsNoFileRequestAndAuthorizesNoBytes()
+    {
+        byte[] hash = Enumerable.Repeat((byte)0x6D, 32).ToArray();
+        var manifest = new FileManifestMessage
+        {
+            SessionId = 126,
+            Files =
+            {
+                new FileManifestMessage.FileEntry(
+                    "textures/declined.png",
+                    hash,
+                    4096,
+                    AssetKind.Texture2D),
+            },
+        };
+        manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
+
+        FileTransferClient.Reset();
+        Anomaly.Client.Api.Networking.AnomalyMessaging.ResetForTests();
+        try
+        {
+            InvokeClientTransfer("HandleManifest", manifest);
+            Assert.Equal("AwaitingConsent", ClientTransferState());
+
+            FileTransferClient.DeclinePendingManifest(manifest.ManifestSha256);
+
+            Assert.Equal("Aborted", ClientTransferState());
+            Assert.Empty(Anomaly.Client.Api.Networking.AnomalyMessaging.Sent);
+            Assert.Equal(0L, ClientTransferRequestedBytes());
+            Assert.Equal(0L, ClientTransferReceivedBytes());
+            Assert.Equal(0, ClientTransferBufferCount());
+            Assert.False(FileTransferClient.IsAssetApproved(hash, AssetKind.Texture2D));
+        }
+        finally
+        {
+            FileTransferClient.Reset();
+        }
+    }
+
+    [Fact]
     public void ClientTransferDefersEarlyCompletionUntilReliableUnorderedChunksArrive()
     {
         byte[] complete = Enumerable.Range(0, 37).Select(i => (byte)i).ToArray();
@@ -377,7 +873,7 @@ public sealed class AdversarialStressTests : IDisposable
 
         FileTransferClient.Reset();
         Anomaly.Client.Api.Networking.AnomalyMessaging.ResetForTests();
-        InvokeClientTransfer("HandleManifest", new FileManifestMessage
+        var manifest = new FileManifestMessage
         {
             SessionId = 123,
             Files =
@@ -388,7 +884,10 @@ public sealed class AdversarialStressTests : IDisposable
                     (uint)complete.Length,
                     AssetKind.AudioClip),
             },
-        });
+        };
+        manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
+        InvokeClientTransfer("HandleManifest", manifest);
+        ApproveClientTransfer(manifest.ManifestSha256);
 
         InvokeClientTransfer("HandleFileComplete", new FileTransferCompleteMessage
         {
@@ -419,6 +918,110 @@ public sealed class AdversarialStressTests : IDisposable
     }
 
     [Fact]
+    public void ClientTransferCacheCommitExceptionFailsClosedAfterReleasingBuffer()
+    {
+        byte[] complete = Enumerable.Range(0, 37).Select(i => (byte)i).ToArray();
+        byte[] hash;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+            hash = sha.ComputeHash(complete);
+
+        FileTransferClient.Reset();
+        Anomaly.Client.Api.Networking.AnomalyMessaging.ResetForTests();
+        bool failureObserved = false;
+        Action<bool> handler = successful => failureObserved = !successful;
+        FileTransferClient.TransferFinished += handler;
+        Anomaly.Client.Api.FileTransfer.FileCache.ThrowOnImport = true;
+        try
+        {
+            var manifest = new FileManifestMessage
+            {
+                SessionId = 124,
+                Files =
+                {
+                    new FileManifestMessage.FileEntry(
+                        "audio/cache-failure.ogg",
+                        hash,
+                        (uint)complete.Length,
+                        AssetKind.AudioClip),
+                },
+            };
+            manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
+            InvokeClientTransfer("HandleManifest", manifest);
+            ApproveClientTransfer(manifest.ManifestSha256);
+            InvokeClientTransfer("HandleFileComplete", new FileTransferCompleteMessage
+            {
+                SessionId = 124,
+                Hash = hash,
+            });
+            InvokeClientTransfer("HandleChunk", new FileChunkMessage
+            {
+                SessionId = 124,
+                Hash = hash,
+                ChunkIndex = 0,
+                TotalChunks = 1,
+                Data = complete,
+            });
+
+            Assert.True(failureObserved);
+            Assert.Equal("Aborted", ClientTransferState());
+            Assert.Equal(0, ClientTransferBufferCount());
+            var failureAck = Assert.IsType<FileAckMessage>(
+                Anomaly.Client.Api.Networking.AnomalyMessaging.Sent.Last());
+            Assert.Equal((byte)1, failureAck.Status);
+        }
+        finally
+        {
+            Anomaly.Client.Api.FileTransfer.FileCache.ThrowOnImport = false;
+            FileTransferClient.TransferFinished -= handler;
+            FileTransferClient.Reset();
+        }
+    }
+
+    [Fact]
+    public void ClientTransferUnknownCompletionAcknowledgesBeforeThrowingWarningLogger()
+    {
+        byte[] advertisedHash = Enumerable.Repeat((byte)0x2A, 32).ToArray();
+        byte[] unknownHash = Enumerable.Repeat((byte)0x5A, 32).ToArray();
+        FileTransferClient.Reset();
+        Anomaly.Client.Api.Networking.AnomalyMessaging.ResetForTests();
+        MelonLoader.MelonLogger.ThrowOnWarning = true;
+        try
+        {
+            var manifest = new FileManifestMessage
+            {
+                SessionId = 125,
+                Files =
+                {
+                    new FileManifestMessage.FileEntry(
+                        "audio/known.ogg",
+                        advertisedHash,
+                        1,
+                        AssetKind.AudioClip),
+                },
+            };
+            manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
+            InvokeClientTransfer("HandleManifest", manifest);
+            ApproveClientTransfer(manifest.ManifestSha256);
+            InvokeClientTransfer("HandleFileComplete", new FileTransferCompleteMessage
+            {
+                SessionId = 125,
+                Hash = unknownHash,
+            });
+
+            Assert.Equal("Receiving", ClientTransferState());
+            var failureAck = Assert.IsType<FileAckMessage>(
+                Anomaly.Client.Api.Networking.AnomalyMessaging.Sent.Last());
+            Assert.Equal(unknownHash, failureAck.Hash);
+            Assert.Equal((byte)1, failureAck.Status);
+        }
+        finally
+        {
+            MelonLoader.MelonLogger.ThrowOnWarning = false;
+            FileTransferClient.Reset();
+        }
+    }
+
+    [Fact]
     public void TransferDecodersRejectOversizeAndSurviveDeterministicMalformedCorpus()
     {
         Assert.Throws<InvalidDataException>(() => Deserialize(
@@ -427,7 +1030,7 @@ public sealed class AdversarialStressTests : IDisposable
 
         Assert.Throws<InvalidDataException>(() => Deserialize(
             new FileManifestMessage(),
-            HeaderWithCount(1, FileManifestMessage.MaxFiles + 1)));
+            ManifestHeaderWithCount(1, FileManifestMessage.MaxFiles + 1)));
 
         Assert.Throws<InvalidDataException>(() => Deserialize(
             new FileRequestMessage(),
@@ -468,6 +1071,10 @@ public sealed class AdversarialStressTests : IDisposable
     public void Dispose()
     {
         FileTransferSession.Reset();
+        ContentGrantGate.Reset();
+        Anomaly.Server.Plugin.ResetForTests();
+        MEC.Timing.ThrowOnKill = false;
+        MEC.Timing.ThrowOnRun = false;
         Anomaly.Server.Networking.AnomalyMessaging.ResetForTests();
         Anomaly.Client.Api.Networking.AnomalyMessaging.ResetForTests();
         ServerAssetManager.SetAssets();
@@ -492,6 +1099,15 @@ public sealed class AdversarialStressTests : IDisposable
         gameBackwardRevision = 0,
         connectionContext = AuthConnectionContext.NormalizeEndpoint("example.test", 7777),
         retryCookie = Array.Empty<byte>(),
+    };
+
+    private static PlayerStorage ValidTransportPlayer() => new PlayerStorage
+    {
+        UserId = "transport@anomaly",
+        ClientToServerKey = Enumerable.Repeat((byte)0x11, 32).ToArray(),
+        ServerToClientKey = Enumerable.Repeat((byte)0x22, 32).ToArray(),
+        SessionId = Enumerable.Repeat((byte)0x33, AuthTransportCrypto.SessionIdSize).ToArray(),
+        TranscriptHash = Enumerable.Repeat((byte)0x44, AuthTransportCrypto.TranscriptHashSize).ToArray(),
     };
 
     private static IPAddress UniqueSubnetAddress(int value) => new IPAddress(new byte[]
@@ -541,6 +1157,39 @@ public sealed class AdversarialStressTests : IDisposable
         field.SetValue(session, Enum.Parse(field.FieldType, name));
     }
 
+    private static void DrainCurrentServerFile(object session)
+    {
+        FieldInfo currentFileField = session.GetType().GetField(
+            "_currentFile",
+            BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("Missing current server transfer file.");
+        MethodInfo sendFileChunks = session.GetType().GetMethod(
+            "SendFileChunks",
+            BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("Missing server transfer coroutine.");
+        var routine = (IEnumerator<float>)sendFileChunks.Invoke(
+            session,
+            new[] { currentFileField.GetValue(session) });
+        while (routine.MoveNext())
+        {
+        }
+    }
+
+    private static void ApproveServerTransfer(ReferenceHub hub, FileManifestMessage manifest)
+    {
+        ContentCatalog catalog = CatalogBuilder.Build(
+            Array.Empty<CatalogEntry>(),
+            itemIdBase: 128,
+            itemIdCeiling: 127,
+            manifest.ManifestSha256);
+        ContentGrantGate.RecordOffer(hub.netId, catalog);
+        Assert.True(ContentGrantGate.TryRecordDecision(
+            hub.netId,
+            catalog.CatalogSha256,
+            catalog.ManifestSha256,
+            approved: true));
+    }
+
     private static int ReservedTransferCount()
         => (int)(typeof(FileTransferSession)
             .GetField("_reservedTransferCount", BindingFlags.NonPublic | BindingFlags.Static)
@@ -567,12 +1216,26 @@ public sealed class AdversarialStressTests : IDisposable
         }
     }
 
+    private static void ApproveClientTransfer(byte[] manifestSha256)
+    {
+        MethodInfo method = typeof(FileTransferClient).GetMethod(
+            "ApprovePendingManifest",
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Missing FileTransferClient.ApprovePendingManifest.");
+        Assert.True((bool)method.Invoke(null, new object[] { manifestSha256 }));
+    }
+
     private static int ClientTransferBufferCount()
         => PrivateCollectionCount(typeof(FileTransferClient), "_buffers");
 
     private static long ClientTransferReceivedBytes()
         => (long)(typeof(FileTransferClient)
             .GetField("_receivedBytes", BindingFlags.NonPublic | BindingFlags.Static)
+            ?.GetValue(null) ?? -1L);
+
+    private static long ClientTransferRequestedBytes()
+        => (long)(typeof(FileTransferClient)
+            .GetField("_totalBytes", BindingFlags.NonPublic | BindingFlags.Static)
             ?.GetValue(null) ?? -1L);
 
     private static string ClientTransferState()
@@ -607,6 +1270,17 @@ public sealed class AdversarialStressTests : IDisposable
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
         writer.Write(sessionId);
+        writer.Write((ushort)count);
+        writer.Flush();
+        return stream.ToArray();
+    }
+
+    private static byte[] ManifestHeaderWithCount(ulong sessionId, int count)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write(sessionId);
+        writer.Write(new byte[32]);
         writer.Write((ushort)count);
         writer.Flush();
         return stream.ToArray();

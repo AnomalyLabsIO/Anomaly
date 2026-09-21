@@ -10,8 +10,9 @@ This file is for coding agents working in this repository.
   - `Anomaly.Client.Api` - public mod-facing API surface, `net6.0`, IL2CPP. Event buses, feature wrappers, registries/facades (CommandRegistry, ClientConfig, Scheduler, UiCanvas, etc.), and the `Anomaly.Client.Api.Events.*` + `Anomaly.Client.Api.Features.*` namespaces. No HarmonyX dependency. Third-party mods reference this DLL (and `Anomaly.Shared`), not `Anomaly.Client`.
   - `Anomaly.Server` - LabAPI server plugin, `.NET Framework 4.8`, Harmony
   - `Anomaly.Shared` - auth protocol + message DTOs + crypto, `.NET Framework 4.8`. Client, Client.Api, and Server only; the separate launcher repository deliberately does not reference it.
-- Client user data lives in `%APPDATA%/Anomaly/` on Windows: `user.json`, `CrashReports/`, and per-mod `config.json` / `data.json`.
-- Launcher and installer sources live in the sibling `anomaly-launcher` repository and have their own agent guidance and build/test commands.
+- Client user data lives in `<MelonLoader UserData>/Anomaly/`, normally `<game>/UserData/Anomaly/`: `user.json`, `server-trust.json`, `content-consent.json`, `FileCache/`, and `CrashReports/`. `Paths.AnomalyPath` and `Paths.AnomalyUserDataPath` share this root. Do not import, fall back to, or delete old `%APPDATA%/Anomaly` data. A missing local profile creates a new instance identity; existing local profiles are reused. DPAPI remains Windows-user/Wine-prefix bound.
+- Mod config/persistence facades use MelonPreferences. Bindings, overrides, and managed-module directories retain their UserData locations; skins use `UserData/Skins` and translations use `UserData/i18n`.
+- Launcher and installer sources live in the sibling `anomaly-launcher` and `anomaly-launcher-lite` repositories and have their own agent guidance and build/test commands.
 - Root README covers user-facing install steps; internal conventions inferred from source.
 
 ## External Code References
@@ -76,17 +77,20 @@ Run commands from the repository root unless noted otherwise.
 
 ## Test Commands
 
-- There are currently no test projects in this repository.
-- No xUnit, NUnit, MSTest, or `Microsoft.NET.Test.Sdk` package references were found.
-- `dotnet test` is not a meaningful verification command for the current codebase.
-- Current validation is build-based and, when possible, runtime/manual verification in the target game or server environment.
+- The repository has xUnit test projects using `Microsoft.NET.Test.Sdk`:
+  - `dotnet test Anomaly.Client.Api.Tests/Anomaly.Client.Api.Tests.csproj -c Debug -p:DeployLocal=false`
+  - `dotnet test Anomaly.Shared.Tests/Anomaly.Shared.Tests.csproj -c Debug -p:DeployLocal=false`
+  - `dotnet test Anomaly.Bootstrap.Tests/Anomaly.Bootstrap.Tests.csproj -c Debug -p:DeployLocal=false`
+- API/Bootstrap tests target .NET 8; Shared tests target .NET Framework 4.8. Builds still require the configured local game/loader references.
+- The isolated client path regression test requires PowerShell 7 (`pwsh`) on `PATH` to launch fresh processes before MelonLoader path initialization.
+- Check public API compatibility after building the API project:
+  - `dotnet run --project tools/PublicApiBaseline/PublicApiBaseline.csproj -- Anomaly.Client.Api/bin/Debug/net6.0/Anomaly.Client.Api.dll Anomaly.Client.Api/PublicAPI.Shipped.txt`
+- Automated tests and builds do not replace runtime/manual verification of target game or server behavior.
 
 ## Single-Test Guidance
 
-- There is no single-test command today because the repo has no automated tests.
-- If tests are added later with `dotnet test`, a typical single-test command would look like:
-  - `dotnet test path/to/Tests.csproj --filter FullyQualifiedName~Namespace.Class.Method`
-- If a future test project uses NUnit/xUnit naming filters, prefer the project's documented convention over this generic example.
+- Filter the relevant xUnit project by fully qualified test name:
+  - `dotnet test Anomaly.Client.Api.Tests/Anomaly.Client.Api.Tests.csproj -c Debug -p:DeployLocal=false --filter FullyQualifiedName~Namespace.Class.Method`
 
 ## Project Structure Conventions
 

@@ -28,6 +28,7 @@ internal static class TrKeys
     public const string Menu_Welcome = "anomaly.menu.welcome";
     public const string Menu_AuthConnected = "anomaly.menu.auth_connected";
     public const string Menu_AuthNotSignedIn = "anomaly.menu.auth_not_signed_in";
+    public const string Menu_AuthUnavailable = "anomaly.menu.auth_unavailable";
 
     // Shared between preloader and main menu version labels
     public const string Version_ModSuffix = "anomaly.version_modded_suffix";

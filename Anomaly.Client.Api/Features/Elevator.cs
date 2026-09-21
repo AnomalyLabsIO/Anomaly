@@ -96,6 +96,9 @@ public class Elevator
         return wrapper;
     }
 
+    internal static bool Unregister(ElevatorChamber chamberBase) =>
+        chamberBase != null && _elevators.Remove(chamberBase);
+
     internal static void ClearAll() => _elevators.Clear();
 
     public override string ToString() => $"Elevator(Sequence={CurrentSequence}, Destination={DestinationLevel})";

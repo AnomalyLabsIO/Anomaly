@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Anomaly.Client.Api.Config;
+using Anomaly.Client.Api.Events;
 using MelonLoader;
 using Newtonsoft.Json;
 
@@ -10,8 +11,8 @@ namespace Anomaly.Client.Api.Internal.Config;
 /// <summary>
 /// MelonPreferences-backed <see cref="IConfigSource"/>. Values are stored as
 /// JSON strings inside MelonPreferences entries so the compatibility API can
-/// keep accepting arbitrary Json.NET-serializable values while moving mutable
-/// state out of loadout-managed <c>UserData/Anomaly</c> files.
+/// keep accepting arbitrary Json.NET-serializable values using MelonLoader's
+/// existing preferences storage.
 /// </summary>
 internal sealed class MelonPreferencesConfigSource : IConfigSource
 {
@@ -64,8 +65,7 @@ internal sealed class MelonPreferencesConfigSource : IConfigSource
         if (string.Equals(entry.Value, json, StringComparison.Ordinal)) return;
 
         entry.Value = json;
-        try { KeyChanged?.Invoke(key); }
-        catch (Exception ex) { MelonLogger.Error($"MelonPreferencesConfigSource[{ModId}]: KeyChanged handler threw for '{key}': {ex}"); }
+        FireKeyChanged(key);
     }
 
     public bool Has(string key)
@@ -85,8 +85,7 @@ internal sealed class MelonPreferencesConfigSource : IConfigSource
         {
             _entries.Remove(key);
             _entryIdsToKeys.Remove(entryId);
-            try { KeyChanged?.Invoke(key); }
-            catch (Exception ex) { MelonLogger.Error($"MelonPreferencesConfigSource[{ModId}]: KeyChanged handler threw for '{key}': {ex}"); }
+            FireKeyChanged(key);
         }
     }
 
@@ -110,8 +109,10 @@ internal sealed class MelonPreferencesConfigSource : IConfigSource
 
     private void FireKeyChanged(string key)
     {
-        try { KeyChanged?.Invoke(key); }
-        catch (Exception ex) { MelonLogger.Error($"MelonPreferencesConfigSource[{ModId}]: KeyChanged handler threw for '{key}': {ex}"); }
+        EventInvoker.Invoke(
+            KeyChanged,
+            key,
+            $"MelonPreferencesConfigSource[{ModId}].KeyChanged('{key}')");
     }
 
     private MelonPreferences_Entry<string> GetOrCreateEntry(string key)

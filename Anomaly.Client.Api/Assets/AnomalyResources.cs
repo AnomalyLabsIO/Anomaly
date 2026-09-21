@@ -18,13 +18,30 @@ namespace Anomaly.Client.Api.Assets
     public static class AnomalyResources
     {
         private static readonly Dictionary<string, Texture2D> _textures = new();
-        private static readonly Dictionary<string, AssetBundle> _bundles = new();
         private static readonly Dictionary<string, AudioClip> _audioClips = new();
+        private static Func<byte[], AssetKind, bool> _remoteAssetAuthorization;
+
+        internal static void SetRemoteAssetAuthorization(Func<byte[], AssetKind, bool> authorization) =>
+            _remoteAssetAuthorization = authorization;
+
+        internal static bool IsRemoteAssetAuthorized(byte[] hash, AssetKind kind)
+        {
+            if (hash == null || hash.Length != 32)
+                return false;
+            try
+            {
+                return _remoteAssetAuthorization?.Invoke(hash, kind) == true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         public static bool TryGetTexture(byte[] hash, out Texture2D texture)
         {
             texture = null;
-            if (hash == null || hash.Length != 32) return false;
+            if (!IsRemoteAssetAuthorized(hash, AssetKind.Texture2D)) return false;
 
             string hex = FileCache.ToHex(hash);
             if (_textures.TryGetValue(hex, out texture))
@@ -64,42 +81,10 @@ namespace Anomaly.Client.Api.Assets
             }
         }
 
-        public static bool TryGetBundle(byte[] hash, out AssetBundle bundle)
-        {
-            bundle = null;
-            if (hash == null || hash.Length != 32) return false;
-
-            string hex = FileCache.ToHex(hash);
-            if (_bundles.TryGetValue(hex, out bundle) && bundle != null)
-                return true;
-
-            if (!FileCache.HasFile(hash))
-                return false;
-
-            try
-            {
-                var path = FileCache.GetFilePath(hash);
-                var b = AssetBundleLoader.LoadFromFile(path);
-                if (b == null)
-                {
-                    MelonLogger.Warning($"AnomalyResources: AssetBundle.LoadFromFile returned null for {hex}.");
-                    return false;
-                }
-                _bundles[hex] = b;
-                bundle = b;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"AnomalyResources.TryGetBundle({hex}): {ex}");
-                return false;
-            }
-        }
-
         public static bool TryGetAudioClip(byte[] hash, out AudioClip clip)
         {
             clip = null;
-            if (hash == null || hash.Length != 32) return false;
+            if (!IsRemoteAssetAuthorized(hash, AssetKind.AudioClip)) return false;
 
             string hex = FileCache.ToHex(hash);
             if (_audioClips.TryGetValue(hex, out clip))
@@ -122,7 +107,7 @@ namespace Anomaly.Client.Api.Assets
                     return false;
                 }
                 var bytes = File.ReadAllBytes(path);
-                var c = AudioClipFactory.TryDecode(
+                var c = AudioClipFactory.TryDecodeRemoteOgg(
                     bytes,
                     "announcer_" + hex.Substring(0, 8),
                     "audio:" + hex);
@@ -144,32 +129,8 @@ namespace Anomaly.Client.Api.Assets
         }
 
         /// <summary>
-        /// Loads a named asset out of a cached bundle. Convenience helper that
-        /// combines <see cref="TryGetBundle"/> + <c>LoadAsset</c>.
-        /// </summary>
-        public static bool TryLoadFromBundle<T>(byte[] bundleHash, string assetName, out T asset)
-            where T : UnityEngine.Object
-        {
-            asset = null;
-            if (!TryGetBundle(bundleHash, out var bundle))
-                return false;
-
-            try
-            {
-                asset = AssetBundleLoader.LoadAsset<T>(bundle, assetName);
-                return asset != null;
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"AnomalyResources.TryLoadFromBundle('{assetName}'): {ex}");
-                return false;
-            }
-        }
-
-        /// <summary>
         /// Drops the cached Unity object for a specific hash so the next lookup
-        /// rebuilds it from disk. Used by <see cref="AssetReloadMessage"/> handling
-        /// when the underlying file on disk has been replaced.
+        /// rebuilds it from disk.
         /// </summary>
         public static void UnloadOne(byte[] hash)
         {
@@ -182,11 +143,6 @@ namespace Anomaly.Client.Api.Assets
                     UnityEngine.Object.Destroy(tex);
                 _textures.Remove(hex);
                 RemoteAssetDecodeBudget.ReleaseLive("texture:" + hex);
-            }
-            if (_bundles.TryGetValue(hex, out var bundle) && bundle != null)
-            {
-                bundle.Unload(true);
-                _bundles.Remove(hex);
             }
             if (_audioClips.TryGetValue(hex, out var clip))
             {
@@ -205,10 +161,6 @@ namespace Anomaly.Client.Api.Assets
                 RemoteAssetDecodeBudget.ReleaseLive("texture:" + entry.Key);
             }
             _textures.Clear();
-
-            foreach (var b in _bundles.Values)
-                if (b != null) b.Unload(true);
-            _bundles.Clear();
 
             foreach (var c in _audioClips.Values)
             {

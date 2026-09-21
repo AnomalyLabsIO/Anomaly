@@ -235,7 +235,7 @@ public static class WorldObjects
         catch { return null; }
     }
 
-    /// <summary>Wraps <see cref="GameObject.FindGameObjectsWithTag"/>.</summary>
+    /// <summary>Wraps <see cref="GameObject.FindGameObjectsWithTag(string)"/>.</summary>
     public static GameObject[] FindAllByTag(string tag)
     {
         if (string.IsNullOrEmpty(tag)) return System.Array.Empty<GameObject>();

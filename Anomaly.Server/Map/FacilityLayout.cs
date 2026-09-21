@@ -296,8 +296,19 @@ namespace Anomaly.Server.Map
 
         internal static void InvokeRecipeApplied()
         {
-            try { RecipeApplied?.Invoke(); }
-            catch (Exception ex) { Logger.Error($"FacilityLayout.RecipeApplied handler threw: {ex}"); }
+            Delegate[] subscribers = RecipeApplied?.GetInvocationList() ?? Array.Empty<Delegate>();
+            foreach (Delegate subscriber in subscribers)
+            {
+                try
+                {
+                    ((Action)subscriber)();
+                }
+                catch (Exception ex)
+                {
+                    try { Logger.Error($"FacilityLayout.RecipeApplied handler threw: {ex}"); }
+                    catch { }
+                }
+            }
         }
 
         // ---- Per-connection bootstrap send ------------------------------

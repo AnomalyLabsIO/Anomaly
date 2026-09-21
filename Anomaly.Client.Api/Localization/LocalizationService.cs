@@ -18,7 +18,7 @@ namespace Anomaly.Client.Api.Localization;
 /// SCPSL registry (authoritative) or config overrides, and supports registration of additional
 /// namespaces by third-party mods.
 ///
-/// Mod authors typically should not construct this directly — use <see cref="Tr.RegisterMod"/>.
+/// Mod authors typically should not construct this directly — use <see cref="Tr.RegisterMod(string)"/>.
 /// </summary>
 public class LocalizationService
 {
@@ -26,31 +26,43 @@ public class LocalizationService
     private readonly string _userDataDir;
     private readonly Assembly _resourceAssembly;
     private readonly MelonPreferences_Entry<string> _localeOverride;
-    private readonly Dictionary<string, string> _active = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _fallback = new(StringComparer.Ordinal);
+    private Dictionary<string, string> _active = new(StringComparer.Ordinal);
+    private Dictionary<string, string> _fallback = new(StringComparer.Ordinal);
 
     // Track registered namespaces for collision detection
-    private readonly HashSet<string> _registeredNamespaces = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _registeredNamespaces = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly Regex NamespaceRegex =
         new("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$", RegexOptions.Compiled);
 
     public string ActiveLocale { get; private set; } = "en";
 
+    /// <param name="userDataDir">Root directory for Anomaly's extracted localization data.</param>
     /// <param name="resourceAssembly">
     /// The assembly that owns the embedded i18n resources to extract. Must be passed
     /// explicitly because <c>Assembly.GetExecutingAssembly()</c> here would return
     /// Anomaly.Client.Api, but the resources live in Anomaly.Client.
     /// </param>
     internal LocalizationService(string userDataDir, Assembly resourceAssembly)
+        : this(userDataDir, resourceAssembly, null)
+    {
+    }
+
+    /// <summary>
+    /// Deterministic constructor used by focused runtime tests. Production callers
+    /// use the two-argument overload and resolve the locale from the normal sources.
+    /// </summary>
+    internal LocalizationService(string userDataDir, Assembly resourceAssembly, string activeLocale)
     {
         _userDataDir = userDataDir;
         _resourceAssembly = resourceAssembly ?? throw new ArgumentNullException(nameof(resourceAssembly));
         _anomalyI18nDir = Path.Combine(userDataDir, "i18n", "anomaly");
-        _localeOverride = GetOrCreateStringPreference("anomaly", "locale", string.Empty, "Locale override");
+        _localeOverride = string.IsNullOrWhiteSpace(activeLocale)
+            ? GetOrCreateStringPreference("anomaly", "locale", string.Empty, "Locale override")
+            : null;
 
         EnsureAnomalyExtracted();
-        ActiveLocale = ResolveLocale();
+        ActiveLocale = string.IsNullOrWhiteSpace(activeLocale) ? ResolveLocale() : activeLocale;
         LoadAnomalyTranslations();
     }
 
@@ -63,7 +75,7 @@ public class LocalizationService
         if (_active.TryGetValue(key, out var value)) return value;
         if (_fallback.TryGetValue(key, out var fb)) return fb;
 
-        MelonLogger.Warning($"[Anomaly i18n] Missing key: {key}");
+        LogWarning($"[Anomaly i18n] Missing key: {key}");
         return key;
     }
 
@@ -100,7 +112,7 @@ public class LocalizationService
     {
         if (string.IsNullOrWhiteSpace(modNamespace))
         {
-            MelonLogger.Error("[Anomaly i18n] RegisterMod: namespace must not be empty.");
+            LogError("[Anomaly i18n] RegisterMod: namespace must not be empty.");
             return false;
         }
 
@@ -108,8 +120,8 @@ public class LocalizationService
 
         if (!NamespaceRegex.IsMatch(modNamespace))
         {
-            MelonLogger.Error($"[Anomaly i18n] RegisterMod: invalid namespace '{modNamespace}'. " +
-                              "Must be lowercase alphanumeric with dots (e.g., 'mymod').");
+            LogError($"[Anomaly i18n] RegisterMod: invalid namespace '{modNamespace}'. " +
+                     "Must be lowercase alphanumeric with dots (e.g., 'mymod').");
             return false;
         }
 
@@ -118,35 +130,54 @@ public class LocalizationService
             || modNamespace.StartsWith("launcher.", StringComparison.Ordinal)
             || modNamespace == "launcher")
         {
-            MelonLogger.Error($"[Anomaly i18n] RegisterMod: namespace '{modNamespace}' is reserved.");
+            LogError($"[Anomaly i18n] RegisterMod: namespace '{modNamespace}' is reserved.");
             return false;
         }
 
         if (_registeredNamespaces.Contains(modNamespace))
         {
-            MelonLogger.Warning($"[Anomaly i18n] RegisterMod: namespace '{modNamespace}' is already registered. Ignoring.");
+            LogWarning($"[Anomaly i18n] RegisterMod: namespace '{modNamespace}' is already registered. Ignoring.");
             return false;
         }
 
         if (!Directory.Exists(i18nDirectoryPath))
         {
-            MelonLogger.Error($"[Anomaly i18n] RegisterMod: directory '{i18nDirectoryPath}' does not exist.");
+            LogError($"[Anomaly i18n] RegisterMod: directory '{i18nDirectoryPath}' does not exist.");
             return false;
         }
 
         try
         {
-            if (!MergeFileInto(_fallback, Path.Combine(i18nDirectoryPath, "en.yaml"), modNamespace))
+            // Stage the complete registration in private copies. Invalid YAML,
+            // namespace escapes, or key collisions discard the copies without
+            // publishing any entries or claiming the namespace.
+            var stagedFallback = new Dictionary<string, string>(_fallback, StringComparer.Ordinal);
+            var stagedActive = new Dictionary<string, string>(_active, StringComparer.Ordinal);
+            var stagedNamespaces = new HashSet<string>(_registeredNamespaces, StringComparer.OrdinalIgnoreCase);
+            var occupiedKeys = new HashSet<string>(_fallback.Keys, StringComparer.Ordinal);
+            occupiedKeys.UnionWith(_active.Keys);
+
+            if (!MergeModFileInto(
+                    stagedFallback,
+                    Path.Combine(i18nDirectoryPath, "en.yaml"),
+                    modNamespace,
+                    occupiedKeys,
+                    required: true))
                 return false;
-            if (!MergeActiveFromDir(i18nDirectoryPath, modNamespace))
+            if (!MergeActiveModFromDir(stagedActive, i18nDirectoryPath, modNamespace, occupiedKeys))
                 return false;
-            _registeredNamespaces.Add(modNamespace);
-            MelonLogger.Msg($"[Anomaly i18n] Registered mod namespace '{modNamespace}' from '{i18nDirectoryPath}'.");
+            if (!stagedNamespaces.Add(modNamespace))
+                return false;
+
+            _fallback = stagedFallback;
+            _active = stagedActive;
+            _registeredNamespaces = stagedNamespaces;
+            LogMessage($"[Anomaly i18n] Registered mod namespace '{modNamespace}' from '{i18nDirectoryPath}'.");
             return true;
         }
         catch (Exception ex)
         {
-            MelonLogger.Error($"[Anomaly i18n] RegisterMod '{modNamespace}' failed: {ex.Message}");
+            LogError($"[Anomaly i18n] RegisterMod '{modNamespace}' failed: {ex.Message}");
             return false;
         }
     }
@@ -193,7 +224,7 @@ public class LocalizationService
         }
         catch (Exception ex)
         {
-            MelonLogger.Warning($"[Anomaly i18n] Extract failed: {ex.Message}");
+            LogWarning($"[Anomaly i18n] Extract failed: {ex.Message}");
         }
     }
 
@@ -265,27 +296,57 @@ public class LocalizationService
         foreach (var kvp in _fallback) _active[kvp.Key] = kvp.Value;
     }
 
-    private bool MergeActiveFromDir(string dir, string expectedNamespace)
+    private bool MergeActiveModFromDir(
+        Dictionary<string, string> target,
+        string dir,
+        string expectedNamespace,
+        ISet<string> occupiedKeys)
     {
-        var exact = LoadYamlFile(Path.Combine(dir, $"{ActiveLocale}.yaml"));
-        if (exact != null)
+        string exactPath = Path.Combine(dir, $"{ActiveLocale}.yaml");
+        if (File.Exists(exactPath))
         {
-            return MergeTranslations(_active, exact, dir, expectedNamespace);
+            return MergeModFileInto(target, exactPath, expectedNamespace, occupiedKeys);
         }
 
         var underscore = ActiveLocale.IndexOf('_');
         if (underscore > 0)
         {
             var prefix = ActiveLocale.Substring(0, underscore);
-            var prefixMatch = LoadYamlFile(Path.Combine(dir, $"{prefix}.yaml"));
-            if (prefixMatch != null)
+            string prefixPath = Path.Combine(dir, $"{prefix}.yaml");
+            if (File.Exists(prefixPath))
             {
-                return MergeTranslations(_active, prefixMatch, dir, expectedNamespace);
+                return MergeModFileInto(target, prefixPath, expectedNamespace, occupiedKeys);
             }
         }
 
         // Nothing translated for active locale — fallback file (en.yaml) was already merged into _fallback.
         return true;
+    }
+
+    private bool MergeModFileInto(
+        Dictionary<string, string> target,
+        string path,
+        string expectedNamespace,
+        ISet<string> occupiedKeys,
+        bool required = false)
+    {
+        if (!TryLoadYamlFile(path, out Dictionary<string, string> loaded, out Exception error))
+        {
+            LogError(
+                $"[Anomaly i18n] '{path}' is invalid YAML and registration was rejected: {error.Message}");
+            return false;
+        }
+
+        if (loaded == null)
+        {
+            if (!required)
+                return true;
+
+            LogError($"[Anomaly i18n] Required English fallback '{path}' is missing.");
+            return false;
+        }
+
+        return MergeTranslations(target, loaded, path, expectedNamespace, occupiedKeys);
     }
 
     private bool MergeFileInto(Dictionary<string, string> target, string path, string expectedNamespace)
@@ -300,15 +361,30 @@ public class LocalizationService
         Dictionary<string, string> target,
         Dictionary<string, string> loaded,
         string source,
-        string expectedNamespace)
+        string expectedNamespace,
+        ISet<string> occupiedKeys = null)
     {
         string prefix = expectedNamespace + ".";
         foreach (var kvp in loaded)
         {
-            if (!kvp.Key.StartsWith(prefix, StringComparison.Ordinal))
+            if (string.IsNullOrEmpty(kvp.Key) || !kvp.Key.StartsWith(prefix, StringComparison.Ordinal))
             {
-                MelonLogger.Error(
+                LogError(
                     $"[Anomaly i18n] '{source}' contains key '{kvp.Key}' outside namespace '{expectedNamespace}'.");
+                return false;
+            }
+
+            if (kvp.Value == null)
+            {
+                LogError(
+                    $"[Anomaly i18n] '{source}' contains null value for key '{kvp.Key}'.");
+                return false;
+            }
+
+            if (occupiedKeys != null && occupiedKeys.Contains(kvp.Key))
+            {
+                LogError(
+                    $"[Anomaly i18n] Key '{kvp.Key}' from '{source}' collides with an existing translation.");
                 return false;
             }
 
@@ -322,7 +398,7 @@ public class LocalizationService
     {
         if (target.TryGetValue(key, out var existing) && existing != value)
         {
-            MelonLogger.Warning(
+            LogWarning(
                 $"[Anomaly i18n] Key '{key}' from '{source}' overwrites an existing translation.");
         }
 
@@ -330,6 +406,31 @@ public class LocalizationService
     }
 
     private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder().Build();
+
+    private static bool TryLoadYamlFile(
+        string path,
+        out Dictionary<string, string> loaded,
+        out Exception error)
+    {
+        loaded = null;
+        error = null;
+
+        if (!File.Exists(path))
+            return true;
+
+        try
+        {
+            var yaml = File.ReadAllText(path);
+            loaded = YamlDeserializer.Deserialize<Dictionary<string, string>>(yaml)
+                     ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex;
+            return false;
+        }
+    }
 
     private static Dictionary<string, string> LoadYamlFile(string path)
     {
@@ -355,5 +456,23 @@ public class LocalizationService
         var category = MelonPreferences.CreateCategory(categoryId, "Anomaly");
         var entry = category.GetEntry<string>(entryId);
         return entry ?? category.CreateEntry(entryId, defaultValue, displayName);
+    }
+
+    private static void LogMessage(string message)
+    {
+        try { MelonLogger.Msg(message); }
+        catch { /* Logging must never change localization state. */ }
+    }
+
+    private static void LogWarning(string message)
+    {
+        try { MelonLogger.Warning(message); }
+        catch { /* Logging must never change localization state. */ }
+    }
+
+    private static void LogError(string message)
+    {
+        try { MelonLogger.Error(message); }
+        catch { /* Logging must never change localization state. */ }
     }
 }

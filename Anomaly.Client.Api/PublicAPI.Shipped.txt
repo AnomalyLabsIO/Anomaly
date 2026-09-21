@@ -5,11 +5,8 @@ E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AnnouncerLineScheduledEventArgs> Anomaly.Client.Api.Events.Handlers.AnnouncerEvents::LineScheduled|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AnnouncerLineStartedEventArgs> Anomaly.Client.Api.Events.Handlers.AnnouncerEvents::LineStarted|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AnomalyMessageReceivedEventArgs> Anomaly.Client.Api.Events.Handlers.NetworkMessageEvents::AnomalyMessageReceived|add=public|remove=public
-E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetDespawnedEventArgs> Anomaly.Client.Api.Assets.AssetEvents::Despawned|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs> Anomaly.Client.Api.Assets.AssetEvents::OverrideApplied|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs> Anomaly.Client.Api.Assets.AssetEvents::OverrideCleared|add=public|remove=public
-E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs> Anomaly.Client.Api.Assets.AssetEvents::Reloaded|add=public|remove=public
-E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs> Anomaly.Client.Api.Assets.AssetEvents::Spawned|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs> Anomaly.Client.Api.Events.Handlers.AudioEvents::Playing|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs> Anomaly.Client.Api.Events.Handlers.HudEvents::BroadcastShowing|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.CameraShakingEventArgs> Anomaly.Client.Api.Events.Handlers.CameraEvents::Shaking|add=public|remove=public
@@ -39,8 +36,6 @@ E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PickupAddedEventArgs> Anomaly.Client.Api.Events.Handlers.PickupEvents::Added|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PickupRemovedEventArgs> Anomaly.Client.Api.Events.Handlers.PickupEvents::Removed|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerAddedEventArgs> Anomaly.Client.Api.Events.Handlers.PlayerEvents::Added|add=public|remove=public
-E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerDamagedEventArgs> Anomaly.Client.Api.Events.Handlers.StatsEvents::Damaged|add=public|remove=public
-E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerDiedEventArgs> Anomaly.Client.Api.Events.Handlers.StatsEvents::Died|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerDroppingItemEventArgs> Anomaly.Client.Api.Events.Handlers.InventoryEvents::DroppingItem|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerHealedEventArgs> Anomaly.Client.Api.Events.Handlers.StatsEvents::Healed|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerHumeShieldChangedEventArgs> Anomaly.Client.Api.Events.Handlers.StatsEvents::HumeShieldChanged|add=public|remove=public
@@ -81,12 +76,6 @@ E|System.Action`1<System.String> Anomaly.Client.Api.Config.IConfigSource::KeyCha
 E|System.Action`1<System.String> Anomaly.Client.Api.Input.InputRegistry::Pressed|add=public|remove=public
 E|System.Action`1<System.String> Anomaly.Client.Api.Input.InputRegistry::Released|add=public|remove=public
 E|System.Action`1<UnityEngine.Camera> Anomaly.Client.Api.Features.CameraManager::Changed|add=public|remove=public
-F|Anomaly.Client.Api.Content.ItemContentCompletionStatus Anomaly.Client.Api.Content.ItemContentCompletionStatus::Complete|static=True|readonly=False|const=True
-F|Anomaly.Client.Api.Content.ItemContentCompletionStatus Anomaly.Client.Api.Content.ItemContentCompletionStatus::HashMismatch|static=True|readonly=False|const=True
-F|Anomaly.Client.Api.Content.ItemContentCompletionStatus Anomaly.Client.Api.Content.ItemContentCompletionStatus::Incomplete|static=True|readonly=False|const=True
-F|Anomaly.Client.Api.Content.PassiveAssetKind Anomaly.Client.Api.Content.PassiveAssetKind::AudioOgg|static=True|readonly=False|const=True
-F|Anomaly.Client.Api.Content.PassiveAssetKind Anomaly.Client.Api.Content.PassiveAssetKind::MeshGltf|static=True|readonly=False|const=True
-F|Anomaly.Client.Api.Content.PassiveAssetKind Anomaly.Client.Api.Content.PassiveAssetKind::TexturePng|static=True|readonly=False|const=True
 F|Anomaly.Client.Api.Enum.SceneType Anomaly.Client.Api.Enum.SceneType::Facility|static=True|readonly=False|const=True
 F|Anomaly.Client.Api.Enum.SceneType Anomaly.Client.Api.Enum.SceneType::FastMenu|static=True|readonly=False|const=True
 F|Anomaly.Client.Api.Enum.SceneType Anomaly.Client.Api.Enum.SceneType::Loader|static=True|readonly=False|const=True
@@ -186,14 +175,6 @@ F|System.Byte Anomaly.Client.Api.Enum.SceneType::value__|static=False|readonly=F
 F|System.Byte Anomaly.Client.Api.Features.LocalBroadcast/Flags::value__|static=False|readonly=False|const=False
 F|System.Byte Anomaly.Client.Api.Features.MotionFailure::value__|static=False|readonly=False|const=False
 F|System.Byte Anomaly.Client.Api.Input.InputModifiers::value__|static=False|readonly=False|const=False
-F|System.Int32 Anomaly.Client.Api.Content.ItemContentCompletionStatus::value__|static=False|readonly=False|const=False
-F|System.Int32 Anomaly.Client.Api.Content.ItemContentLimits::MaxAssetsPerItem|static=True|readonly=False|const=True
-F|System.Int32 Anomaly.Client.Api.Content.ItemContentLimits::MaxAssets|static=True|readonly=False|const=True
-F|System.Int32 Anomaly.Client.Api.Content.ItemContentLimits::MaxItems|static=True|readonly=False|const=True
-F|System.Int32 Anomaly.Client.Api.Content.ItemContentLimits::MaxKeyLength|static=True|readonly=False|const=True
-F|System.Int32 Anomaly.Client.Api.Content.ItemContentLimits::MaxTextLength|static=True|readonly=False|const=True
-F|System.Int32 Anomaly.Client.Api.Content.ItemContentLimits::MaxTransferChunkBytes|static=True|readonly=False|const=True
-F|System.Int32 Anomaly.Client.Api.Content.PassiveAssetKind::value__|static=False|readonly=False|const=False
 F|System.Int32 Anomaly.Client.Api.Features.Hud/Element::value__|static=False|readonly=False|const=False
 F|System.Int32 Anomaly.Client.Api.Features.PlayerAnchor::value__|static=False|readonly=False|const=False
 F|System.Int32 Anomaly.Client.Api.Modding.ApiContract::ManifestSchemaVersion|static=True|readonly=False|const=True
@@ -201,8 +182,6 @@ F|System.Int32 Anomaly.Client.Api.Modding.FeatureHealthStatus::value__|static=Fa
 F|System.Int32 Anomaly.Client.Api.Modding.ModCapability::value__|static=False|readonly=False|const=False
 F|System.Int32 Anomaly.Client.Api.UI.UiAnchor::value__|static=False|readonly=False|const=False
 F|System.Int32 Anomaly.Client.Api.UI.UiLayer::value__|static=False|readonly=False|const=False
-F|System.Int64 Anomaly.Client.Api.Content.ItemContentLimits::MaxAssetBytes|static=True|readonly=False|const=True
-F|System.Int64 Anomaly.Client.Api.Content.ItemContentLimits::MaxCatalogBytes|static=True|readonly=False|const=True
 F|System.Single Anomaly.Client.Api.UI.UiPrefabValidator::MaxDimensionPx|static=True|readonly=False|const=True
 F|System.String Anomaly.Client.Api.Features.LocalPlayerMotion::DefaultOwnerId|static=True|readonly=False|const=True
 F|System.String Anomaly.Client.Api.Modding.ApiContract::CurrentVersion|static=True|readonly=False|const=True
@@ -211,21 +190,6 @@ F|System.String Anomaly.Client.Api.Modding.ApiContract::MinimumSupportedVersion|
 M|Anomaly.Client.Api.Commands.ICommand Anomaly.Client.Api.Commands.CommandRegistry::Lookup(System.String)|static=True|virtual=False|abstract=False|gp=
 M|Anomaly.Client.Api.Config.IConfigSource Anomaly.Client.Api.Config.ClientConfig::For(System.String)|static=True|virtual=False|abstract=False|gp=
 M|Anomaly.Client.Api.Config.IConfigSource Anomaly.Client.Api.Modding.IModContext::get_Config()|static=False|virtual=True|abstract=True|gp=
-M|Anomaly.Client.Api.Content.ItemCatalog Anomaly.Client.Api.Content.ItemCatalogActivationState::get_Catalog()|static=False|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot Anomaly.Client.Api.Content.FileItemCatalogActivationStore::Load()|static=False|virtual=True|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot Anomaly.Client.Api.Content.IItemCatalogActivationStore::Load()|static=False|virtual=True|abstract=True|gp=
-M|Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot Anomaly.Client.Api.Content.ItemCatalogActivationManager::get_Current()|static=False|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemCatalogActivationState Anomaly.Client.Api.Content.ItemCatalogActivationManager::Commit()|static=False|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemCatalogActivationState Anomaly.Client.Api.Content.ItemCatalogActivationManager::Prepare(Anomaly.Client.Api.Content.ItemCatalog,System.String,Anomaly.Client.Api.Content.ItemCatalogConsentRecord,System.Func`2<Anomaly.Client.Api.Content.ItemContentCacheKey,System.Boolean>,System.DateTimeOffset)|static=False|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemCatalogActivationState Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot::get_Active()|static=False|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemCatalogActivationState Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot::get_Previous()|static=False|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemCatalogConsentRecord Anomaly.Client.Api.Content.ItemCatalogConsentRecord::Create(System.String,Anomaly.Client.Api.Content.ItemCatalog,System.DateTimeOffset)|static=True|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemCatalogDiff Anomaly.Client.Api.Content.ItemCatalogDiff::Compare(Anomaly.Client.Api.Content.ItemCatalog,Anomaly.Client.Api.Content.ItemCatalog)|static=True|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemContentCacheKey Anomaly.Client.Api.Content.ItemContentCacheKey::Create(System.String,System.String,System.String)|static=True|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemContentCacheKey Anomaly.Client.Api.Content.ItemContentTransferSession::GetCacheKey(System.String)|static=False|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemContentCompletionStatus Anomaly.Client.Api.Content.ItemContentTransferSession::CompleteAsset(System.Guid,System.String)|static=False|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.ItemContentRequest Anomaly.Client.Api.Content.ItemContentTransferSession::RequestAsset(System.String)|static=False|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Content.PassiveAssetKind Anomaly.Client.Api.Content.PassiveAssetReference::get_Kind()|static=False|virtual=False|abstract=False|gp=
 M|Anomaly.Client.Api.Enum.SceneType Anomaly.Client.Api.Features.Client::get_CurrentSceneType()|static=True|virtual=False|abstract=False|gp=
 M|Anomaly.Client.Api.Features.AdminToy Anomaly.Client.Api.Events.Args.AdminToyAddedEventArgs::get_AdminToy()|static=False|virtual=False|abstract=False|gp=
 M|Anomaly.Client.Api.Features.AdminToy Anomaly.Client.Api.Events.Args.AdminToyRemovedEventArgs::get_AdminToy()|static=False|virtual=False|abstract=False|gp=
@@ -311,11 +275,7 @@ M|Anomaly.Client.Api.Persistence.IPersistenceStore Anomaly.Client.Api.Persistenc
 M|Anomaly.Client.Api.Scheduling.ScheduledTask Anomaly.Client.Api.Modding.IModContext::Schedule(System.TimeSpan,System.Action)|static=False|virtual=True|abstract=True|gp=
 M|Anomaly.Client.Api.Scheduling.ScheduledTask Anomaly.Client.Api.Modding.IModContext::ScheduleRecurring(System.TimeSpan,System.Action,System.TimeSpan)|static=False|virtual=True|abstract=True|gp=
 M|Anomaly.Client.Api.Scheduling.ScheduledTask Anomaly.Client.Api.Scheduling.Scheduler::Every(System.TimeSpan,System.Action,System.TimeSpan)|static=True|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Scheduling.ScheduledTask Anomaly.Client.Api.Scheduling.Scheduler::Every(System.TimeSpan,System.Action,System.TimeSpan,System.String)|static=True|virtual=False|abstract=False|gp=
 M|Anomaly.Client.Api.Scheduling.ScheduledTask Anomaly.Client.Api.Scheduling.Scheduler::In(System.TimeSpan,System.Action)|static=True|virtual=False|abstract=False|gp=
-M|Anomaly.Client.Api.Scheduling.ScheduledTask Anomaly.Client.Api.Scheduling.Scheduler::In(System.TimeSpan,System.Action,System.String)|static=True|virtual=False|abstract=False|gp=
-M|Anomaly.Shared.Networking.AnomalyInboundRateLimiter Anomaly.Client.Api.Networking.AnomalyReplayTable::get_InboundRateLimiter()|static=True|virtual=False|abstract=False|gp=
-M|Anomaly.Shared.Networking.AnomalyReplayState Anomaly.Client.Api.Networking.AnomalyReplayTable::get_Instance()|static=True|virtual=False|abstract=False|gp=
 M|Anomaly.Shared.Networking.IAnomalyMessage Anomaly.Client.Api.Events.Args.AnomalyMessageReceivedEventArgs::get_Message()|static=False|virtual=False|abstract=False|gp=
 M|Anomaly.Shared.Networking.Messages.RoundPhase Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs::get_NewPhase()|static=False|virtual=False|abstract=False|gp=
 M|Anomaly.Shared.Networking.Messages.RoundPhase Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs::get_PreviousPhase()|static=False|virtual=False|abstract=False|gp=
@@ -420,8 +380,6 @@ M|Il2CppPlayerRoles.Ragdolls.BasicRagdoll Anomaly.Client.Api.Features.Ragdoll::g
 M|Il2CppPlayerRoles.RoleTypeId Anomaly.Client.Api.Features.Ragdoll::get_RoleType()|static=False|virtual=False|abstract=False|gp=
 M|Il2CppPlayerRoles.RoleTypeId Anomaly.Client.Api.Features.Role::get_Type()|static=False|virtual=False|abstract=False|gp=
 M|Il2CppPlayerRoles.Team Anomaly.Client.Api.Features.Role::get_Team()|static=False|virtual=False|abstract=False|gp=
-M|Il2CppPlayerStatsSystem.DamageHandlerBase Anomaly.Client.Api.Events.Args.PlayerDamagedEventArgs::get_DamageHandler()|static=False|virtual=False|abstract=False|gp=
-M|Il2CppPlayerStatsSystem.DamageHandlerBase Anomaly.Client.Api.Events.Args.PlayerDiedEventArgs::get_DamageHandler()|static=False|virtual=False|abstract=False|gp=
 M|Il2CppPlayerStatsSystem.DamageHandlerBase Anomaly.Client.Api.Features.Ragdoll::get_DamageHandler()|static=False|virtual=False|abstract=False|gp=
 M|Il2CppPlayerStatsSystem.PlayerStats Anomaly.Client.Api.Features.Player::get_PlayerStats()|static=False|virtual=False|abstract=False|gp=
 M|Il2CppPlayerStatsSystem.PlayerStats Anomaly.Client.Api.Features.PlayerStatsWrapper::get_Base()|static=False|virtual=False|abstract=False|gp=
@@ -432,22 +390,14 @@ M|Il2CppScp914.Scp914KnobSetting Anomaly.Client.Api.Features.Scp914::get_KnobSet
 M|Il2CppSystem.Collections.Generic.List`1<Il2CppInventorySystem.Items.Pickups.ItemPickupBase> Anomaly.Client.Api.Features.LockerChamberWrapper::get_Contents()|static=False|virtual=False|abstract=False|gp=
 M|Il2CppVoiceChat.VoiceChatChannel Anomaly.Client.Api.Features.VoiceMessagePacket::get_Channel()|static=False|virtual=False|abstract=False|gp=
 M|System.Boolean Anomaly.Client.Api.Assets.AnomalyResources::TryGetAudioClip(System.Byte[],UnityEngine.AudioClip&)|static=True|virtual=False|abstract=False|gp=
-M|System.Boolean Anomaly.Client.Api.Assets.AnomalyResources::TryGetBundle(System.Byte[],UnityEngine.AssetBundle&)|static=True|virtual=False|abstract=False|gp=
 M|System.Boolean Anomaly.Client.Api.Assets.AnomalyResources::TryGetTexture(System.Byte[],UnityEngine.Texture2D&)|static=True|virtual=False|abstract=False|gp=
-M|System.Boolean Anomaly.Client.Api.Assets.AnomalyResources::TryLoadFromBundle(System.Byte[],System.String,T&)|static=True|virtual=False|abstract=False|gp=T:NonVariant:UnityEngine.Object
 M|System.Boolean Anomaly.Client.Api.Commands.CommandContext::TryArgInt(System.Int32,System.Int32&)|static=False|virtual=False|abstract=False|gp=
 M|System.Boolean Anomaly.Client.Api.Commands.CommandRegistry::Execute(System.String)|static=True|virtual=False|abstract=False|gp=
 M|System.Boolean Anomaly.Client.Api.Commands.CommandRegistry::Execute(System.String,System.Action`1<System.String>)|static=True|virtual=False|abstract=False|gp=
 M|System.Boolean Anomaly.Client.Api.Commands.CommandRegistry::Unregister(System.String,System.String)|static=True|virtual=False|abstract=False|gp=
+M|System.Boolean Anomaly.Client.Api.Compatibility.GameVersionCompatibility::IsSupported(System.Collections.Generic.IEnumerable`1<System.String>,System.Int32,System.Int32,System.Int32)|static=True|virtual=False|abstract=False|gp=
+M|System.Boolean Anomaly.Client.Api.Compatibility.GameVersionCompatibility::TryParse(System.String,System.Version&,System.Version&)|static=True|virtual=False|abstract=False|gp=
 M|System.Boolean Anomaly.Client.Api.Config.IConfigSource::Has(System.String)|static=False|virtual=True|abstract=True|gp=
-M|System.Boolean Anomaly.Client.Api.Content.ItemCatalogActivationManager::Rollback()|static=False|virtual=False|abstract=False|gp=
-M|System.Boolean Anomaly.Client.Api.Content.ItemCatalogCanonicalizer::MatchesDeclaredHash(Anomaly.Client.Api.Content.ItemCatalog)|static=True|virtual=False|abstract=False|gp=
-M|System.Boolean Anomaly.Client.Api.Content.ItemCatalogConsentRecord::Allows(System.String,System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Boolean Anomaly.Client.Api.Content.ItemCatalogDiff::get_HasChanges()|static=False|virtual=False|abstract=False|gp=
-M|System.Boolean Anomaly.Client.Api.Content.ItemContentCacheKey::Equals(Anomaly.Client.Api.Content.ItemContentCacheKey)|static=False|virtual=True|abstract=False|gp=
-M|System.Boolean Anomaly.Client.Api.Content.ItemContentCacheKey::Equals(System.Object)|static=False|virtual=True|abstract=False|gp=
-M|System.Boolean Anomaly.Client.Api.Content.ItemContentRequest::get_IsAlreadyAvailable()|static=False|virtual=False|abstract=False|gp=
-M|System.Boolean Anomaly.Client.Api.Content.ItemContentTransferSession::IsAssetAvailable(System.String)|static=False|virtual=False|abstract=False|gp=
 M|System.Boolean Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs::get_IsAllowed()|static=False|virtual=True|abstract=False|gp=
 M|System.Boolean Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs::get_IsAllowed()|static=False|virtual=True|abstract=False|gp=
 M|System.Boolean Anomaly.Client.Api.Events.Args.CameraShakingEventArgs::get_IsAllowed()|static=False|virtual=True|abstract=False|gp=
@@ -636,11 +586,7 @@ M|System.Byte Anomaly.Client.Api.Features.LockerChamberWrapper::get_Index()|stat
 M|System.Byte Anomaly.Client.Api.Features.PlayerEffect::get_Intensity()|static=False|virtual=False|abstract=False|gp=
 M|System.Byte Anomaly.Client.Api.Features.PlayerEffect::get_MaxIntensity()|static=False|virtual=False|abstract=False|gp=
 M|System.Byte Anomaly.Client.Api.Features.SpeakerAdminToy::get_ControllerId()|static=False|virtual=False|abstract=False|gp=
-M|System.Byte[] Anomaly.Client.Api.Content.ItemCatalogCanonicalizer::Serialize(Anomaly.Client.Api.Content.ItemCatalog)|static=True|virtual=False|abstract=False|gp=
 M|System.Byte[] Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::get_TextureHash()|static=False|virtual=False|abstract=False|gp=
-M|System.Byte[] Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs::get_NewHash()|static=False|virtual=False|abstract=False|gp=
-M|System.Byte[] Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs::get_OldHash()|static=False|virtual=False|abstract=False|gp=
-M|System.Byte[] Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs::get_AssetHash()|static=False|virtual=False|abstract=False|gp=
 M|System.Byte[] Anomaly.Client.Api.Features.VoiceMessagePacket::get_Data()|static=False|virtual=False|abstract=False|gp=
 M|System.Byte[] Anomaly.Client.Api.FileTransfer.FileCache::ComputeHash(System.Byte[])|static=True|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.IReadOnlyCollection`1<Anomaly.Client.Api.Commands.ICommand> Anomaly.Client.Api.Commands.CommandRegistry::get_All()|static=True|virtual=False|abstract=False|gp=
@@ -650,22 +596,12 @@ M|System.Collections.Generic.IReadOnlyList`1<Anomaly.Client.Api.Features.LockerC
 M|System.Collections.Generic.IReadOnlyList`1<Anomaly.Client.Api.Modding.ModManifest> Anomaly.Client.Api.Modding.ModResolutionResult::get_Ordered()|static=False|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Commands.CommandContext::get_Args()|static=False|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Commands.ICommand::get_Aliases()|static=False|virtual=True|abstract=True|gp=
-M|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Content.ItemCatalogDiff::get_AddedAssets()|static=False|virtual=False|abstract=False|gp=
-M|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Content.ItemCatalogDiff::get_ChangedAssets()|static=False|virtual=False|abstract=False|gp=
-M|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Content.ItemCatalogDiff::get_ChangedItems()|static=False|virtual=False|abstract=False|gp=
-M|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Content.ItemCatalogDiff::get_RemovedAssets()|static=False|virtual=False|abstract=False|gp=
-M|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Content.ItemCatalogValidator::Validate(Anomaly.Client.Api.Content.ItemCatalog)|static=True|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Modding.ModManifestValidator::Validate(Anomaly.Client.Api.Modding.ModManifest)|static=True|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Modding.ModResolutionResult::get_Errors()|static=False|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.UI.ModSettings.ModSettingMetadata::get_Choices()|static=False|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.IReadOnlyList`1<UnityEngine.Renderer> Anomaly.Client.Api.Features.ItemModels::GetRenderers(Il2Cpp.ItemType)|static=True|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.IReadOnlyList`1<UnityEngine.Renderer> Anomaly.Client.Api.Features.Pickup::get_Renderers()|static=False|virtual=False|abstract=False|gp=
-M|System.Collections.Generic.IReadOnlySet`1<System.String> Anomaly.Client.Api.Content.ItemContentLimits::get_ApprovedBuiltInPrefabs()|static=True|virtual=False|abstract=False|gp=
-M|System.Collections.Generic.List`1<Anomaly.Client.Api.Content.ItemContentCacheKey> Anomaly.Client.Api.Content.ItemCatalogActivationState::get_Assets()|static=False|virtual=False|abstract=False|gp=
-M|System.Collections.Generic.List`1<Anomaly.Client.Api.Content.ItemDefinition> Anomaly.Client.Api.Content.ItemCatalog::get_Items()|static=False|virtual=False|abstract=False|gp=
-M|System.Collections.Generic.List`1<Anomaly.Client.Api.Content.PassiveAssetReference> Anomaly.Client.Api.Content.ItemCatalog::get_Assets()|static=False|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.List`1<Anomaly.Client.Api.Modding.ModDependency> Anomaly.Client.Api.Modding.ModManifest::get_Dependencies()|static=False|virtual=False|abstract=False|gp=
-M|System.Collections.Generic.List`1<System.String> Anomaly.Client.Api.Content.ItemDefinition::get_AssetKeys()|static=False|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.List`1<System.String> Anomaly.Client.Api.Modding.ModManifest::get_Conflicts()|static=False|virtual=False|abstract=False|gp=
 M|System.Collections.Generic.List`1<System.String> Anomaly.Client.Api.Modding.ModManifest::get_SupportedGameVersions()|static=False|virtual=False|abstract=False|gp=
 M|System.Collections.ObjectModel.ReadOnlyCollection`1<Anomaly.Client.Api.Features.AdminToy> Anomaly.Client.Api.Features.AdminToy::get_List()|static=True|virtual=False|abstract=False|gp=
@@ -707,13 +643,10 @@ M|System.Collections.ObjectModel.ReadOnlyCollection`1<Il2CppInventorySystem.Item
 M|System.Collections.ObjectModel.ReadOnlyDictionary`2<System.String,System.UInt16> Anomaly.Client.Api.Features.PlayerInventory::get_Ammo()|static=False|virtual=False|abstract=False|gp=
 M|System.Collections.ObjectModel.ReadOnlyDictionary`2<UnityEngine.GameObject,Anomaly.Client.Api.Features.Player> Anomaly.Client.Api.Features.Player::get_GameObjectToPlayer()|static=True|virtual=False|abstract=False|gp=
 M|System.DateTime Anomaly.Client.Api.FileTransfer.FileCache/CacheEntry::get_LastUsed()|static=False|virtual=False|abstract=False|gp=
-M|System.DateTimeOffset Anomaly.Client.Api.Content.ItemCatalogActivationState::get_ActivatedAtUtc()|static=False|virtual=False|abstract=False|gp=
-M|System.DateTimeOffset Anomaly.Client.Api.Content.ItemCatalogConsentRecord::get_ApprovedAtUtc()|static=False|virtual=False|abstract=False|gp=
 M|System.DateTimeOffset Anomaly.Client.Api.Modding.FeatureHealthRecord::get_UpdatedUtc()|static=False|virtual=False|abstract=False|gp=
 M|System.Double Anomaly.Client.Api.Events.Args.AnnouncerLineScheduledEventArgs::get_ScheduledStartDspTime()|static=False|virtual=False|abstract=False|gp=
 M|System.Double Anomaly.Client.Api.Features.Ragdoll::get_CreationTime()|static=False|virtual=False|abstract=False|gp=
 M|System.Double Anomaly.Client.Api.Scheduling.ScheduledTask::get_RemainingSeconds()|static=False|virtual=False|abstract=False|gp=
-M|System.Guid Anomaly.Client.Api.Content.ItemContentRequest::get_RequestId()|static=False|virtual=False|abstract=False|gp=
 M|System.IAsyncResult Anomaly.Client.Api.Events.AnomalyEventHandler`1::BeginInvoke(TEventArgs,System.AsyncCallback,System.Object)|static=False|virtual=True|abstract=False|gp=
 M|System.IDisposable Anomaly.Client.Api.Features.CameraManager::RegisterFallback(System.String,System.Func`1<UnityEngine.Camera>)|static=True|virtual=False|abstract=False|gp=
 M|System.IDisposable Anomaly.Client.Api.Features.CharacterModels::RegisterLocalHook(Anomaly.Client.Api.Features.IModelHook)|static=True|virtual=False|abstract=False|gp=
@@ -725,14 +658,8 @@ M|System.IDisposable Anomaly.Client.Api.Input.VirtualInputs::RegisterAxis(System
 M|System.IDisposable Anomaly.Client.Api.Input.VirtualInputs::RegisterButton(System.String,UnityEngine.KeyCode,System.Func`1<System.Boolean>)|static=True|virtual=False|abstract=False|gp=
 M|System.IDisposable Anomaly.Client.Api.Input.VirtualInputs::RegisterMouseButton(System.String,System.Int32,System.Func`1<System.Boolean>)|static=True|virtual=False|abstract=False|gp=
 M|System.Int32 Anomaly.Client.Api.Commands.CommandRegistry::UnregisterAll(System.String)|static=True|virtual=False|abstract=False|gp=
-M|System.Int32 Anomaly.Client.Api.Content.ItemCatalog::get_SchemaVersion()|static=False|virtual=False|abstract=False|gp=
-M|System.Int32 Anomaly.Client.Api.Content.ItemCatalogActivationState::get_SchemaVersion()|static=False|virtual=False|abstract=False|gp=
-M|System.Int32 Anomaly.Client.Api.Content.ItemCatalogDiff::get_FileCount()|static=False|virtual=False|abstract=False|gp=
-M|System.Int32 Anomaly.Client.Api.Content.ItemContentCacheKey::GetHashCode()|static=False|virtual=True|abstract=False|gp=
 M|System.Int32 Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::get_MaterialIndex()|static=False|virtual=False|abstract=False|gp=
 M|System.Int32 Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs::get_MaterialIndex()|static=False|virtual=False|abstract=False|gp=
-M|System.Int32 Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs::get_AffectedOverrides()|static=False|virtual=False|abstract=False|gp=
-M|System.Int32 Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs::get_AffectedSpawns()|static=False|virtual=False|abstract=False|gp=
 M|System.Int32 Anomaly.Client.Api.Events.Args.FileTransferCompleteEventArgs::get_FileCount()|static=False|virtual=False|abstract=False|gp=
 M|System.Int32 Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::get_CompletedFiles()|static=False|virtual=False|abstract=False|gp=
 M|System.Int32 Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::get_TotalFiles()|static=False|virtual=False|abstract=False|gp=
@@ -760,12 +687,6 @@ M|System.Int32 Anomaly.Client.Api.Input.VirtualInputs::UnregisterAllForMod(Syste
 M|System.Int32 Anomaly.Client.Api.Modding.ModManifest::get_SchemaVersion()|static=False|virtual=False|abstract=False|gp=
 M|System.Int32 Anomaly.Client.Api.UI.ModSettings.ModSettingCategoryMetadata::get_SortOrder()|static=False|virtual=False|abstract=False|gp=
 M|System.Int32 Anomaly.Client.Api.UI.ModSettings.ModSettingMetadata::get_Order()|static=False|virtual=False|abstract=False|gp=
-M|System.Int64 Anomaly.Client.Api.Content.ItemCatalogDiff::get_AggregateBytes()|static=False|virtual=False|abstract=False|gp=
-M|System.Int64 Anomaly.Client.Api.Content.ItemCatalogDiff::get_DownloadBytes()|static=False|virtual=False|abstract=False|gp=
-M|System.Int64 Anomaly.Client.Api.Content.ItemContentRequest::get_ExpectedSize()|static=False|virtual=False|abstract=False|gp=
-M|System.Int64 Anomaly.Client.Api.Content.ItemContentRequest::get_ResumeOffset()|static=False|virtual=False|abstract=False|gp=
-M|System.Int64 Anomaly.Client.Api.Content.ItemContentTransferSession::AcceptChunk(System.Guid,System.String,System.Int64,System.ReadOnlyMemory`1<System.Byte>)|static=False|virtual=False|abstract=False|gp=
-M|System.Int64 Anomaly.Client.Api.Content.PassiveAssetReference::get_SizeBytes()|static=False|virtual=False|abstract=False|gp=
 M|System.Int64 Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::get_ReceivedBytes()|static=False|virtual=False|abstract=False|gp=
 M|System.Int64 Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::get_TotalBytes()|static=False|virtual=False|abstract=False|gp=
 M|System.Int64 Anomaly.Client.Api.FileTransfer.FileCache/CacheEntry::get_VerifiedLastWriteUtcTicks()|static=False|virtual=False|abstract=False|gp=
@@ -842,24 +763,6 @@ M|System.String Anomaly.Client.Api.Commands.ICommand::get_Description()|static=F
 M|System.String Anomaly.Client.Api.Commands.ICommand::get_Name()|static=False|virtual=True|abstract=True|gp=
 M|System.String Anomaly.Client.Api.Compatibility.SupportedGameVersionAttribute::get_Version()|static=False|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Config.IConfigSource::get_ModId()|static=False|virtual=True|abstract=True|gp=
-M|System.String Anomaly.Client.Api.Content.ItemCatalog::get_CatalogSha256()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemCatalog::get_ServerFingerprint()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemCatalogActivationState::get_CatalogSha256()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemCatalogActivationState::get_ServerFingerprint()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemCatalogCanonicalizer::ComputeSha256(Anomaly.Client.Api.Content.ItemCatalog)|static=True|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemCatalogConsentRecord::get_CatalogSha256()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemCatalogConsentRecord::get_ServerFingerprint()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemContentCacheKey::GetRelativePath()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemContentCacheKey::get_CatalogSha256()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemContentCacheKey::get_ContentSha256()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemContentCacheKey::get_ServerFingerprint()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemContentRequest::get_AssetKey()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemContentTransferSession::GetCachePath(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemDefinition::get_BuiltInPrefab()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemDefinition::get_DisplayName()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.ItemDefinition::get_Key()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.PassiveAssetReference::get_Key()|static=False|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Content.PassiveAssetReference::get_Sha256()|static=False|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Events.Args.AnnouncerLineScheduledEventArgs::get_ApiName()|static=False|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Events.Args.AnnouncerLineStartedEventArgs::get_ApiName()|static=False|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::get_ComponentPath()|static=False|virtual=False|abstract=False|gp=
@@ -874,6 +777,7 @@ M|System.String Anomaly.Client.Api.Features.AdminToy::ToString()|static=False|vi
 M|System.String Anomaly.Client.Api.Features.AdminToy::get_CommandName()|static=False|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.AnnouncerWord::get_ApiName()|static=False|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Client::get_CurrentSceneName()|static=True|virtual=False|abstract=False|gp=
+M|System.String Anomaly.Client.Api.Features.Client::get_EnrollmentId()|static=True|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Client::get_ServerIp()|static=True|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Computer::get_MAC()|static=True|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Computer::get_PcName()|static=True|virtual=False|abstract=False|gp=
@@ -900,11 +804,8 @@ M|System.String Anomaly.Client.Api.Features.Paths::get_ApplicationDataPath()|sta
 M|System.String Anomaly.Client.Api.Features.Paths::get_AudioOverridesPath()|static=True|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Paths::get_CrashReportsPath()|static=True|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Paths::get_FileCachePath()|static=True|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Features.Paths::get_MeshOverridesPath()|static=True|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Paths::get_OverridesPath()|static=True|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Paths::get_SkinsPath()|static=True|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Features.Paths::get_SpriteOverridesPath()|static=True|virtual=False|abstract=False|gp=
-M|System.String Anomaly.Client.Api.Features.Paths::get_TextureOverridesPath()|static=True|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Pickup::ToString()|static=False|virtual=True|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Pickup::get_TypeName()|static=False|virtual=False|abstract=False|gp=
 M|System.String Anomaly.Client.Api.Features.Player::ToString()|static=False|virtual=True|abstract=False|gp=
@@ -980,25 +881,17 @@ M|System.UInt16 Anomaly.Client.Api.Features.Door::get_ActiveLocks()|static=False
 M|System.UInt16 Anomaly.Client.Api.Features.Item::get_Serial()|static=False|virtual=False|abstract=False|gp=
 M|System.UInt16 Anomaly.Client.Api.Features.Locker::get_OpenedChambersMask()|static=False|virtual=False|abstract=False|gp=
 M|System.UInt16 Anomaly.Client.Api.Features.Pickup::get_Serial()|static=False|virtual=False|abstract=False|gp=
-M|System.UInt32 Anomaly.Client.Api.Events.Args.AssetDespawnedEventArgs::get_ObjectId()|static=False|virtual=False|abstract=False|gp=
 M|System.UInt32 Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::get_NetId()|static=False|virtual=False|abstract=False|gp=
 M|System.UInt32 Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs::get_NetId()|static=False|virtual=False|abstract=False|gp=
-M|System.UInt32 Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs::get_ObjectId()|static=False|virtual=False|abstract=False|gp=
 M|System.UInt32 Anomaly.Client.Api.Features.ClientCapabilities::get_CurrentRoundEpoch()|static=True|virtual=False|abstract=False|gp=
 M|System.UInt32 Anomaly.Client.Api.Features.MotionDiscontinuity::get_Sequence()|static=False|virtual=False|abstract=False|gp=
 M|System.UInt32 Anomaly.Client.Api.FileTransfer.FileCache/CacheEntry::get_Size()|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Assets.AnomalyResources::UnloadAll()|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Assets.AnomalyResources::UnloadOne(System.Byte[])|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Assets.AssetEvents::add_Despawned(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetDespawnedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Assets.AssetEvents::add_OverrideApplied(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Assets.AssetEvents::add_OverrideCleared(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Assets.AssetEvents::add_Reloaded(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Assets.AssetEvents::add_Spawned(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Assets.AssetEvents::remove_Despawned(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetDespawnedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Assets.AssetEvents::remove_OverrideApplied(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Assets.AssetEvents::remove_OverrideCleared(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Assets.AssetEvents::remove_Reloaded(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Assets.AssetEvents::remove_Spawned(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Commands.CommandContext::.ctor(System.String,System.Collections.Generic.IReadOnlyList`1<System.String>,System.Action`1<System.String>)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Commands.CommandContext::Reply(System.String)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Commands.CommandRegistry::Register(System.String,Anomaly.Client.Api.Commands.ICommand)|static=True|virtual=False|abstract=False|gp=
@@ -1011,46 +904,6 @@ M|System.Void Anomaly.Client.Api.Config.IConfigSource::Save()|static=False|virtu
 M|System.Void Anomaly.Client.Api.Config.IConfigSource::Set(System.String,T)|static=False|virtual=True|abstract=True|gp=T:NonVariant:
 M|System.Void Anomaly.Client.Api.Config.IConfigSource::add_KeyChanged(System.Action`1<System.String>)|static=False|virtual=True|abstract=True|gp=
 M|System.Void Anomaly.Client.Api.Config.IConfigSource::remove_KeyChanged(System.Action`1<System.String>)|static=False|virtual=True|abstract=True|gp=
-M|System.Void Anomaly.Client.Api.Content.FileItemCatalogActivationStore::.ctor(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.FileItemCatalogActivationStore::SaveAtomically(Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot)|static=False|virtual=True|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.IItemCatalogActivationStore::SaveAtomically(Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot)|static=False|virtual=True|abstract=True|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalog::.ctor()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalog::set_Assets(System.Collections.Generic.List`1<Anomaly.Client.Api.Content.PassiveAssetReference>)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalog::set_CatalogSha256(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalog::set_Items(System.Collections.Generic.List`1<Anomaly.Client.Api.Content.ItemDefinition>)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalog::set_SchemaVersion(System.Int32)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalog::set_ServerFingerprint(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationManager::.ctor(Anomaly.Client.Api.Content.IItemCatalogActivationStore)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationManager::CancelPrepared()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot::.ctor()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot::set_Active(Anomaly.Client.Api.Content.ItemCatalogActivationState)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot::set_Previous(Anomaly.Client.Api.Content.ItemCatalogActivationState)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationState::.ctor()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationState::set_ActivatedAtUtc(System.DateTimeOffset)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationState::set_Assets(System.Collections.Generic.List`1<Anomaly.Client.Api.Content.ItemContentCacheKey>)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationState::set_Catalog(Anomaly.Client.Api.Content.ItemCatalog)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationState::set_CatalogSha256(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationState::set_SchemaVersion(System.Int32)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogActivationState::set_ServerFingerprint(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogConsentRecord::.ctor()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogConsentRecord::set_ApprovedAtUtc(System.DateTimeOffset)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogConsentRecord::set_CatalogSha256(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogConsentRecord::set_ServerFingerprint(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemCatalogDiff::.ctor()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemContentCacheKey::.ctor()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemContentRequest::.ctor()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemContentTransferSession::.ctor(Anomaly.Client.Api.Content.ItemCatalog,System.String,Anomaly.Client.Api.Content.ItemCatalogConsentRecord,System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemContentTransferSession::Dispose()|static=False|virtual=True|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemDefinition::.ctor()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemDefinition::set_AssetKeys(System.Collections.Generic.List`1<System.String>)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemDefinition::set_BuiltInPrefab(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemDefinition::set_DisplayName(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.ItemDefinition::set_Key(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.PassiveAssetReference::.ctor()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.PassiveAssetReference::set_Key(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.PassiveAssetReference::set_Kind(Anomaly.Client.Api.Content.PassiveAssetKind)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.PassiveAssetReference::set_Sha256(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Content.PassiveAssetReference::set_SizeBytes(System.Int64)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.AnomalyEventHandler`1::.ctor(System.Object,System.IntPtr)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.AnomalyEventHandler`1::EndInvoke(System.IAsyncResult)|static=False|virtual=True|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.AnomalyEventHandler`1::Invoke(TEventArgs)|static=False|virtual=True|abstract=False|gp=
@@ -1059,11 +912,8 @@ M|System.Void Anomaly.Client.Api.Events.Args.AdminToyRemovedEventArgs::.ctor(Ano
 M|System.Void Anomaly.Client.Api.Events.Args.AnnouncerLineScheduledEventArgs::.ctor(Il2CppCassie.CassieLine,System.Double)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.AnnouncerLineStartedEventArgs::.ctor(Il2CppCassie.CassieLineSource)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.AnomalyMessageReceivedEventArgs::.ctor(Anomaly.Shared.Networking.IAnomalyMessage)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Events.Args.AssetDespawnedEventArgs::.ctor(System.UInt32)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::.ctor(System.UInt32,System.String,System.Int32,System.Byte[])|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs::.ctor(System.UInt32,System.String,System.Int32)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs::.ctor(System.Byte[],System.Byte[],System.Int32,System.Int32)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs::.ctor(System.UInt32,System.Byte[],UnityEngine.GameObject)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs::.ctor(UnityEngine.AudioClip,System.Nullable`1<UnityEngine.Vector3>,Il2CppAudioPooling.MixerChannel,System.Single)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs::set_IsAllowed(System.Boolean)|static=False|virtual=True|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs::.ctor(System.String,System.UInt16,System.Byte)|static=False|virtual=False|abstract=False|gp=
@@ -1087,7 +937,9 @@ M|System.Void Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::.cto
 M|System.Void Anomaly.Client.Api.Events.Args.FirearmShotEventArgs::.ctor(Il2CppInventorySystem.Items.Firearms.ShotEvents.ShotEvent)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.GeneratorEngagedEventArgs::.ctor(Anomaly.Client.Api.Features.Generator)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs::.ctor(System.String,System.Single)|static=False|virtual=False|abstract=False|gp=
+M|System.Void Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs::set_DurationSeconds(System.Single)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs::set_IsAllowed(System.Boolean)|static=False|virtual=True|abstract=False|gp=
+M|System.Void Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs::set_Text(System.String)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.InventoryChangedEventArgs::.ctor(Anomaly.Client.Api.Features.Player)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.InventoryUiClosingEventArgs::.ctor()|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.InventoryUiClosingEventArgs::set_IsAllowed(System.Boolean)|static=False|virtual=True|abstract=False|gp=
@@ -1096,8 +948,6 @@ M|System.Void Anomaly.Client.Api.Events.Args.InventoryUiOpeningEventArgs::set_Is
 M|System.Void Anomaly.Client.Api.Events.Args.PickupAddedEventArgs::.ctor(Anomaly.Client.Api.Features.Pickup)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.PickupRemovedEventArgs::.ctor(Anomaly.Client.Api.Features.Pickup)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.PlayerAddedEventArgs::.ctor(Anomaly.Client.Api.Features.Player)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Events.Args.PlayerDamagedEventArgs::.ctor(Anomaly.Client.Api.Features.Player,Il2CppPlayerStatsSystem.DamageHandlerBase)|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Events.Args.PlayerDiedEventArgs::.ctor(Anomaly.Client.Api.Features.Player,Il2CppPlayerStatsSystem.DamageHandlerBase)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.PlayerDroppingItemEventArgs::.ctor(Anomaly.Client.Api.Features.Player,System.UInt16,System.Boolean)|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.PlayerDroppingItemEventArgs::set_IsAllowed(System.Boolean)|static=False|virtual=True|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Args.PlayerEventArgs::.ctor(Anomaly.Client.Api.Features.Player)|static=False|virtual=False|abstract=False|gp=
@@ -1246,13 +1096,9 @@ M|System.Void Anomaly.Client.Api.Events.Handlers.RoundEvents::remove_Restarted(A
 M|System.Void Anomaly.Client.Api.Events.Handlers.RoundEvents::remove_Started(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Handlers.RoundEvents::remove_Starting(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Handlers.RoundEvents::remove_WaitingForPlayers(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Events.Handlers.StatsEvents::add_Damaged(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerDamagedEventArgs>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Events.Handlers.StatsEvents::add_Died(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerDiedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Handlers.StatsEvents::add_Healed(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerHealedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Handlers.StatsEvents::add_HumeShieldChanged(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerHumeShieldChangedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Handlers.StatsEvents::add_StaminaChanged(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerStaminaChangedEventArgs>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Events.Handlers.StatsEvents::remove_Damaged(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerDamagedEventArgs>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Events.Handlers.StatsEvents::remove_Died(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerDiedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Handlers.StatsEvents::remove_Healed(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerHealedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Handlers.StatsEvents::remove_HumeShieldChanged(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerHumeShieldChangedEventArgs>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Events.Handlers.StatsEvents::remove_StaminaChanged(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.PlayerStaminaChangedEventArgs>)|static=True|virtual=False|abstract=False|gp=
@@ -1324,7 +1170,7 @@ M|System.Void Anomaly.Client.Api.Modding.IAnomalyMod::OnEnable()|static=False|vi
 M|System.Void Anomaly.Client.Api.Modding.IModContext::RegisterCleanup(System.Action)|static=False|virtual=True|abstract=True|gp=
 M|System.Void Anomaly.Client.Api.Modding.IModContext::RegisterCommand(Anomaly.Client.Api.Commands.ICommand)|static=False|virtual=True|abstract=True|gp=
 M|System.Void Anomaly.Client.Api.Modding.IModContext::ReportHealth(System.String,Anomaly.Client.Api.Modding.FeatureHealthStatus,System.String)|static=False|virtual=True|abstract=True|gp=
-M|System.Void Anomaly.Client.Api.Modding.IModContext::Subscribe(System.Action,System.Action)|static=False|virtual=True|abstract=True|gp=
+M|System.Void Anomaly.Client.Api.Modding.IModContext::Subscribe(System.Action`1<Anomaly.Client.Api.Events.AnomalyEventHandler`1<TEventArgs>>,System.Action`1<Anomaly.Client.Api.Events.AnomalyEventHandler`1<TEventArgs>>,Anomaly.Client.Api.Events.AnomalyEventHandler`1<TEventArgs>)|static=False|virtual=True|abstract=True|gp=TEventArgs:NonVariant:System.EventArgs
 M|System.Void Anomaly.Client.Api.Modding.IModContext::Track(System.IDisposable)|static=False|virtual=True|abstract=True|gp=
 M|System.Void Anomaly.Client.Api.Modding.ModDependency::.ctor()|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Modding.ModDependency::set_Id(System.String)|static=False|virtual=False|abstract=False|gp=
@@ -1348,7 +1194,6 @@ M|System.Void Anomaly.Client.Api.Modding.ModManifest::set_Version(System.String)
 M|System.Void Anomaly.Client.Api.Networking.AnomalyMessaging::Send(Anomaly.Shared.Networking.IAnomalyMessage)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Networking.AnomalyMessaging::add_MessageReceived(System.Action`1<Anomaly.Shared.Networking.IAnomalyMessage>)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Networking.AnomalyMessaging::remove_MessageReceived(System.Action`1<Anomaly.Shared.Networking.IAnomalyMessage>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Networking.AnomalyReplayTable::Reset()|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Persistence.ClientPersistence::FlushAll()|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Persistence.IPersistenceStore::Delete(System.String)|static=False|virtual=True|abstract=True|gp=
 M|System.Void Anomaly.Client.Api.Persistence.IPersistenceStore::Flush()|static=False|virtual=True|abstract=True|gp=
@@ -1361,10 +1206,7 @@ M|System.Void Anomaly.Client.Api.Rendering.MaterialTint::Clear(System.Collection
 M|System.Void Anomaly.Client.Api.Rendering.MaterialTint::Clear(UnityEngine.Renderer)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Rendering.ModelAttachment::Detach(UnityEngine.GameObject,System.Boolean)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Scheduling.ScheduledTask::Cancel()|static=False|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Scheduling.Scheduler::ClearAll()|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Scheduling.Scheduler::ClearCooldown(System.String)|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Scheduling.Scheduler::PauseAll()|static=True|virtual=False|abstract=False|gp=
-M|System.Void Anomaly.Client.Api.Scheduling.Scheduler::ResumeAll()|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.Scheduling.Scheduler::StartCooldown(System.String,System.TimeSpan)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.UI.ModSettings.ModSettingCategoryMetadata::.ctor()|static=False|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.UI.ModSettings.ModSettingCategoryMetadata::set_DisplayName(System.String)|static=False|virtual=False|abstract=False|gp=
@@ -1385,29 +1227,12 @@ M|System.Void Anomaly.Client.Api.UI.ModSettings.ModSettings::RegisterEntry(Melon
 M|System.Void Anomaly.Client.Api.UI.SafeArea::Apply(UnityEngine.RectTransform)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.UI.UiAnchorExtensions::Apply(UnityEngine.RectTransform,Anomaly.Client.Api.UI.UiAnchor,UnityEngine.Vector2)|static=True|virtual=False|abstract=False|gp=
 M|System.Void Anomaly.Client.Api.UI.UiParameterBinder::Bind(UnityEngine.GameObject,System.Collections.Generic.IReadOnlyDictionary`2<System.String,System.String>)|static=True|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemCatalogDiff::set_AddedAssets(System.Collections.Generic.IReadOnlyList`1<System.String>)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemCatalogDiff::set_AggregateBytes(System.Int64)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemCatalogDiff::set_ChangedAssets(System.Collections.Generic.IReadOnlyList`1<System.String>)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemCatalogDiff::set_ChangedItems(System.Collections.Generic.IReadOnlyList`1<System.String>)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemCatalogDiff::set_DownloadBytes(System.Int64)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemCatalogDiff::set_FileCount(System.Int32)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemCatalogDiff::set_RemovedAssets(System.Collections.Generic.IReadOnlyList`1<System.String>)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemContentCacheKey::set_CatalogSha256(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemContentCacheKey::set_ContentSha256(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemContentCacheKey::set_ServerFingerprint(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemContentRequest::set_AssetKey(System.String)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemContentRequest::set_ExpectedSize(System.Int64)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemContentRequest::set_IsAlreadyAvailable(System.Boolean)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemContentRequest::set_RequestId(System.Guid)|static=False|virtual=False|abstract=False|gp=
-M|System.Void modreq(System.Runtime.CompilerServices.IsExternalInit) Anomaly.Client.Api.Content.ItemContentRequest::set_ResumeOffset(System.Int64)|static=False|virtual=False|abstract=False|gp=
-M|T Anomaly.Client.Api.Assets.AssetBundleLoader::LoadAsset(UnityEngine.AssetBundle,System.String)|static=True|virtual=False|abstract=False|gp=T:NonVariant:UnityEngine.Object
 M|T Anomaly.Client.Api.Config.IConfigSource::Get(System.String,T)|static=False|virtual=True|abstract=True|gp=T:NonVariant:
 M|T Anomaly.Client.Api.Features.Door::As()|static=False|virtual=False|abstract=False|gp=T:NonVariant:Anomaly.Client.Api.Features.Door
 M|T Anomaly.Client.Api.Features.Item::As()|static=False|virtual=False|abstract=False|gp=T:NonVariant:Anomaly.Client.Api.Features.Item
 M|T Anomaly.Client.Api.Features.Pickup::As()|static=False|virtual=False|abstract=False|gp=T:NonVariant:Anomaly.Client.Api.Features.Pickup
 M|T Anomaly.Client.Api.Persistence.IPersistenceStore::Load(System.String,T)|static=False|virtual=True|abstract=True|gp=T:NonVariant:
 M|T[] Anomaly.Client.Api.Features.WorldObjects::FindAllByComponent()|static=True|virtual=False|abstract=False|gp=T:NonVariant:UnityEngine.Component
-M|UnityEngine.AssetBundle Anomaly.Client.Api.Assets.AssetBundleLoader::LoadFromFile(System.String,System.UInt32,System.UInt64)|static=True|virtual=False|abstract=False|gp=
 M|UnityEngine.AudioClip Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs::get_Clip()|static=False|virtual=False|abstract=False|gp=
 M|UnityEngine.AudioClip Anomaly.Client.Api.Features.AnnouncerWord::get_Clip()|static=False|virtual=False|abstract=False|gp=
 M|UnityEngine.Bounds Anomaly.Client.Api.Features.Room::get_WorldspaceBounds()|static=False|virtual=False|abstract=False|gp=
@@ -1417,7 +1242,6 @@ M|UnityEngine.Camera Anomaly.Client.Api.Features.VisibilityViewpoint::get_Camera
 M|UnityEngine.Canvas Anomaly.Client.Api.UI.UiCanvas::get_Canvas()|static=True|virtual=False|abstract=False|gp=
 M|UnityEngine.Color Anomaly.Client.Api.Features.LightAdminToy::get_Color()|static=False|virtual=False|abstract=False|gp=
 M|UnityEngine.Color Anomaly.Client.Api.Features.PrimitiveAdminToy::get_Color()|static=False|virtual=False|abstract=False|gp=
-M|UnityEngine.GameObject Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs::get_GameObject()|static=False|virtual=False|abstract=False|gp=
 M|UnityEngine.GameObject Anomaly.Client.Api.Events.Args.CanvasReadyEventArgs::get_Canvas()|static=False|virtual=False|abstract=False|gp=
 M|UnityEngine.GameObject Anomaly.Client.Api.Features.AdminToy::get_GameObject()|static=False|virtual=False|abstract=False|gp=
 M|UnityEngine.GameObject Anomaly.Client.Api.Features.Elevator::get_GameObject()|static=False|virtual=False|abstract=False|gp=
@@ -1481,11 +1305,6 @@ M|UnityEngine.Vector3 Anomaly.Client.Api.Features.ShootingTargetAdminToy::get_Ce
 M|UnityEngine.Vector3 Anomaly.Client.Api.Features.Tesla::get_Position()|static=False|virtual=False|abstract=False|gp=
 M|UnityEngine.Vector3Int Anomaly.Client.Api.Features.Room::get_MainCoords()|static=False|virtual=False|abstract=False|gp=
 P|Anomaly.Client.Api.Config.IConfigSource Anomaly.Client.Api.Modding.IModContext::Config()|get=public|set=none
-P|Anomaly.Client.Api.Content.ItemCatalog Anomaly.Client.Api.Content.ItemCatalogActivationState::Catalog()|get=public|set=public
-P|Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot Anomaly.Client.Api.Content.ItemCatalogActivationManager::Current()|get=public|set=none
-P|Anomaly.Client.Api.Content.ItemCatalogActivationState Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot::Active()|get=public|set=public
-P|Anomaly.Client.Api.Content.ItemCatalogActivationState Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot::Previous()|get=public|set=public
-P|Anomaly.Client.Api.Content.PassiveAssetKind Anomaly.Client.Api.Content.PassiveAssetReference::Kind()|get=public|set=public
 P|Anomaly.Client.Api.Enum.SceneType Anomaly.Client.Api.Features.Client::CurrentSceneType()|get=public|set=none
 P|Anomaly.Client.Api.Features.AdminToy Anomaly.Client.Api.Events.Args.AdminToyAddedEventArgs::AdminToy()|get=public|set=none
 P|Anomaly.Client.Api.Features.AdminToy Anomaly.Client.Api.Events.Args.AdminToyRemovedEventArgs::AdminToy()|get=public|set=none
@@ -1537,8 +1356,6 @@ P|Anomaly.Client.Api.Input.InputModifiers Anomaly.Client.Api.Input.InputKey::Mod
 P|Anomaly.Client.Api.Modding.FeatureHealthStatus Anomaly.Client.Api.Modding.FeatureHealthRecord::Status()|get=public|set=none
 P|Anomaly.Client.Api.Modding.ModCapability Anomaly.Client.Api.Modding.ModManifest::Capabilities()|get=public|set=public
 P|Anomaly.Client.Api.Persistence.IPersistenceStore Anomaly.Client.Api.Modding.IModContext::Persistence()|get=public|set=none
-P|Anomaly.Shared.Networking.AnomalyInboundRateLimiter Anomaly.Client.Api.Networking.AnomalyReplayTable::InboundRateLimiter()|get=public|set=nonpublic
-P|Anomaly.Shared.Networking.AnomalyReplayState Anomaly.Client.Api.Networking.AnomalyReplayTable::Instance()|get=public|set=nonpublic
 P|Anomaly.Shared.Networking.IAnomalyMessage Anomaly.Client.Api.Events.Args.AnomalyMessageReceivedEventArgs::Message()|get=public|set=none
 P|Anomaly.Shared.Networking.Messages.RoundPhase Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs::NewPhase()|get=public|set=none
 P|Anomaly.Shared.Networking.Messages.RoundPhase Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs::PreviousPhase()|get=public|set=none
@@ -1640,8 +1457,6 @@ P|Il2CppPlayerRoles.Ragdolls.BasicRagdoll Anomaly.Client.Api.Features.Ragdoll::B
 P|Il2CppPlayerRoles.RoleTypeId Anomaly.Client.Api.Features.Ragdoll::RoleType()|get=public|set=none
 P|Il2CppPlayerRoles.RoleTypeId Anomaly.Client.Api.Features.Role::Type()|get=public|set=none
 P|Il2CppPlayerRoles.Team Anomaly.Client.Api.Features.Role::Team()|get=public|set=none
-P|Il2CppPlayerStatsSystem.DamageHandlerBase Anomaly.Client.Api.Events.Args.PlayerDamagedEventArgs::DamageHandler()|get=public|set=none
-P|Il2CppPlayerStatsSystem.DamageHandlerBase Anomaly.Client.Api.Events.Args.PlayerDiedEventArgs::DamageHandler()|get=public|set=none
 P|Il2CppPlayerStatsSystem.DamageHandlerBase Anomaly.Client.Api.Features.Ragdoll::DamageHandler()|get=public|set=none
 P|Il2CppPlayerStatsSystem.PlayerStats Anomaly.Client.Api.Features.Player::PlayerStats()|get=public|set=none
 P|Il2CppPlayerStatsSystem.PlayerStats Anomaly.Client.Api.Features.PlayerStatsWrapper::Base()|get=public|set=none
@@ -1651,8 +1466,6 @@ P|Il2CppScp914.Scp914Controller Anomaly.Client.Api.Features.Scp914::Base()|get=p
 P|Il2CppScp914.Scp914KnobSetting Anomaly.Client.Api.Features.Scp914::KnobSetting()|get=public|set=none
 P|Il2CppSystem.Collections.Generic.List`1<Il2CppInventorySystem.Items.Pickups.ItemPickupBase> Anomaly.Client.Api.Features.LockerChamberWrapper::Contents()|get=public|set=none
 P|Il2CppVoiceChat.VoiceChatChannel Anomaly.Client.Api.Features.VoiceMessagePacket::Channel()|get=public|set=none
-P|System.Boolean Anomaly.Client.Api.Content.ItemCatalogDiff::HasChanges()|get=public|set=none
-P|System.Boolean Anomaly.Client.Api.Content.ItemContentRequest::IsAlreadyAvailable()|get=public|set=public
 P|System.Boolean Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs::IsAllowed()|get=public|set=public
 P|System.Boolean Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs::IsAllowed()|get=public|set=public
 P|System.Boolean Anomaly.Client.Api.Events.Args.CameraShakingEventArgs::IsAllowed()|get=public|set=public
@@ -1768,9 +1581,6 @@ P|System.Byte Anomaly.Client.Api.Features.PlayerEffect::Intensity()|get=public|s
 P|System.Byte Anomaly.Client.Api.Features.PlayerEffect::MaxIntensity()|get=public|set=none
 P|System.Byte Anomaly.Client.Api.Features.SpeakerAdminToy::ControllerId()|get=public|set=none
 P|System.Byte[] Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::TextureHash()|get=public|set=none
-P|System.Byte[] Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs::NewHash()|get=public|set=none
-P|System.Byte[] Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs::OldHash()|get=public|set=none
-P|System.Byte[] Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs::AssetHash()|get=public|set=none
 P|System.Byte[] Anomaly.Client.Api.Features.VoiceMessagePacket::Data()|get=public|set=none
 P|System.Collections.Generic.IReadOnlyCollection`1<Anomaly.Client.Api.Commands.ICommand> Anomaly.Client.Api.Commands.CommandRegistry::All()|get=public|set=none
 P|System.Collections.Generic.IReadOnlyCollection`1<Anomaly.Client.Api.Input.InputBindingDefinition> Anomaly.Client.Api.Input.InputRegistry::All()|get=public|set=none
@@ -1778,19 +1588,10 @@ P|System.Collections.Generic.IReadOnlyList`1<Anomaly.Client.Api.Features.LockerC
 P|System.Collections.Generic.IReadOnlyList`1<Anomaly.Client.Api.Modding.ModManifest> Anomaly.Client.Api.Modding.ModResolutionResult::Ordered()|get=public|set=none
 P|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Commands.CommandContext::Args()|get=public|set=none
 P|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Commands.ICommand::Aliases()|get=public|set=none
-P|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Content.ItemCatalogDiff::AddedAssets()|get=public|set=public
-P|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Content.ItemCatalogDiff::ChangedAssets()|get=public|set=public
-P|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Content.ItemCatalogDiff::ChangedItems()|get=public|set=public
-P|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Content.ItemCatalogDiff::RemovedAssets()|get=public|set=public
 P|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.Modding.ModResolutionResult::Errors()|get=public|set=none
 P|System.Collections.Generic.IReadOnlyList`1<System.String> Anomaly.Client.Api.UI.ModSettings.ModSettingMetadata::Choices()|get=public|set=public
 P|System.Collections.Generic.IReadOnlyList`1<UnityEngine.Renderer> Anomaly.Client.Api.Features.Pickup::Renderers()|get=public|set=none
-P|System.Collections.Generic.IReadOnlySet`1<System.String> Anomaly.Client.Api.Content.ItemContentLimits::ApprovedBuiltInPrefabs()|get=public|set=none
-P|System.Collections.Generic.List`1<Anomaly.Client.Api.Content.ItemContentCacheKey> Anomaly.Client.Api.Content.ItemCatalogActivationState::Assets()|get=public|set=public
-P|System.Collections.Generic.List`1<Anomaly.Client.Api.Content.ItemDefinition> Anomaly.Client.Api.Content.ItemCatalog::Items()|get=public|set=public
-P|System.Collections.Generic.List`1<Anomaly.Client.Api.Content.PassiveAssetReference> Anomaly.Client.Api.Content.ItemCatalog::Assets()|get=public|set=public
 P|System.Collections.Generic.List`1<Anomaly.Client.Api.Modding.ModDependency> Anomaly.Client.Api.Modding.ModManifest::Dependencies()|get=public|set=public
-P|System.Collections.Generic.List`1<System.String> Anomaly.Client.Api.Content.ItemDefinition::AssetKeys()|get=public|set=public
 P|System.Collections.Generic.List`1<System.String> Anomaly.Client.Api.Modding.ModManifest::Conflicts()|get=public|set=public
 P|System.Collections.Generic.List`1<System.String> Anomaly.Client.Api.Modding.ModManifest::SupportedGameVersions()|get=public|set=public
 P|System.Collections.ObjectModel.ReadOnlyCollection`1<Anomaly.Client.Api.Features.AdminToy> Anomaly.Client.Api.Features.AdminToy::List()|get=public|set=none
@@ -1826,20 +1627,12 @@ P|System.Collections.ObjectModel.ReadOnlyCollection`1<Il2CppInventorySystem.Item
 P|System.Collections.ObjectModel.ReadOnlyDictionary`2<System.String,System.UInt16> Anomaly.Client.Api.Features.PlayerInventory::Ammo()|get=public|set=none
 P|System.Collections.ObjectModel.ReadOnlyDictionary`2<UnityEngine.GameObject,Anomaly.Client.Api.Features.Player> Anomaly.Client.Api.Features.Player::GameObjectToPlayer()|get=public|set=none
 P|System.DateTime Anomaly.Client.Api.FileTransfer.FileCache/CacheEntry::LastUsed()|get=public|set=public
-P|System.DateTimeOffset Anomaly.Client.Api.Content.ItemCatalogActivationState::ActivatedAtUtc()|get=public|set=public
-P|System.DateTimeOffset Anomaly.Client.Api.Content.ItemCatalogConsentRecord::ApprovedAtUtc()|get=public|set=public
 P|System.DateTimeOffset Anomaly.Client.Api.Modding.FeatureHealthRecord::UpdatedUtc()|get=public|set=none
 P|System.Double Anomaly.Client.Api.Events.Args.AnnouncerLineScheduledEventArgs::ScheduledStartDspTime()|get=public|set=none
 P|System.Double Anomaly.Client.Api.Features.Ragdoll::CreationTime()|get=public|set=none
 P|System.Double Anomaly.Client.Api.Scheduling.ScheduledTask::RemainingSeconds()|get=public|set=none
-P|System.Guid Anomaly.Client.Api.Content.ItemContentRequest::RequestId()|get=public|set=public
-P|System.Int32 Anomaly.Client.Api.Content.ItemCatalog::SchemaVersion()|get=public|set=public
-P|System.Int32 Anomaly.Client.Api.Content.ItemCatalogActivationState::SchemaVersion()|get=public|set=public
-P|System.Int32 Anomaly.Client.Api.Content.ItemCatalogDiff::FileCount()|get=public|set=public
 P|System.Int32 Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::MaterialIndex()|get=public|set=none
 P|System.Int32 Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs::MaterialIndex()|get=public|set=none
-P|System.Int32 Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs::AffectedOverrides()|get=public|set=none
-P|System.Int32 Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs::AffectedSpawns()|get=public|set=none
 P|System.Int32 Anomaly.Client.Api.Events.Args.FileTransferCompleteEventArgs::FileCount()|get=public|set=none
 P|System.Int32 Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::CompletedFiles()|get=public|set=none
 P|System.Int32 Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::TotalFiles()|get=public|set=none
@@ -1864,11 +1657,6 @@ P|System.Int32 Anomaly.Client.Api.Features.Warhead::Kills()|get=public|set=none
 P|System.Int32 Anomaly.Client.Api.Modding.ModManifest::SchemaVersion()|get=public|set=public
 P|System.Int32 Anomaly.Client.Api.UI.ModSettings.ModSettingCategoryMetadata::SortOrder()|get=public|set=public
 P|System.Int32 Anomaly.Client.Api.UI.ModSettings.ModSettingMetadata::Order()|get=public|set=public
-P|System.Int64 Anomaly.Client.Api.Content.ItemCatalogDiff::AggregateBytes()|get=public|set=public
-P|System.Int64 Anomaly.Client.Api.Content.ItemCatalogDiff::DownloadBytes()|get=public|set=public
-P|System.Int64 Anomaly.Client.Api.Content.ItemContentRequest::ExpectedSize()|get=public|set=public
-P|System.Int64 Anomaly.Client.Api.Content.ItemContentRequest::ResumeOffset()|get=public|set=public
-P|System.Int64 Anomaly.Client.Api.Content.PassiveAssetReference::SizeBytes()|get=public|set=public
 P|System.Int64 Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::ReceivedBytes()|get=public|set=none
 P|System.Int64 Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::TotalBytes()|get=public|set=none
 P|System.Int64 Anomaly.Client.Api.FileTransfer.FileCache/CacheEntry::VerifiedLastWriteUtcTicks()|get=public|set=public
@@ -1881,7 +1669,7 @@ P|System.Nullable`1<System.Double> Anomaly.Client.Api.UI.ModSettings.ModSettingM
 P|System.Nullable`1<UnityEngine.Vector3> Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs::Position()|get=public|set=none
 P|System.Single Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs::Volume()|get=public|set=none
 P|System.Single Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::Percent()|get=public|set=none
-P|System.Single Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs::DurationSeconds()|get=public|set=none
+P|System.Single Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs::DurationSeconds()|get=public|set=public
 P|System.Single Anomaly.Client.Api.Events.Args.PlayerHealedEventArgs::AmountHealed()|get=public|set=none
 P|System.Single Anomaly.Client.Api.Events.Args.PlayerHealedEventArgs::CurrentHealth()|get=public|set=none
 P|System.Single Anomaly.Client.Api.Events.Args.PlayerHealedEventArgs::PreviousHealth()|get=public|set=none
@@ -1943,21 +1731,6 @@ P|System.String Anomaly.Client.Api.Commands.ICommand::Description()|get=public|s
 P|System.String Anomaly.Client.Api.Commands.ICommand::Name()|get=public|set=none
 P|System.String Anomaly.Client.Api.Compatibility.SupportedGameVersionAttribute::Version()|get=public|set=none
 P|System.String Anomaly.Client.Api.Config.IConfigSource::ModId()|get=public|set=none
-P|System.String Anomaly.Client.Api.Content.ItemCatalog::CatalogSha256()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemCatalog::ServerFingerprint()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemCatalogActivationState::CatalogSha256()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemCatalogActivationState::ServerFingerprint()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemCatalogConsentRecord::CatalogSha256()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemCatalogConsentRecord::ServerFingerprint()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemContentCacheKey::CatalogSha256()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemContentCacheKey::ContentSha256()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemContentCacheKey::ServerFingerprint()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemContentRequest::AssetKey()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemDefinition::BuiltInPrefab()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemDefinition::DisplayName()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.ItemDefinition::Key()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.PassiveAssetReference::Key()|get=public|set=public
-P|System.String Anomaly.Client.Api.Content.PassiveAssetReference::Sha256()|get=public|set=public
 P|System.String Anomaly.Client.Api.Events.Args.AnnouncerLineScheduledEventArgs::ApiName()|get=public|set=none
 P|System.String Anomaly.Client.Api.Events.Args.AnnouncerLineStartedEventArgs::ApiName()|get=public|set=none
 P|System.String Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::ComponentPath()|get=public|set=none
@@ -1967,10 +1740,11 @@ P|System.String Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs::ServerI
 P|System.String Anomaly.Client.Api.Events.Args.ClientDisconnectedEventArgs::ServerIp()|get=public|set=none
 P|System.String Anomaly.Client.Api.Events.Args.ClientReadyEventArgs::SceneName()|get=public|set=none
 P|System.String Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::FileName()|get=public|set=none
-P|System.String Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs::Text()|get=public|set=none
+P|System.String Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs::Text()|get=public|set=public
 P|System.String Anomaly.Client.Api.Features.AdminToy::CommandName()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.AnnouncerWord::ApiName()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.Client::CurrentSceneName()|get=public|set=none
+P|System.String Anomaly.Client.Api.Features.Client::EnrollmentId()|get=public|set=nonpublic
 P|System.String Anomaly.Client.Api.Features.Client::ServerIp()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.Computer::MAC()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.Computer::PcName()|get=public|set=none
@@ -1986,11 +1760,8 @@ P|System.String Anomaly.Client.Api.Features.Paths::ApplicationDataPath()|get=pub
 P|System.String Anomaly.Client.Api.Features.Paths::AudioOverridesPath()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.Paths::CrashReportsPath()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.Paths::FileCachePath()|get=public|set=none
-P|System.String Anomaly.Client.Api.Features.Paths::MeshOverridesPath()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.Paths::OverridesPath()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.Paths::SkinsPath()|get=public|set=none
-P|System.String Anomaly.Client.Api.Features.Paths::SpriteOverridesPath()|get=public|set=none
-P|System.String Anomaly.Client.Api.Features.Paths::TextureOverridesPath()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.Pickup::TypeName()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.PlayerEffect::Classification()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.PlayerEffect::Name()|get=public|set=none
@@ -2042,10 +1813,8 @@ P|System.UInt16 Anomaly.Client.Api.Features.Door::ActiveLocks()|get=public|set=n
 P|System.UInt16 Anomaly.Client.Api.Features.Item::Serial()|get=public|set=none
 P|System.UInt16 Anomaly.Client.Api.Features.Locker::OpenedChambersMask()|get=public|set=none
 P|System.UInt16 Anomaly.Client.Api.Features.Pickup::Serial()|get=public|set=none
-P|System.UInt32 Anomaly.Client.Api.Events.Args.AssetDespawnedEventArgs::ObjectId()|get=public|set=none
 P|System.UInt32 Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::NetId()|get=public|set=none
 P|System.UInt32 Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs::NetId()|get=public|set=none
-P|System.UInt32 Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs::ObjectId()|get=public|set=none
 P|System.UInt32 Anomaly.Client.Api.Features.ClientCapabilities::CurrentRoundEpoch()|get=public|set=none
 P|System.UInt32 Anomaly.Client.Api.Features.MotionDiscontinuity::Sequence()|get=public|set=none
 P|System.UInt32 Anomaly.Client.Api.FileTransfer.FileCache/CacheEntry::Size()|get=public|set=public
@@ -2058,7 +1827,6 @@ P|UnityEngine.Camera Anomaly.Client.Api.Features.VisibilityViewpoint::Camera()|g
 P|UnityEngine.Canvas Anomaly.Client.Api.UI.UiCanvas::Canvas()|get=public|set=none
 P|UnityEngine.Color Anomaly.Client.Api.Features.LightAdminToy::Color()|get=public|set=none
 P|UnityEngine.Color Anomaly.Client.Api.Features.PrimitiveAdminToy::Color()|get=public|set=none
-P|UnityEngine.GameObject Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs::GameObject()|get=public|set=none
 P|UnityEngine.GameObject Anomaly.Client.Api.Events.Args.CanvasReadyEventArgs::Canvas()|get=public|set=nonpublic
 P|UnityEngine.GameObject Anomaly.Client.Api.Features.AdminToy::GameObject()|get=public|set=none
 P|UnityEngine.GameObject Anomaly.Client.Api.Features.Elevator::GameObject()|get=public|set=none
@@ -2109,32 +1877,14 @@ P|UnityEngine.Vector3 Anomaly.Client.Api.Features.ShootingTargetAdminToy::Center
 P|UnityEngine.Vector3 Anomaly.Client.Api.Features.Tesla::Position()|get=public|set=none
 P|UnityEngine.Vector3Int Anomaly.Client.Api.Features.Room::MainCoords()|get=public|set=none
 T|Anomaly.Client.Api.Assets.AnomalyResources|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Assets.AssetBundleLoader|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Assets.AssetEvents|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Commands.CommandContext|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Commands.CommandRegistry|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Commands.ICommand|interface|base=|ifaces=|gp=
+T|Anomaly.Client.Api.Compatibility.GameVersionCompatibility|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Compatibility.SupportedGameVersionAttribute|class|base=System.Attribute|ifaces=|gp=
 T|Anomaly.Client.Api.Config.ClientConfig|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Config.IConfigSource|interface|base=|ifaces=|gp=
-T|Anomaly.Client.Api.Content.FileItemCatalogActivationStore|class|base=System.Object|ifaces=Anomaly.Client.Api.Content.IItemCatalogActivationStore|gp=
-T|Anomaly.Client.Api.Content.IItemCatalogActivationStore|interface|base=|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemCatalogActivationManager|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemCatalogActivationSnapshot|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemCatalogActivationState|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemCatalogCanonicalizer|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemCatalogConsentRecord|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemCatalogDiff|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemCatalogValidator|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemCatalog|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemContentCacheKey|class|base=System.Object|ifaces=System.IEquatable`1<Anomaly.Client.Api.Content.ItemContentCacheKey>|gp=
-T|Anomaly.Client.Api.Content.ItemContentCompletionStatus|enum|base=System.Enum|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemContentLimits|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemContentRequest|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.ItemContentTransferSession|class|base=System.Object|ifaces=System.IDisposable|gp=
-T|Anomaly.Client.Api.Content.ItemDefinition|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Content.PassiveAssetKind|enum|base=System.Enum|ifaces=|gp=
-T|Anomaly.Client.Api.Content.PassiveAssetReference|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Enum.SceneType|enum|base=System.Enum|ifaces=|gp=
 T|Anomaly.Client.Api.Events.AnomalyEventHandler`1|delegate|base=System.MulticastDelegate|ifaces=|gp=TEventArgs:Contravariant:System.EventArgs
 T|Anomaly.Client.Api.Events.Args.AdminToyAddedEventArgs|class|base=System.EventArgs|ifaces=|gp=
@@ -2142,11 +1892,8 @@ T|Anomaly.Client.Api.Events.Args.AdminToyRemovedEventArgs|class|base=System.Even
 T|Anomaly.Client.Api.Events.Args.AnnouncerLineScheduledEventArgs|class|base=System.EventArgs|ifaces=|gp=
 T|Anomaly.Client.Api.Events.Args.AnnouncerLineStartedEventArgs|class|base=System.EventArgs|ifaces=|gp=
 T|Anomaly.Client.Api.Events.Args.AnomalyMessageReceivedEventArgs|class|base=System.EventArgs|ifaces=|gp=
-T|Anomaly.Client.Api.Events.Args.AssetDespawnedEventArgs|class|base=System.EventArgs|ifaces=|gp=
 T|Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs|class|base=System.EventArgs|ifaces=|gp=
 T|Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs|class|base=System.EventArgs|ifaces=|gp=
-T|Anomaly.Client.Api.Events.Args.AssetReloadedEventArgs|class|base=System.EventArgs|ifaces=|gp=
-T|Anomaly.Client.Api.Events.Args.AssetSpawnedEventArgs|class|base=System.EventArgs|ifaces=|gp=
 T|Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs|class|base=System.EventArgs|ifaces=Anomaly.Client.Api.Events.ICancellableEvent|gp=
 T|Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs|class|base=System.EventArgs|ifaces=Anomaly.Client.Api.Events.ICancellableEvent|gp=
 T|Anomaly.Client.Api.Events.Args.CameraShakingEventArgs|class|base=System.EventArgs|ifaces=Anomaly.Client.Api.Events.ICancellableEvent|gp=
@@ -2172,8 +1919,6 @@ T|Anomaly.Client.Api.Events.Args.InventoryUiOpeningEventArgs|class|base=System.E
 T|Anomaly.Client.Api.Events.Args.PickupAddedEventArgs|class|base=System.EventArgs|ifaces=|gp=
 T|Anomaly.Client.Api.Events.Args.PickupRemovedEventArgs|class|base=System.EventArgs|ifaces=|gp=
 T|Anomaly.Client.Api.Events.Args.PlayerAddedEventArgs|class|base=Anomaly.Client.Api.Events.Args.PlayerEventArgs|ifaces=|gp=
-T|Anomaly.Client.Api.Events.Args.PlayerDamagedEventArgs|class|base=Anomaly.Client.Api.Events.Args.PlayerEventArgs|ifaces=|gp=
-T|Anomaly.Client.Api.Events.Args.PlayerDiedEventArgs|class|base=Anomaly.Client.Api.Events.Args.PlayerEventArgs|ifaces=|gp=
 T|Anomaly.Client.Api.Events.Args.PlayerDroppingItemEventArgs|class|base=Anomaly.Client.Api.Events.Args.PlayerEventArgs|ifaces=Anomaly.Client.Api.Events.ICancellableEvent|gp=
 T|Anomaly.Client.Api.Events.Args.PlayerEventArgs|class|base=System.EventArgs|ifaces=|gp=
 T|Anomaly.Client.Api.Events.Args.PlayerHealedEventArgs|class|base=Anomaly.Client.Api.Events.Args.PlayerEventArgs|ifaces=|gp=
@@ -2315,7 +2060,6 @@ T|Anomaly.Client.Api.Modding.ModManifestValidator|class|base=System.Object|iface
 T|Anomaly.Client.Api.Modding.ModManifest|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Modding.ModResolutionResult|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Networking.AnomalyMessaging|class|base=System.Object|ifaces=|gp=
-T|Anomaly.Client.Api.Networking.AnomalyReplayTable|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Persistence.ClientPersistence|class|base=System.Object|ifaces=|gp=
 T|Anomaly.Client.Api.Persistence.IPersistenceStore|interface|base=|ifaces=|gp=
 T|Anomaly.Client.Api.Rendering.MaterialTint|class|base=System.Object|ifaces=|gp=

@@ -1,5 +1,5 @@
 using Anomaly.Client.Api.Modding;
-using Anomaly.Client.Api.Content;
+using Anomaly.Client.Api.Compatibility;
 using Xunit;
 
 namespace Anomaly.Client.Api.Tests;
@@ -90,39 +90,30 @@ public sealed class ModManifestTests
         Version = version,
         ApiVersion = ApiContract.CurrentVersion,
         Sha256 = new string('a', 64),
+        SupportedGameVersions = { "14.2.7^" },
     };
 
-    [Fact]
-    public void Item_catalog_rejects_unknown_assets()
+    [Theory]
+    [InlineData(14, 2, 7, true)]
+    [InlineData(14, 2, 99, true)]
+    [InlineData(14, 2, 6, false)]
+    [InlineData(14, 3, 0, false)]
+    public void Caret_game_version_is_bounded_to_selected_patch_line(
+        int major, int minor, int revision, bool supported)
     {
-        var catalog = new ItemCatalog
-        {
-            ServerFingerprint = new string('f', 64),
-            CatalogSha256 = new string('a', 64),
-            Assets =
-            {
-                new PassiveAssetReference
-                {
-                    Key = "example.asset",
-                    Kind = PassiveAssetKind.TexturePng,
-                    Sha256 = new string('b', 64),
-                    SizeBytes = ItemContentLimits.MaxAssetBytes,
-                },
-            },
-            Items =
-            {
-                new ItemDefinition
-                {
-                    Key = "example.item",
-                    DisplayName = "Example",
-                    BuiltInPrefab = "Coin",
-                    AssetKeys = { "example.missing" },
-                },
-            },
-        };
-
-        var errors = ItemCatalogValidator.Validate(catalog);
-
-        Assert.Contains(errors, error => error.Contains("unknown asset", StringComparison.Ordinal));
+        Assert.Equal(supported, GameVersionCompatibility.IsSupported(
+            new[] { "14.2.7^" }, major, minor, revision));
     }
+
+    [Theory]
+    [InlineData("14.2147483647.7^")]
+    [InlineData("14.2.2147483647")]
+    [InlineData("+14.2.7^")]
+    [InlineData("14.+2.7^")]
+    [InlineData("14.2.+7^")]
+    public void Game_version_range_overflow_or_noncanonical_numeric_syntax_is_rejected(string expression)
+    {
+        Assert.False(GameVersionCompatibility.TryParse(expression, out _, out _));
+    }
+
 }

@@ -9,7 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="MelonLoader">
-      <HintPath>E:\Projects\AnomalyLabs\Client\MelonLoader\net6\MelonLoader.dll</HintPath>
+      <HintPath>$(AnomalyClientMelonLibDir)\MelonLoader.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

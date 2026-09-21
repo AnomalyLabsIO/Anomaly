@@ -10,7 +10,8 @@ namespace Anomaly.Shared.Networking.Messages
         public override int MaxPayloadBytes => 8 + 2 + (MaxRequestedHashes * 32);
 
         public string MessageName => "anomaly:filerequest";
-        public MessageChannel TransportChannel => MessageChannel.ReliableUnordered;
+        // Consent decisions and their resulting requests must be observed in order.
+        public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 
         public ulong SessionId { get; set; }
         public List<byte[]> RequestedHashes { get; set; } = new List<byte[]>();

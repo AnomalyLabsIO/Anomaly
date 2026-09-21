@@ -2,110 +2,105 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Anomaly.Shared.Content
 {
-    /// <summary>
-    /// Deterministic catalog assembly + integrity hashing, shared by client and server.
-    /// The server <see cref="Build"/>s the catalog (assigning ids from dynamic bases); the
-    /// client recomputes <see cref="ComputeCatalogHash"/> over what it received to confirm
-    /// both sides derived identical content.
-    /// </summary>
+    /// <summary>Deterministic assignment and SHA-256 canonicalization for item catalogs.</summary>
     public static class CatalogBuilder
     {
-        /// <summary>
-        /// Dynamic custom-id base = 1 + the highest id the running game knows about, so it
-        /// auto-adapts when the game adds new vanilla items/roles. Mirrors the game's own
-        /// max-id computation (<c>Mathf.Max(num,(int)key)</c> over AvailableItems in
-        /// ItemTranslationReader). <paramref name="maxDefinedEnumValue"/> comes from
-        /// <c>Enum.GetValues</c> (covers unloaded holiday entries); <paramref name="registryKeys"/>
-        /// from the live loader dictionary (guards interop staleness). Never fills gaps below max.
-        /// </summary>
-        public static int ComputeIdBase(int maxDefinedEnumValue, IEnumerable<int> registryKeys)
+        private static readonly byte[] Domain = Encoding.ASCII.GetBytes("ANOMALY-ITEM-CATALOG-V1");
+
+        public static int ComputeIdBase(int maxDefinedEnumValue)
         {
-            int max = maxDefinedEnumValue;
-            if (registryKeys != null)
-            {
-                foreach (int k in registryKeys)
-                    if (k > max)
-                        max = k;
-            }
-            return max + 1;
+            if (maxDefinedEnumValue == int.MaxValue)
+                throw new InvalidOperationException("No custom item id can be allocated above the stock maximum.");
+            return maxDefinedEnumValue + 1;
         }
 
         /// <summary>
-        /// Stable-sorts entries by (Kind, Key), assigns per-kind ids from the supplied bases
-        /// (effects get a 0-based append index), validates ceilings, and computes the integrity
-        /// hash over the assigned, ordered entries. Throws if a kind's assignment exceeds its
-        /// ceiling so the server fails loudly at freeze rather than silently dropping content.
+        /// Sorts by stable key, rejects duplicate keys, assigns the complete
+        /// range transactionally, and binds the resulting catalog to a file manifest.
         /// </summary>
-        public static ContentCatalog Build(IEnumerable<CatalogEntry> entries,
-            int itemIdBase, int itemIdCeiling, int roleIdBase, int roleIdCeiling)
+        public static ContentCatalog Build(
+            IEnumerable<CatalogEntry> entries,
+            int itemIdBase,
+            int itemIdCeiling,
+            byte[] manifestSha256)
         {
-            var sorted = Sort(entries);
+            if (entries == null)
+                throw new ArgumentNullException(nameof(entries));
+            if (itemIdBase < 0 || itemIdCeiling > 127 || itemIdBase > itemIdCeiling + 1)
+                throw new ArgumentOutOfRangeException(nameof(itemIdBase), "Custom item ids must fit the game's signed-byte wire range.");
+            RequireSha256(manifestSha256, nameof(manifestSha256));
 
-            int nextItem = itemIdBase, nextRole = roleIdBase, nextEffect = 0;
-            foreach (var e in sorted)
-            {
-                switch (e.Kind)
-                {
-                    case CatalogEntryKind.Item:
-                        if (nextItem > itemIdCeiling)
-                            throw new InvalidOperationException(
-                                $"Custom item id space exhausted (base {itemIdBase}, ceiling {itemIdCeiling}). Reduce custom items or raise the ceiling.");
-                        e.AssignedId = nextItem++;
-                        break;
-                    case CatalogEntryKind.Role:
-                        if (nextRole > roleIdCeiling)
-                            throw new InvalidOperationException(
-                                $"Custom role id space exhausted (base {roleIdBase}, ceiling {roleIdCeiling}).");
-                        e.AssignedId = nextRole++;
-                        break;
-                    case CatalogEntryKind.Effect:
-                        e.AssignedId = nextEffect++;
-                        break;
-                }
-            }
+            var sorted = entries.OrderBy(entry => entry?.Key, StringComparer.Ordinal).ToList();
+            if (sorted.Any(entry => entry == null))
+                throw new InvalidDataException("Catalog contained a null item.");
+            if (sorted.Select(entry => entry.Key).Distinct(StringComparer.Ordinal).Count() != sorted.Count)
+                throw new InvalidDataException("Catalog contained duplicate item keys.");
+            if (sorted.Count > Math.Max(0, itemIdCeiling - itemIdBase + 1))
+                throw new InvalidOperationException(
+                    $"Custom item id space exhausted (base {itemIdBase}, ceiling {itemIdCeiling}).");
 
-            return new ContentCatalog
+            for (int index = 0; index < sorted.Count; index++)
+                sorted[index].AssignedId = itemIdBase + index;
+
+            var catalog = new ContentCatalog
             {
+                ManifestSha256 = (byte[])manifestSha256.Clone(),
                 Entries = sorted,
-                CatalogHash = HashSorted(sorted),
             };
+            catalog.CatalogSha256 = ComputeCatalogHash(catalog);
+            return catalog;
         }
 
-        /// <summary>
-        /// Recomputes the catalog hash over the entries (re-sorted canonically). The client
-        /// calls this on the received catalog and compares to <see cref="ContentCatalog.CatalogHash"/>.
-        /// </summary>
-        public static uint ComputeCatalogHash(IEnumerable<CatalogEntry> entries) => HashSorted(Sort(entries));
-
-        private static List<CatalogEntry> Sort(IEnumerable<CatalogEntry> entries) =>
-            entries.OrderBy(e => (byte)e.Kind).ThenBy(e => e.Key, StringComparer.Ordinal).ToList();
-
-        private static uint HashSorted(List<CatalogEntry> sorted)
+        public static byte[] ComputeCatalogHash(ContentCatalog catalog)
         {
-            using (var ms = new MemoryStream())
-            using (var w = new BinaryWriter(ms))
+            if (catalog == null)
+                throw new ArgumentNullException(nameof(catalog));
+            RequireSha256(catalog.ManifestSha256, nameof(catalog.ManifestSha256));
+
+            using (var stream = new MemoryStream())
+            using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
+            using (var sha256 = SHA256.Create())
             {
-                foreach (var e in sorted)
-                    e.WriteTo(w);
-                w.Flush();
-                return Fnv1a(ms.ToArray());
+                writer.Write(Domain);
+                writer.Write(catalog.SchemaVersion);
+                writer.Write(catalog.ManifestSha256);
+                var sorted = (catalog.Entries ?? new List<CatalogEntry>())
+                    .OrderBy(entry => entry?.Key, StringComparer.Ordinal)
+                    .ToList();
+                writer.Write(sorted.Count);
+                foreach (var entry in sorted)
+                {
+                    if (entry == null)
+                        throw new InvalidDataException("Catalog contained a null item.");
+                    entry.WriteTo(writer);
+                }
+                writer.Flush();
+                stream.Position = 0;
+                return sha256.ComputeHash(stream);
             }
         }
 
-        // FNV-1a 32-bit over raw bytes — same constants as AnomalyMessageRegistry.ComputeHash,
-        // applied to the serialized entries so the hash covers exactly the wire content.
-        private static uint Fnv1a(byte[] data)
+        public static bool HashesEqual(byte[] left, byte[] right)
         {
-            uint hash = 2166136261u;
-            foreach (byte b in data)
-            {
-                hash ^= b;
-                hash *= 16777619u;
-            }
-            return hash;
+            if (left == null || right == null || left.Length != ContentCatalog.Sha256Bytes ||
+                right.Length != ContentCatalog.Sha256Bytes)
+                return false;
+
+            int difference = 0;
+            for (int index = 0; index < left.Length; index++)
+                difference |= left[index] ^ right[index];
+            return difference == 0;
+        }
+
+        private static void RequireSha256(byte[] hash, string parameter)
+        {
+            if (hash == null || hash.Length != ContentCatalog.Sha256Bytes)
+                throw new ArgumentException("A 32-byte SHA-256 value is required.", parameter);
         }
     }
 }

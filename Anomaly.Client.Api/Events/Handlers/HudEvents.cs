@@ -8,7 +8,7 @@ namespace Anomaly.Client.Api.Events.Handlers;
 /// </summary>
 public static class HudEvents
 {
-    /// <summary>Fires before a server-sent hint is rendered on the local HUD. Cancel to suppress.</summary>
+    /// <summary>Fires before a server-sent hint is rendered on the local HUD. Mutate text/duration or cancel to suppress.</summary>
     public static event AnomalyEventHandler<HintDisplayingEventArgs> HintDisplaying;
 
     /// <summary>Fires before a server-sent broadcast is rendered on the local HUD. Cancel to suppress.</summary>

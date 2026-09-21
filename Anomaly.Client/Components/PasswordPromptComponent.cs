@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Localization;
 using Il2CppInterop.Runtime.Attributes;
 using Il2CppTMPro;
@@ -131,6 +132,16 @@ public class PasswordPromptComponent : MonoBehaviour
         string detail,
         System.Action onConfirm,
         System.Action onCancel)
+        => ShowConfirmation(title, detail,
+            "Press Enter to trust this server key. Press Esc to cancel.", onConfirm, onCancel);
+
+    [HideFromIl2Cpp]
+    public void ShowConfirmation(
+        string title,
+        string detail,
+        string hint,
+        System.Action onConfirm,
+        System.Action onCancel)
     {
         _confirmationMode = true;
         _plainTextMode = false;
@@ -142,7 +153,7 @@ public class PasswordPromptComponent : MonoBehaviour
         Cursor.visible = true;
 
         _titleText.text = title ?? "Confirm";
-        _hintText.text = "Press Enter to trust this server key. Press Esc to cancel.";
+        _hintText.text = hint ?? "Press Enter to confirm. Press Esc to cancel.";
         _passwordText.alignment = TextAlignmentOptions.Center;
         UpdatePasswordText();
         _root.SetActive(true);
@@ -322,35 +333,103 @@ public class PasswordPromptComponent : MonoBehaviour
 public static class PasswordPrompt
 {
     private static PasswordPromptComponent _instance;
+    private static readonly PromptLeaseGate LeaseGate = new();
 
-    public static void Show(System.Action<string> onSubmit, System.Action onCancel)
+    public static void Show(
+        string owner,
+        System.Action<string> onSubmit,
+        System.Action onCancel)
     {
         EnsureInstance();
-        _instance?.Show(onSubmit, onCancel);
+        PromptLease lease = LeaseGate.Begin(owner);
+        _instance?.Show(
+            value =>
+            {
+                if (LeaseGate.TryConsume(lease))
+                    onSubmit?.Invoke(value);
+            },
+            () =>
+            {
+                if (LeaseGate.TryConsume(lease))
+                    onCancel?.Invoke();
+            });
     }
 
     public static void ShowConfirmation(
+        string owner,
         string title,
         string detail,
         System.Action onConfirm,
         System.Action onCancel)
     {
+        ShowConfirmation(
+            owner,
+            title,
+            detail,
+            "Press Enter to trust this server key. Press Esc to cancel.",
+            onConfirm,
+            onCancel);
+    }
+
+    public static void ShowConfirmation(
+        string owner,
+        string title,
+        string detail,
+        string hint,
+        System.Action onConfirm,
+        System.Action onCancel)
+    {
         EnsureInstance();
-        _instance?.ShowConfirmation(title, detail, onConfirm, onCancel);
+        PromptLease lease = LeaseGate.Begin(owner);
+        _instance?.ShowConfirmation(
+            title,
+            detail,
+            hint,
+            () =>
+            {
+                if (LeaseGate.TryConsume(lease))
+                    onConfirm?.Invoke();
+            },
+            () =>
+            {
+                if (LeaseGate.TryConsume(lease))
+                    onCancel?.Invoke();
+            });
     }
 
     public static void ShowTextInput(
+        string owner,
         string title,
         string hint,
         System.Action<string> onSubmit,
         System.Action onCancel)
     {
         EnsureInstance();
-        _instance?.ShowTextInput(title, hint, onSubmit, onCancel);
+        PromptLease lease = LeaseGate.Begin(owner);
+        _instance?.ShowTextInput(
+            title,
+            hint,
+            value =>
+            {
+                if (LeaseGate.TryConsume(lease))
+                    onSubmit?.Invoke(value);
+            },
+            () =>
+            {
+                if (LeaseGate.TryConsume(lease))
+                    onCancel?.Invoke();
+            });
     }
 
-    public static void Hide()
+    public static void Hide(string owner)
     {
+        if (LeaseGate.Invalidate(owner))
+            _instance?.Hide();
+    }
+
+    public static void HideAll()
+    {
+        LeaseGate.InvalidateAll();
         _instance?.Hide();
     }
 

@@ -1,5 +1,6 @@
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
+using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Networking;
 using Anomaly.Shared.Capabilities;
 using Anomaly.Shared.Networking;
@@ -39,6 +40,7 @@ public static class ClientCapabilities
 
     private static readonly object Sync = new();
     private static readonly Dictionary<string, Entry> Entries = new(StringComparer.Ordinal);
+    private static readonly TransactionalInitializer Initializer = new();
     private static bool _initialized;
     private static uint _roundEpoch;
     private static uint _txSequence;
@@ -96,11 +98,15 @@ public static class ClientCapabilities
         lock (Sync)
         {
             if (_initialized) return;
+            Initializer.Initialize(
+                new InitializationStep(
+                    () => AnomalyMessaging.MessageReceived += OnMessageReceived,
+                    () => AnomalyMessaging.MessageReceived -= OnMessageReceived),
+                new InitializationStep(
+                    () => ClientEvents.Disconnected += OnDisconnected,
+                    () => ClientEvents.Disconnected -= OnDisconnected));
             _initialized = true;
         }
-
-        AnomalyMessaging.MessageReceived += OnMessageReceived;
-        ClientEvents.Disconnected += OnDisconnected;
     }
 
     internal static void ResetSession()
@@ -127,8 +133,7 @@ public static class ClientCapabilities
             _lastChallengeSequence = 0;
         }
 
-        AnomalyMessaging.MessageReceived -= OnMessageReceived;
-        ClientEvents.Disconnected -= OnDisconnected;
+        Initializer.Reset();
         AnomalyMessaging.ResetSession(0);
     }
 

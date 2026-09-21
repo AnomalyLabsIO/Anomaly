@@ -7,9 +7,9 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("Anomaly.Server")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("TayTay")]
+[assembly: AssemblyCompany("AnomalyLabs")]
 [assembly: AssemblyProduct("Anomaly.Server")]
-[assembly: AssemblyCopyright("Copyright © TayTay 2026")]
+[assembly: AssemblyCopyright("Copyright (c) 2026 AnomalyLabs contributors")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

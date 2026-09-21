@@ -1,0 +1,52 @@
+<Project>
+  <!-- Legacy non-SDK projects do not contribute a repository SourceRoot on
+       their own. Roslyn requires one top-level root when CI path mapping is
+       enabled, otherwise deterministic Release builds fail before compile. -->
+  <ItemGroup Condition="'$(ContinuousIntegrationBuild)' == 'true' And
+                        ('$(MSBuildProjectName)' == 'Anomaly.Server' Or
+                         '$(MSBuildProjectName)' == 'Anomaly.Shared')">
+    <SourceRoot Include="$(MSBuildProjectDirectory)\" />
+  </ItemGroup>
+
+  <Target Name="PrepareAnomalyServerPublicizedReference"
+          BeforeTargets="ValidateAnomalyExternalReferences"
+          Condition="'$(AnomalyRequiresServerReferences)' == 'true' And '$(DesignTimeBuild)' != 'true'"
+          Inputs="$(AnomalyServerAssemblyCSharpSource);$(AnomalyRepositoryRoot)tools\ReferencePublicizer\Program.cs;$(AnomalyRepositoryRoot)tools\ReferencePublicizer\ReferencePublicizer.csproj"
+          Outputs="$(AnomalyServerPublicizedAssembly)">
+    <Error Condition="!Exists('$(AnomalyServerAssemblyCSharpSource)')"
+           Text="The stock server Assembly-CSharp input is missing at '$(AnomalyServerAssemblyCSharpSource)'. Set AnomalyServerGameDir or AnomalyServerAssemblyCSharpSource to the supported game build." />
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(AnomalyServerPublicizedAssembly)'))" />
+    <Exec Command="dotnet run --project &quot;$(AnomalyRepositoryRoot)tools\ReferencePublicizer\ReferencePublicizer.csproj&quot; -c Release --no-launch-profile -- &quot;$(AnomalyServerAssemblyCSharpSource)&quot; &quot;$(AnomalyServerPublicizedAssembly)&quot;" />
+  </Target>
+
+  <Target Name="ValidateAnomalyExternalReferences"
+          BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(AnomalyRequiresClientInterop)' == 'true' And !Exists('$(AnomalyClientInteropDir)\Assembly-CSharp.dll')"
+           Text="Anomaly client IL2CPP references are missing at '$(AnomalyClientInteropDir)'. Set AnomalyClientRoot or AnomalyClientInteropDir to a MelonLoader-generated reference tree for the supported game build." />
+    <Error Condition="'$(AnomalyRequiresClientMelon)' == 'true' And !Exists('$(AnomalyClientMelonLibDir)\MelonLoader.dll')"
+           Text="MelonLoader references are missing at '$(AnomalyClientMelonLibDir)'. Set AnomalyClientRoot or AnomalyClientMelonLibDir to the MelonLoader net6 directory." />
+    <Error Condition="'$(AnomalyRequiresServerCrypto)' == 'true' And !Exists('$(AnomalyServerReferenceDir)\BouncyCastle.Cryptography.dll')"
+           Text="The server crypto reference is missing at '$(AnomalyServerReferenceDir)\BouncyCastle.Cryptography.dll'. Set AnomalyServerReferenceDir to the supported server reference snapshot." />
+    <Error Condition="'$(AnomalyRequiresServerNetstandard)' == 'true' And !Exists('$(AnomalyServerReferenceDir)\netstandard.dll')"
+           Text="The server netstandard reference is missing at '$(AnomalyServerReferenceDir)\netstandard.dll'. Set AnomalyServerReferenceDir to the supported server reference snapshot." />
+    <Error Condition="'$(AnomalyRequiresServerReferences)' == 'true' And !Exists('$(AnomalyServerPublicizedAssembly)')"
+           Text="The generated server compile reference is missing at '$(AnomalyServerPublicizedAssembly)'. Set AnomalyServerPublicizedAssembly or allow the reference-publicizer target to generate it from the supported stock game assembly." />
+    <Error Condition="'$(AnomalyRequiresServerReferences)' == 'true' And !Exists('$(AnomalyLabApiDir)\LabApi.dll')"
+           Text="LabAPI is missing at '$(AnomalyLabApiDir)\LabApi.dll'. Set AnomalyLabApiDir to the supported LabAPI reference directory." />
+    <Error Condition="'$(AnomalyRequiresServerReferences)' == 'true' And !Exists('$(AnomalyHarmonyPath)')"
+           Text="Server Harmony is missing at '$(AnomalyHarmonyPath)'. Set AnomalyHarmonyPath to the deployed 0Harmony.dll." />
+  </Target>
+
+  <!-- Release tooling invokes this target per runtime project. It records the
+       exact resolved assembly paths; the package tool hashes them without
+       publishing machine-specific paths. -->
+  <Target Name="WriteAnomalyResolvedReferences"
+          DependsOnTargets="ResolveReferences"
+          Condition="'$(AnomalyResolvedReferenceList)' != ''">
+    <WriteLinesToFile File="$(AnomalyResolvedReferenceList)"
+                      Lines="@(ReferencePath-&gt;'%(FullPath)')"
+                      Overwrite="true"
+                      Encoding="UTF-8" />
+  </Target>
+</Project>

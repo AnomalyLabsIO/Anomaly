@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Anomaly.Server.Auth;
 using Anomaly.Server.Networking;
@@ -21,6 +23,7 @@ public static class PlayerAuthenticationManagerPatch
 {
     private const int EncryptedMessageHeaderSize = 5;
     private const uint GenericTransportRateKeyPrefix = 0xFFF00000u;
+    private const uint RawTransportRateKey = 0xFFE00000u;
     private const string DummyUserId = "ID_Dummy";
     
     /*[HarmonyPostfix]
@@ -46,40 +49,191 @@ public static class PlayerAuthenticationManagerPatch
         if (__instance._hub != null && __instance._hub.IsDummy) return;
 
         var connectionId = __instance.connectionToClient.connectionId;
-        OffThreadLogger.Info("Processing auth in FixedUpdate for connection " + connectionId);
+        try { OffThreadLogger.Info("Processing auth in FixedUpdate for connection " + connectionId); }
+        catch { }
 
         if (!LiteNetLib4MirrorServer.Peers.TryGetValue(connectionId, out var peer) || peer == null)
         {
-            OffThreadLogger.Warn($"Authentication failed for connection {connectionId}: no LiteNetLib peer was found.");
-            __instance.RejectAuthentication("Authentication failed Server Side", null, false);
+            RejectFailClosed(__instance, "missing-litenetlib-peer", "Authentication failed Server Side");
+            try { OffThreadLogger.Warn($"Authentication failed for connection {connectionId}: no LiteNetLib peer was found."); }
+            catch { }
             return;
         }
 
         var endPoint = peer.EndPoint;
-        if(!AuthHandler.TryTakePlayer(endPoint, out var player))
+        AuthenticatedHandoff handoff = null;
+        string handoffFailure = null;
+        bool admissionEntered = Plugin.TryCommitAuthenticatedAdmission(() =>
         {
-            OffThreadLogger.Error($"Player from {endPoint} joined the server without being authenticated. No stored player data found.");
-            __instance.RejectAuthentication("Authentication failed Server Side", null, false);
+            PlayerStorage player = null;
+            try
+            {
+                // Claiming the accepted phase-two handoff and registering its
+                // authenticated hub are one admission transaction. Teardown can
+                // therefore observe either the stored player or the registered hub,
+                // never an invisible map-to-hub gap.
+                if (!AuthHandler.TryTakePlayer(endPoint, out player))
+                    throw new InvalidOperationException("No stored authenticated handoff was found.");
+
+                handoff = PrepareAuthenticatedHandoff(__instance, endPoint, player);
+            }
+            catch (Exception ex)
+            {
+                if (player != null)
+                {
+                    try { EnrollmentSessionRegistry.Cancel(player.UserId, player.EnrollmentReservation); }
+                    catch { }
+                    try { player.ClearSecrets(); }
+                    catch { }
+                }
+                Plugin.QuarantineAuthenticatedPlayer(__instance._hub, "authentication-handoff-failure");
+                handoffFailure = $"Authentication handoff failed for {player?.UserId ?? "unknown"}: {ex}";
+            }
+        });
+
+        if (!admissionEntered)
+        {
+            // The still-stored handoff is drained by teardown, which latches the
+            // deny-all patch barrier. Revoke this hub as well before diagnostics so
+            // a failed rejection cannot leave an offline ReadyClient behind.
+            RejectFailClosed(
+                __instance,
+                "admission-closed-during-handoff",
+                "Anomaly authentication is unavailable during server teardown.");
+            try { OffThreadLogger.Warn("Authentication was rejected because Anomaly admission closed during handoff."); }
+            catch { }
             return;
         }
 
-        __instance._authenticationRequested = true;
-
-        __instance.UserId = player.UserId;
-        __instance._hub.nicknameSync.UpdateNickname(player.NickName);
-        try
+        if (handoff == null)
         {
-            AuthenticatedTransportSessions.Register(__instance._hub, player);
-            __instance._hub.encryptedChannelManager.EncryptionKey = null;
-        }
-        catch (Exception ex)
-        {
-            OffThreadLogger.Error($"Authentication failed for {player.UserId}: invalid transport session: {ex.Message}");
-            __instance.RejectAuthentication("Authentication failed Server Side", null, false);
+            RejectFailClosed(__instance, "authentication-handoff-failure", "Authentication failed Server Side");
+            try { OffThreadLogger.Error(handoffFailure ?? "Authentication handoff failed without a diagnostic."); }
+            catch { }
             return;
         }
-        OffThreadLogger.Info($"Authenticated {player.NickName} ({player.UserId}) from {endPoint}, directional protocol-v2 transport enabled");
-        __instance._hub.serverRoles.RefreshPermissions(false);
+
+        PublishAuthenticatedHandoff(handoff);
+    }
+
+    private static void RejectFailClosed(
+        PlayerAuthenticationManager instance,
+        string context,
+        string rejectionReason)
+    {
+        Plugin.QuarantineAuthenticatedPlayer(instance?._hub, context);
+        try { instance?.connectionToClient?.Disconnect(); }
+        catch { }
+        try { instance?.RejectAuthentication(rejectionReason, null, false); }
+        catch { }
+    }
+
+    private static AuthenticatedHandoff PrepareAuthenticatedHandoff(
+        PlayerAuthenticationManager instance,
+        System.Net.IPEndPoint endPoint,
+        PlayerStorage player)
+    {
+        instance._authenticationRequested = true;
+
+        instance.UserId = player.UserId;
+        instance._hub.nicknameSync.UpdateNickname(player.NickName);
+        AuthenticatedTransportSessions.Register(instance._hub, player);
+        instance._hub.encryptedChannelManager.EncryptionKey = null;
+
+        if (!EnrollmentSessionRegistry.TryActivate(
+                player.UserId,
+                player.EnrollmentReservation,
+                instance._hub,
+                PlayerAuthenticationManager.AllowSameAccountJoining,
+                out var previousEnrollmentHub))
+        {
+            EnrollmentSessionRegistry.Cancel(player.UserId, player.EnrollmentReservation);
+            throw new InvalidOperationException("The authentication was superseded by a newer connection attempt.");
+        }
+
+        var duplicates = new List<ReferenceHub>();
+        if (!PlayerAuthenticationManager.AllowSameAccountJoining)
+        {
+            duplicates = ReferenceHub.AllHubs
+                .Where(hub => hub != null
+                              && !ReferenceEquals(hub, instance._hub)
+                              && !hub.isLocalPlayer
+                              && string.Equals(hub.authManager?.UserId, player.UserId, StringComparison.Ordinal))
+                .ToList();
+            if (previousEnrollmentHub != null
+                && !duplicates.Any(hub => ReferenceEquals(hub, previousEnrollmentHub)))
+            {
+                duplicates.Add(previousEnrollmentHub);
+            }
+        }
+
+        return new AuthenticatedHandoff
+        {
+            Manager = instance,
+            EndPoint = endPoint,
+            UserId = player.UserId,
+            NickName = player.NickName,
+            DuplicateHubs = duplicates,
+        };
+    }
+
+    private static void PublishAuthenticatedHandoff(AuthenticatedHandoff handoff)
+    {
+        ReferenceHub survivingOlderHub = null;
+        foreach (ReferenceHub duplicate in handoff.DuplicateHubs)
+        {
+            if (!Plugin.IsAuthenticatedAdmissionCurrent(handoff.Manager._hub))
+                return;
+            try
+            {
+                ServerConsole.Disconnect(
+                    duplicate.gameObject,
+                    "Only one player instance of the same player is allowed.");
+            }
+            catch (Exception ex)
+            {
+                survivingOlderHub ??= duplicate;
+                try { OffThreadLogger.Error($"Failed to disconnect an older session for {handoff.UserId}: {ex}"); }
+                catch { }
+            }
+        }
+
+        if (survivingOlderHub != null)
+        {
+            bool rolledBack = false;
+            Plugin.TryCommitAuthenticatedAdmission(() =>
+            {
+                rolledBack = EnrollmentSessionRegistry.TryRollbackActivation(
+                    handoff.UserId,
+                    handoff.Manager._hub,
+                    survivingOlderHub);
+                Plugin.QuarantineAuthenticatedPlayer(handoff.Manager._hub, "duplicate-session-rollback");
+            });
+            RejectFailClosed(
+                handoff.Manager,
+                "duplicate-session-rollback",
+                "The older authenticated session could not be replaced safely.");
+            try
+            {
+                OffThreadLogger.Error(
+                    $"Rejected replacement session for {handoff.UserId} because an older authenticated " +
+                    $"session could not be evicted (conditionalRollback={rolledBack}).");
+            }
+            catch { }
+            return;
+        }
+
+        if (!Plugin.IsAuthenticatedAdmissionCurrent(handoff.Manager._hub))
+            return;
+
+        try { handoff.Manager._hub.serverRoles.RefreshPermissions(false); }
+        catch (Exception exception)
+        {
+            RejectFailClosed(handoff.Manager, "permission-refresh-failure", "Authentication failed Server Side");
+            try { OffThreadLogger.Error($"Initial permission refresh failed for {handoff.UserId}: {exception}"); }
+            catch { }
+            return;
+        }
 
         // Vanilla fires PlayerEvents.OnJoined from
         // PlayerAuthenticationManager.ServerReceiveAuthenticationResponse (the
@@ -87,14 +241,51 @@ public static class PlayerAuthenticationManagerPatch
         // modded client doesn't send CmdSetNick — we set the nick server-side
         // above). Without this explicit invocation, no LabAPI plugin sees our
         // hub as "joined", which breaks any plugin hooked to PlayerEvents.Joined.
-        try { PlayerEvents.OnJoined(new PlayerJoinedEventArgs(__instance._hub)); }
-        catch (Exception ex) { OffThreadLogger.Error($"PlayerEvents.OnJoined dispatch failed: {ex}"); }
-
-        AnomalyMessaging.RaiseClientReady(__instance._hub);
-        Timing.CallDelayed(1f, () =>
+        try { PlayerEvents.OnJoined(new PlayerJoinedEventArgs(handoff.Manager._hub)); }
+        catch (Exception ex)
         {
-            __instance._hub.serverRoles.RefreshPermissions(false);
-        });
+            try { OffThreadLogger.Error($"PlayerEvents.OnJoined dispatch failed: {ex}"); }
+            catch { }
+        }
+
+        if (!Plugin.IsAuthenticatedAdmissionCurrent(handoff.Manager._hub))
+            return;
+        AnomalyMessaging.RaiseClientReady(handoff.Manager._hub);
+        if (!Plugin.IsAuthenticatedAdmissionCurrent(handoff.Manager._hub))
+            return;
+        try { Timing.CallDelayed(1f, () =>
+        {
+            if (!Plugin.IsAuthenticatedAdmissionCurrent(handoff.Manager._hub))
+                return;
+            try { handoff.Manager._hub.serverRoles.RefreshPermissions(false); }
+            catch (Exception exception)
+            {
+                RejectFailClosed(handoff.Manager, "delayed-permission-refresh-failure", "Authentication failed Server Side");
+                try { OffThreadLogger.Error($"Delayed permission refresh failed for {handoff.UserId}: {exception}"); }
+                catch { }
+            }
+        }); }
+        catch (Exception exception)
+        {
+            try { OffThreadLogger.Error($"Could not schedule delayed permission refresh: {exception}"); }
+            catch { }
+        }
+        try
+        {
+            OffThreadLogger.Info(
+                $"Authenticated {handoff.NickName} ({handoff.UserId}) from {handoff.EndPoint}, " +
+                "directional authenticated transport enabled");
+        }
+        catch { }
+    }
+
+    private sealed class AuthenticatedHandoff
+    {
+        internal PlayerAuthenticationManager Manager;
+        internal System.Net.IPEndPoint EndPoint;
+        internal string UserId;
+        internal string NickName;
+        internal List<ReferenceHub> DuplicateHubs;
     }
 
     [HarmonyPostfix]
@@ -166,11 +357,16 @@ public static class PlayerAuthenticationManagerPatch
             return false;
         }
 
-        if (__instance._txCounter == 4294967295U)
-            __instance._txCounter = 0;
-        __instance._txCounter++;
+        if (!EncryptedTransportCounterGuard.TryAdvance(__instance._txCounter, out var nextCounter))
+        {
+            ExhaustTransportCounter(__instance);
+            __result = false;
+            return false;
+        }
+        __instance._txCounter = nextCounter;
 
         EncryptedChannelManager.EncryptedMessageOutside messageOut;
+        ReferenceHub targetHub = null;
 
         var data = new byte[content.Length + 5];
         data[0] = (byte)channel;
@@ -183,9 +379,13 @@ public static class PlayerAuthenticationManagerPatch
         }
         else
         {
-            if (!ReferenceHub.TryGetHub(__instance.connectionToClient, out var targetHub))
+            if (!ReferenceHub.TryGetHub(__instance.connectionToClient, out targetHub))
             {
-                OffThreadLogger.Warn("Tried to send encrypted byte[] message, but no hub was found for the connection");
+                FailClosedOutgoingTransport(
+                    __instance,
+                    null,
+                    "encrypted-byte-send-missing-hub",
+                    "Tried to send encrypted byte[] message, but no hub was found for the connection.");
                 __result = false;
                 return false;
             }
@@ -194,21 +394,42 @@ public static class PlayerAuthenticationManagerPatch
             {
                 if (!AuthenticatedTransportSessions.TryEncryptToClient(targetHub, data, out encryptedData))
                 {
-                    OffThreadLogger.Warn("Tried to send encrypted byte[] message, but no protocol-v2 session was found");
+                    FailClosedOutgoingTransport(
+                        __instance,
+                        targetHub,
+                        "encrypted-byte-send-missing-session",
+                        "Tried to send encrypted byte[] message, but no directional authenticated transport session was found.");
                     __result = false;
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                OffThreadLogger.Warn($"Failed to encrypt server-to-client byte[] message: {ex.GetType().Name}: {ex.Message}");
+                FailClosedOutgoingTransport(
+                    __instance,
+                    targetHub,
+                    "encrypted-byte-send-encryption-failure",
+                    $"Failed to encrypt server-to-client byte[] message: {ex.GetType().Name}: {ex.Message}");
                 __result = false;
                 return false;
             }
             messageOut = new EncryptedChannelManager.EncryptedMessageOutside(EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encryptedData);
         }
 
-        __instance.connectionToClient.Send(messageOut);
+        try
+        {
+            __instance.connectionToClient.Send(messageOut);
+        }
+        catch (Exception ex)
+        {
+            FailClosedOutgoingTransport(
+                __instance,
+                targetHub,
+                "encrypted-byte-send-delivery-failure",
+                $"Failed to deliver server-to-client encrypted byte[] message: {ex.GetType().Name}: {ex.Message}");
+            __result = false;
+            return false;
+        }
         __result = true;
         return false;
     }
@@ -224,11 +445,16 @@ public static class PlayerAuthenticationManagerPatch
             return false;
         }
 
-        if (__instance._txCounter == 4294967295U)
-            __instance._txCounter = 0;
-        __instance._txCounter++;
+        if (!EncryptedTransportCounterGuard.TryAdvance(__instance._txCounter, out var nextCounter))
+        {
+            ExhaustTransportCounter(__instance);
+            __result = false;
+            return false;
+        }
+        __instance._txCounter = nextCounter;
 
         EncryptedChannelManager.EncryptedMessageOutside messageOut;
+        ReferenceHub targetHub = null;
 
         var data = new byte[Misc.Utf8Encoding.GetByteCount(content)+5];
         data[0] = (byte)channel;
@@ -241,9 +467,13 @@ public static class PlayerAuthenticationManagerPatch
         }
         else
         {
-            if (!ReferenceHub.TryGetHub(__instance.connectionToClient, out var targetHub))
+            if (!ReferenceHub.TryGetHub(__instance.connectionToClient, out targetHub))
             {
-                OffThreadLogger.Warn("Tried to send encrypted message, but no hub was found for the connection");
+                FailClosedOutgoingTransport(
+                    __instance,
+                    null,
+                    "encrypted-string-send-missing-hub",
+                    "Tried to send encrypted message, but no hub was found for the connection.");
                 __result = false;
                 return false;
             }
@@ -252,21 +482,42 @@ public static class PlayerAuthenticationManagerPatch
             {
                 if (!AuthenticatedTransportSessions.TryEncryptToClient(targetHub, data, out encryptedData))
                 {
-                    OffThreadLogger.Warn("Tried to send encrypted message, but no protocol-v2 session was found");
+                    FailClosedOutgoingTransport(
+                        __instance,
+                        targetHub,
+                        "encrypted-string-send-missing-session",
+                        "Tried to send encrypted message, but no directional authenticated transport session was found.");
                     __result = false;
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                OffThreadLogger.Warn($"Failed to encrypt server-to-client message: {ex.GetType().Name}: {ex.Message}");
+                FailClosedOutgoingTransport(
+                    __instance,
+                    targetHub,
+                    "encrypted-string-send-encryption-failure",
+                    $"Failed to encrypt server-to-client message: {ex.GetType().Name}: {ex.Message}");
                 __result = false;
                 return false;
             }
             messageOut = new EncryptedChannelManager.EncryptedMessageOutside(EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, encryptedData);
         }
 
-        __instance.connectionToClient.Send(messageOut);
+        try
+        {
+            __instance.connectionToClient.Send(messageOut);
+        }
+        catch (Exception ex)
+        {
+            FailClosedOutgoingTransport(
+                __instance,
+                targetHub,
+                "encrypted-string-send-delivery-failure",
+                $"Failed to deliver server-to-client encrypted message: {ex.GetType().Name}: {ex.Message}");
+            __result = false;
+            return false;
+        }
         __result = true;
         return false;
     }
@@ -280,34 +531,61 @@ public static class PlayerAuthenticationManagerPatch
 
         if (!ReferenceHub.TryGetHub(conn, out var hub))
         {
-            OffThreadLogger.Warn(
-                $"Encrypted message dropped: no hub for connection {conn?.connectionId ?? -1} " +
-                $"(isReady={conn?.isReady}, identity={(conn?.identity == null ? "null" : conn.identity.netId.ToString())}).");
+            try { conn?.Disconnect(); }
+            catch { }
+            try
+            {
+                OffThreadLogger.Warn(
+                    $"Encrypted message dropped: no hub for connection {conn?.connectionId ?? -1} " +
+                    $"(isReady={conn?.isReady}, identity={(conn?.identity == null ? "null" : conn.identity.netId.ToString())}).");
+            }
+            catch { }
             return false;
         }
 
         var packedData = packed.Data;
+        var rawLimiter = AnomalyReplayTable.GetRawRateLimiterOrCreate(hub);
         if (packedData == null)
         {
-            OffThreadLogger.Warn(
-                $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: payload was null " +
-                $"(connId={conn?.connectionId ?? -1}, level={packed.Level}).");
+            HandleRawTransportResult(
+                hub,
+                conn,
+                rawLimiter.RegisterProtocolViolation(),
+                $"Encrypted message payload was null (connId={conn?.connectionId ?? -1}, level={packed.Level}).");
             return false;
         }
 
         if (packedData.Length == 0)
         {
-            OffThreadLogger.Warn(
-                $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: payload was empty " +
-                $"(connId={conn?.connectionId ?? -1}, level={packed.Level}).");
+            HandleRawTransportResult(
+                hub,
+                conn,
+                rawLimiter.RegisterProtocolViolation(),
+                $"Encrypted message payload was empty (connId={conn?.connectionId ?? -1}, level={packed.Level}).");
             return false;
         }
 
         if (packedData.Length > AnomalyChannel.MaxEncryptedEnvelopeBytes)
         {
-            OffThreadLogger.Warn(
-                $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: payload exceeded the " +
-                $"absolute ceiling ({packedData.Length}/{AnomalyChannel.MaxEncryptedEnvelopeBytes} bytes).");
+            HandleRawTransportResult(
+                hub,
+                conn,
+                rawLimiter.RegisterProtocolViolation(),
+                $"Encrypted message exceeded the absolute ceiling " +
+                $"({packedData.Length}/{AnomalyChannel.MaxEncryptedEnvelopeBytes} bytes).");
+            return false;
+        }
+
+        var rawRateResult = rawLimiter.TryAccept(
+            RawTransportRateKey,
+            Math.Min(packedData.Length, AnomalyChannel.MaxEnvelopeBytes));
+        if (!rawRateResult.Allowed)
+        {
+            HandleRawTransportResult(
+                hub,
+                conn,
+                rawRateResult,
+                $"Pre-decrypt traffic exceeded bounded packet/byte limits ({packedData.Length} bytes).");
             return false;
         }
 
@@ -338,9 +616,11 @@ public static class PlayerAuthenticationManagerPatch
 
             if (packedData.Length < EncryptedMessageHeaderSize)
             {
-                OffThreadLogger.Warn(
-                    $"Encrypted message dropped from local client {hub.LoggedNameFromRefHub()}: " +
-                    $"payload too short ({packedData.Length} bytes).");
+                HandleRawTransportResult(
+                    hub,
+                    conn,
+                    rawLimiter.RegisterProtocolViolation(),
+                    $"Local encrypted-channel payload was too short ({packedData.Length} bytes).");
                 return false;
             }
 
@@ -354,8 +634,11 @@ public static class PlayerAuthenticationManagerPatch
             var encrypted = packed.Level == EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated;
             if (!encrypted && packed.Level != EncryptedChannelManager.SecurityLevel.Unsecured)
             {
-                OffThreadLogger.Warn(
-                    $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: unknown security level {packed.Level}.");
+                HandleRawTransportResult(
+                    hub,
+                    conn,
+                    rawLimiter.RegisterProtocolViolation(),
+                    $"Encrypted message used unknown security level {packed.Level}.");
                 return false;
             }
 
@@ -364,7 +647,11 @@ public static class PlayerAuthenticationManagerPatch
             {
                 if (!AuthTransportCrypto.IsVersion2Envelope(packedData))
                 {
-                    OffThreadLogger.Warn($"Rejected legacy/bidirectional encrypted envelope from {hub.LoggedNameFromRefHub()} during protocol v2.");
+                    HandleRawTransportResult(
+                        hub,
+                        conn,
+                        rawLimiter.RegisterProtocolViolation(),
+                        "Rejected a legacy or malformed directional AEAD v2 envelope for application protocol v3.");
                     return false;
                 }
 
@@ -372,15 +659,22 @@ public static class PlayerAuthenticationManagerPatch
                 {
                     if (!AuthenticatedTransportSessions.TryDecryptFromClient(hub, packedData, out decryptedData))
                     {
-                        OffThreadLogger.Warn($"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: no protocol-v2 transport session.");
+                        HandleRawTransportResult(
+                            hub,
+                            conn,
+                            rawLimiter.RegisterProtocolViolation(),
+                            "Encrypted message had no directional authenticated transport session.");
                         return false;
                     }
                 }
                 catch (Exception ex)
                 {
-                    OffThreadLogger.Warn(
-                        $"Failed to decrypt received message from {hub.LoggedNameFromRefHub()} " +
-                        $"(connId={conn?.connectionId ?? -1}, bytes={packedData.Length}): {ex.GetType().Name}: {ex.Message}");
+                    HandleRawTransportResult(
+                        hub,
+                        conn,
+                        rawLimiter.RegisterProtocolViolation(),
+                        $"Encrypted message authentication failed (connId={conn?.connectionId ?? -1}, " +
+                        $"bytes={packedData.Length}, error={ex.GetType().Name}).");
                     return false;
                 }
             }
@@ -391,9 +685,11 @@ public static class PlayerAuthenticationManagerPatch
 
             if (decryptedData == null || decryptedData.Length == 0)
             {
-                OffThreadLogger.Warn(
-                    $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: " +
-                    $"decoded payload was {(decryptedData == null ? "null" : "empty")}.");
+                HandleRawTransportResult(
+                    hub,
+                    conn,
+                    rawLimiter.RegisterProtocolViolation(),
+                    $"Decoded encrypted payload was {(decryptedData == null ? "null" : "empty")}.");
                 return false;
             }
 
@@ -401,7 +697,11 @@ public static class PlayerAuthenticationManagerPatch
 
             if (!encrypted && RequiresEncryption(channel))
             {
-                OffThreadLogger.Warn($"Message on channel {channel} was sent without encryption. Discarding message!");
+                HandleRawTransportResult(
+                    hub,
+                    conn,
+                    rawLimiter.RegisterProtocolViolation(),
+                    $"Message on channel {channel} was sent without required encryption.");
                 return false;
             }
 
@@ -418,9 +718,12 @@ public static class PlayerAuthenticationManagerPatch
 
             if (decryptedData.Length < EncryptedMessageHeaderSize)
             {
-                OffThreadLogger.Warn(
-                    $"Encrypted message dropped from {hub.LoggedNameFromRefHub()}: decoded payload too short " +
-                    $"({decryptedData.Length} bytes, channel={channel}, level={packed.Level}).");
+                HandleRawTransportResult(
+                    hub,
+                    conn,
+                    rawLimiter.RegisterProtocolViolation(),
+                    $"Decoded payload was too short ({decryptedData.Length} bytes, " +
+                    $"channel={channel}, level={packed.Level}).");
                 return false;
             }
 
@@ -430,18 +733,18 @@ public static class PlayerAuthenticationManagerPatch
                 .TryAccept(genericRateKey, genericPayloadBytes);
             if (!genericRateResult.Allowed)
             {
+                if (genericRateResult.ShouldDisconnect)
+                {
+                    QuarantineAndDisconnect(hub, conn, "generic-channel-rate-limit");
+                    OffThreadLogger.Error(
+                        $"Disconnected {hub.LoggedNameFromRefHub()} after sustained generic " +
+                        "encrypted-channel traffic exceeded bounded limits.");
+                }
                 if (genericRateResult.ShouldLog)
                 {
                     OffThreadLogger.Warn(
                         $"Rate-limited generic encrypted channel {channel} from {hub.LoggedNameFromRefHub()} " +
                         $"({genericPayloadBytes} bytes, drops={genericRateResult.DroppedInWindow}).");
-                }
-                if (genericRateResult.ShouldDisconnect && conn != null)
-                {
-                    OffThreadLogger.Error(
-                        $"Disconnecting {hub.LoggedNameFromRefHub()} after sustained generic " +
-                        "encrypted-channel traffic exceeded bounded limits.");
-                    conn.Disconnect();
                 }
                 return false;
             }
@@ -453,12 +756,24 @@ public static class PlayerAuthenticationManagerPatch
 
             if (encrypted)
             {
-                if (hub.encryptedChannelManager._rxCounter == 4294967295U)
-                    hub.encryptedChannelManager._rxCounter = 0;
-
-                if (counter <= hub.encryptedChannelManager._rxCounter)
+                if (counter == uint.MaxValue)
                 {
-                    OffThreadLogger.Warn($"Received message with counter {counter}, which is lower or equal to last received message counter {hub.encryptedChannelManager._rxCounter}. Discarding message!");
+                    QuarantineAndDisconnect(hub, conn, "receive-counter-exhaustion");
+                    OffThreadLogger.Error(
+                        $"Disconnected {hub.LoggedNameFromRefHub()}: encrypted receive counter is exhausted.");
+                    return false;
+                }
+
+                if (!EncryptedTransportCounterGuard.CanAccept(
+                        hub.encryptedChannelManager._rxCounter,
+                        counter))
+                {
+                    HandleRawTransportResult(
+                        hub,
+                        conn,
+                        rawLimiter.RegisterProtocolViolation(),
+                        $"Rejected encrypted counter {counter}; high-water mark is " +
+                        $"{hub.encryptedChannelManager._rxCounter}.");
                     return false;
                 }
 
@@ -469,18 +784,31 @@ public static class PlayerAuthenticationManagerPatch
 
         if (!EncryptedChannelManager.ServerChannelHandlers.TryGetValue(channel, out var handler))
         {
-            OffThreadLogger.Warn($"No handler is registered for encrypted channel {channel} (server).");
+            HandleRawTransportResult(
+                hub,
+                conn,
+                rawLimiter.RegisterProtocolViolation(),
+                $"No server handler is registered for encrypted channel {channel}.");
             return false;
         }
 
-        try
+        foreach (Delegate subscriber in handler.GetInvocationList())
         {
-            handler.Invoke(hub, message, packed.Level);
-        }
-        catch (Exception ex)
-        {
-            OffThreadLogger.Error($"Exception while handling encrypted message on channel {channel} (server, running a handler). Exception: {ex.Message}");
-            OffThreadLogger.Error(ex.StackTrace);
+            try
+            {
+                ((EncryptedChannelManager.EncryptedMessageServerHandler)subscriber)
+                    .Invoke(hub, message, packed.Level);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    OffThreadLogger.Error(
+                        $"Exception while handling encrypted message on channel {channel} " +
+                        $"(server, running an isolated handler): {ex}");
+                }
+                catch { }
+            }
         }
         return false;
     }
@@ -490,5 +818,82 @@ public static class PlayerAuthenticationManagerPatch
         return channel == EncryptedChannelManager.EncryptedChannel.RemoteAdmin ||
                channel == EncryptedChannelManager.EncryptedChannel.AdminChat ||
                (byte)channel == AnomalyChannel.ChannelId;
+    }
+
+    private static void ExhaustTransportCounter(EncryptedChannelManager manager)
+    {
+        ReferenceHub hub = null;
+        try
+        {
+            if (manager != null)
+                ReferenceHub.TryGetHub(manager.connectionToClient, out hub);
+        }
+        catch { }
+        FailClosedOutgoingTransport(
+            manager,
+            hub,
+            "send-counter-exhaustion",
+            "Encrypted send counter was exhausted; transport was revoked before counter reuse.");
+    }
+
+    private static void FailClosedOutgoingTransport(
+        EncryptedChannelManager manager,
+        ReferenceHub hub,
+        string context,
+        string diagnostic)
+    {
+        if (hub != null)
+        {
+            try { Plugin.QuarantineAuthenticatedPlayer(hub, context); }
+            catch { }
+        }
+
+        Exception disconnectFailure = null;
+        try { manager?.connectionToClient?.Disconnect(); }
+        catch (Exception exception) { disconnectFailure = exception; }
+
+        try { OffThreadLogger.Warn(diagnostic); }
+        catch { }
+        if (disconnectFailure != null)
+        {
+            try
+            {
+                OffThreadLogger.Error(
+                    $"Failed to disconnect after {context}: {disconnectFailure.GetType().Name}: {disconnectFailure.Message}");
+            }
+            catch { }
+        }
+    }
+
+    private static void HandleRawTransportResult(
+        ReferenceHub hub,
+        NetworkConnection conn,
+        AnomalyRateLimitResult result,
+        string message)
+    {
+        if (result.ShouldDisconnect)
+        {
+            QuarantineAndDisconnect(hub, conn, "raw-transport-rate-limit");
+            OffThreadLogger.Error(
+                $"Disconnected {hub.LoggedNameFromRefHub()} after sustained invalid or excessive pre-decrypt traffic.");
+        }
+        if (result.ShouldLog)
+        {
+            OffThreadLogger.Warn(
+                $"{message} Peer={hub.LoggedNameFromRefHub()}, drops={result.DroppedInWindow}.");
+        }
+    }
+
+    private static void QuarantineAndDisconnect(
+        ReferenceHub hub,
+        NetworkConnection conn,
+        string context)
+    {
+        Plugin.QuarantineAuthenticatedPlayer(hub, context);
+        try { conn?.Disconnect(); }
+        catch (Exception ex)
+        {
+            OffThreadLogger.Error($"Failed to disconnect {hub?.LoggedNameFromRefHub()} after {context}: {ex}");
+        }
     }
 }

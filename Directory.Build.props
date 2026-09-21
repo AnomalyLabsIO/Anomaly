@@ -1,0 +1,67 @@
+<Project>
+  <PropertyGroup>
+    <AnomalyRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))</AnomalyRepositoryRoot>
+
+    <!-- All machine-specific inputs are overridable MSBuild properties. The defaults
+         describe the sibling layout used by local Anomaly development. -->
+    <AnomalyClientRoot Condition="'$(AnomalyClientRoot)' == ''">$([System.IO.Path]::GetFullPath('$(AnomalyRepositoryRoot)..\Client'))</AnomalyClientRoot>
+    <AnomalyClientInteropDir Condition="'$(AnomalyClientInteropDir)' == ''">$(AnomalyClientRoot)\MelonLoader\Il2CppAssemblies</AnomalyClientInteropDir>
+    <AnomalyClientMelonLibDir Condition="'$(AnomalyClientMelonLibDir)' == ''">$(AnomalyClientRoot)\MelonLoader\net6</AnomalyClientMelonLibDir>
+
+    <AnomalyServerRoot Condition="'$(AnomalyServerRoot)' == ''">$([System.IO.Path]::GetFullPath('$(AnomalyRepositoryRoot)..\Server'))</AnomalyServerRoot>
+    <AnomalyServerGameDir Condition="'$(AnomalyServerGameDir)' == ''">$(AnomalyServerRoot)\server</AnomalyServerGameDir>
+    <AnomalyServerManagedDir Condition="'$(AnomalyServerManagedDir)' == ''">$(AnomalyServerGameDir)\SCPSL_Data\Managed</AnomalyServerManagedDir>
+    <AnomalyServerReferenceDir Condition="'$(AnomalyServerReferenceDir)' == ''">$(AnomalyServerManagedDir)</AnomalyServerReferenceDir>
+    <AnomalyServerAssemblyCSharpSource Condition="'$(AnomalyServerAssemblyCSharpSource)' == ''">$(AnomalyServerManagedDir)\Assembly-CSharp.dll</AnomalyServerAssemblyCSharpSource>
+    <AnomalyGeneratedReferenceDir Condition="'$(AnomalyGeneratedReferenceDir)' == ''">$(AnomalyRepositoryRoot)obj\generated-references</AnomalyGeneratedReferenceDir>
+    <AnomalyServerPublicizedAssembly Condition="'$(AnomalyServerPublicizedAssembly)' == ''">$(AnomalyGeneratedReferenceDir)\Assembly-CSharp.dll</AnomalyServerPublicizedAssembly>
+    <AnomalyLabApiDir Condition="'$(AnomalyLabApiDir)' == ''">$(AnomalyServerReferenceDir)</AnomalyLabApiDir>
+    <AnomalyHarmonyPath Condition="'$(AnomalyHarmonyPath)' == ''">$(AnomalyServerRoot)\0Harmony.dll</AnomalyHarmonyPath>
+
+    <AnomalyLocalLoadoutRoot Condition="'$(AnomalyLocalLoadoutRoot)' == ''">$([System.IO.Path]::GetFullPath('$(AnomalyRepositoryRoot)..\ModdedFiles\loadouts\dev\local'))</AnomalyLocalLoadoutRoot>
+    <AnomalyClientModsDir Condition="'$(AnomalyClientModsDir)' == ''">$(AnomalyLocalLoadoutRoot)\Mods</AnomalyClientModsDir>
+    <AnomalyClientPluginsDir Condition="'$(AnomalyClientPluginsDir)' == ''">$(AnomalyLocalLoadoutRoot)\Plugins</AnomalyClientPluginsDir>
+    <AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">$(AnomalyLocalLoadoutRoot)\UserLibs</AnomalyClientUserLibsDir>
+    <AnomalyServerLabApiRoot Condition="'$(AnomalyServerLabApiRoot)' == ''">$(AnomalyServerGameDir)\AppData\SCP Secret Laboratory\LabAPI</AnomalyServerLabApiRoot>
+    <AnomalyPluginsDir Condition="'$(AnomalyPluginsDir)' == ''">$(AnomalyServerLabApiRoot)\plugins\global</AnomalyPluginsDir>
+    <AnomalyServerDepsDir Condition="'$(AnomalyServerDepsDir)' == ''">$(AnomalyServerLabApiRoot)\dependencies\global</AnomalyServerDepsDir>
+
+    <Authors>AnomalyLabs contributors</Authors>
+    <Copyright>Copyright (c) 2026 AnomalyLabs contributors</Copyright>
+    <PackageLicenseExpression>LGPL-2.1-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/AnomalyLabsIO/Anomaly</RepositoryUrl>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Anomaly.Client' Or
+                            '$(MSBuildProjectName)' == 'Anomaly.Client.Api' Or
+                            '$(MSBuildProjectName)' == 'Anomaly.Bootstrap' Or
+                            '$(MSBuildProjectName)' == 'Anomaly.Server' Or
+                            '$(MSBuildProjectName)' == 'Anomaly.Shared' Or
+                            '$(MSBuildProjectName)' == 'Anomaly.Client.Api.Tests' Or
+                            '$(MSBuildProjectName)' == 'Anomaly.Bootstrap.Tests' Or
+                            '$(MSBuildProjectName)' == 'Anomaly.Shared.Tests'">
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Anomaly.Client' Or '$(MSBuildProjectName)' == 'Anomaly.Client.Api'">
+    <AnomalyRequiresClientInterop>true</AnomalyRequiresClientInterop>
+    <AnomalyRequiresClientMelon>true</AnomalyRequiresClientMelon>
+    <AnomalyRequiresServerCrypto>true</AnomalyRequiresServerCrypto>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Anomaly.Bootstrap' Or '$(MSBuildProjectName)' == 'Anomaly.PreloadCanary'">
+    <AnomalyRequiresClientMelon>true</AnomalyRequiresClientMelon>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Anomaly.Server'">
+    <AnomalyRequiresServerReferences>true</AnomalyRequiresServerReferences>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Anomaly.Shared'">
+    <AnomalyRequiresServerCrypto>true</AnomalyRequiresServerCrypto>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Anomaly.Shared.Tests'">
+    <AnomalyRequiresServerCrypto>true</AnomalyRequiresServerCrypto>
+    <AnomalyRequiresServerNetstandard>true</AnomalyRequiresServerNetstandard>
+  </PropertyGroup>
+</Project>

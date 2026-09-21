@@ -142,13 +142,18 @@ namespace Anomaly.Server.Features
 
         private static void NotifyCapabilitiesChanged(ReferenceHub player)
         {
-            try
+            Delegate[] subscribers = CapabilitiesChanged?.GetInvocationList() ?? Array.Empty<Delegate>();
+            foreach (Delegate subscriber in subscribers)
             {
-                CapabilitiesChanged?.Invoke(player);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"ClientCapabilities.CapabilitiesChanged handler threw: {ex}");
+                try
+                {
+                    ((Action<ReferenceHub>)subscriber)(player);
+                }
+                catch (Exception ex)
+                {
+                    try { Logger.Error($"ClientCapabilities.CapabilitiesChanged handler threw: {ex}"); }
+                    catch { /* logging must not suppress later subscribers */ }
+                }
             }
         }
 
@@ -176,8 +181,20 @@ namespace Anomaly.Server.Features
             PlayerMotion.ResetAll();
             foreach (ReferenceHub hub in ReferenceHub.AllHubs)
             {
-                if (AnomalyMessaging.IsAnomalyTarget(hub))
-                    SendChallenge(hub);
+                try
+                {
+                    if (AnomalyMessaging.IsAnomalyTarget(hub))
+                        SendChallenge(hub);
+                }
+                catch (Exception exception)
+                {
+                    try
+                    {
+                        Logger.Error(
+                            $"ClientCapabilities: Isolated round-start challenge failure: {exception}");
+                    }
+                    catch { }
+                }
             }
         }
 

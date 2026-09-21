@@ -2,10 +2,12 @@ using Anomaly.Client.Api.Features;
 using Anomaly.Client.Api.Events;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Api.Internal.Wrappers;
+using Anomaly.Client.Api.Modding;
 using Anomaly.Shared.Auth;
 using Anomaly.Shared.Networking;
 using Il2Cpp;
 using Il2CppMirror;
+using Il2CppMirror.LiteNetLib4Mirror;
 using MelonLoader;
 
 namespace Anomaly.Client.Api.Networking;
@@ -24,25 +26,45 @@ public static class AnomalyMessaging
 
     public static void Send(IAnomalyMessage msg)
     {
+        if (!TrySend(msg))
+            throw new InvalidOperationException(
+                $"Anomaly message '{msg?.MessageName ?? "<null>"}' could not be delivered.");
+    }
+
+    internal static bool TrySend(IAnomalyMessage msg)
+    {
         var hub = LocalPlayer.Instance?.ReferenceHub;
         if (hub == null && !PlayerRegistry.TryGetLocalHub(out hub))
         {
-            MelonLogger.Warning("AnomalyMessaging.Send: No local player hub available.");
-            return;
+            SafeLogWarning("AnomalyMessaging.Send: No local player hub available.");
+            return false;
+        }
+
+        bool authenticatedTransportRequired = !NetworkServer.active && HasTransportSession();
+        if (!NetworkServer.active && !authenticatedTransportRequired)
+        {
+            SafeLogWarning(
+                "AnomalyMessaging.Send: No authenticated session is active; treating the send as pre-connect API misuse.");
+            return false;
         }
 
         uint counter = AnomalyReplayTable.Instance.NextTxCounter(msg.TransportChannel);
+        if (counter == 0 || counter == uint.MaxValue)
+        {
+            FailClosedTransport("Replay counter exhausted before reuse.");
+            return false;
+        }
         uint hash = AnomalyMessageRegistry.GetHash(msg.MessageName);
 
         if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var policy))
         {
             MelonLogger.Warning($"AnomalyMessaging.Send: No policy registered for '{msg.MessageName}'.");
-            return;
+            return false;
         }
         if (policy.Direction == AnomalyMessageDirection.ServerToClient)
         {
             MelonLogger.Warning($"AnomalyMessaging.Send: '{msg.MessageName}' is server-to-client only.");
-            return;
+            return false;
         }
 
         // Serialize the inner payload: [hash][message payload]
@@ -59,7 +81,7 @@ public static class AnomalyMessaging
             MelonLogger.Warning(
                 $"AnomalyMessaging.Send: '{msg.MessageName}' exceeded its payload ceiling " +
                 $"({serializedPayloadBytes}/{policy.MaxPayloadBytes} bytes).");
-            return;
+            return false;
         }
 
         // Build the full envelope: [0xFE][4:counter][inner]
@@ -68,25 +90,63 @@ public static class AnomalyMessaging
         BitConverter.GetBytes(counter).CopyTo(data, 1);
         Array.Copy(inner, 0, data, 5, inner.Length);
 
+        if (!FitsDeployedTransport(
+                msg.TransportChannel,
+                data.Length + AuthTransportCrypto.NonceSize + AuthTransportCrypto.TagSize,
+                out string transportFailure))
+        {
+            if (authenticatedTransportRequired)
+                FailClosedTransport("The required custom-message payload did not fit the deployed transport.");
+            SafeLogWarning(transportFailure);
+            return false;
+        }
+
         if (NetworkServer.active)
         {
-            EncryptedMessageTransport.Send(
+            return EncryptedMessageTransport.Send(
                 EncryptedChannelManager.SecurityLevel.Unsecured,
                 data,
                 (int)msg.TransportChannel);
         }
-        else
+
+        byte[] encrypted;
+        try
         {
-            if (!TryEncryptClientEnvelope(data, out var encrypted))
+            if (!TryEncryptClientEnvelope(data, out encrypted))
             {
-                MelonLogger.Warning("AnomalyMessaging.Send: No authenticated protocol-v2 transport session is available.");
-                return;
+                FailClosedTransport(
+                    "The custom-message send path lost its directional authenticated transport session.");
+                SafeLogWarning(
+                    "AnomalyMessaging.Send: No authenticated directional transport session is available.");
+                return false;
             }
-            EncryptedMessageTransport.Send(
-                EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
-                encrypted,
-                (int)msg.TransportChannel);
         }
+        catch (Exception exception)
+        {
+            FailClosedTransport("The required custom-message encryption path threw.");
+            SafeLogWarning(
+                $"AnomalyMessaging.Send: Authenticated encryption threw: {exception.GetType().Name}: {exception.Message}");
+            return false;
+        }
+        try
+        {
+            if (EncryptedMessageTransport.Send(
+                    EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
+                    encrypted,
+                    (int)msg.TransportChannel))
+                return true;
+        }
+        catch (Exception exception)
+        {
+            FailClosedTransport("The required custom-message delivery path threw.");
+            SafeLogWarning(
+                $"AnomalyMessaging.Send: Authenticated delivery threw: {exception.GetType().Name}: {exception.Message}");
+            return false;
+        }
+
+        FailClosedTransport("The required custom-message delivery path rejected the packet.");
+        SafeLogWarning("AnomalyMessaging.Send: Authenticated delivery returned false.");
+        return false;
     }
 
     internal static void OnReceived(
@@ -245,15 +305,15 @@ public static class AnomalyMessaging
             }
         }
 
-        try
+        foreach (Delegate subscriber in MessageReceived?.GetInvocationList() ?? Array.Empty<Delegate>())
         {
-            MessageReceived?.Invoke(message);
-            NetworkMessageEvents.OnMessageReceived(message);
+            try { ((Action<IAnomalyMessage>)subscriber)(message); }
+            catch (Exception ex)
+            {
+                SafeLogError($"AnomalyMessaging.OnReceived: Isolated handler exception for '{message.MessageName}': {ex}");
+            }
         }
-        catch (Exception ex)
-        {
-            MelonLogger.Error($"AnomalyMessaging.OnReceived: Handler exception for '{message.MessageName}': {ex}");
-        }
+        NetworkMessageEvents.OnMessageReceived(message);
     }
 
     internal static void ResetSession(uint roundEpoch)
@@ -273,21 +333,10 @@ public static class AnomalyMessaging
         string message,
         bool localTransport)
     {
+        if (result.ShouldDisconnect && !localTransport)
+            FailClosedTransport("Sustained invalid or over-limit server traffic was rejected.");
         if (result.ShouldLog)
-            MelonLogger.Warning($"{message} (drops={result.DroppedInWindow}).");
-        if (!result.ShouldDisconnect || localTransport)
-            return;
-
-        MelonLogger.Error(
-            "AnomalyMessaging.OnReceived: Disconnecting after sustained invalid or over-limit server traffic.");
-        try
-        {
-            NetworkClient.connection?.Disconnect();
-        }
-        catch (Exception ex)
-        {
-            MelonLogger.Warning($"AnomalyMessaging.OnReceived: Rate-limit disconnect failed: {ex.Message}");
-        }
+            SafeLogWarning($"{message} (drops={result.DroppedInWindow}).");
     }
 
     internal static void ConfigureTransportSession(
@@ -299,7 +348,7 @@ public static class AnomalyMessaging
         if (clientToServerKey?.Length != 32 || serverToClientKey?.Length != 32 ||
             sessionId?.Length != AuthTransportCrypto.SessionIdSize ||
             transcriptHash?.Length != AuthTransportCrypto.TranscriptHashSize)
-            throw new ArgumentException("Invalid protocol-v2 transport session material.");
+            throw new ArgumentException("Invalid directional authenticated transport session material.");
 
         lock (TransportSync)
         {
@@ -315,6 +364,43 @@ public static class AnomalyMessaging
     {
         lock (TransportSync)
             ClearTransportSessionLocked();
+    }
+
+    private static bool HasTransportSession()
+    {
+        lock (TransportSync)
+        {
+            return _clientToServerKey != null &&
+                   _serverToClientKey != null &&
+                   _sessionId != null &&
+                   _transcriptHash != null;
+        }
+    }
+
+    internal static void FailClosedTransport(string reason)
+    {
+        Exception clearFailure = null;
+        Exception disconnectFailure = null;
+        try { ClearTransportSession(); }
+        catch (Exception exception) { clearFailure = exception; }
+        try { NetworkClient.connection?.Disconnect(); }
+        catch (Exception exception) { disconnectFailure = exception; }
+
+        try
+        {
+            FeatureHealth.Report(
+                "anomaly",
+                "networking",
+                FeatureHealthStatus.Failed,
+                $"{reason} Reconnect/rekey is required.");
+        }
+        catch { }
+
+        SafeLogError($"{reason} Authenticated transport was revoked and disconnect was requested.");
+        if (clearFailure != null)
+            SafeLogError($"Failed to clear authenticated transport material: {clearFailure}");
+        if (disconnectFailure != null)
+            SafeLogError($"Failed to disconnect after authenticated transport revocation: {disconnectFailure}");
     }
 
     internal static bool TryEncryptClientEnvelope(byte[] plaintext, out byte[] envelope)
@@ -369,9 +455,58 @@ public static class AnomalyMessaging
         _transcriptHash = null;
     }
 
+    private static void SafeLogWarning(string message)
+    {
+        try { MelonLogger.Warning(message); }
+        catch { }
+    }
+
+    private static void SafeLogError(string message)
+    {
+        try { MelonLogger.Error(message); }
+        catch { }
+    }
+
     private static void Clear(byte[] value)
     {
         if (value != null)
             Array.Clear(value, 0, value.Length);
+    }
+
+    private static bool FitsDeployedTransport(
+        MessageChannel channel,
+        int encodedBytes,
+        out string failure)
+    {
+        failure = null;
+        try
+        {
+            var transport = LiteNetLib4MirrorTransport.Singleton;
+            if (transport == null)
+            {
+                failure = "AnomalyMessaging.Send: No deployed transport is active.";
+                return false;
+            }
+            bool fits = TransportPacketPolicy.FitsReportedChannel(
+                channel,
+                encodedBytes,
+                transport.GetMaxPacketSize,
+                out int maximum);
+            if (fits)
+                return true;
+            int required = encodedBytes > int.MaxValue - TransportPacketPolicy.FramingReserveBytes
+                ? int.MaxValue
+                : encodedBytes + TransportPacketPolicy.FramingReserveBytes;
+            failure =
+                $"AnomalyMessaging.Send: encoded packet exceeded deployed channel {channel} " +
+                $"capacity ({required}/{maximum} bytes).";
+            return false;
+        }
+        catch (Exception exception)
+        {
+            failure =
+                $"AnomalyMessaging.Send: transport ceiling query failed closed: {exception.Message}";
+            return false;
+        }
     }
 }

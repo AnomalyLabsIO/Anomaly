@@ -9,29 +9,29 @@ public static class CustomNetworkManagerPatch
 {
     [HarmonyPostfix]
     [HarmonyPatch(typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnStartClient))]
-    public static void OnStartClientPostfix()
+    public static void OnStartClientPostfix(CustomNetworkManager __instance)
     {
-        ClientRuntime.HandleClientStarted();
+        ClientRuntime.HandleClientStarted(__instance);
     }
 
     [HarmonyPostfix]
     [HarmonyPatch(typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientConnect))]
-    public static void OnClientConnectPostfix()
+    public static void OnClientConnectPostfix(CustomNetworkManager __instance)
     {
-        ClientRuntime.HandleClientConnected();
+        ClientRuntime.HandleClientConnected(__instance);
     }
 
     [HarmonyPostfix]
     [HarmonyPatch(typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientDisconnect))]
-    public static void OnClientDisconnectPostfix()
+    public static void OnClientDisconnectPostfix(CustomNetworkManager __instance)
     {
-        ClientRuntime.HandleClientDisconnected();
+        ClientRuntime.HandleClientDisconnected(__instance);
     }
 
     [HarmonyPostfix]
     [HarmonyPatch(typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientSceneChanged))]
-    public static void OnClientSceneChangedPostfix()
+    public static void OnClientSceneChangedPostfix(CustomNetworkManager __instance)
     {
-        ClientRuntime.HandleClientReady();
+        ClientRuntime.HandleClientReady(__instance);
     }
 }

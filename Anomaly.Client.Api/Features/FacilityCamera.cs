@@ -56,7 +56,7 @@ public class FacilityCamera
     public Transform Anchor => Base?.CameraAnchor;
     public GameObject GameObject => Base != null ? Base.gameObject : null;
 
-    /// <summary>All cameras currently in the scene. Built fresh each call via <see cref="Object.FindObjectsOfType{T}()"/>.</summary>
+    /// <summary>All cameras currently in the scene. Built fresh each call via <c>UnityEngine.Object.FindObjectsOfType&lt;Scp079Camera&gt;()</c>.</summary>
     public static ReadOnlyCollection<FacilityCamera> List
     {
         get
@@ -105,6 +105,9 @@ public class FacilityCamera
         _cameras[cameraBase] = wrapper;
         return wrapper;
     }
+
+    internal static bool Unregister(Scp079Camera cameraBase) =>
+        cameraBase != null && _cameras.Remove(cameraBase);
 
     internal static void ClearAll() => _cameras.Clear();
 

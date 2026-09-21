@@ -77,5 +77,10 @@ public class AdminToy
         return new AdminToy(toyBase);
     }
 
+    internal static bool Unregister(AdminToyBase toyBase) =>
+        toyBase != null && _toys.Remove(toyBase);
+
+    internal static void ClearAll() => _toys.Clear();
+
     public override string ToString() => $"AdminToy({CommandName})";
 }

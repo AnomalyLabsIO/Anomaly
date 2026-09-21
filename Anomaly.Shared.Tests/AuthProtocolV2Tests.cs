@@ -567,6 +567,37 @@ public sealed class AuthProtocolV2Tests
     }
 
     [Fact]
+    public void DirectionalTransportRejectsTrailingOuterEnvelopeBytes()
+    {
+        var pair = CreatePair();
+        using (var clientKeys = pair.Client.DeriveSessionKeys(
+                   pair.ServerHandshake,
+                   pair.Identifier,
+                   pair.PasswordChallenge))
+        using (var serverKeys = pair.Server.DeriveSessionKeys(
+                   pair.ClientHandshake,
+                   pair.ServerHandshake,
+                   pair.Identifier,
+                   pair.PasswordChallenge))
+        {
+            byte[] envelope = AuthTransportCrypto.Encrypt(
+                clientKeys.ClientToServerKey,
+                clientKeys.SessionId,
+                clientKeys.TranscriptHash,
+                AuthTransportDirection.ClientToServer,
+                new byte[] { AnomalyChannel.ChannelId, 1, 2, 3 });
+            byte[] withTrailingByte = envelope.Concat(new byte[] { 0xA5 }).ToArray();
+
+            Assert.ThrowsAny<Exception>(() => AuthTransportCrypto.Decrypt(
+                serverKeys.ClientToServerKey,
+                serverKeys.SessionId,
+                serverKeys.TranscriptHash,
+                AuthTransportDirection.ClientToServer,
+                withTrailingByte));
+        }
+    }
+
+    [Fact]
     public void ReplayCounterIsRejectedAfterDirectionalDecryption()
     {
         var pair = CreatePair();

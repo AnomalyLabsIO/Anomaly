@@ -16,10 +16,10 @@ namespace Anomaly.Client.Assets
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Phase 1 is local-only: this class scans the user's <c>Overrides/</c>
-    /// directory once on <see cref="Init"/> and never re-scans (Phase 3 adds a
-    /// FileSystemWatcher for hot reload). Phase 2 adds server-pushed entries
-    /// from the file manifest with the same path-key shape.
+    /// Public v1 is local-audio-only: this class scans the user's
+    /// <c>Overrides/AudioClip/</c> directory once on <see cref="Init"/> and
+    /// never re-scans. Authenticated server content remains hash-addressed and
+    /// is not inserted into this path registry.
     /// </para>
     /// <para>
     /// Lookup keys are lowercased forward-slash-normalized paths under the
@@ -40,7 +40,6 @@ namespace Anomaly.Client.Assets
         {
             if (_initialized)
                 return;
-            _initialized = true;
 
             ScanLocal(Paths.AudioOverridesPath, _localAudio, ".ogg", ".wav");
 
@@ -53,6 +52,8 @@ namespace Anomaly.Client.Assets
             {
                 MelonLogger.Msg($"PathOverrideRegistry: discovered {total} local override(s) (audio={_localAudio.Count}).");
             }
+
+            _initialized = true;
         }
 
         public static void Shutdown()

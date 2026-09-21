@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Anomaly.Shared.Auth;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Anomaly.Client.Auth;
 
@@ -16,39 +18,83 @@ public struct PlayerAuth
     [JsonProperty("identity_protection", NullValueHandling = NullValueHandling.Ignore)]
     public string IdentityProtection { get; set; }
 
+    [JsonProperty("identity_public", NullValueHandling = NullValueHandling.Ignore)]
+    public string IdentityPublic { get; set; }
+
     [JsonProperty("username")]
     public string Username { get; set; }
 
     [JsonProperty("identity_rotation_chain", NullValueHandling = NullValueHandling.Ignore)]
     public string IdentityRotationChain { get; set; }
 
+    [JsonExtensionData]
+    public IDictionary<string, JToken> ExtensionData { get; set; }
+
     public void SetIdentity(byte[] identity)
+        => SetIdentity(identity, WindowsDataProtection.Protect);
+
+    internal void SetIdentity(byte[] identity, Func<byte[], byte[]> protect)
     {
         if (identity == null || identity.Length != 97)
             throw new ArgumentException("Anomaly identity must be 97 bytes.", nameof(identity));
-        var protectedIdentity = WindowsDataProtection.Protect(identity);
+        if (protect == null)
+            throw new ArgumentNullException(nameof(protect));
+
+        byte[] identityPublic = null;
+        byte[] protectedIdentity = null;
         try
         {
+            identityPublic = AuthCrypto.WritePublic(AuthCrypto.ReadIdentity(identity));
+            protectedIdentity = protect(identity);
+            if (protectedIdentity == null || protectedIdentity.Length == 0)
+                throw new InvalidOperationException("Identity protection returned an empty result.");
+
             Identity = Convert.ToBase64String(protectedIdentity);
             IdentityProtection = DpapiProtection;
+            IdentityPublic = Convert.ToBase64String(identityPublic);
         }
         finally
         {
-            Array.Clear(protectedIdentity, 0, protectedIdentity.Length);
+            if (identityPublic != null)
+                Array.Clear(identityPublic, 0, identityPublic.Length);
+            if (protectedIdentity != null)
+                Array.Clear(protectedIdentity, 0, protectedIdentity.Length);
         }
     }
 
     public byte[] GetIdentity()
+        => GetIdentity(WindowsDataProtection.Unprotect);
+
+    internal byte[] GetIdentity(Func<byte[], byte[]> unprotect)
     {
+        if (unprotect == null)
+            throw new ArgumentNullException(nameof(unprotect));
+
         var stored = Convert.FromBase64String(Identity);
         if (string.IsNullOrEmpty(IdentityProtection))
+        {
+            if (stored.Length != 97)
+            {
+                Array.Clear(stored, 0, stored.Length);
+                throw new InvalidOperationException("Legacy Anomaly identity is not 97 bytes.");
+            }
             return stored; // legacy plaintext; AuthHandler migrates it immediately
+        }
         if (!string.Equals(IdentityProtection, DpapiProtection, StringComparison.Ordinal))
+        {
+            Array.Clear(stored, 0, stored.Length);
             throw new InvalidOperationException("Unsupported Anomaly identity protection scheme: " + IdentityProtection);
+        }
 
         try
         {
-            return WindowsDataProtection.Unprotect(stored);
+            var identity = unprotect(stored);
+            if (identity != null && identity.Length == 97)
+                return identity;
+
+            if (identity != null)
+                Array.Clear(identity, 0, identity.Length);
+            throw new InvalidOperationException("Protected Anomaly identity is not 97 bytes.");
         }
         finally
         {

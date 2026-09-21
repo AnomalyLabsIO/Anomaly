@@ -1,7 +1,7 @@
 using MelonLoader;
 using MelonLoader.Utils;
 
-[assembly: MelonInfo(typeof(Anomaly.Bootstrap.Core), "Anomaly Bootstrap", "0.1.0", "AnomalyLabs", null)]
+[assembly: MelonInfo(typeof(Anomaly.Bootstrap.Core), "Anomaly Bootstrap", "1.0.0", "AnomalyLabs", null)]
 [assembly: MelonGame("Northwood", "SCPSL")]
 
 namespace Anomaly.Bootstrap;

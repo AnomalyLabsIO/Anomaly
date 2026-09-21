@@ -88,6 +88,11 @@ public static class Announcer
         string normalizedName = NormalizeApiName(apiName);
         if (audioHash == null || audioHash.Length != 32)
             throw new ArgumentException("Audio hash must be 32 bytes.", nameof(audioHash));
+        if (!ServerAssetManager.TryGetAsset(audioHash, out ServerAssetManager.AssetInfo asset) ||
+            asset.Kind != AssetKind.AudioClip)
+            throw new ArgumentException(
+                "Audio hash must identify an OGG file in the current advertised manifest.",
+                nameof(audioHash));
         if (durationSeconds <= 0f ||
             durationSeconds > AnnouncerVocabularyMessage.MaxDurationSeconds ||
             float.IsNaN(durationSeconds) || float.IsInfinity(durationSeconds))
@@ -105,7 +110,7 @@ public static class Announcer
         var word = new Word
         {
             ApiName = normalizedName,
-            AssetPath = assetPath,
+            AssetPath = assetPath ?? asset.RelativePath,
             AudioHash = CloneHash(audioHash),
             DurationSeconds = durationSeconds,
             Type = type
@@ -115,7 +120,7 @@ public static class Announcer
         TryApplyWord(word);
 
         if (_initialized)
-            AnomalyMessaging.SendToAll(BuildMessage(new[] { word }));
+            SendToApprovedClients(new[] { word });
 
         return word;
     }
@@ -125,8 +130,17 @@ public static class Announcer
         if (_words.Count == 0)
             return;
 
-        Logger.Info($"Announcer: Replaying {_words.Count} custom word(s) to {hub.LoggedNameFromRefHub()}");
-        AnomalyMessaging.SendToClient(hub, BuildMessage(_words.Values));
+        var approved = new List<Word>();
+        foreach (Word word in _words.Values)
+        {
+            if (FileTransferSession.IsAssetApproved(hub, word.AudioHash, AssetKind.AudioClip))
+                approved.Add(word);
+        }
+        if (approved.Count == 0)
+            return;
+
+        Logger.Info($"Announcer: Replaying {approved.Count} approved custom word(s) to {hub.LoggedNameFromRefHub()}");
+        AnomalyMessaging.TrySendToClient(hub, BuildMessage(approved));
     }
 
     private static void ApplyAll()
@@ -302,6 +316,44 @@ public static class Announcer
                 (byte)word.Type));
         }
         return message;
+    }
+
+    private static void SendToApprovedClients(IEnumerable<Word> words)
+    {
+        var candidates = new List<Word>(words);
+        foreach (ReferenceHub hub in ReferenceHub.AllHubs)
+        {
+            try
+            {
+                var approved = new List<Word>();
+                foreach (Word word in candidates)
+                {
+                    if (FileTransferSession.IsAssetApproved(hub, word.AudioHash, AssetKind.AudioClip))
+                        approved.Add(word);
+                }
+                if (approved.Count == 0)
+                    continue;
+
+                AnomalyMessaging.TrySendToClient(hub, BuildMessage(approved));
+            }
+            catch (Exception exception)
+            {
+                SafeLogRecipientFailure(hub, exception);
+            }
+        }
+    }
+
+    private static void SafeLogRecipientFailure(ReferenceHub hub, Exception exception)
+    {
+        string name;
+        try { name = hub?.LoggedNameFromRefHub() ?? "<null>"; }
+        catch { name = "<unavailable>"; }
+        try
+        {
+            Logger.Error(
+                $"Announcer: Isolated approved-recipient send failure for {name}: {exception}");
+        }
+        catch { }
     }
 
     private static string NormalizeApiName(string apiName)

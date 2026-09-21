@@ -1,6 +1,8 @@
 bin/
 obj/
 publish/
+/artifacts/
+/release-output/
 /packages/
 
 # IDE and per-user state
@@ -23,7 +25,20 @@ steamdb_patch_manifest_map.csv
 
 # Private vanity-identity outputs (contain private key material)
 tools/vanity-results.jsonl*
+tools/**/*-results.*
+tools/**/*_results.*
+tools/**/results.*
+tools/**/secrets/**
+*.secret
+*.secrets
+.env
+.env.*
 
 # Operator-owned release signing keys
 *.pem
 *.key
+*.p12
+*.pfx
+*.snk
+*.sig
+*.sha256

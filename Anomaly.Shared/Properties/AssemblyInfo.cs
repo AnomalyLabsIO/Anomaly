@@ -8,9 +8,9 @@ using System.Runtime.CompilerServices;
 [assembly: AssemblyTitle("Anomaly.Shared")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("TayTay")]
+[assembly: AssemblyCompany("AnomalyLabs")]
 [assembly: AssemblyProduct("Anomaly.Shared")]
-[assembly: AssemblyCopyright("Copyright © TayTay 2026")]
+[assembly: AssemblyCopyright("Copyright (c) 2026 AnomalyLabs contributors")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -19,6 +19,9 @@ using System.Runtime.CompilerServices;
 // COM, set the ComVisible attribute to true on that type.
 [assembly: ComVisible(false)]
 [assembly: InternalsVisibleTo("Anomaly.Shared.Tests")]
+[assembly: InternalsVisibleTo("Anomaly.Client")]
+[assembly: InternalsVisibleTo("Anomaly.Client.Api")]
+[assembly: InternalsVisibleTo("Anomaly.Server")]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
 [assembly: Guid("AAFE496C-E163-48FF-BDB4-5C794AB76A05")]

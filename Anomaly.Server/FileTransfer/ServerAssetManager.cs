@@ -85,7 +85,29 @@ public static class ServerAssetManager
                 asset.Kind));
         }
 
+        manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
+
         return manifest;
+    }
+
+    public static byte[] ComputeCurrentManifestSha256()
+    {
+        var entries = new List<FileManifestMessage.FileEntry>();
+        long aggregateBytes = 0;
+        foreach (var pair in Assets)
+        {
+            AssetInfo asset = pair.Value;
+            if (entries.Count >= FileManifestMessage.MaxFiles ||
+                !IsManifestSafe(asset, aggregateBytes, out _))
+                continue;
+            aggregateBytes += asset.Size;
+            entries.Add(new FileManifestMessage.FileEntry(
+                asset.RelativePath,
+                (byte[])asset.Hash.Clone(),
+                asset.Size,
+                asset.Kind));
+        }
+        return FileManifestMessage.ComputeManifestSha256(entries);
     }
 
     public static bool TryGetAsset(byte[] hash, out AssetInfo asset)
@@ -285,18 +307,8 @@ public static class ServerAssetManager
         switch (ext)
         {
             case ".png":
-            case ".jpg":
-            case ".jpeg":
                 return AssetKind.Texture2D;
-            case ".ttf":
-            case ".otf":
-                return AssetKind.Font;
-            case ".unity3d":
-            case ".bundle":
-            case ".assetbundle":
-                return AssetKind.AssetBundle;
             case ".ogg":
-            case ".wav":
                 return AssetKind.AudioClip;
             default:
                 return AssetKind.Unknown;

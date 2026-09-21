@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using Anomaly.Shared.Assets;
 
@@ -19,6 +21,7 @@ namespace Anomaly.Shared.Networking.Messages
         public MessageChannel TransportChannel => MessageChannel.ReliableUnordered;
 
         public ulong SessionId { get; set; }
+        public byte[] ManifestSha256 { get; set; } = new byte[32];
         public List<FileEntry> Files { get; set; } = new List<FileEntry>();
 
         public void Serialize(BinaryWriter writer)
@@ -27,8 +30,11 @@ namespace Anomaly.Shared.Networking.Messages
                 throw new InvalidDataException("File-transfer session id cannot be zero.");
             if (Files == null || Files.Count > MaxFiles)
                 throw new InvalidDataException($"Manifest file count exceeded {MaxFiles}.");
+            if (!HashesEqual(ManifestSha256, ComputeManifestSha256(Files)))
+                throw new InvalidDataException("Manifest SHA-256 did not match its canonical entries.");
 
             writer.Write(SessionId);
+            writer.Write(ManifestSha256);
             writer.Write((ushort)Files.Count);
             long aggregateBytes = 0;
             var hashes = new HashSet<string>(StringComparer.Ordinal);
@@ -48,6 +54,7 @@ namespace Anomaly.Shared.Networking.Messages
                 if (!hashes.Add(BitConverter.ToString(file.Hash)))
                     throw new InvalidDataException("Manifest contained a duplicate content hash.");
                 ValidateKind(file.Kind);
+                ValidateKindPath(file.Kind, file.Path);
                 writer.Write((byte)pathBytes.Length);
                 writer.Write(pathBytes);
                 writer.Write(file.Hash);
@@ -61,6 +68,10 @@ namespace Anomaly.Shared.Networking.Messages
             SessionId = reader.ReadUInt64();
             if (SessionId == 0)
                 throw new InvalidDataException("File-transfer session id cannot be zero.");
+
+            ManifestSha256 = reader.ReadBytes(32);
+            if (ManifestSha256.Length != 32)
+                throw new EndOfStreamException("Manifest SHA-256 was truncated.");
 
             int count = reader.ReadUInt16();
             if (count > MaxFiles)
@@ -91,8 +102,11 @@ namespace Anomaly.Shared.Networking.Messages
                     throw new InvalidDataException($"Manifest aggregate size exceeded {MaxAggregateBytes} bytes.");
                 AssetKind kind = (AssetKind)reader.ReadByte();
                 ValidateKind(kind);
+                ValidateKindPath(kind, path);
                 Files.Add(new FileEntry(path, hash, size, kind));
             }
+            if (!HashesEqual(ManifestSha256, ComputeManifestSha256(Files)))
+                throw new InvalidDataException("Manifest SHA-256 did not match its canonical entries.");
         }
 
         private static void ValidateRelativePath(string path)
@@ -119,11 +133,65 @@ namespace Anomaly.Shared.Networking.Messages
 
         private static void ValidateKind(AssetKind kind)
         {
-            if (kind != AssetKind.Texture2D &&
-                kind != AssetKind.AssetBundle &&
-                kind != AssetKind.Font &&
-                kind != AssetKind.AudioClip)
+            if (kind != AssetKind.Texture2D && kind != AssetKind.AudioClip)
                 throw new InvalidDataException("Manifest contained an unsupported asset kind.");
+        }
+
+        private static void ValidateKindPath(AssetKind kind, string path)
+        {
+            string extension = Path.GetExtension(path);
+            if (kind == AssetKind.Texture2D &&
+                !string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Remote textures must use the PNG format.");
+            if (kind == AssetKind.AudioClip &&
+                !string.Equals(extension, ".ogg", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Remote audio must use the OGG format.");
+        }
+
+        public static byte[] ComputeManifestSha256(IEnumerable<FileEntry> files)
+        {
+            if (files == null)
+                throw new ArgumentNullException(nameof(files));
+
+            using (var stream = new MemoryStream())
+            using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
+            using (var sha256 = SHA256.Create())
+            {
+                writer.Write(Encoding.ASCII.GetBytes("ANOMALY-FILE-MANIFEST-V1"));
+                var ordered = files.OrderBy(file => file.Path, StringComparer.Ordinal)
+                    .ThenBy(file => BitConverter.ToString(file.Hash ?? Array.Empty<byte>()), StringComparer.Ordinal)
+                    .ToList();
+                writer.Write(ordered.Count);
+                foreach (FileEntry file in ordered)
+                {
+                    ValidateRelativePath(file.Path);
+                    ValidateKind(file.Kind);
+                    ValidateKindPath(file.Kind, file.Path);
+                    byte[] path = Utf8.GetBytes(file.Path);
+                    if (path.Length == 0 || path.Length > MaxPathBytes ||
+                        file.Hash == null || file.Hash.Length != 32 ||
+                        file.Size == 0 || file.Size > MaxFileBytes)
+                        throw new InvalidDataException("Manifest entry was invalid for canonicalization.");
+                    writer.Write((byte)path.Length);
+                    writer.Write(path);
+                    writer.Write(file.Hash);
+                    writer.Write(file.Size);
+                    writer.Write((byte)file.Kind);
+                }
+                writer.Flush();
+                stream.Position = 0;
+                return sha256.ComputeHash(stream);
+            }
+        }
+
+        private static bool HashesEqual(byte[] left, byte[] right)
+        {
+            if (left == null || right == null || left.Length != 32 || right.Length != 32)
+                return false;
+            int difference = 0;
+            for (int index = 0; index < 32; index++)
+                difference |= left[index] ^ right[index];
+            return difference == 0;
         }
 
         public struct FileEntry

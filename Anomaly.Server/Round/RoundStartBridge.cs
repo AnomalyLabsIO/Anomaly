@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using HarmonyLib;
 using LabApi.Events.Handlers;
 using Logger = LabApi.Features.Console.Logger;
 
@@ -23,13 +24,16 @@ namespace Anomaly.Server.Round
     /// it to invoke the vanilla static event reflectively, restoring the
     /// expected server-side fan-out.
     ///
-    /// Re-firing is safe even if the local dispatch *does* happen on some
-    /// builds: <c>RoleAssigner</c> guards against double-spawn via
-    /// <c>CheckPlayer</c> rejecting hubs that are already alive.
+    /// The LabAPI and native-RPC entry points share a per-round guard. When the
+    /// native path is reached, its one-line multicast invocation is replaced by
+    /// the same isolated fan-out used by the bridge. This keeps every vanilla
+    /// subscriber independent and prevents the two entry points from dispatching
+    /// the event twice in a single round.
     /// </summary>
     internal static class RoundStartBridge
     {
         private static bool _hooked;
+        private static bool _raisedThisRound;
         private static FieldInfo _onRoundStartedField;
 
         internal static void Init()
@@ -40,10 +44,15 @@ namespace Anomaly.Server.Round
             _onRoundStartedField = ResolveBackingField();
             if (_onRoundStartedField == null)
             {
-                Logger.Warn("RoundStartBridge: CharacterClassManager.OnRoundStarted backing field not found — bridge inactive.");
-                return;
+                _hooked = false;
+                throw new MissingFieldException(
+                    typeof(CharacterClassManager).FullName,
+                    "OnRoundStarted");
             }
 
+            _raisedThisRound = false;
+            ServerEvents.WaitingForPlayers += ResetRoundGuard;
+            ServerEvents.RoundRestarted += ResetRoundGuard;
             ServerEvents.RoundStarted += OnRoundStarted;
             Logger.Info("RoundStartBridge: bridging ServerEvents.RoundStarted -> CharacterClassManager.OnRoundStarted.");
         }
@@ -52,25 +61,77 @@ namespace Anomaly.Server.Round
         {
             if (_hooked)
             {
+                ServerEvents.WaitingForPlayers -= ResetRoundGuard;
+                ServerEvents.RoundRestarted -= ResetRoundGuard;
                 ServerEvents.RoundStarted -= OnRoundStarted;
                 _hooked = false;
             }
 
+            _raisedThisRound = false;
             _onRoundStartedField = null;
         }
 
         private static void OnRoundStarted()
         {
-            if (_onRoundStartedField == null) return;
+            DispatchOnce("LabAPI round-start bridge");
+        }
+
+        private static void ResetRoundGuard()
+        {
+            _raisedThisRound = false;
+        }
+
+        /// <summary>
+        /// Harmony prefix for the native local-RPC callback. Return true only
+        /// when the bridge is inactive so vanilla remains untouched after an
+        /// owner-unpatch or retained-patch teardown.
+        /// </summary>
+        internal static bool InterceptNativeRoundStart()
+        {
+            if (!_hooked || _onRoundStartedField == null)
+                return true;
+
+            DispatchOnce("native round-start callback");
+            return false;
+        }
+
+        private static void DispatchOnce(string source)
+        {
+            if (!_hooked || _onRoundStartedField == null || _raisedThisRound)
+                return;
+
+            _raisedThisRound = true;
+            Action handler;
             try
             {
-                if (_onRoundStartedField.GetValue(null) is Action handler)
-                    handler.Invoke();
+                handler = _onRoundStartedField.GetValue(null) as Action;
             }
             catch (Exception ex)
             {
-                Logger.Error($"RoundStartBridge: re-firing CharacterClassManager.OnRoundStarted threw: {ex}");
+                SafeLogError($"RoundStartBridge: could not read CharacterClassManager.OnRoundStarted from {source}: {ex}");
+                return;
             }
+
+            if (handler == null)
+                return;
+
+            foreach (Delegate subscriber in handler.GetInvocationList())
+            {
+                try
+                {
+                    ((Action)subscriber)();
+                }
+                catch (Exception ex)
+                {
+                    SafeLogError($"RoundStartBridge: isolated CharacterClassManager.OnRoundStarted subscriber threw from {source}: {ex}");
+                }
+            }
+        }
+
+        private static void SafeLogError(string message)
+        {
+            try { Logger.Error(message); }
+            catch { }
         }
 
         /// <summary>
@@ -82,6 +143,16 @@ namespace Anomaly.Server.Round
             return typeof(CharacterClassManager).GetField(
                 "OnRoundStarted",
                 BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+        }
+    }
+
+    [HarmonyPatch(typeof(CharacterClassManager), "UserCode_RpcRoundStarted")]
+    internal static class NativeRoundStartDispatchPatch
+    {
+        [HarmonyPrefix]
+        private static bool Prefix()
+        {
+            return RoundStartBridge.InterceptNativeRoundStart();
         }
     }
 }

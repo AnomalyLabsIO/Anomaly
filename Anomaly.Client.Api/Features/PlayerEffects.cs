@@ -74,5 +74,26 @@ public class PlayerEffects
         return wrapper;
     }
 
+    internal static bool Unregister(PlayerEffectsControllerBase controller)
+    {
+        if (controller == null)
+            return false;
+
+        try
+        {
+            foreach (StatusEffectBase effectBase in controller.AllEffects)
+                PlayerEffect.Unregister(effectBase);
+        }
+        catch
+        {
+            // The parent wrapper can still be evicted when an IL2CPP child
+            // collection is already being torn down.
+        }
+
+        return _wrappers.Remove(controller);
+    }
+
+    internal static void ClearAll() => _wrappers.Clear();
+
     public override string ToString() => $"PlayerEffects(Count={Count})";
 }

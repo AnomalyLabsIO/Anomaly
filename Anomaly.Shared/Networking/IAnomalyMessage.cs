@@ -2,10 +2,13 @@ using System.IO;
 
 namespace Anomaly.Shared.Networking
 {
-    public interface IAnomalyMessage
+    public interface IAnomalyMessage :
+        IDirectionalAnomalyMessage,
+        IBoundedAnomalyMessage,
+        IAuthPhaseAnomalyMessage
     {
         /// <summary>
-        /// Namespaced message name (e.g., "anomaly:blendshapes").
+        /// Namespaced message name (e.g., "example:ping").
         /// Used for registration and hashed for the wire format.
         /// </summary>
         string MessageName { get; }

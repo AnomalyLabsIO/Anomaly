@@ -20,8 +20,11 @@ public static class FileCache
         if (!Directory.Exists(_cacheDir))
             Directory.CreateDirectory(_cacheDir);
 
+        _index = new Dictionary<string, CacheEntry>(StringComparer.Ordinal);
         CleanupIncomingFiles();
         LoadIndex();
+        ReconcileIndex();
+        QuarantineOverBudget(500L * 1024L * 1024L);
         MelonLogger.Msg($"FileCache initialized at {_cacheDir} ({_index.Count} cached files)");
     }
 
@@ -99,14 +102,17 @@ public static class FileCache
         if (!Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        // Atomic write: temp file + rename
-        string tempPath = filePath + ".tmp";
+        // Atomic same-directory replacement: a reader sees either the old blob
+        // or the fully flushed new blob, never a partial file.
+        string tempPath = filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllBytes(tempPath, data);
-            if (File.Exists(filePath))
-                File.Delete(filePath);
-            File.Move(tempPath, filePath);
+            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(data, 0, data.Length);
+                stream.Flush(true);
+            }
+            File.Move(tempPath, filePath, overwrite: true);
 
             lock (Lock)
             {
@@ -260,14 +266,86 @@ public static class FileCache
         {
             string json = File.ReadAllText(_manifestPath);
             var manifest = JsonSerializer.Deserialize<CacheManifest>(json);
-            if (manifest?.Files != null)
+            if (manifest?.Version == 1 && manifest.Files != null)
                 _index = manifest.Files;
+            else
+                throw new InvalidDataException("FileCache manifest schema is unsupported or incomplete.");
         }
         catch (Exception ex)
         {
-            MelonLogger.Warning($"FileCache: Failed to load manifest, starting fresh: {ex.Message}");
+            MelonLogger.Warning($"FileCache: Failed to load manifest; rebuilding from verified blobs: {ex.Message}");
+            QuarantineFile(_manifestPath, "manifest");
             _index = new Dictionary<string, CacheEntry>();
         }
+    }
+
+    private static void ReconcileIndex()
+    {
+        var reconciled = new Dictionary<string, CacheEntry>(StringComparer.Ordinal);
+        foreach (string path in Directory.GetFiles(_cacheDir, "*", SearchOption.AllDirectories))
+        {
+            string fullPath = Path.GetFullPath(path);
+            if (string.Equals(fullPath, Path.GetFullPath(_manifestPath), StringComparison.OrdinalIgnoreCase) ||
+                fullPath.Contains(Path.DirectorySeparatorChar + ".incoming" + Path.DirectorySeparatorChar) ||
+                fullPath.Contains(Path.DirectorySeparatorChar + ".quarantine" + Path.DirectorySeparatorChar) ||
+                fullPath.EndsWith(".bak", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (fullPath.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
+            {
+                QuarantineFile(path, "temporary");
+                continue;
+            }
+
+            string name = Path.GetFileName(path);
+            if (!IsLowerHexSha256(name))
+            {
+                QuarantineFile(path, "unexpected");
+                continue;
+            }
+
+            try
+            {
+                var info = new FileInfo(path);
+                if (info.Length <= 0 || info.Length > 64L * 1024L * 1024L)
+                {
+                    QuarantineFile(path, "size");
+                    continue;
+                }
+
+                byte[] actual;
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
+                using (var sha = SHA256.Create())
+                    actual = sha.ComputeHash(stream);
+                if (!string.Equals(ToHex(actual), name, StringComparison.Ordinal))
+                {
+                    QuarantineFile(path, "hash");
+                    continue;
+                }
+
+                if (!_index.TryGetValue(name, out CacheEntry existing))
+                {
+                    QuarantineFile(path, "orphan");
+                    continue;
+                }
+                reconciled[name] = new CacheEntry
+                {
+                    OriginalPath = existing.OriginalPath ?? string.Empty,
+                    Size = checked((uint)info.Length),
+                    LastUsed = existing.LastUsed == default ? info.LastWriteTimeUtc : existing.LastUsed,
+                    VerifiedLastWriteUtcTicks = info.LastWriteTimeUtc.Ticks,
+                };
+            }
+            catch (Exception exception)
+            {
+                MelonLogger.Warning($"FileCache: Could not reconcile '{path}': {exception.Message}");
+                QuarantineFile(path, "read");
+            }
+        }
+
+        lock (Lock)
+            _index = reconciled;
+        SaveIndex();
     }
 
     private static void CleanupIncomingFiles()
@@ -276,13 +354,13 @@ public static class FileCache
         if (!Directory.Exists(incomingDir))
             return;
 
-        int removed = 0;
+        int quarantined = 0;
         foreach (string file in Directory.GetFiles(incomingDir, "*.part", SearchOption.TopDirectoryOnly))
         {
             try
             {
-                File.Delete(file);
-                removed++;
+                QuarantineFile(file, "temporary");
+                quarantined++;
             }
             catch
             {
@@ -290,25 +368,100 @@ public static class FileCache
             }
         }
 
-        if (removed > 0)
-            MelonLogger.Msg($"FileCache: Removed {removed} stale partial download(s).");
+        if (quarantined > 0)
+            MelonLogger.Msg($"FileCache: Quarantined {quarantined} stale partial download(s).");
     }
 
     private static void SaveIndex()
     {
+        lock (Lock)
+        {
+            string temporary = null;
+            try
+            {
+                var manifest = new CacheManifest
+                {
+                    Version = 1,
+                    Files = new Dictionary<string, CacheEntry>(_index, StringComparer.Ordinal),
+                };
+                string json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
+                temporary = _manifestPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                string backup = _manifestPath + ".bak";
+                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(json);
+                using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(true);
+                }
+                if (File.Exists(_manifestPath))
+                    File.Replace(temporary, _manifestPath, backup, ignoreMetadataErrors: true);
+                else
+                    File.Move(temporary, _manifestPath);
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"FileCache: Failed to save manifest: {ex.Message}");
+            }
+            finally
+            {
+                try
+                {
+                    if (temporary != null && File.Exists(temporary))
+                        File.Delete(temporary);
+                }
+                catch
+                {
+                    // A stale temp is quarantined during the next startup reconciliation.
+                }
+            }
+        }
+    }
+
+    private static void QuarantineOverBudget(long maxBytes)
+    {
+        bool changed = false;
+        lock (Lock)
+        {
+            long totalSize = _index.Values.Sum(entry => (long)entry.Size);
+            if (totalSize <= maxBytes)
+                return;
+
+            foreach (KeyValuePair<string, CacheEntry> entry in
+                     _index.OrderBy(pair => pair.Value.LastUsed).ToList())
+            {
+                if (totalSize <= maxBytes)
+                    break;
+                QuarantineFile(GetFilePathInternal(entry.Key), "budget");
+                totalSize -= entry.Value.Size;
+                _index.Remove(entry.Key);
+                changed = true;
+            }
+        }
+
+        if (changed)
+            SaveIndex();
+    }
+
+    private static bool IsLowerHexSha256(string value) =>
+        value != null && value.Length == 64 && value.All(character =>
+            character is >= '0' and <= '9' or >= 'a' and <= 'f');
+
+    private static void QuarantineFile(string path, string reason)
+    {
         try
         {
-            var manifest = new CacheManifest { Version = 1 };
-            lock (Lock)
-            {
-                manifest.Files = new Dictionary<string, CacheEntry>(_index);
-            }
-            string json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_manifestPath, json);
+            if (!File.Exists(path))
+                return;
+            string directory = Path.Combine(_cacheDir, ".quarantine");
+            Directory.CreateDirectory(directory);
+            string destination = Path.Combine(
+                directory,
+                Path.GetFileName(path) + "." + reason + "." + DateTime.UtcNow.Ticks);
+            File.Move(path, destination);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            MelonLogger.Warning($"FileCache: Failed to save manifest: {ex.Message}");
+            MelonLogger.Warning($"FileCache: Could not quarantine '{path}': {exception.Message}");
         }
     }
 

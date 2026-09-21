@@ -64,18 +64,17 @@ namespace Anomaly.Server.Assets
 
         public static void LogSummary()
         {
-            int tex = 0, font = 0, bundle = 0, unk = 0;
+            int tex = 0, audio = 0, unk = 0;
             foreach (var kv in ServerAssetManager.AllAssets)
             {
                 switch (kv.Value.Kind)
                 {
                     case AssetKind.Texture2D: tex++; break;
-                    case AssetKind.Font: font++; break;
-                    case AssetKind.AssetBundle: bundle++; break;
+                    case AssetKind.AudioClip: audio++; break;
                     default: unk++; break;
                 }
             }
-            Logger.Info($"AssetRegistry: {tex} textures, {font} fonts, {bundle} bundles, {unk} unknown.");
+            Logger.Info($"AssetRegistry: {tex} PNG textures, {audio} OGG clips, {unk} unknown.");
         }
 
         private static string Normalize(string path) => path.Replace('\\', '/').TrimStart('/');

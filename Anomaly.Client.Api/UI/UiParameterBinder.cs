@@ -19,7 +19,7 @@ namespace Anomaly.Client.Api.UI;
 /// <list type="bullet">
 ///   <item><see cref="TMP_Text"/> — sets <see cref="TMP_Text.text"/>.</item>
 ///   <item><see cref="Text"/> — sets <see cref="Text.text"/>.</item>
-///   <item><see cref="Image"/> — sets <see cref="Image.color"/> if the value parses as a color.</item>
+///   <item><see cref="Image"/> — sets its <c>color</c> property if the value parses as a color.</item>
 /// </list>
 /// <para>Special key <c>"_active"</c> toggles the slot's <see cref="GameObject.activeSelf"/>
 /// based on truthy/falsy string values ("true"/"1"/"yes" vs. others).</para>

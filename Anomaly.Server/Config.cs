@@ -9,8 +9,10 @@ public class Config
     public string AssetDirectory { get; set; } = "";
 
     /// <summary>
-    /// Requires clients to prove knowledge of the server password before Mirror
-    /// accepts the connection. Set the password with LocalAdmin: password &lt;value&gt;.
+    /// Requests password-gated admission. Public/remote password authentication is
+    /// deliberately unavailable until a vetted OPAQUE implementation supports both
+    /// target runtimes, so enabling this rejects remote clients. The only current
+    /// compatibility path is the separately enabled loopback-only legacy proof.
     /// </summary>
     public bool RequirePassword { get; set; } = false;
 
@@ -45,5 +47,4 @@ public class Config
     /// server instead logs the mismatch and refuses to grant the affected custom content
     /// to that client, leaving the rest of the session intact.
     /// </summary>
-    public bool ContentMismatchKick { get; set; } = false;
 }

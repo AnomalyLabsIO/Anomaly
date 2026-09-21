@@ -104,8 +104,12 @@ public class Projectile : Pickup
         if (serial == 0)
             return;
 
-        if (!_serialCache.TryGetValue(serial, out Projectile existing) || !ReferenceEquals(existing, projectile))
-            _serialCache[serial] = projectile;
+        if (_serialCache.TryGetValue(serial, out Projectile existing) && !ReferenceEquals(existing, projectile))
+        {
+            if (existing != null)
+                _projectiles.Remove(existing.ProjectileBase);
+        }
+        _serialCache[serial] = projectile;
     }
 
     private ushort SafeProjectileSerial()

@@ -13,10 +13,12 @@ public class HintDisplayingEventArgs : EventArgs, ICancellableEvent
     }
 
     /// <summary>The raw hint text. May contain rich-text tags and translation tokens.</summary>
-    public string Text { get; }
+    /// <remarks>Changes are applied to text hints before they are rendered.</remarks>
+    public string Text { get; set; }
 
     /// <summary>Display duration in seconds (0 if not provided by the hint).</summary>
-    public float DurationSeconds { get; }
+    /// <remarks>Only finite, non-negative changes are applied.</remarks>
+    public float DurationSeconds { get; set; }
 
     public bool IsAllowed { get; set; } = true;
 }

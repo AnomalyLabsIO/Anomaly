@@ -5,7 +5,7 @@ using System.Net;
 namespace Anomaly.Shared.Auth;
 
 /// <summary>
-/// Canonical endpoint label bound into the protocol-v2 signed transcript. The
+/// Canonical endpoint label bound into the signed authentication transcript. The
 /// server signs the exact target the client intended to reach; TOFU storage uses
 /// the same normalization so textual aliases do not silently create new pins.
 /// </summary>

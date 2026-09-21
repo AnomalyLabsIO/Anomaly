@@ -1,4 +1,6 @@
 using Anomaly.Client.Internal;
+using Anomaly.Client.Api.Internal;
+using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
 
 namespace Anomaly.Client.Api.Networking
@@ -10,13 +12,19 @@ namespace Anomaly.Client.Api.Networking
     /// </summary>
     internal static class SilentRoleChangeHandler
     {
+        private static readonly TransactionalInitializer Initializer = new();
+
         internal static void Register()
         {
-            AnomalyMessaging.MessageReceived += msg =>
-            {
-                if (msg is SilentRoleChangeMessage)
-                    SilentRoleChange.IsPending = true;
-            };
+            Initializer.Initialize(new InitializationStep(
+                () => AnomalyMessaging.MessageReceived += HandleMessage,
+                () => AnomalyMessaging.MessageReceived -= HandleMessage));
+        }
+
+        private static void HandleMessage(IAnomalyMessage message)
+        {
+            if (message is SilentRoleChangeMessage)
+                SilentRoleChange.IsPending = true;
         }
     }
 }

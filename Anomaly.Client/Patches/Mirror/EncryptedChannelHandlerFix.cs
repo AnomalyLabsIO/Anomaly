@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using System.Reflection;
-using HarmonyLib;
+using Anomaly.Client.Api.Internal;
 using Il2Cpp;
 using Il2CppInterop.Runtime;
 using Il2CppMirror;
@@ -36,70 +36,159 @@ public static class EncryptedChannelHandlerFix
     private static MethodInfo _clientReceiveMethod;
     private static MethodInfo _deserializeMethod;
     private static NetworkMessageDelegate _bridgeDelegate;
+    private static NetworkMessageDelegate _previousDelegate;
+    private static IntPtr _publishedDictionaryPointer;
+    private static bool _hadPreviousDelegate;
+    private static bool _published;
+    private static readonly TransactionalInitializer Initializer = new();
 
-    [HarmonyPatch(typeof(NetworkManager), nameof(NetworkManager.RegisterClientMessages))]
-    public static class RegisterEncryptedHandler
+    internal static bool IsReady { get; private set; }
+    internal static string LastError { get; private set; }
+
+    /// <summary>
+    /// Resolves the required bridge and publishes it into the current client
+    /// handler dictionary. This is called directly by the required networking
+    /// registrar so Harmony postfix ordering cannot report networking ready
+    /// before message id 9934 is actually installed.
+    /// </summary>
+    internal static bool EnsureRegistered()
     {
-        [HarmonyPostfix]
-        public static void Postfix()
+        IsReady = false;
+        try
         {
-            try
-            {
-                // Cache the method lookups and the converted bridge delegate
-                // once — they don't change across connects. But re-apply the
-                // dictionary entry on every RegisterClientMessages since the
-                // NetworkClient.handlers dict gets cleared on each disconnect
-                // (and without re-applying, reconnecting leaves id 9934 with
-                // no handler again).
-                if (_clientReceiveMethod == null)
-                {
+            Initializer.Initialize(
+                new InitializationStep(
+                    () =>
+                    {
                     _clientReceiveMethod = typeof(EncryptedChannelManager).GetMethod(
                         "ClientReceivePackedMessage",
                         BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
                     if (_clientReceiveMethod == null)
+                            throw new MissingMethodException(
+                                typeof(EncryptedChannelManager).FullName,
+                                "ClientReceivePackedMessage");
+                    },
+                    () => _clientReceiveMethod = null),
+                new InitializationStep(
+                    () =>
                     {
-                        MelonLogger.Warning("[EncryptedChannelHandlerFix] ClientReceivePackedMessage not found");
-                        return;
-                    }
-                }
-
-                if (_deserializeMethod == null)
-                {
                     _deserializeMethod = FindDeserializeMethod();
                     if (_deserializeMethod == null)
+                            throw new MissingMethodException(
+                                "EncryptedChannelFunctions",
+                                "DeserializeEncryptedMessageOutside");
+                    },
+                    () => _deserializeMethod = null),
+                new InitializationStep(
+                    () =>
                     {
-                        MelonLogger.Warning("[EncryptedChannelHandlerFix] DeserializeEncryptedMessageOutside not found");
-                        return;
-                    }
-                }
-
-                if (_bridgeDelegate == null)
-                {
                     Action<NetworkConnection, NetworkReader, int> managedBridge = BridgeDispatch;
                     _bridgeDelegate = DelegateSupport.ConvertDelegate<NetworkMessageDelegate>(managedBridge);
-                }
+                    if (_bridgeDelegate == null)
+                            throw new InvalidOperationException("IL2CPP delegate conversion returned null.");
+                    },
+                    () => _bridgeDelegate = null));
 
-                var dict = NetworkClient.handlers;
-                if (dict == null)
-                {
-                    MelonLogger.Warning("[EncryptedChannelHandlerFix] NetworkClient.handlers is null");
-                    return;
-                }
+            var handlers = NetworkClient.handlers ??
+                throw new InvalidOperationException("NetworkClient.handlers is null.");
 
-                dict[(ushort)9934] = _bridgeDelegate;
-
-                MelonLogger.Msg(
-                    $"[EncryptedChannelHandlerFix] Installed handler for EncryptedMessageOutside " +
-                    $"(id=9934) — NetworkClient.handlers now has {dict.Count} entries");
-            }
-            catch (Exception ex)
+            if (handlers.TryGetValue((ushort)9934, out NetworkMessageDelegate existing) &&
+                SameDelegate(existing, _bridgeDelegate))
             {
-                var inner = ex is TargetInvocationException tie && tie.InnerException != null ? tie.InnerException : ex;
-                MelonLogger.Error(
-                    $"[EncryptedChannelHandlerFix] Failed to register handler: " +
-                    $"{inner.GetType().Name}: {inner.Message}");
+                _published = true;
+                _publishedDictionaryPointer = handlers.Pointer;
+                _hadPreviousDelegate = false;
+                _previousDelegate = null;
+            }
+            else
+            {
+                _hadPreviousDelegate = handlers.TryGetValue((ushort)9934, out _previousDelegate);
+                _publishedDictionaryPointer = handlers.Pointer;
+                try
+                {
+                    handlers[(ushort)9934] = _bridgeDelegate;
+                    _published = true;
+                    if (!handlers.TryGetValue((ushort)9934, out NetworkMessageDelegate installed) ||
+                        !SameDelegate(installed, _bridgeDelegate))
+                    {
+                        throw new InvalidOperationException(
+                            "Encrypted message handler publication could not be verified.");
+                    }
+                }
+                catch
+                {
+                    RollBackConnectionRegistration();
+                    throw;
+                }
+            }
+
+            IsReady = true;
+            LastError = null;
+            SafeLogMessage(
+                $"[EncryptedChannelHandlerFix] Installed handler for EncryptedMessageOutside " +
+                $"(id=9934) — NetworkClient.handlers now has {handlers.Count} entries");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            RollBackConnectionRegistration();
+            Initializer.Reset();
+            var inner = ex is TargetInvocationException tie && tie.InnerException != null ? tie.InnerException : ex;
+            LastError = $"{inner.GetType().Name}: {inner.Message}";
+            SafeLogError("[EncryptedChannelHandlerFix] Failed to register handler: " + LastError);
+            return false;
+        }
+    }
+
+    internal static void ResetConnectionState()
+    {
+        RollBackConnectionRegistration();
+        IsReady = false;
+    }
+
+    private static void RollBackConnectionRegistration()
+    {
+        try
+        {
+            var handlers = NetworkClient.handlers;
+            if (_published &&
+                handlers != null &&
+                handlers.Pointer == _publishedDictionaryPointer &&
+                handlers.TryGetValue((ushort)9934, out NetworkMessageDelegate current) &&
+                SameDelegate(current, _bridgeDelegate))
+            {
+                if (_hadPreviousDelegate)
+                    handlers[(ushort)9934] = _previousDelegate;
+                else
+                    handlers.Remove((ushort)9934);
             }
         }
+        catch { }
+        finally
+        {
+            _published = false;
+            _publishedDictionaryPointer = IntPtr.Zero;
+            _hadPreviousDelegate = false;
+            _previousDelegate = null;
+        }
+    }
+
+    private static bool SameDelegate(NetworkMessageDelegate first, NetworkMessageDelegate second)
+    {
+        return ReferenceEquals(first, second) ||
+            (first != null && second != null && first.Pointer == second.Pointer);
+    }
+
+    private static void SafeLogMessage(string message)
+    {
+        try { MelonLogger.Msg(message); }
+        catch { }
+    }
+
+    private static void SafeLogError(string message)
+    {
+        try { MelonLogger.Error(message); }
+        catch { }
     }
 
     /// <summary>
@@ -158,7 +247,9 @@ public static class EncryptedChannelHandlerFix
         catch (Exception ex)
         {
             var inner = ex is TargetInvocationException tie && tie.InnerException != null ? tie.InnerException : ex;
-            MelonLogger.Error(
+            Anomaly.Client.Api.Networking.AnomalyMessaging.FailClosedTransport(
+                "The required encrypted-channel receive bridge failed while dispatching a message.");
+            SafeLogError(
                 $"[EncryptedChannelHandlerFix] bridge dispatch failed: " +
                 $"{inner.GetType().Name}: {inner.Message}");
         }

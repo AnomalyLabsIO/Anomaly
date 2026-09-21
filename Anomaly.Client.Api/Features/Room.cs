@@ -94,5 +94,10 @@ public class Room
         return Get(roomIdentifier);
     }
 
+    internal static bool Unregister(RoomIdentifier roomIdentifier) =>
+        roomIdentifier != null && _rooms.Remove(roomIdentifier);
+
+    internal static void ClearAll() => _rooms.Clear();
+
     public override string ToString() => $"Room({RoomName}, {Zone})";
 }

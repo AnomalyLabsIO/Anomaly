@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Networking;
+using Anomaly.Shared.Assets;
 using Anomaly.Shared.Networking.Messages;
 using Interactables.Interobjects.DoorUtils;
 using MapGeneration;
 using Mirror;
+using LabApi.Events.Handlers;
 using Logger = LabApi.Features.Console.Logger;
 
 namespace Anomaly.Server.Assets
@@ -45,6 +47,7 @@ namespace Anomaly.Server.Assets
             if (!_hookedSessionCompleted)
             {
                 FileTransferSession.SessionCompleted += OnSessionCompleted;
+                ServerEvents.RoundRestarted += OnRoundRestarted;
                 _hookedSessionCompleted = true;
             }
         }
@@ -54,6 +57,7 @@ namespace Anomaly.Server.Assets
             if (_hookedSessionCompleted)
             {
                 FileTransferSession.SessionCompleted -= OnSessionCompleted;
+                ServerEvents.RoundRestarted -= OnRoundRestarted;
                 _hookedSessionCompleted = false;
             }
 
@@ -83,17 +87,17 @@ namespace Anomaly.Server.Assets
                 throw new ArgumentException("Texture hash must be 32 bytes.", nameof(textureHash));
             if (materialIdx < 0 || materialIdx > ushort.MaxValue)
                 throw new ArgumentOutOfRangeException(nameof(materialIdx));
+            if (!ServerAssetManager.TryGetAsset(textureHash, out ServerAssetManager.AssetInfo asset) ||
+                asset.Kind != AssetKind.Texture2D)
+                throw new ArgumentException(
+                    "Texture hash must identify a PNG in the current advertised manifest.",
+                    nameof(textureHash));
 
             var key = new Key(netId, componentPath, (ushort)materialIdx);
-            _overrides[key] = textureHash;
+            byte[] storedHash = (byte[])textureHash.Clone();
+            _overrides[key] = storedHash;
 
-            AnomalyMessaging.SendToAll(new AssetOverrideTextureMessage
-            {
-                NetId = netId,
-                ComponentPath = componentPath ?? "",
-                MaterialIndex = (ushort)materialIdx,
-                TextureHash = textureHash
-            });
+            SendOverrideToApprovedClients(key, storedHash);
         }
 
         public static void ClearTexture(uint netId, string componentPath, int materialIdx)
@@ -175,14 +179,62 @@ namespace Anomaly.Server.Assets
             Logger.Info($"AssetOverrides: Replaying {_overrides.Count} overrides to {hub.LoggedNameFromRefHub()}");
             foreach (var kv in _overrides)
             {
-                AnomalyMessaging.SendToClient(hub, new AssetOverrideTextureMessage
+                if (!FileTransferSession.IsAssetApproved(hub, kv.Value, AssetKind.Texture2D))
+                    continue;
+                try
                 {
-                    NetId = kv.Key.NetId,
-                    ComponentPath = kv.Key.ComponentPath,
-                    MaterialIndex = kv.Key.MaterialIndex,
-                    TextureHash = kv.Value
-                });
+                    AnomalyMessaging.TrySendToClient(hub, BuildMessage(kv.Key, kv.Value));
+                }
+                catch (Exception exception)
+                {
+                    Logger.Error(
+                        $"AssetOverrides: Isolated replay failure for {hub.LoggedNameFromRefHub()}: {exception}");
+                }
             }
+        }
+
+        private static void SendOverrideToApprovedClients(Key key, byte[] textureHash)
+        {
+            foreach (ReferenceHub hub in ReferenceHub.AllHubs)
+            {
+                try
+                {
+                    if (!FileTransferSession.IsAssetApproved(hub, textureHash, AssetKind.Texture2D))
+                        continue;
+                    AnomalyMessaging.TrySendToClient(hub, BuildMessage(key, textureHash));
+                }
+                catch (Exception exception)
+                {
+                    SafeLogRecipientFailure(hub, exception);
+                }
+            }
+        }
+
+        private static void SafeLogRecipientFailure(ReferenceHub hub, Exception exception)
+        {
+            string name;
+            try { name = hub?.LoggedNameFromRefHub() ?? "<null>"; }
+            catch { name = "<unavailable>"; }
+            try
+            {
+                Logger.Error(
+                    $"AssetOverrides: Isolated approved-recipient send failure for {name}: {exception}");
+            }
+            catch { }
+        }
+
+        private static AssetOverrideTextureMessage BuildMessage(Key key, byte[] textureHash) =>
+            new AssetOverrideTextureMessage
+            {
+                NetId = key.NetId,
+                ComponentPath = key.ComponentPath,
+                MaterialIndex = key.MaterialIndex,
+                TextureHash = (byte[])textureHash.Clone()
+            };
+
+        private static void OnRoundRestarted()
+        {
+            _overrides.Clear();
         }
 
         private static bool TryGetNetId(RoomIdentifier room, out uint netId)

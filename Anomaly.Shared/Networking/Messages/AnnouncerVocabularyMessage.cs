@@ -7,6 +7,7 @@ namespace Anomaly.Shared.Networking.Messages
 {
     public class AnnouncerVocabularyMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
+        private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
         public const int MaxWords = 128;
         public const int MaxApiNameBytes = 128;
         public const float MaxDurationSeconds = 30f;
@@ -24,7 +25,7 @@ namespace Anomaly.Shared.Networking.Messages
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var word in Words)
             {
-                var nameBytes = Encoding.UTF8.GetBytes(word.ApiName ?? "");
+                var nameBytes = Utf8.GetBytes(word.ApiName ?? "");
                 if (nameBytes.Length > MaxApiNameBytes)
                     throw new InvalidDataException($"Vocabulary name exceeded {MaxApiNameBytes} bytes.");
                 if (nameBytes.Length == 0 || word.AudioHash == null || word.AudioHash.Length != 32)
@@ -57,7 +58,7 @@ namespace Anomaly.Shared.Networking.Messages
                 byte[] nameBytes = reader.ReadBytes(nameLength);
                 if (nameBytes.Length != nameLength || nameLength == 0)
                     throw new EndOfStreamException("Vocabulary name was truncated or empty.");
-                string apiName = Encoding.UTF8.GetString(nameBytes);
+                string apiName = Utf8.GetString(nameBytes);
                 if (!names.Add(apiName))
                     throw new InvalidDataException("Vocabulary contained a duplicate API name.");
                 byte[] audioHash = reader.ReadBytes(32);

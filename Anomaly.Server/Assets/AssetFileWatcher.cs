@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using Anomaly.Server.FileTransfer;
-using Anomaly.Server.Networking;
 using Anomaly.Server.Utils;
 using Anomaly.Shared.Networking.Messages;
 using MEC;
@@ -13,10 +12,9 @@ using Logger = LabApi.Features.Console.Logger;
 namespace Anomaly.Server.Assets
 {
     /// <summary>
-    /// Watches the server's asset directory for changes and pushes
-    /// <see cref="AssetReloadMessage"/> broadcasts to all connected clients when
-    /// a file's content actually changes. Changes are debounced to coalesce
-    /// rapid editor saves.
+    /// Watches the server's asset directory and rebuilds the immutable source
+    /// snapshot used by future connections. Active-session hot reload is
+    /// deliberately disabled in public v1.
     /// </summary>
     public static class AssetFileWatcher
     {
@@ -49,6 +47,7 @@ namespace Anomaly.Server.Assets
             };
             _watcher.Changed += OnFileEvent;
             _watcher.Created += OnFileEvent;
+            _watcher.Deleted += OnFileEvent;
             _watcher.Renamed += OnFileRenamed;
 
             _drainHandle = Timing.RunCoroutine(DrainIncoming());
@@ -77,7 +76,11 @@ namespace Anomaly.Server.Assets
 
         // Worker-thread entry points: only enqueue. No MEC, no dictionary access here.
         private static void OnFileEvent(object sender, FileSystemEventArgs e) => _incoming.Enqueue(e.FullPath);
-        private static void OnFileRenamed(object sender, RenamedEventArgs e) => _incoming.Enqueue(e.FullPath);
+        private static void OnFileRenamed(object sender, RenamedEventArgs e)
+        {
+            _incoming.Enqueue(e.OldFullPath);
+            _incoming.Enqueue(e.FullPath);
+        }
 
         // Main-thread pump: drains worker-thread file events and runs the debounce on the
         // main thread, where Timing and _pendingDebounces are safe to touch.
@@ -107,16 +110,26 @@ namespace Anomaly.Server.Assets
             _pendingDebounces.Remove(fullPath);
 
             if (!File.Exists(fullPath))
+            {
+                ServerAssetManager.Rescan();
+                Logger.Info($"AssetFileWatcher: Asset removed or renamed '{fullPath}'. Future clients use the rebuilt manifest.");
                 return;
+            }
 
             byte[] newHash;
-            uint newSize;
             try
             {
-                var data = File.ReadAllBytes(fullPath);
-                newSize = (uint)data.Length;
+                var info = new FileInfo(fullPath);
+                if (info.Length <= 0 || info.Length > FileManifestMessage.MaxFileBytes ||
+                    ServerAssetManager.InferKind(fullPath) == Anomaly.Shared.Assets.AssetKind.Unknown)
+                {
+                    ServerAssetManager.Rescan();
+                    Logger.Warn($"AssetFileWatcher: Ignoring unsupported or over-budget asset '{fullPath}'.");
+                    return;
+                }
                 using (var sha = SHA256.Create())
-                    newHash = sha.ComputeHash(data);
+                using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    newHash = sha.ComputeHash(stream);
             }
             catch (Exception ex)
             {
@@ -150,12 +163,9 @@ namespace Anomaly.Server.Assets
                 return;
             }
 
-            Logger.Info($"AssetFileWatcher: '{fullPath}' changed: {Hex(oldHash)} → {Hex(newHash)}. Broadcasting reload.");
-            AnomalyMessaging.SendToAll(new AssetReloadMessage
-            {
-                OldHash = oldHash,
-                NewHash = newHash
-            });
+            Logger.Info(
+                $"AssetFileWatcher: '{fullPath}' changed: {Hex(oldHash)} → {Hex(newHash)}. " +
+                "Connected clients keep their approved snapshot; future clients receive the rebuilt manifest.");
         }
 
         private static bool HashesEqual(byte[] a, byte[] b)

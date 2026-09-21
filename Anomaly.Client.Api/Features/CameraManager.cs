@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Anomaly.Client.Api.Events;
 using Anomaly.Client.Api.Events.Handlers;
 using Il2Cpp;
 using MelonLoader;
@@ -193,8 +194,7 @@ public static class CameraManager
         if (ReferenceEquals(_cached, c))
             return;
         _cached = c;
-        try { Changed?.Invoke(c); }
-        catch (Exception ex) { MelonLogger.Error($"CameraManager.Changed handler threw: {ex}"); }
+        EventInvoker.Invoke(Changed, c, "CameraManager.Changed");
     }
 
     private static bool IsUsable(Camera c) => c != null && c.gameObject != null && c.enabled;

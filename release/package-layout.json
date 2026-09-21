@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 2,
+  "packages": [
+    {
+      "packageId": "anomaly-client",
+      "target": "client-runtime",
+      "archiveName": "anomaly-client-{version}.zip",
+      "runtimeClosure": {
+        "runtimeFramework": ".NET 6 runtime bundled with MelonLoader 0.7.2",
+        "referenceProjects": [
+          "Anomaly.Bootstrap",
+          "Anomaly.Client",
+          "Anomaly.Client.Api",
+          "Anomaly.Shared"
+        ],
+        "frameworkProvidedAssemblies": [
+          "Microsoft.Win32.Primitives",
+          "mscorlib",
+          "netstandard",
+          "System",
+          "System.Collections",
+          "System.Collections.Concurrent",
+          "System.ComponentModel.Primitives",
+          "System.ComponentModel.TypeConverter",
+          "System.Console",
+          "System.Core",
+          "System.Data.Common",
+          "System.Diagnostics.Process",
+          "System.Diagnostics.StackTrace",
+          "System.Diagnostics.TraceSource",
+          "System.Linq",
+          "System.Linq.Expressions",
+          "System.Memory",
+          "System.Net.NetworkInformation",
+          "System.Net.Requests",
+          "System.Numerics",
+          "System.ObjectModel",
+          "System.Reflection.Emit",
+          "System.Reflection.Emit.ILGeneration",
+          "System.Reflection.Emit.Lightweight",
+          "System.Reflection.Primitives",
+          "System.Runtime",
+          "System.Runtime.CompilerServices.Unsafe",
+          "System.Runtime.InteropServices",
+          "System.Runtime.InteropServices.RuntimeInformation",
+          "System.Runtime.Numerics",
+          "System.Runtime.Serialization.Formatters",
+          "System.Runtime.Serialization.Primitives",
+          "System.Security.Cryptography.Algorithms",
+          "System.Security.Cryptography.Primitives",
+          "System.Text.Encoding.Extensions",
+          "System.Text.Json",
+          "System.Text.RegularExpressions",
+          "System.Threading",
+          "System.Threading.Thread",
+          "System.Xml.ReaderWriter",
+          "System.Xml.XDocument"
+        ],
+        "hostProvidedAssemblies": [
+          { "name": "Assembly-CSharp", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "Il2CppInterop.Runtime", "provider": "MelonLoader 0.7.2" },
+          { "name": "Il2CppMirror", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
+          { "name": "Il2Cppmscorlib", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
+          { "name": "Il2CppSystem.Core", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
+          { "name": "MelonLoader", "provider": "MelonLoader 0.7.2" },
+          { "name": "Unity.TextMeshPro", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "UnityEngine.AnimationModule", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "UnityEngine.AudioModule", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "UnityEngine.CoreModule", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "UnityEngine.IMGUIModule", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "UnityEngine.InputLegacyModule", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "UnityEngine.Physics2DModule", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "UnityEngine.PhysicsModule", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "UnityEngine.TextRenderingModule", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "UnityEngine.UI", "provider": "SCP:SL 14.2.7 client interop" },
+          { "name": "UnityEngine.UIModule", "provider": "SCP:SL 14.2.7 client interop" }
+        ]
+      },
+      "entries": [
+        { "source": "Anomaly.Bootstrap/bin/Release/net6.0/Anomaly.Bootstrap.dll", "path": "Plugins/Anomaly.Bootstrap.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/Anomaly.Client.dll", "path": "Mods/Anomaly.Client.dll" },
+        { "source": "Anomaly.Client.Api/bin/Release/net6.0/Anomaly.Client.Api.dll", "path": "UserLibs/Anomaly.Client.Api.dll" },
+        { "source": "Anomaly.Shared/bin/Release/Anomaly.Shared.dll", "path": "UserLibs/Anomaly.Shared.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/BouncyCastle.Cryptography.dll", "path": "UserLibs/BouncyCastle.Cryptography.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/0Harmony.dll", "path": "UserLibs/0Harmony.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/BigGustave.dll", "path": "UserLibs/BigGustave.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/Mono.Cecil.dll", "path": "UserLibs/Mono.Cecil.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/Mono.Cecil.Mdb.dll", "path": "UserLibs/Mono.Cecil.Mdb.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/Mono.Cecil.Pdb.dll", "path": "UserLibs/Mono.Cecil.Pdb.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/Mono.Cecil.Rocks.dll", "path": "UserLibs/Mono.Cecil.Rocks.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/MonoMod.Backports.dll", "path": "UserLibs/MonoMod.Backports.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/MonoMod.Core.dll", "path": "UserLibs/MonoMod.Core.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/MonoMod.Iced.dll", "path": "UserLibs/MonoMod.Iced.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/MonoMod.ILHelpers.dll", "path": "UserLibs/MonoMod.ILHelpers.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/MonoMod.RuntimeDetour.dll", "path": "UserLibs/MonoMod.RuntimeDetour.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/MonoMod.Utils.dll", "path": "UserLibs/MonoMod.Utils.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/Newtonsoft.Json.dll", "path": "UserLibs/Newtonsoft.Json.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/NVorbis.dll", "path": "UserLibs/NVorbis.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/YamlDotNet.dll", "path": "UserLibs/YamlDotNet.dll" },
+        { "source": "THIRD_PARTY_DEPENDENCIES.md", "path": "THIRD_PARTY_DEPENDENCIES.md" },
+        { "source": "LICENSE", "path": "LICENSE" },
+        { "source": "NOTICE", "path": "NOTICE" }
+      ]
+    },
+    {
+      "packageId": "anomaly-server",
+      "target": "server-runtime",
+      "archiveName": "anomaly-server-{version}.zip",
+      "runtimeClosure": {
+        "runtimeFramework": ".NET Framework 4.8 runtime",
+        "referenceProjects": [
+          "Anomaly.Server",
+          "Anomaly.Shared"
+        ],
+        "frameworkProvidedAssemblies": [
+          "mscorlib",
+          "System",
+          "System.Core",
+          "System.Numerics",
+          "System.Runtime.Serialization"
+        ],
+        "hostProvidedAssemblies": [
+          { "name": "Assembly-CSharp", "provider": "SCP:SL 14.2.7 dedicated server" },
+          { "name": "Assembly-CSharp-firstpass", "provider": "SCP:SL 14.2.7 dedicated server" },
+          { "name": "CommandSystem.Core", "provider": "SCP:SL 14.2.7 dedicated server" },
+          { "name": "LabApi", "provider": "SCP:SL LabAPI host" },
+          { "name": "Mirror", "provider": "SCP:SL 14.2.7 dedicated server" },
+          { "name": "netstandard", "provider": "SCP:SL 14.2.7 managed runtime" },
+          { "name": "System.Runtime.CompilerServices.Unsafe", "provider": "SCP:SL 14.2.7 managed runtime" },
+          { "name": "UnityEngine.AudioModule", "provider": "SCP:SL 14.2.7 dedicated server" },
+          { "name": "UnityEngine.CoreModule", "provider": "SCP:SL 14.2.7 dedicated server" }
+        ]
+      },
+      "entries": [
+        { "source": "Anomaly.Server/bin/Release/Anomaly.Server.dll", "path": "plugins/global/Anomaly.Server.dll" },
+        { "source": "Anomaly.Shared/bin/Release/Anomaly.Shared.dll", "path": "dependencies/global/Anomaly.Shared.dll" },
+        { "source": "Anomaly.Server/bin/Release/BouncyCastle.Cryptography.dll", "path": "dependencies/global/BouncyCastle.Cryptography.dll" },
+        { "source": "Anomaly.Server/bin/Release/0Harmony.dll", "path": "dependencies/global/0Harmony.dll" },
+        { "source": "Anomaly.Server/bin/Release/System.Numerics.Vectors.dll", "path": "dependencies/global/System.Numerics.Vectors.dll" },
+        { "source": "Anomaly.Server/bin/Release/System.Threading.Tasks.Extensions.dll", "path": "dependencies/global/System.Threading.Tasks.Extensions.dll" },
+        { "source": "THIRD_PARTY_DEPENDENCIES.md", "path": "THIRD_PARTY_DEPENDENCIES.md" },
+        { "source": "LICENSE", "path": "LICENSE" },
+        { "source": "NOTICE", "path": "NOTICE" }
+      ]
+    },
+    {
+      "packageId": "anomaly-sdk",
+      "target": "developer-sdk",
+      "archiveName": "anomaly-sdk-{version}.zip",
+      "entries": [
+        { "source": "Anomaly.Client.Api/bin/Release/net6.0/Anomaly.Client.Api.dll", "path": "lib/net6.0/Anomaly.Client.Api.dll" },
+        { "source": "Anomaly.Shared/bin/Release/Anomaly.Shared.dll", "path": "lib/net48/Anomaly.Shared.dll" },
+        { "source": "Anomaly.Client/bin/Release/net6.0/BouncyCastle.Cryptography.dll", "path": "lib/net48/BouncyCastle.Cryptography.dll" },
+        { "source": "Anomaly.Client.Api/bin/Release/net6.0/Anomaly.Client.Api.xml", "path": "docs/Anomaly.Client.Api.xml" },
+        { "source": "Anomaly.Shared/bin/Release/Anomaly.Shared.xml", "path": "docs/Anomaly.Shared.xml" },
+        { "source": "Anomaly.Client.Api/PublicAPI.Shipped.txt", "path": "reference/Anomaly.Client.Api.PublicAPI.Shipped.txt" },
+        { "source": "release/sdk-reference-metadata.json", "path": "reference/sdk-reference-metadata.json" },
+        { "source": "release/package-layout.json", "path": "reference/package-layout.json" },
+        { "source": "THIRD_PARTY_DEPENDENCIES.md", "path": "THIRD_PARTY_DEPENDENCIES.md" },
+        { "source": "LICENSE", "path": "LICENSE" },
+        { "source": "NOTICE", "path": "NOTICE" }
+      ]
+    }
+  ]
+}

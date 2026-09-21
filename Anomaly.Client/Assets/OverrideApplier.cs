@@ -63,9 +63,31 @@ namespace Anomaly.Client.Assets
 
             material = mats[materialIndex];
             var original = material.mainTexture;
-            material.mainTexture = newTexture;
-            renderer.materials = mats;
-            return original;
+            bool textureChanged = false;
+            try
+            {
+                // Set ownership before invoking Unity: a property setter may
+                // mutate native state and still throw before returning.
+                textureChanged = true;
+                material.mainTexture = newTexture;
+                renderer.materials = mats;
+                return original;
+            }
+            catch
+            {
+                // Do not leave an untracked remote mutation behind when Unity
+                // rejects the later renderer-array publication. OverrideRegistry
+                // only records ownership after this method returns successfully.
+                if (textureChanged)
+                {
+                    try { material.mainTexture = original; }
+                    catch { }
+                    try { renderer.materials = mats; }
+                    catch { }
+                }
+                material = null;
+                throw;
+            }
         }
 
         /// <summary>

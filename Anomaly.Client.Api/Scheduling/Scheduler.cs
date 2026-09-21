@@ -49,7 +49,7 @@ public static class Scheduler
     /// for diagnostics. <paramref name="ownerId"/> is informational only — no
     /// validation is performed.
     /// </summary>
-    public static ScheduledTask In(TimeSpan delay, Action callback, string ownerId)
+    internal static ScheduledTask In(TimeSpan delay, Action callback, string ownerId)
     {
         if (callback == null) throw new ArgumentNullException(nameof(callback));
         var task = new ScheduledTask(ScheduledTask.TaskKind.OneShot,
@@ -72,7 +72,7 @@ public static class Scheduler
     /// <summary>
     /// Registers a recurring callback, attributing it to <paramref name="ownerId"/>.
     /// </summary>
-    public static ScheduledTask Every(TimeSpan interval, Action callback, TimeSpan firstDelay, string ownerId)
+    internal static ScheduledTask Every(TimeSpan interval, Action callback, TimeSpan firstDelay, string ownerId)
     {
         if (callback == null) throw new ArgumentNullException(nameof(callback));
         if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval), "Must be positive.");
@@ -126,20 +126,54 @@ public static class Scheduler
     /// <see cref="ResumeAll"/>. Used during round transitions so timing isn't
     /// corrupted by scene loads.
     /// </summary>
-    public static void PauseAll() => _paused = true;
+    internal static void PauseAll() => _paused = true;
 
-    public static void ResumeAll() => _paused = false;
+    internal static void ResumeAll() => _paused = false;
 
     /// <summary>
     /// Cancels all tasks and clears all cooldowns. Intended for catastrophic
     /// reset paths (disconnect, application shutdown). Individual plugins should
     /// <see cref="ScheduledTask.Cancel"/> their own handles.
     /// </summary>
-    public static void ClearAll()
+    internal static void ClearAll()
     {
         foreach (var t in _tasks) t.Cancel();
         _tasks.Clear();
         _cooldowns.Clear();
+        _pendingRemoval.Clear();
+        _paused = false;
+    }
+
+    /// <summary>
+    /// Cancels framework-managed work belonging to one managed module. Peer
+    /// mods cannot call this boundary; they retain and cancel their own task
+    /// handles instead.
+    /// </summary>
+    internal static void ClearOwner(string ownerId)
+    {
+        if (string.IsNullOrWhiteSpace(ownerId))
+            return;
+
+        for (var i = _tasks.Count - 1; i >= 0; i--)
+        {
+            var task = _tasks[i];
+            if (string.Equals(task.OwnerId, ownerId, StringComparison.Ordinal))
+            {
+                task.Cancel();
+                _tasks.RemoveAt(i);
+            }
+        }
+
+        var cooldownsToRemove = new List<string>();
+        string prefix = ownerId + ".";
+        foreach (var key in _cooldowns.Keys)
+        {
+            if (string.Equals(key, ownerId, StringComparison.Ordinal)
+                || key.StartsWith(prefix, StringComparison.Ordinal))
+                cooldownsToRemove.Add(key);
+        }
+        foreach (var key in cooldownsToRemove)
+            _cooldowns.Remove(key);
     }
 
     /// <summary>
@@ -154,16 +188,20 @@ public static class Scheduler
         if (_cooldowns.Count > 0)
         {
             List<string> expired = null;
-            foreach (var kvp in _cooldowns)
+            // Snapshot the keys because updating an existing Dictionary value can
+            // invalidate its enumerator on supported runtimes.
+            foreach (string key in new List<string>(_cooldowns.Keys))
             {
-                double remaining = kvp.Value - deltaSeconds;
+                if (!_cooldowns.TryGetValue(key, out double current))
+                    continue;
+                double remaining = current - deltaSeconds;
                 if (remaining <= 0)
                 {
-                    (expired ??= new List<string>()).Add(kvp.Key);
+                    (expired ??= new List<string>()).Add(key);
                 }
                 else
                 {
-                    _cooldowns[kvp.Key] = remaining;
+                    _cooldowns[key] = remaining;
                 }
             }
             if (expired != null)
@@ -172,10 +210,9 @@ public static class Scheduler
 
         // Tasks: iterate snapshot-safe; allow callbacks to register new tasks without
         // affecting this frame's iteration.
-        int count = _tasks.Count;
-        for (int i = 0; i < count; i++)
+        var snapshot = _tasks.ToArray();
+        foreach (ScheduledTask task in snapshot)
         {
-            var task = _tasks[i];
             if (task.IsCanceled || task.Paused)
             {
                 if (task.IsCanceled) _pendingRemoval.Add(task);

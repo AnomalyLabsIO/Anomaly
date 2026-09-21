@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using Anomaly.Server.Networking;
+using Anomaly.Server.Content;
+using Anomaly.Shared.Assets;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
 using MEC;
@@ -24,6 +26,8 @@ public class FileTransferSession
 
     private static readonly Dictionary<ReferenceHub, FileTransferSession> ActiveSessions =
         new Dictionary<ReferenceHub, FileTransferSession>();
+    private static readonly Dictionary<ReferenceHub, AssetManifestSnapshot> ApprovedManifests =
+        new Dictionary<ReferenceHub, AssetManifestSnapshot>();
     private static readonly object BudgetLock = new object();
 
     private const int MaxActiveTransfers = 8;
@@ -41,6 +45,7 @@ public class FileTransferSession
     private readonly ulong _sessionId;
     private readonly FileManifestMessage _manifestMessage;
     private readonly Dictionary<string, ServerAssetManager.AssetInfo> _manifest;
+    private readonly AssetManifestSnapshot _assetSnapshot;
     private readonly Queue<ServerAssetManager.AssetInfo> _pendingFiles =
         new Queue<ServerAssetManager.AssetInfo>();
 
@@ -60,10 +65,11 @@ public class FileTransferSession
         _sessionId = CreateSessionId();
         _manifestMessage = ServerAssetManager.BuildManifest(_sessionId, out var snapshot);
         _manifest = snapshot;
+        _assetSnapshot = new AssetManifestSnapshot(_manifestMessage.Files);
         _lastActivityUtc = DateTime.UtcNow;
     }
 
-    public static void StartForPlayer(ReferenceHub hub)
+    public static void StartForPlayer(ReferenceHub hub, Action<byte[]> beforeManifestSend = null)
     {
         if (hub == null)
             return;
@@ -71,22 +77,43 @@ public class FileTransferSession
         CleanupPlayer(hub);
         var session = new FileTransferSession(hub);
         ActiveSessions[hub] = session;
-        session.SendManifest();
+        try
+        {
+            beforeManifestSend?.Invoke((byte[])session._manifestMessage.ManifestSha256.Clone());
+            session.SendManifest();
+        }
+        catch (Exception exception)
+        {
+            session.EndSession(false, "content offer preparation failed: " + exception.Message);
+            throw;
+        }
     }
 
     public static void CleanupPlayer(ReferenceHub hub)
     {
-        if (hub != null && ActiveSessions.TryGetValue(hub, out var session))
-            session.EndSession(false, "player disconnected or session was replaced");
+        if (hub == null)
+            return;
+        ApprovedManifests.Remove(hub);
+        if (ActiveSessions.TryGetValue(hub, out var session))
+            session.EndSession(
+                false,
+                "player disconnected or session was replaced",
+                failClosed: false);
     }
+
+    internal static bool IsAssetApproved(ReferenceHub hub, byte[] hash, AssetKind expectedKind) =>
+        hub != null &&
+        ApprovedManifests.TryGetValue(hub, out AssetManifestSnapshot manifest) &&
+        manifest.Contains(hash, expectedKind);
 
     public static void Reset()
     {
         var sessions = new List<FileTransferSession>(ActiveSessions.Values);
         foreach (var session in sessions)
-            session.EndSession(false, "server reset");
+            session.EndSession(false, "server reset", failClosed: false);
 
         ActiveSessions.Clear();
+        ApprovedManifests.Clear();
         lock (BudgetLock)
         {
             _reservedTransferCount = 0;
@@ -114,16 +141,22 @@ public class FileTransferSession
     {
         try
         {
-            AnomalyMessaging.SendToClient(_hub, _manifestMessage);
+            if (!AnomalyMessaging.TrySendToClient(_hub, _manifestMessage))
+                throw new InvalidOperationException("the authenticated manifest could not be delivered");
             _lastActivityUtc = DateTime.UtcNow;
             _watchdogHandle = Timing.RunCoroutine(Watchdog());
-            Logger.Info(
-                $"FileTransfer: Sent bounded manifest ({_manifestMessage.Files.Count} files, session={_sessionId:x16}) " +
-                $"to {_hub.LoggedNameFromRefHub()}.");
+            try
+            {
+                Logger.Info(
+                    $"FileTransfer: Sent bounded manifest ({_manifestMessage.Files.Count} files, session={_sessionId:x16}) " +
+                    $"to {_hub.LoggedNameFromRefHub()}.");
+            }
+            catch { }
         }
         catch (Exception ex)
         {
             EndSession(false, $"manifest send failed: {ex.Message}");
+            throw;
         }
     }
 
@@ -137,6 +170,11 @@ public class FileTransferSession
         if (request.SessionId != _sessionId)
         {
             EndSession(false, "request session id did not match the advertised manifest");
+            return;
+        }
+        if (!ContentGrantGate.TryBeginTransfer(_hub.netId))
+        {
+            EndSession(false, "file request arrived without matching user consent");
             return;
         }
 
@@ -178,9 +216,13 @@ public class FileTransferSession
             return;
         }
 
-        Logger.Info(
-            $"FileTransfer: Accepted {_pendingFiles.Count} files ({requestedBytes} bytes, session={_sessionId:x16}) " +
-            $"for {_hub.LoggedNameFromRefHub()}.");
+        try
+        {
+            Logger.Info(
+                $"FileTransfer: Accepted {_pendingFiles.Count} files ({requestedBytes} bytes, session={_sessionId:x16}) " +
+                $"for {_hub.LoggedNameFromRefHub()}.");
+        }
+        catch { }
         SendNextFile();
     }
 
@@ -211,9 +253,16 @@ public class FileTransferSession
 
         _state = State.Sending;
         _lastActivityUtc = DateTime.UtcNow;
-        if (_sendHandle.IsRunning)
-            Timing.KillCoroutines(_sendHandle);
-        _sendHandle = Timing.RunCoroutine(SendFileChunks(_currentFile));
+        try
+        {
+            if (_sendHandle.IsRunning)
+                Timing.KillCoroutines(_sendHandle);
+            _sendHandle = Timing.RunCoroutine(SendFileChunks(_currentFile));
+        }
+        catch (Exception exception)
+        {
+            EndSession(false, "transfer coroutine could not be started safely: " + exception.Message);
+        }
     }
 
     private IEnumerator<float> SendFileChunks(ServerAssetManager.AssetInfo asset)
@@ -288,14 +337,15 @@ public class FileTransferSession
                     }
 
                     sha.TransformBlock(data, 0, data.Length, data, 0);
-                    AnomalyMessaging.SendToClient(_hub, new FileChunkMessage
+                    if (!AnomalyMessaging.TrySendToClient(_hub, new FileChunkMessage
                     {
                         SessionId = _sessionId,
                         Hash = (byte[])asset.Hash.Clone(),
                         ChunkIndex = checked((ushort)i),
                         TotalChunks = checked((ushort)totalChunks),
                         Data = data
-                    });
+                    }))
+                        throw new InvalidOperationException("the authenticated chunk could not be delivered");
                 }
                 catch (Exception ex)
                 {
@@ -321,11 +371,26 @@ public class FileTransferSession
                 yield break;
             }
 
-            AnomalyMessaging.SendToClient(_hub, new FileTransferCompleteMessage
+            try
             {
-                SessionId = _sessionId,
-                Hash = (byte[])asset.Hash.Clone()
-            });
+                if (!AnomalyMessaging.TrySendToClient(_hub, new FileTransferCompleteMessage
+                    {
+                        SessionId = _sessionId,
+                        Hash = (byte[])asset.Hash.Clone()
+                    }))
+                {
+                    throw new InvalidOperationException(
+                        "the authenticated completion marker could not be delivered");
+                }
+            }
+            catch (Exception ex)
+            {
+                EndSession(
+                    false,
+                    $"completion marker send failed for '{asset.RelativePath}': {ex.Message}",
+                    false);
+                yield break;
+            }
             _state = State.AwaitingAck;
             _lastActivityUtc = DateTime.UtcNow;
         }
@@ -359,9 +424,13 @@ public class FileTransferSession
             return;
         }
 
-        Logger.Warn(
-            $"FileTransfer: Matched failure ACK for '{_currentFile.RelativePath}'; " +
-            $"retrying {_retryCount}/{MaxRetries}.");
+        try
+        {
+            Logger.Warn(
+                $"FileTransfer: Matched failure ACK for '{_currentFile.RelativePath}'; " +
+                $"retrying {_retryCount}/{MaxRetries}.");
+        }
+        catch { }
         StartCurrentFile();
     }
 
@@ -409,37 +478,139 @@ public class FileTransferSession
         }
     }
 
-    private void EndSession(bool completed, string reason, bool stopSend = true)
+    private void EndSession(
+        bool completed,
+        string reason,
+        bool stopSend = true,
+        bool failClosed = true)
     {
         if (_state == State.Complete || _state == State.Aborted)
             return;
 
         _state = completed ? State.Complete : State.Aborted;
-        if (stopSend && _sendHandle.IsRunning)
-            Timing.KillCoroutines(_sendHandle);
-        if (_watchdogHandle.IsRunning)
-            Timing.KillCoroutines(_watchdogHandle);
+
+        // Revoke logical ownership and release the global budget before
+        // touching the external scheduler. A failed coroutine cancellation
+        // cannot retain an active/approved transfer or exhaust future slots.
         ReleaseBudget();
 
+        bool ownedActiveSession = false;
         if (ActiveSessions.TryGetValue(_hub, out var current) && ReferenceEquals(current, this))
+        {
+            ownedActiveSession = true;
             ActiveSessions.Remove(_hub);
+        }
+
+        if (!completed && ownedActiveSession)
+            ApprovedManifests.Remove(_hub);
+
+        if (!completed && failClosed && ownedActiveSession)
+        {
+            ContentGrantGate.Remove(_hub.netId);
+            FailClosedAuthenticatedPlayer("file-transfer-failure");
+        }
+
+        if (stopSend)
+            StopCoroutineBestEffort(_sendHandle, "send");
+        StopCoroutineBestEffort(_watchdogHandle, "watchdog");
 
         if (!completed)
         {
-            Logger.Warn(
-                $"FileTransfer: Aborted session {_sessionId:x16} for {_hub.LoggedNameFromRefHub()}: {reason}.");
+            try
+            {
+                Logger.Warn(
+                    $"FileTransfer: Aborted session {_sessionId:x16} for {_hub.LoggedNameFromRefHub()}: {reason}.");
+            }
+            catch { }
             return;
         }
 
-        Logger.Info(
-            $"FileTransfer: Completed session {_sessionId:x16} for {_hub.LoggedNameFromRefHub()}: {reason}.");
+        if (!ContentGrantGate.TryCompleteTransfer(_hub.netId))
+        {
+            ApprovedManifests.Remove(_hub);
+            if (ownedActiveSession)
+            {
+                ContentGrantGate.Remove(_hub.netId);
+                FailClosedAuthenticatedPlayer("file-transfer-completion-state-mismatch");
+            }
+            try
+            {
+                Logger.Error(
+                    $"FileTransfer: Completed session {_sessionId:x16} without an approved transfer state for " +
+                    $"{_hub.LoggedNameFromRefHub()}; activation remains closed.");
+            }
+            catch { }
+            return;
+        }
+
+        try { ApprovedManifests[_hub] = _assetSnapshot; }
+        catch (Exception exception)
+        {
+            if (ownedActiveSession)
+            {
+                ContentGrantGate.Remove(_hub.netId);
+                FailClosedAuthenticatedPlayer("approved-manifest-publication-failure");
+            }
+            try { Logger.Error($"FileTransfer: Approved manifest publication failed: {exception}"); }
+            catch { }
+            return;
+        }
+
+        Delegate[] subscribers = SessionCompleted?.GetInvocationList() ?? Array.Empty<Delegate>();
+        foreach (Delegate subscriber in subscribers)
+        {
+            try
+            {
+                ((Action<ReferenceHub>)subscriber)(_hub);
+            }
+            catch (Exception ex)
+            {
+                try { Logger.Error($"FileTransfer: SessionCompleted subscriber threw: {ex}"); }
+                catch { }
+            }
+        }
         try
         {
-            SessionCompleted?.Invoke(_hub);
+            Logger.Info(
+                $"FileTransfer: Completed session {_sessionId:x16} for {_hub.LoggedNameFromRefHub()}: {reason}.");
         }
-        catch (Exception ex)
+        catch { }
+    }
+
+    private void StopCoroutineBestEffort(CoroutineHandle handle, string name)
+    {
+        if (!handle.IsRunning)
+            return;
+        try { Timing.KillCoroutines(handle); }
+        catch (Exception exception)
         {
-            Logger.Error($"FileTransfer: SessionCompleted handler threw: {ex}");
+            try
+            {
+                Logger.Error(
+                    $"FileTransfer: Failed to stop {name} coroutine for session {_sessionId:x16}: {exception}");
+            }
+            catch { }
+        }
+    }
+
+    private void FailClosedAuthenticatedPlayer(string context)
+    {
+        Exception quarantineFailure = null;
+        Exception disconnectFailure = null;
+        try { Plugin.QuarantineAuthenticatedPlayer(_hub, context); }
+        catch (Exception exception) { quarantineFailure = exception; }
+        try { _hub?.connectionToClient?.Disconnect(); }
+        catch (Exception exception) { disconnectFailure = exception; }
+
+        if (quarantineFailure != null)
+        {
+            try { Logger.Error($"FileTransfer: Failed to quarantine after {context}: {quarantineFailure}"); }
+            catch { }
+        }
+        if (disconnectFailure != null)
+        {
+            try { Logger.Error($"FileTransfer: Failed to disconnect after {context}: {disconnectFailure}"); }
+            catch { }
         }
     }
 

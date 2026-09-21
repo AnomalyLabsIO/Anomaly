@@ -5,6 +5,7 @@ using System.Text;
 using Anomaly.Server.Utils;
 using Anomaly.Shared.Auth;
 using Anomaly.Shared.Networking;
+using CentralAuth;
 using GameCore;
 using HarmonyLib;
 using LabApi.Events;
@@ -57,6 +58,15 @@ public static class ProcessConnectionRequestPatch
 
     private static bool OnConnectionRequestInner(ConnectionRequest request)
     {
+        if (!Plugin.IsAdmissionOpen)
+        {
+            // A partially initialized or restoration-failed plugin must consume
+            // the request. Falling through while OnlineMode is false would hand
+            // the peer to vanilla's unauthenticated offline path.
+            TryRejectOnException(request);
+            return false;
+        }
+
         OffThreadLogger.Info("Connection from " + request.RemoteEndPoint.Address);
 
         try
@@ -527,27 +537,17 @@ public static class ProcessConnectionRequestPatch
             }
             #endregion
 
-            #region Geoblocking
-            var region = "";
-            //TODO: Geoblocking
-            //NW just sends the country along in the Request and that means it is really easy to manipulate
-            if (false)
-            {
-                RequestRejected();
-                if (LogRejection)
-                {
-                    OffThreadLogger.Debug($"Player {userId} ({ip}) tried to join from a blocked country {("INSERT COUNTRY HERE")}");
-                }
-
-                RequestWriter.Reset();
-                RequestWriter.Put(9);
-                request.Reject(RequestWriter);
-                CustomLiteNetLib4MirrorTransport.ResetIdleMode();
-            }
-            #endregion
+            var preauthFlags = CentralAuthPreauthFlags.None;
 
             #region Slots
-            if (!HasSlot(userId))
+            // Use the game's user-aware fullness check so the authenticated
+            // enrollment ID, configured reserved-slot list, and current slot
+            // limits are evaluated by the same path as vanilla preauth.
+            bool serverFull = ServerFullnessPolicy.IsFull(
+                userId,
+                preauthFlags,
+                CustomLiteNetLib4MirrorTransport.IsServerFull);
+            if (serverFull)
             {
                 OffThreadLogger.Debug($"Player {userId} ({ip}) rejected - server full");
                 RequestWriter.Reset();
@@ -560,7 +560,16 @@ public static class ProcessConnectionRequestPatch
 
             #region LabAPI
             int position = request.Data.Position;
-            PlayerPreAuthenticatingEventArgs ev = new PlayerPreAuthenticatingEventArgs(!CustomLiteNetLib4MirrorTransport.IsServerFull(), userId, request.RemoteEndPoint.Address.ToString(), 0L, CentralAuthPreauthFlags.None, string.Empty, (byte[]) null, request, position);
+            PlayerPreAuthenticatingEventArgs ev = new PlayerPreAuthenticatingEventArgs(
+                !serverFull,
+                userId,
+                request.RemoteEndPoint.Address.ToString(),
+                0L,
+                preauthFlags,
+                string.Empty,
+                (byte[]) null,
+                request,
+                position);
             LabApi.Events.Handlers.PlayerEvents.OnPreAuthenticating(ev);
             if (!ev.IsAllowed)
             {
@@ -599,7 +608,62 @@ public static class ProcessConnectionRequestPatch
                     player.TranscriptHash = (byte[])keys.TranscriptHash.Clone();
                 }
 
-                if (!AuthHandler.StorePlayer(request.RemoteEndPoint, player))
+                if (!Plugin.IsAdmissionOpen)
+                {
+                    player.ClearSecrets();
+                    TryRejectOnException(request);
+                    return false;
+                }
+
+                if (!AcceptedClientIdentityStore.TryValidateAndCommit(
+                        userId,
+                        authenticatedConnection.Handshake,
+                        out var acceptedIdentityError))
+                {
+                    player.ClearSecrets();
+                    OffThreadLogger.Warn(
+                        $"Rejected client identity progression for {userId} ({ip}): {acceptedIdentityError}");
+                    RequestWriter.Reset();
+                    RequestWriter.Put((byte)RejectionReason.InvalidToken);
+                    request.RejectForce(RequestWriter);
+                    return false;
+                }
+
+                player.EnrollmentReservation = EnrollmentSessionRegistry.Reserve(
+                    userId,
+                    PlayerAuthenticationManager.AllowSameAccountJoining);
+
+                bool storedPlayer = false;
+                bool admissionCommitted;
+                try
+                {
+                    admissionCommitted = Plugin.TryCommitAuthenticatedAdmission(() =>
+                    {
+                        storedPlayer = AuthHandler.StorePlayer(request.RemoteEndPoint, player);
+                        if (storedPlayer)
+                            request.Accept();
+                    });
+                }
+                catch
+                {
+                    if (storedPlayer)
+                        AuthHandler.RemoveStoredPlayer(request.RemoteEndPoint);
+                    else
+                    {
+                        EnrollmentSessionRegistry.Cancel(userId, player.EnrollmentReservation);
+                        player.ClearSecrets();
+                    }
+                    throw;
+                }
+
+                if (!admissionCommitted)
+                {
+                    EnrollmentSessionRegistry.Cancel(userId, player.EnrollmentReservation);
+                    player.ClearSecrets();
+                    TryRejectOnException(request);
+                    return false;
+                }
+                if (!storedPlayer)
                 {
                     OffThreadLogger.Warn($"Rejected {ip}: verified-player handoff capacity is full.");
                     RequestWriter.Reset();
@@ -607,8 +671,6 @@ public static class ProcessConnectionRequestPatch
                     request.RejectForce(RequestWriter);
                     return false;
                 }
-
-                request.Accept();
                 CustomLiteNetLib4MirrorTransport.PreauthDisableIdleMode();
                 LabApi.Events.Handlers.PlayerEvents.OnPreAuthenticated(new PlayerPreAuthenticatedEventArgs(userId, request.RemoteEndPoint.Address.ToString(), 0L, CentralAuthPreauthFlags.None, string.Empty, (byte[]) null, request, position));
             }
@@ -685,25 +747,6 @@ public static class ProcessConnectionRequestPatch
         CustomLiteNetLib4MirrorTransport.Rejected += 1u;
         if (CustomLiteNetLib4MirrorTransport.Rejected > CustomLiteNetLib4MirrorTransport.RejectionThreshold)
             CustomLiteNetLib4MirrorTransport.SuppressRejections = true;
-    }
-
-    private static bool HasSlot(string userId)
-    {
-        //When the configured max slots are not full yet allow connections
-        if (LiteNetLib4MirrorCore.Host.ConnectedPeersCount < CustomNetworkManager.slots)
-            return true;
-
-        //Reject the Connection when Mirror can't handle another Request
-        if (LiteNetLib4MirrorCore.Host.ConnectedPeersCount == LiteNetLib4MirrorNetworkManager.singleton.maxConnections)
-            return false;
-
-        if(ConfigFile.ServerConfig.GetBool("use_reserved_slots",true) && ReservedSlot.HasReservedSlot(userId))
-        {
-            if (LiteNetLib4MirrorCore.Host.ConnectedPeersCount < CustomNetworkManager.slots + CustomNetworkManager.reservedSlots)
-                return true;
-        }
-
-        return false;
     }
 
     private static void WritePasswordChallenge(NetDataWriter writer, PasswordChallenge challenge)

@@ -1,5 +1,4 @@
 using System;
-using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Networking;
 using Anomaly.Shared.Networking.Messages;
 using LabApi.Events.Arguments.ServerEvents;
@@ -15,10 +14,8 @@ namespace Anomaly.Server.Round
     /// plugins can react to the same moments.
     /// </summary>
     /// <remarks>
-    /// Late-join replay: when a new hub connects, <c>FileTransferSession.SessionCompleted</c>
-    /// already fires after initial assets are ready; we hook that in
-    /// <c>RoundStateBroadcaster.BroadcastCurrentTo</c> so clients joining mid-round
-    /// get the current phase as well.
+    /// Late-join replay is tied to the authenticated client-ready event and is
+    /// deliberately independent of optional asset consent or transfer outcome.
     /// </remarks>
     internal static class RoundStateBroadcaster
     {
@@ -39,11 +36,7 @@ namespace Anomaly.Server.Round
             ServerEvents.RoundEnded        += OnRoundEnded;
             ServerEvents.RoundRestarted    += OnRoundRestarted;
 
-            // Late-join: when a hub finishes its initial file transfer, replay the
-            // current phase to them so they don't miss the transition they would
-            // otherwise have seen. Matches the self-contained pattern used by
-            // AssetSpawner and AssetOverrides.
-            FileTransferSession.SessionCompleted += BroadcastCurrentTo;
+            AnomalyMessaging.ClientReady += BroadcastCurrentTo;
 
             Logger.Info("RoundStateBroadcaster: subscribed to LabAPI round events.");
         }
@@ -59,7 +52,7 @@ namespace Anomaly.Server.Round
                 ServerEvents.RoundEnded        -= OnRoundEnded;
                 ServerEvents.RoundRestarted    -= OnRoundRestarted;
 
-                FileTransferSession.SessionCompleted -= BroadcastCurrentTo;
+                AnomalyMessaging.ClientReady -= BroadcastCurrentTo;
                 _hooked = false;
             }
 

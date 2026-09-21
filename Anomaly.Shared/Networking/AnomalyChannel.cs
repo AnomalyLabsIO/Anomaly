@@ -32,12 +32,12 @@ namespace Anomaly.Shared.Networking
     public static class AnomalyProtocol
     {
         /// <summary>
-        /// v2: authenticates the complete client/server handshake transcript,
-        /// adds a persistent signed server identity and stateless retry cookie,
-        /// and introduces transfer/session wire hardening. v1 is intentionally
+        /// v3: replaces the incompatible custom-content catalogs with one
+        /// SHA-256-bound items-only contract and adds explicit consent and
+        /// server-local enrollment disclosure. Older versions are intentionally
         /// rejected; there is no silent downgrade path.
         /// </summary>
-        public const byte CurrentVersion = 2;
+        public const byte CurrentVersion = 3;
     }
 
     /// <summary>

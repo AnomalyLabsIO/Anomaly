@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Anomaly.Client.Api.Assets;
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Networking;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
@@ -14,15 +15,13 @@ namespace Anomaly.Client.Internal.Audio;
 internal static class AnnouncerVocabularyReceiver
 {
     private static readonly Dictionary<string, CassieLine> _serverLines = new(StringComparer.OrdinalIgnoreCase);
-    private static bool _initialized;
+    private static readonly TransactionalInitializer Initializer = new();
 
     public static void Init()
     {
-        if (_initialized)
-            return;
-
-        _initialized = true;
-        AnomalyMessaging.MessageReceived += OnMessage;
+        Initializer.Initialize(new InitializationStep(
+            () => AnomalyMessaging.MessageReceived += OnMessage,
+            () => AnomalyMessaging.MessageReceived -= OnMessage));
     }
 
     public static void Clear()

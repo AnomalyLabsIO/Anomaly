@@ -11,13 +11,15 @@
         <RootNamespace>Anomaly.Server</RootNamespace>
         <AssemblyName>Anomaly.Server</AssemblyName>
         <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-        <RuntimeIdentifiers>win</RuntimeIdentifiers>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
         <FileAlignment>512</FileAlignment>
         <LangVersion>12</LangVersion>
         <DeployLocal Condition="'$(DeployLocal)' == ''">false</DeployLocal>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-        <PlatformTarget>AnyCPU</PlatformTarget>
+        <PlatformTarget>x64</PlatformTarget>
+        <Prefer32Bit>false</Prefer32Bit>
         <DebugSymbols>true</DebugSymbols>
         <DebugType>full</DebugType>
         <Optimize>false</Optimize>
@@ -28,7 +30,8 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-        <PlatformTarget>AnyCPU</PlatformTarget>
+        <PlatformTarget>x64</PlatformTarget>
+        <Prefer32Bit>false</Prefer32Bit>
         <DebugType>pdbonly</DebugType>
         <Optimize>true</Optimize>
         <OutputPath>bin\Release\</OutputPath>
@@ -39,141 +42,156 @@
     </PropertyGroup>
     <ItemGroup>
         <Reference Include="0Harmony">
-          <HintPath>..\..\Server\0Harmony.dll</HintPath>
+          <HintPath>$(AnomalyHarmonyPath)</HintPath>
         </Reference>
         <Reference Include="Assembly-CSharp">
-          <HintPath>..\..\..\SCPSL\Talky\packages\ExMod.Exiled.9.14.2\lib\net48\Assembly-CSharp-Publicized.dll</HintPath>
+          <HintPath>$(AnomalyServerPublicizedAssembly)</HintPath>
         </Reference>
         <Reference Include="Assembly-CSharp-firstpass">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\Assembly-CSharp-firstpass.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\Assembly-CSharp-firstpass.dll</HintPath>
         </Reference>
         <Reference Include="BouncyCastle.Cryptography">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\BouncyCastle.Cryptography.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\BouncyCastle.Cryptography.dll</HintPath>
         </Reference>
         <Reference Include="CommandSystem.Core">
-          <HintPath>C:\Users\tayjm\Desktop\scpsl\SCPSL_Data\Managed\CommandSystem.Core.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\CommandSystem.Core.dll</HintPath>
         </Reference>
         <Reference Include="DnsClient">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\DnsClient.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\DnsClient.dll</HintPath>
         </Reference>
         <Reference Include="LabApi">
-          <HintPath>C:\Users\tayjm\Desktop\scpsl\SCPSL_Data\Managed\LabApi.dll</HintPath>
+          <HintPath>$(AnomalyLabApiDir)\LabApi.dll</HintPath>
         </Reference>
         <Reference Include="Mirror">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\Mirror.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\Mirror.dll</HintPath>
         </Reference>
         <Reference Include="Mirror.Components">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\Mirror.Components.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\Mirror.Components.dll</HintPath>
         </Reference>
         <Reference Include="mscorlib">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\mscorlib.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\mscorlib.dll</HintPath>
         </Reference>
         <Reference Include="NorthwoodLib">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\NorthwoodLib.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\NorthwoodLib.dll</HintPath>
         </Reference>
         <Reference Include="Pooling">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\Pooling.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\Pooling.dll</HintPath>
         </Reference>
         <Reference Include="System">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.dll</HintPath>
         </Reference>
         <Reference Include="System.Buffers">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Buffers.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Buffers.dll</HintPath>
         </Reference>
         <Reference Include="System.Collections.Immutable">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Collections.Immutable.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Collections.Immutable.dll</HintPath>
         </Reference>
         <Reference Include="System.ComponentModel.Composition">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.ComponentModel.Composition.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.ComponentModel.Composition.dll</HintPath>
         </Reference>
         <Reference Include="System.Configuration">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Configuration.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Configuration.dll</HintPath>
         </Reference>
         <Reference Include="System.Core">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Core.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Core.dll</HintPath>
         </Reference>
         <Reference Include="System.Data">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Data.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Data.dll</HintPath>
         </Reference>
         <Reference Include="System.Data.DataSetExtensions">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Data.DataSetExtensions.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Data.DataSetExtensions.dll</HintPath>
         </Reference>
         <Reference Include="System.Drawing">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Drawing.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Drawing.dll</HintPath>
         </Reference>
         <Reference Include="System.EnterpriseServices">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.EnterpriseServices.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.EnterpriseServices.dll</HintPath>
         </Reference>
         <Reference Include="System.IO.Compression">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.IO.Compression.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.IO.Compression.dll</HintPath>
         </Reference>
         <Reference Include="System.IO.Compression.FileSystem">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.IO.Compression.FileSystem.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.IO.Compression.FileSystem.dll</HintPath>
         </Reference>
         <Reference Include="System.IO.Pipelines">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.IO.Pipelines.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.IO.Pipelines.dll</HintPath>
         </Reference>
         <Reference Include="System.Net.Http">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Net.Http.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Net.Http.dll</HintPath>
         </Reference>
         <Reference Include="System.Numerics">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Numerics.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Numerics.dll</HintPath>
         </Reference>
         <Reference Include="System.Numerics.Vectors">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Numerics.Vectors.dll</HintPath>
+          <HintPath>$(PkgSystem_Numerics_Vectors)\lib\net46\System.Numerics.Vectors.dll</HintPath>
+          <Private>true</Private>
         </Reference>
         <Reference Include="System.Runtime">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Runtime.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Runtime.dll</HintPath>
         </Reference>
         <Reference Include="System.Runtime.CompilerServices.Unsafe">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
         </Reference>
         <Reference Include="System.Runtime.Serialization">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Runtime.Serialization.dll</HintPath>
-        </Reference>
-        <Reference Include="System.Security">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Security.dll</HintPath>
-        </Reference>
-        <Reference Include="System.ServiceModel.Internals">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.ServiceModel.Internals.dll</HintPath>
-        </Reference>
-        <Reference Include="System.Text.Encodings.Web">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Text.Encodings.Web.dll</HintPath>
-        </Reference>
-        <Reference Include="System.Text.Json">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Text.Json.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Runtime.Serialization.dll</HintPath>
         </Reference>
         <Reference Include="System.Threading.Tasks.Extensions">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Threading.Tasks.Extensions.dll</HintPath>
+          <HintPath>$(PkgSystem_Threading_Tasks_Extensions)\lib\net461\System.Threading.Tasks.Extensions.dll</HintPath>
+          <Private>true</Private>
+        </Reference>
+        <Reference Include="System.Security">
+          <HintPath>$(AnomalyServerReferenceDir)\System.Security.dll</HintPath>
+        </Reference>
+        <Reference Include="System.ServiceModel.Internals">
+          <HintPath>$(AnomalyServerReferenceDir)\System.ServiceModel.Internals.dll</HintPath>
+        </Reference>
+        <Reference Include="System.Text.Encodings.Web">
+          <HintPath>$(AnomalyServerReferenceDir)\System.Text.Encodings.Web.dll</HintPath>
+        </Reference>
+        <Reference Include="System.Text.Json">
+          <HintPath>$(AnomalyServerReferenceDir)\System.Text.Json.dll</HintPath>
         </Reference>
         <Reference Include="System.Transactions">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Transactions.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Transactions.dll</HintPath>
         </Reference>
         <Reference Include="System.Xml">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Xml.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Xml.dll</HintPath>
         </Reference>
         <Reference Include="System.Xml.Linq">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\System.Xml.Linq.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\System.Xml.Linq.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\UnityEngine.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\UnityEngine.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.AudioModule">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\UnityEngine.AudioModule.dll</HintPath>
         </Reference>
         <Reference Include="UnityEngine.CoreModule">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\UnityEngine.CoreModule.dll</HintPath>
         </Reference>
+    </ItemGroup>
+    <ItemGroup>
+      <!-- The deployed Text.Json/Pipelines assemblies require these exact
+           strong-name versions; the stock server directory contains older
+           facade versions. Ship this pinned closure with the plugin. -->
+      <PackageReference Include="System.Numerics.Vectors" Version="4.4.0"
+                        GeneratePathProperty="true" ExcludeAssets="compile;runtime" />
+      <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4"
+                        GeneratePathProperty="true" ExcludeAssets="compile;runtime" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Round\RoundStateBroadcaster.cs" />
         <Compile Include="Round\RoundStartBridge.cs" />
         <Compile Include="Auth\AuthHandler.cs" />
+        <Compile Include="Auth\AcceptedClientIdentityJournal.cs" />
+        <Compile Include="Auth\AcceptedClientIdentityStore.cs" />
         <Compile Include="Auth\Connection.cs" />
+        <Compile Include="Auth\EnrollmentSessionRegistry.cs" />
         <Compile Include="Auth\PasswordStore.cs" />
         <Compile Include="Auth\PreauthGate.cs" />
         <Compile Include="Auth\PlayerStorage.cs" />
         <Compile Include="Auth\ServerIdentityStore.cs" />
+        <Compile Include="Auth\ServerFullnessPolicy.cs" />
         <Compile Include="Commands\PasswordCommand.cs" />
         <Compile Include="Commands\ServerIdentityCommand.cs" />
         <Compile Include="Config.cs" />
@@ -184,27 +202,27 @@
         <Compile Include="Properties\AssemblyInfo.cs"/>
         <Compile Include="Networking\AnomalyMessaging.cs" />
         <Compile Include="Networking\AuthenticatedTransportSessions.cs" />
+        <Compile Include="Networking\EncryptedTransportCounterGuard.cs" />
         <Compile Include="Networking\AnomalyReplayTable.cs" />
         <Compile Include="Assets\AssetFileWatcher.cs" />
         <Compile Include="Assets\AssetOverrides.cs" />
         <Compile Include="Assets\AssetRegistry.cs" />
-        <Compile Include="Assets\AssetSpawner.cs" />
         <Compile Include="Features\Announcer.cs" />
         <Compile Include="Features\PlayerColorState.cs" />
         <Compile Include="Features\PlayerColorBridge.cs" />
         <Compile Include="Features\ClientCapabilities.cs" />
         <Compile Include="Features\PlayerMotion.cs" />
         <Compile Include="Internal\Motion\FpcMotionHandoff.cs" />
+        <Compile Include="Lifecycle\ServerLifecycleTransaction.cs" />
         <Compile Include="Content\Content.cs" />
         <Compile Include="Content\ContentCatalogBridge.cs" />
+        <Compile Include="Content\ContentActivationCoordinator.cs" />
         <Compile Include="Content\ServerContentRegistrar.cs" />
         <Compile Include="Content\ContentRegistry.cs" />
         <Compile Include="Content\ContentGrantGate.cs" />
+        <Compile Include="Content\ContentReadiness.cs" />
         <Compile Include="Content\CustomItemDefinition.cs" />
-        <Compile Include="Content\CustomRoleDefinition.cs" />
-        <Compile Include="Content\CustomEffectDefinition.cs" />
         <Compile Include="Content\ItemLogicBase.cs" />
-        <Compile Include="Content\RoleLogicBase.cs" />
         <Compile Include="FileTransfer\FileTransferSession.cs" />
         <Compile Include="FileTransfer\ServerAssetManager.cs" />
         <Compile Include="Map\FacilityGlyphs.cs" />
@@ -228,9 +246,6 @@
       $(AnomalyPluginsDir) via env var or a .csproj.user file to redirect. Anomaly.Shared
       is deployed by its own post-build target so it isn't copied here.
     -->
-    <PropertyGroup>
-      <AnomalyPluginsDir Condition="'$(AnomalyPluginsDir)' == ''">E:\Projects\AnomalyLabs\Server\server\AppData\SCP Secret Laboratory\LabAPI\plugins\global</AnomalyPluginsDir>
-    </PropertyGroup>
     <Target Name="CopyToLocalServer" AfterTargets="Build">
       <Message Importance="high" Text="Anomaly.Server: copying $(TargetFileName) -&gt; $(AnomalyPluginsDir)" Condition="'$(DeployLocal)' == 'true' And Exists('$(AnomalyPluginsDir)')" />
       <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyPluginsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="'$(DeployLocal)' == 'true' And Exists('$(AnomalyPluginsDir)')" />

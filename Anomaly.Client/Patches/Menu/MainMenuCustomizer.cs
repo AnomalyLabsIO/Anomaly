@@ -168,9 +168,11 @@ internal static class MainMenuCustomizer
         {
             if (menu == null) return;
 
-            string text = IsAuthGood(out var username)
-                ? Tr.Get(TrKeys.Menu_AuthConnected, username)
-                : Tr.Get(TrKeys.Menu_AuthNotSignedIn);
+            string text = AuthHandler.InitializationState == AuthInitializationState.Failed
+                ? Tr.Get(TrKeys.Menu_AuthUnavailable)
+                : IsAuthGood(out var username)
+                    ? Tr.Get(TrKeys.Menu_AuthConnected, username)
+                    : Tr.Get(TrKeys.Menu_AuthNotSignedIn);
 
             AuthStatusOverlay.SetDefault(text);
         }
@@ -267,7 +269,8 @@ internal static class MainMenuCustomizer
     {
         var auth = AuthHandler.PlayerAuth;
         username = auth.Username;
-        return !string.IsNullOrEmpty(auth.Username)
+        return AuthHandler.InitializationState == AuthInitializationState.Ready
+            && !string.IsNullOrEmpty(auth.Username)
             && !string.IsNullOrEmpty(auth.Identity)
             && auth.Identity != "pending";
     }

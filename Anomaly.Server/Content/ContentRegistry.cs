@@ -1,223 +1,249 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Anomaly.Server.Assets;
+using Anomaly.Server.FileTransfer;
+using Anomaly.Shared.Assets;
 using Anomaly.Shared.Content;
+using Anomaly.Shared.Networking.Messages;
 using InventorySystem;
-using UnityEngine;
 using Logger = LabApi.Features.Console.Logger;
 
 namespace Anomaly.Server.Content
 {
-    /// <summary>
-    /// Order-independent store of registered custom-content definitions, frozen once (before
-    /// any spawn) into a deterministic <see cref="ContentCatalog"/>. Computes the custom id
-    /// bases from the LIVE game enums + loader dictionaries so they auto-adapt to game updates
-    /// (never hardcoded). Post-freeze it exposes id/key/logic/entry lookups for the bridge,
-    /// registrar, grant helpers, and name bridge.
-    /// </summary>
+    /// <summary>Order-independent registration and frozen items-only session catalog.</summary>
     internal static class ContentRegistry
     {
-        // Item pickup ids cross the (widened) wire as a byte; reserve 255 for ItemType.None.
-        private const int ItemIdCeiling = 254;
+        private const int ItemIdCeiling = 127;
 
-        private static readonly Dictionary<string, CustomItemDefinition> _items = new Dictionary<string, CustomItemDefinition>();
-        private static readonly Dictionary<string, CustomRoleDefinition> _roles = new Dictionary<string, CustomRoleDefinition>();
-        private static readonly Dictionary<string, CustomEffectDefinition> _effects = new Dictionary<string, CustomEffectDefinition>();
+        private static readonly Dictionary<string, CustomItemDefinition> Items =
+            new Dictionary<string, CustomItemDefinition>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, int> KeyToId =
+            new Dictionary<string, int>(StringComparer.Ordinal);
+        private static readonly Dictionary<int, CatalogEntry> ItemById =
+            new Dictionary<int, CatalogEntry>();
+        private static readonly Dictionary<int, ItemLogicBase> ItemLogic =
+            new Dictionary<int, ItemLogicBase>();
+        private static string _registrationError;
 
         public static bool Frozen { get; private set; }
-        public static ContentCatalog Catalog { get; private set; } = new ContentCatalog();
+        public static bool Materialized { get; private set; }
+        public static ContentCatalog Catalog { get; private set; } = EmptyCatalog();
 
-        // Post-freeze lookups.
-        private static readonly Dictionary<string, int> _keyToId = new Dictionary<string, int>();
-        private static readonly Dictionary<int, CatalogEntry> _itemById = new Dictionary<int, CatalogEntry>();
-        private static readonly Dictionary<int, CatalogEntry> _roleById = new Dictionary<int, CatalogEntry>();
-        private static readonly Dictionary<int, ItemLogicBase> _itemLogic = new Dictionary<int, ItemLogicBase>();
-        private static readonly Dictionary<int, RoleLogicBase> _roleLogic = new Dictionary<int, RoleLogicBase>();
-
-        internal static void Add(CustomItemDefinition def) => AddGeneric(def?.Key, def, _items, "item");
-
-        internal static void Add(CustomRoleDefinition def)
+        internal static void Add(CustomItemDefinition definition)
         {
-            if (def != null)
-                Logger.Warn(
-                    $"Anomaly.Content: custom role '{def.Key}' rejected; v1 is items-only and has no safe role materializer.");
-        }
-
-        internal static void Add(CustomEffectDefinition def)
-        {
-            if (def != null)
-                Logger.Warn(
-                    $"Anomaly.Content: custom effect '{def.Key}' rejected; v1 is items-only and has no safe effect materializer.");
-        }
-
-        private static void AddGeneric<T>(string key, T def, Dictionary<string, T> store, string kind) where T : class
-        {
+            if (definition == null)
+            {
+                RejectRegistration("a null custom item definition was registered");
+                return;
+            }
             if (Frozen)
             {
-                Logger.Warn($"Anomaly.Content: cannot register {kind} '{key}' after the catalog is frozen; ignoring.");
+                Logger.Warn($"Anomaly.Content: cannot register item '{definition.Key}' after the catalog is frozen.");
                 return;
             }
-            if (def == null)
-                return;
-            if (!ModNamespace.IsValidContentKey(key))
+            if (!ModNamespace.IsValidContentKey(definition.Key))
             {
-                Logger.Warn($"Anomaly.Content: invalid {kind} key '{key}' (expected 'modid:name', lowercase); ignoring.");
+                RejectRegistration($"invalid item key '{definition.Key}' (expected 'modid:name', lowercase)");
                 return;
             }
-            if (_items.ContainsKey(key) || _roles.ContainsKey(key) || _effects.ContainsKey(key))
+            if (Items.ContainsKey(definition.Key))
             {
-                Logger.Warn($"Anomaly.Content: duplicate content key '{key}'; ignoring.");
+                RejectRegistration($"duplicate item key '{definition.Key}'");
                 return;
             }
-            store[key] = def;
+            Items.Add(definition.Key, definition);
         }
 
-        /// <summary>
-        /// Freezes the registry into the catalog. Idempotent. Builds entries, assigns ids from
-        /// the dynamic bases, hashes the result, and populates lookups. Does NOT inject game
-        /// templates — that's the registrar's job, driven by the bridge after freeze.
-        /// </summary>
-        internal static void Freeze()
+        internal static bool Freeze()
         {
             if (Frozen)
-                return;
-
-            var entries = new List<CatalogEntry>();
-            foreach (var d in _items.Values) entries.Add(BuildItemEntry(d));
-
-            int itemBase = CatalogBuilder.ComputeIdBase(MaxEnumValue<ItemType>(), IntKeys(InventoryItemLoader.AvailableItems.Keys));
-
-            try
-            {
-                Catalog = CatalogBuilder.Build(entries, itemBase, ItemIdCeiling, 0, 0);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Anomaly.Content: failed to build catalog ({ex.Message}); custom content disabled this session.");
-                Catalog = new ContentCatalog();
-                Frozen = true;
-                return;
-            }
-
-            foreach (var e in Catalog.Entries)
-            {
-                _keyToId[e.Key] = e.AssignedId;
-                switch (e.Kind)
-                {
-                    case CatalogEntryKind.Item:
-                        _itemById[e.AssignedId] = e;
-                        if (_items.TryGetValue(e.Key, out var idef) && idef.Logic != null)
-                            _itemLogic[e.AssignedId] = idef.Logic;
-                        break;
-                    case CatalogEntryKind.Role:
-                        _roleById[e.AssignedId] = e;
-                        if (_roles.TryGetValue(e.Key, out var rdef) && rdef.Logic != null)
-                            _roleLogic[e.AssignedId] = rdef.Logic;
-                        break;
-                }
-            }
+                return Materialized;
 
             Frozen = true;
-            Logger.Info($"Anomaly.Content: items-only catalog frozen — {_items.Count} items " +
-                        $"(hash=0x{Catalog.CatalogHash:X8}, itemBase={itemBase}).");
+            try
+            {
+                if (!string.IsNullOrEmpty(_registrationError))
+                    throw new InvalidOperationException(_registrationError);
+                var entries = Items.Values.Select(BuildItemEntry).ToList();
+                var availableItems = InventoryItemLoader.AvailableItems;
+                if (availableItems == null)
+                    throw new InvalidOperationException("InventoryItemLoader.AvailableItems is unavailable.");
+                int itemBase = CatalogBuilder.ComputeIdBase(MaxEnumValue<ItemType>());
+                Catalog = CatalogBuilder.Build(
+                    entries,
+                    itemBase,
+                    ItemIdCeiling,
+                    ServerAssetManager.ComputeCurrentManifestSha256());
+                ContentCatalogMessage.ValidateCatalog(Catalog, validateDeclaredHash: true);
+
+                if (!ServerContentRegistrar.RegisterItems(Catalog.Entries))
+                    throw new InvalidOperationException("One or more server item templates could not be registered.");
+
+                foreach (CatalogEntry entry in Catalog.Entries)
+                {
+                    KeyToId.Add(entry.Key, entry.AssignedId);
+                    ItemById.Add(entry.AssignedId, entry);
+                    if (Items.TryGetValue(entry.Key, out CustomItemDefinition definition) && definition.Logic != null)
+                        ItemLogic.Add(entry.AssignedId, definition.Logic);
+                }
+
+                Materialized = true;
+                SafeLogInfo(
+                    $"Anomaly.Content: items-only catalog frozen with {Catalog.Entries.Count} item(s), " +
+                    $"catalog={ToHex(Catalog.CatalogSha256)}, manifest={ToHex(Catalog.ManifestSha256)}.");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                // Revoke published state before diagnostics. Logger failures
+                // must never strand a partially active catalog.
+                bool registrarClean = ServerContentRegistrar.Reset();
+                KeyToId.Clear();
+                ItemById.Clear();
+                ItemLogic.Clear();
+                Catalog = EmptyCatalog();
+                Materialized = false;
+                SafeLogError(
+                    $"Anomaly.Content: transactional catalog freeze failed; custom content is disabled " +
+                    $"(registrarClean={registrarClean}): {exception}");
+                return false;
+            }
         }
 
-        // --- lookups ---
+        internal static bool TryGetId(string key, out int id) => KeyToId.TryGetValue(key, out id);
 
-        internal static bool TryGetId(string key, out int id) => _keyToId.TryGetValue(key, out id);
-        internal static bool TryGetItemEntry(int id, out CatalogEntry entry) => _itemById.TryGetValue(id, out entry);
-        internal static bool TryGetRoleEntry(int id, out CatalogEntry entry) => _roleById.TryGetValue(id, out entry);
-        internal static bool TryGetItemLogic(int id, out ItemLogicBase logic) => _itemLogic.TryGetValue(id, out logic);
-        internal static bool TryGetRoleLogic(int id, out RoleLogicBase logic) => _roleLogic.TryGetValue(id, out logic);
-        internal static bool IsCustomItemId(int id) => _itemById.ContainsKey(id);
-        internal static bool IsCustomRoleId(int id) => _roleById.ContainsKey(id);
+        internal static bool TryGetKey(int id, out string key)
+        {
+            if (ItemById.TryGetValue(id, out CatalogEntry entry))
+            {
+                key = entry.Key;
+                return true;
+            }
+            key = null;
+            return false;
+        }
 
-        internal static IEnumerable<CatalogEntry> ItemEntries => _itemById.Values;
-        internal static IEnumerable<CatalogEntry> RoleEntries => _roleById.Values;
+        internal static bool TryGetItemEntry(int id, out CatalogEntry entry) => ItemById.TryGetValue(id, out entry);
+        internal static bool TryGetItemLogic(int id, out ItemLogicBase logic) => ItemLogic.TryGetValue(id, out logic);
+        internal static bool IsCustomItemId(int id) => ItemById.ContainsKey(id);
+        internal static IEnumerable<CatalogEntry> ItemEntries => ItemById.Values;
+
+        /// <summary>
+        /// Rebinds immutable item definitions and assigned ids to the exact file
+        /// snapshot offered to a future connection. Active connection catalogs
+        /// are never mutated by file-watcher changes.
+        /// </summary>
+        internal static ContentCatalog CreateOfferCatalog(byte[] manifestSha256)
+        {
+            if (!Freeze())
+                throw new InvalidOperationException("The server item catalog is not materialized.");
+
+            var entries = new List<CatalogEntry>();
+            foreach (CustomItemDefinition definition in Items.Values.OrderBy(item => item.Key, StringComparer.Ordinal))
+            {
+                CatalogEntry current = BuildItemEntry(definition);
+                if (!KeyToId.TryGetValue(current.Key, out current.AssignedId))
+                    throw new InvalidOperationException($"Item '{current.Key}' has no frozen assigned id.");
+                entries.Add(current);
+            }
+
+            var offer = new ContentCatalog
+            {
+                ManifestSha256 = (byte[])manifestSha256.Clone(),
+                Entries = entries,
+            };
+            offer.CatalogSha256 = CatalogBuilder.ComputeCatalogHash(offer);
+            ContentCatalogMessage.ValidateCatalog(offer, validateDeclaredHash: true);
+            return offer;
+        }
 
         internal static void Reset()
         {
-            _items.Clear();
-            _roles.Clear();
-            _effects.Clear();
-            _keyToId.Clear();
-            _itemById.Clear();
-            _roleById.Clear();
-            _itemLogic.Clear();
-            _roleLogic.Clear();
-            Catalog = new ContentCatalog();
-            Frozen = false;
+            bool registrarClean = false;
+            try
+            {
+                registrarClean = ServerContentRegistrar.Reset();
+            }
+            finally
+            {
+                // Logical state is revoked even when a Unity object remains
+                // pending best-effort cleanup in the registrar.
+                Items.Clear();
+                KeyToId.Clear();
+                ItemById.Clear();
+                ItemLogic.Clear();
+                Catalog = EmptyCatalog();
+                Frozen = false;
+                Materialized = false;
+                _registrationError = null;
+            }
+
+            if (!registrarClean)
+                throw new InvalidOperationException(
+                    "One or more server item templates remain pending cleanup; a clean reload is blocked.");
         }
 
-        // --- entry builders ---
-
-        private static CatalogEntry BuildItemEntry(CustomItemDefinition d) => new CatalogEntry
+        private static void RejectRegistration(string reason)
         {
-            Key = d.Key,
-            Kind = CatalogEntryKind.Item,
-            BaseTemplateId = (int)d.BaseTemplate,
-            DisplayName = d.DisplayName ?? "",
-            Description = d.Description ?? "",
-            Weight = d.Weight,
-            ModelBundleHash = ResolveHash(d.ModelBundlePath, d.Key),
-            ModelAssetName = d.ModelAssetName ?? "",
-            IconHash = ResolveHash(d.IconPath, d.Key),
-        };
-
-        private static CatalogEntry BuildRoleEntry(CustomRoleDefinition d) => new CatalogEntry
-        {
-            Key = d.Key,
-            Kind = CatalogEntryKind.Role,
-            BaseTemplateId = (int)d.BaseTemplate,
-            DisplayName = d.DisplayName ?? "",
-            ColorRgba = PackColor(d.Color),
-            Team = (byte)d.Team,
-            ModelBundleHash = ResolveHash(d.ModelBundlePath, d.Key),
-            ModelAssetName = d.ModelAssetName ?? "",
-        };
-
-        private static CatalogEntry BuildEffectEntry(CustomEffectDefinition d) => new CatalogEntry
-        {
-            Key = d.Key,
-            Kind = CatalogEntryKind.Effect,
-            DisplayName = d.DisplayName ?? "",
-            EffectClassification = d.Classification,
-            EffectSpeedMultiplier = d.SpeedMultiplier,
-        };
-
-        private static byte[] ResolveHash(string relativePath, string key)
-        {
-            if (string.IsNullOrEmpty(relativePath))
-                return null;
-            var hash = AssetRegistry.GetHashByPath(relativePath);
-            if (hash == null)
-                Logger.Warn($"Anomaly.Content: asset '{relativePath}' for '{key}' not found in the asset directory; entry will fall back to no asset.");
-            return hash;
+            _registrationError ??= reason;
+            SafeLogError($"Anomaly.Content: catalog registration rejected: {reason}. The complete catalog will fail closed.");
         }
 
-        private static uint PackColor(Color c)
+        private static void SafeLogInfo(string message)
         {
-            byte r = (byte)Mathf.Clamp(Mathf.RoundToInt(c.r * 255f), 0, 255);
-            byte g = (byte)Mathf.Clamp(Mathf.RoundToInt(c.g * 255f), 0, 255);
-            byte b = (byte)Mathf.Clamp(Mathf.RoundToInt(c.b * 255f), 0, 255);
-            byte a = (byte)Mathf.Clamp(Mathf.RoundToInt(c.a * 255f), 0, 255);
-            return (uint)((r << 24) | (g << 16) | (b << 8) | a);
+            try { Logger.Info(message); }
+            catch { }
+        }
+
+        private static void SafeLogError(string message)
+        {
+            try { Logger.Error(message); }
+            catch { }
+        }
+
+        private static CatalogEntry BuildItemEntry(CustomItemDefinition definition)
+        {
+            var entry = new CatalogEntry
+            {
+                Key = definition.Key,
+                BaseTemplateId = (int)definition.BaseTemplate,
+                DisplayName = definition.DisplayName ?? string.Empty,
+                Description = definition.Description ?? string.Empty,
+            };
+
+            if (!string.IsNullOrWhiteSpace(definition.IconPath))
+            {
+                byte[] hash = AssetRegistry.GetHashByPath(definition.IconPath);
+                if (hash == null || !ServerAssetManager.TryGetAsset(hash, out ServerAssetManager.AssetInfo asset) ||
+                    asset.Kind != AssetKind.Texture2D ||
+                    !string.Equals(Path.GetExtension(asset.RelativePath), ".png", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException(
+                        $"Item '{definition.Key}' icon '{definition.IconPath}' is missing or is not a PNG.");
+                entry.IconHash = (byte[])hash.Clone();
+                entry.IconSize = asset.Size;
+            }
+
+            return entry;
+        }
+
+        private static ContentCatalog EmptyCatalog()
+        {
+            byte[] manifest = FileManifestMessage.ComputeManifestSha256(
+                Array.Empty<FileManifestMessage.FileEntry>());
+            return CatalogBuilder.Build(Array.Empty<CatalogEntry>(), 0, ItemIdCeiling, manifest);
         }
 
         private static int MaxEnumValue<T>() where T : struct, Enum
         {
             int max = int.MinValue;
-            foreach (var v in (T[])Enum.GetValues(typeof(T)))
-            {
-                int i = Convert.ToInt32(v);
-                if (i > max)
-                    max = i;
-            }
+            foreach (T value in (T[])Enum.GetValues(typeof(T)))
+                max = Math.Max(max, Convert.ToInt32(value));
             return max;
         }
 
-        private static IEnumerable<int> IntKeys<T>(IEnumerable<T> keys) where T : struct, Enum =>
-            keys.Select(k => Convert.ToInt32(k));
+        private static string ToHex(byte[] hash) =>
+            BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
     }
 }

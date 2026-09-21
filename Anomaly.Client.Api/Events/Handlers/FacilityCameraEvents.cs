@@ -17,7 +17,7 @@ public static class FacilityCameraEvents
 
     /// <summary>
     /// Fires when any CCTV camera's active/inactive state changes (e.g. SCP-079
-    /// switches the active camera). Use <see cref="FacilityCamera.IsActive"/> to
+    /// switches the active camera). Use <see cref="Anomaly.Client.Api.Features.FacilityCamera.IsActive"/> to
     /// observe the new state.
     /// </summary>
     public static event AnomalyEventHandler<FacilityCameraEventArgs> StateChanged;

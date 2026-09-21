@@ -8,40 +8,49 @@ namespace Anomaly.Client.Patches.Runtime;
 
 /// <summary>
 /// Fires <see cref="HudEvents.HintDisplaying"/> when a server-sent hint is
-/// about to be rendered on the local HUD. Cancelling suppresses the local
-/// render only.
-///
-/// TODO: the right client-side hook hasn't been pinpointed yet. <c>HintDisplay.Show</c>
-/// is server-only (it throws on isLocalPlayer). The actual client renderer is
-/// likely a <c>HintCanvas</c>/<c>HintBubble</c> component that subscribes to
-/// incoming <c>HintMessage</c> Mirror messages — once that is located, replace
-/// the <c>[HarmonyPatch(...)]</c> target below. For now this is wired against
-/// <c>HintDisplay.Show</c> so the file compiles; it will not fire on a normal
-/// client until the patch target is corrected.
+/// about to be rendered on the local HUD. Subscribers can mutate text hints
+/// and their duration. Cancelling suppresses the local render only.
 /// </summary>
 [HarmonyPatch]
 public static class HintDisplayPatch
 {
     [HarmonyPrefix]
-    [HarmonyPatch(typeof(HintDisplay), nameof(HintDisplay.Show))]
-    public static bool ShowPrefix(Hint hint)
+    [HarmonyPatch(typeof(HintDisplay), nameof(HintDisplay.ShowLocal), new[] { typeof(HintMessage) })]
+    public static bool ShowLocalPrefix(HintMessage message)
     {
         try
         {
+            Hint hint = message.Content;
             if (hint == null) return true;
 
-            // Best-effort text extraction. Concrete Hint subclasses (TextHint, TranslationHint)
-            // expose the actual string; we surface .ToString() as a fallback.
-            string text = hint.ToString();
-            float duration = 0f;
+            // TextHint contains the exact server-supplied text. Other concrete
+            // types remain observable without invoking their stateful formatter.
+            string text = hint is TextHint textHint ? textHint.Text : hint.ToString();
+            float duration = hint.DurationScalar;
 
             HintDisplayingEventArgs ev = new(text, duration);
             HudEvents.OnHintDisplaying(ev);
-            return ev.IsAllowed;
+            if (!ev.IsAllowed) return false;
+
+            if (hint is TextHint mutableTextHint)
+                mutableTextHint.Text = ev.Text ?? string.Empty;
+
+            if (!float.IsNaN(ev.DurationSeconds) &&
+                !float.IsInfinity(ev.DurationSeconds) &&
+                ev.DurationSeconds >= 0f)
+            {
+                hint.DurationScalar = ev.DurationSeconds;
+            }
+            else
+            {
+                MelonLogger.Warning("HintDisplaying ignored a non-finite or negative duration mutation.");
+            }
+
+            return true;
         }
         catch (System.Exception ex)
         {
-            MelonLogger.Error($"HintDisplayPatch.ShowPrefix: {ex}");
+            MelonLogger.Error($"HintDisplayPatch.ShowLocalPrefix: {ex}");
             return true;
         }
     }

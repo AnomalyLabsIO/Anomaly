@@ -26,8 +26,8 @@ namespace Anomaly.Shared.Networking
         private sealed class ChannelEntry
         {
             public readonly object Lock = new object();
-            // int64 so Interlocked.Increment wraps cleanly; we cast to uint on the wire,
-            // giving the same 32-bit wrap semantics as vanilla's _txCounter.
+            // Stored as Int64 so CompareExchange is available on every target runtime.
+            // The value saturates before uint.MaxValue; callers must rekey or disconnect.
             public long TxCounter;
             public uint RxHighWater;
             public ulong RxBitmap0; // covers [highWater - 63, highWater]
@@ -48,13 +48,27 @@ namespace Anomaly.Shared.Networking
         {
             int idx = (int)channel;
             if ((uint)idx >= (uint)_entries.Length) return 0;
-            return unchecked((uint)Interlocked.Increment(ref _entries[idx].TxCounter));
+            return TryAdvanceTxCounter(ref _entries[idx].TxCounter);
+        }
+
+        internal static uint TryAdvanceTxCounter(ref long counter)
+        {
+            while (true)
+            {
+                long current = Interlocked.Read(ref counter);
+                if (current < 0 || current >= uint.MaxValue - 1L)
+                    return 0;
+                long next = current + 1L;
+                if (Interlocked.CompareExchange(ref counter, next, current) == current)
+                    return (uint)next;
+            }
         }
 
         public RxResult TryAcceptRx(MessageChannel channel, uint counter, out bool shouldLog)
         {
             shouldLog = false;
-            if (counter == 0) return RxResult.RejectedInvalid;
+            if (counter == 0 || counter == uint.MaxValue)
+                return RxResult.RejectedInvalid;
 
             int idx = (int)channel;
             if ((uint)idx >= (uint)_entries.Length) return RxResult.RejectedInvalid;

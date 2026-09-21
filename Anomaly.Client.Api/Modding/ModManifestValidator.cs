@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using Anomaly.Client.Api.Compatibility;
 
 namespace Anomaly.Client.Api.Modding;
 
@@ -48,6 +49,18 @@ public static class ModManifestValidator
             errors.Add($"Framework API {ApiContract.CurrentVersion} is outside the mod's declared compatibility range.");
         if (!HashPattern.IsMatch(manifest.Sha256 ?? string.Empty))
             errors.Add("Sha256 must contain exactly 64 hexadecimal characters.");
+
+        var gameVersions = manifest.SupportedGameVersions ?? new List<string>();
+        if (gameVersions.Count == 0)
+            errors.Add("At least one Anomaly SupportedGameVersion expression is required.");
+        var gameVersionExpressions = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string expression in gameVersions)
+        {
+            if (!GameVersionCompatibility.TryParse(expression, out _, out _))
+                errors.Add($"Invalid SupportedGameVersion expression '{expression}'.");
+            else if (!gameVersionExpressions.Add(expression))
+                errors.Add($"SupportedGameVersion expression '{expression}' is duplicated.");
+        }
 
         var dependencyIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var dependency in manifest.Dependencies ?? new List<ModDependency>())

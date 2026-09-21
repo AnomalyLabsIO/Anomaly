@@ -6,7 +6,7 @@ namespace Anomaly.Server.Commands;
 
 /// <summary>
 /// Local server-console control for inspecting and deliberately rotating the
-/// protocol-v2 signing identity. Remote-admin command handlers are intentionally
+/// authenticated-handshake signing identity. Remote-admin command handlers are intentionally
 /// not registered for this security-sensitive operation.
 /// </summary>
 [CommandHandler(typeof(GameConsoleCommandHandler))]

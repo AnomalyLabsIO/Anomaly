@@ -1,11 +1,14 @@
 using System.Collections;
+using Anomaly.Client.Api.Assets;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Api.FileTransfer;
+using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Internal.Localization;
 using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Components;
+using Anomaly.Shared.Assets;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
 using Il2CppMirror;
@@ -19,6 +22,7 @@ public static class FileTransferClient
     private enum State
     {
         Idle,
+        AwaitingConsent,
         Receiving,
         Complete,
         Aborted
@@ -46,29 +50,50 @@ public static class FileTransferClient
     private static long _receivedBytes;
     private static int _totalAssetsInManifest;
     private static DateTime _lastActivityUtc;
+    private static byte[] _manifestSha256;
+    private static AssetManifestSnapshot _manifestSnapshot;
+    private static readonly TransactionalInitializer Initializer = new();
+
+    internal static event Action<FileManifestMessage> ManifestOffered;
+    internal static event Action<bool> TransferFinished;
 
     public static void Init()
     {
-        AnomalyMessaging.MessageReceived += OnMessageReceived;
-
-        ClientEvents.Connected += _ =>
-        {
-            if (NetworkServer.active)
-            {
-                FileTransferOverlay.Hide();
-                return;
-            }
-
-            FileTransferOverlay.Show();
-            FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_Connecting));
-        };
-        ClientEvents.Ready += _ => FileTransferOverlay.Hide();
+        Initializer.Initialize(
+            new InitializationStep(
+                () => AnomalyResources.SetRemoteAssetAuthorization(IsAssetApproved),
+                () => AnomalyResources.SetRemoteAssetAuthorization(null)),
+            new InitializationStep(
+                () => AnomalyMessaging.MessageReceived += OnMessageReceived,
+                () => AnomalyMessaging.MessageReceived -= OnMessageReceived),
+            new InitializationStep(
+                () => ClientEvents.Connected += HandleConnected,
+                () => ClientEvents.Connected -= HandleConnected),
+            new InitializationStep(
+                () => ClientEvents.Ready += HandleReady,
+                () => ClientEvents.Ready -= HandleReady));
     }
+
+    private static void HandleConnected(ClientConnectedEventArgs _)
+    {
+        if (NetworkServer.active)
+        {
+            FileTransferOverlay.Hide();
+            return;
+        }
+
+        FileTransferOverlay.Show();
+        FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_Connecting));
+    }
+
+    private static void HandleReady(ClientReadyEventArgs _) => FileTransferOverlay.Hide();
 
     public static void Reset()
     {
-        DisposeBuffers();
+        // Revoke authorization before any best-effort file/UI cleanup can fail.
         _state = State.Idle;
+        _manifestSnapshot = null;
+        _manifestSha256 = null;
         _sessionId = 0;
         _manifest.Clear();
         _requested.Clear();
@@ -79,8 +104,23 @@ public static class FileTransferClient
         _receivedBytes = 0;
         _totalAssetsInManifest = 0;
         _lastActivityUtc = default;
-        FileTransferOverlay.Hide();
+        try { DisposeBuffers(); }
+        catch (Exception exception)
+        {
+            MelonLogger.Error($"FileTransfer: Failed to dispose one or more receive buffers during reset: {exception}");
+            _buffers.Clear();
+        }
+        try { FileTransferOverlay.Hide(); }
+        catch (Exception exception)
+        {
+            MelonLogger.Error($"FileTransfer: Failed to hide the transfer overlay during reset: {exception}");
+        }
     }
+
+    internal static bool IsAssetApproved(byte[] hash, AssetKind expectedKind) =>
+        _state == State.Complete &&
+        _manifestSnapshot != null &&
+        _manifestSnapshot.Contains(hash, expectedKind);
 
     private static void OnMessageReceived(IAnomalyMessage msg)
     {
@@ -107,6 +147,16 @@ public static class FileTransferClient
         }
 
         _sessionId = manifest.SessionId;
+        _manifestSha256 = (byte[])manifest.ManifestSha256.Clone();
+        try
+        {
+            _manifestSnapshot = new AssetManifestSnapshot(manifest.Files);
+        }
+        catch (Exception exception)
+        {
+            Abort("manifest authorization snapshot was invalid: " + exception.Message);
+            return;
+        }
         _totalAssetsInManifest = manifest.Files.Count;
         _manifest.Clear();
         _requested.Clear();
@@ -114,10 +164,18 @@ public static class FileTransferClient
         _totalBytes = 0;
         _receivedBytes = 0;
         _completedFiles = 0;
-
-        var missing = new List<byte[]>();
         foreach (var file in manifest.Files)
         {
+            string extension = Path.GetExtension(file.Path);
+            if ((file.Kind == Anomaly.Shared.Assets.AssetKind.Texture2D &&
+                 !string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)) ||
+                (file.Kind == Anomaly.Shared.Assets.AssetKind.AudioClip &&
+                 !string.Equals(extension, ".ogg", StringComparison.OrdinalIgnoreCase)))
+            {
+                Abort("manifest kind did not match the v1 PNG/OGG allowlist");
+                return;
+            }
+
             string hex = FileCache.ToHex(file.Hash);
             if (_manifest.ContainsKey(hex))
             {
@@ -132,42 +190,95 @@ public static class FileTransferClient
                 Size = file.Size
             };
 
+        }
+        _lastActivityUtc = DateTime.UtcNow;
+        _state = State.AwaitingConsent;
+        InvokeIsolated(ManifestOffered, manifest, "ManifestOffered");
+        if (_state == State.AwaitingConsent)
+        {
+            InvokeBestEffort(FileTransferOverlay.Show, "consent overlay");
+            InvokeBestEffort(
+                () => FileTransferOverlay.SetStatus("Waiting for server-content approval"),
+                "consent overlay status");
+        }
+    }
+
+    internal static bool ApprovePendingManifest(byte[] expectedManifestSha256)
+    {
+        if (_state != State.AwaitingConsent ||
+            !HashesEqual(expectedManifestSha256, _manifestSha256))
+            return false;
+
+        var missing = new List<byte[]>();
+        _requested.Clear();
+        _totalBytes = 0;
+        foreach (ManifestEntry file in _manifest.Values)
+        {
             if (FileCache.HasFile(file.Hash))
                 continue;
-
             _totalBytes += file.Size;
             if (_totalBytes > FileManifestMessage.MaxAggregateBytes)
             {
                 Abort("manifest exceeded the aggregate download budget");
-                return;
+                return false;
             }
-
+            string hex = FileCache.ToHex(file.Hash);
             _requested.Add(hex);
             missing.Add(file.Hash);
         }
 
         _totalFiles = missing.Count;
-        _lastActivityUtc = DateTime.UtcNow;
-
-        AnomalyMessaging.Send(new FileRequestMessage
+        if (!AnomalyMessaging.TrySend(new FileRequestMessage
         {
             SessionId = _sessionId,
-            RequestedHashes = missing
-        });
+            RequestedHashes = missing,
+        }))
+        {
+            Abort("approved file request could not be delivered over the authenticated transport");
+            return false;
+        }
 
         if (missing.Count == 0)
         {
             _state = State.Complete;
-            MelonLogger.Msg("FileTransfer: All files already cached.");
-            FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_LoadingLevel, _totalAssetsInManifest));
-            FileTransferEvents.OnComplete(new FileTransferCompleteEventArgs(true, 0));
-            return;
+            InvokeIsolated(TransferFinished, true, "TransferFinished");
+            InvokeBestEffort(() => MelonLogger.Msg("FileTransfer: Approved manifest is already cached."), "cache-hit log");
+            InvokeBestEffort(
+                () => FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_LoadingLevel, _totalAssetsInManifest)),
+                "cache-hit overlay");
+            InvokeBestEffort(
+                () => FileTransferEvents.OnComplete(new FileTransferCompleteEventArgs(true, 0)),
+                "cache-hit completion event");
+            return true;
         }
 
         _state = State.Receiving;
-        FileTransferOverlay.Show();
-        MelonLogger.Msg($"FileTransfer: Requesting {missing.Count} files ({_totalBytes} bytes), session={_sessionId:x16}.");
-        MelonCoroutines.Start(WatchTimeout(_sessionId));
+        try
+        {
+            MelonCoroutines.Start(WatchTimeout(_sessionId));
+        }
+        catch (Exception exception)
+        {
+            Abort("the transfer timeout watchdog could not start: " + exception.Message);
+            return false;
+        }
+        InvokeBestEffort(
+            () => MelonLogger.Msg($"FileTransfer: Requesting {missing.Count} approved files ({_totalBytes} bytes), session={_sessionId:x16}."),
+            "request log");
+        return true;
+    }
+
+    internal static void DeclinePendingManifest(byte[] expectedManifestSha256)
+    {
+        if (_state != State.AwaitingConsent ||
+            !HashesEqual(expectedManifestSha256, _manifestSha256))
+            return;
+        DisposeBuffers();
+        _requested.Clear();
+        _manifestSnapshot = null;
+        _state = State.Aborted;
+        InvokeIsolated(TransferFinished, false, "TransferFinished");
+        InvokeBestEffort(FileTransferOverlay.Hide, "decline overlay cleanup");
     }
 
     private static void HandleChunk(FileChunkMessage chunk)
@@ -205,12 +316,25 @@ public static class FileTransferClient
             }
         }
 
-        if (!buffer.TryAddChunk(
+        bool accepted;
+        bool duplicate;
+        string error;
+        try
+        {
+            accepted = buffer.TryAddChunk(
                 chunk.ChunkIndex,
                 chunk.TotalChunks,
                 chunk.Data,
-                out bool duplicate,
-                out string error))
+                out duplicate,
+                out error);
+        }
+        catch (Exception exception)
+        {
+            Abort($"could not write the bounded receive buffer for {hex}: {exception.GetType().Name}");
+            return;
+        }
+
+        if (!accepted)
         {
             if (!duplicate)
                 Abort($"invalid chunk for {hex}: {error}");
@@ -225,23 +349,30 @@ public static class FileTransferClient
             return;
         }
 
-        float percent = _totalBytes > 0
-            ? Math.Min(1f, Math.Max(0f, (float)_receivedBytes / _totalBytes))
-            : 0f;
-        FileTransferOverlay.UpdateProgress(entry.Path, _completedFiles + 1, _totalFiles, percent);
-        FileTransferEvents.OnProgress(new FileTransferProgressEventArgs(
-            entry.Path,
-            _completedFiles,
-            _totalFiles,
-            _receivedBytes,
-            _totalBytes,
-            percent));
-
         // ReliableUnordered may deliver the completion marker before the final
         // chunk. Keep the marker and finalize only after the manifest-sized
         // buffer is complete instead of sending a false integrity failure.
         if (buffer.IsComplete && _completionReceived.Contains(hex))
+        {
             FinalizeCompletedFile(hex, buffer);
+            return;
+        }
+
+        float percent = _totalBytes > 0
+            ? Math.Min(1f, Math.Max(0f, (float)_receivedBytes / _totalBytes))
+            : 0f;
+        InvokeBestEffort(
+            () => FileTransferOverlay.UpdateProgress(entry.Path, _completedFiles + 1, _totalFiles, percent),
+            "transfer progress overlay");
+        InvokeBestEffort(
+            () => FileTransferEvents.OnProgress(new FileTransferProgressEventArgs(
+                entry.Path,
+                _completedFiles,
+                _totalFiles,
+                _receivedBytes,
+                _totalBytes,
+                percent)),
+            "transfer progress event");
     }
 
     private static void HandleFileComplete(FileTransferCompleteMessage complete)
@@ -255,8 +386,15 @@ public static class FileTransferClient
         string hex = FileCache.ToHex(complete.Hash);
         if (!_requested.Contains(hex) || !_manifest.ContainsKey(hex))
         {
-            MelonLogger.Warning($"FileTransfer: Completion for unknown/inactive file {hex}.");
-            SendAck(complete.Hash, 1);
+            bool acknowledgementDelivered;
+            try { acknowledgementDelivered = SendAck(complete.Hash, 1); }
+            catch { acknowledgementDelivered = false; }
+            if (!acknowledgementDelivered)
+            {
+                Abort("failure ACK could not be delivered over the authenticated transport");
+                return;
+            }
+            SafeLogWarning($"FileTransfer: Completion for unknown/inactive file {hex}.");
             return;
         }
 
@@ -282,45 +420,97 @@ public static class FileTransferClient
         if (buffer == null || !_requested.Contains(hex) || !_completionReceived.Contains(hex))
             return;
 
-        if (!buffer.IsComplete || !buffer.CommitToCache())
+        bool committed = false;
+        Exception commitFailure = null;
+        if (buffer.IsComplete)
         {
-            MelonLogger.Warning($"FileTransfer: File {hex} failed size or SHA-256 verification.");
-            SendAck(buffer.Hash, 1);
-            _receivedBytes = Math.Max(0, _receivedBytes - buffer.ReceivedBytes);
+            try { committed = buffer.CommitToCache(); }
+            catch (Exception exception) { commitFailure = exception; }
+        }
+
+        if (!buffer.IsComplete || !committed)
+        {
+            long failedBytes = buffer.ReceivedBytes;
+            byte[] failedHash = buffer.Hash;
+            _receivedBytes = Math.Max(0, _receivedBytes - failedBytes);
             buffer.Dispose();
             _buffers.Remove(hex);
             _completionReceived.Remove(hex);
+
+            bool acknowledgementDelivered;
+            try { acknowledgementDelivered = SendAck(failedHash, 1); }
+            catch { acknowledgementDelivered = false; }
+            if (commitFailure != null)
+            {
+                Abort(
+                    "cache commit failed" +
+                    (acknowledgementDelivered
+                        ? $": {commitFailure.GetType().Name}"
+                        : $" and the failure ACK could not be delivered: {commitFailure.GetType().Name}"));
+                return;
+            }
+            if (!acknowledgementDelivered)
+            {
+                Abort("integrity-failure ACK could not be delivered over the authenticated transport");
+                return;
+            }
+            SafeLogWarning($"FileTransfer: File {hex} failed size or SHA-256 verification.");
             return;
         }
 
         string path = buffer.OriginalPath;
+        uint expectedSize = buffer.ExpectedSize;
         buffer.Dispose();
         _buffers.Remove(hex);
         _requested.Remove(hex);
         _completionReceived.Remove(hex);
         _completedFiles++;
 
-        SendAck(buffer.Hash, 0);
-        MelonLogger.Msg($"FileTransfer: File '{path}' received and verified ({buffer.ExpectedSize} bytes).");
-
-        if (_completedFiles < _totalFiles)
+        if (!SendAck(buffer.Hash, 0))
+        {
+            Abort("success ACK could not be delivered over the authenticated transport");
             return;
+        }
+        if (_completedFiles < _totalFiles)
+        {
+            InvokeBestEffort(
+                () => MelonLogger.Msg($"FileTransfer: File '{path}' received and verified ({expectedSize} bytes)."),
+                "verified-file log");
+            return;
+        }
 
         _state = State.Complete;
-        FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_LoadingLevel, _totalAssetsInManifest));
-        FileCache.Evict(500 * 1024 * 1024);
-        FileTransferEvents.OnComplete(new FileTransferCompleteEventArgs(true, _completedFiles));
-        MelonLogger.Msg($"FileTransfer: All {_completedFiles} requested files received.");
+        InvokeIsolated(TransferFinished, true, "TransferFinished");
+        InvokeBestEffort(
+            () => MelonLogger.Msg($"FileTransfer: File '{path}' received and verified ({expectedSize} bytes)."),
+            "verified-file log");
+        InvokeBestEffort(
+            () => FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_LoadingLevel, _totalAssetsInManifest)),
+            "completion overlay");
+        InvokeBestEffort(() => FileCache.Evict(500 * 1024 * 1024), "completion cache maintenance");
+        InvokeBestEffort(
+            () => FileTransferEvents.OnComplete(new FileTransferCompleteEventArgs(true, _completedFiles)),
+            "completion event");
+        InvokeBestEffort(
+            () => MelonLogger.Msg($"FileTransfer: All {_completedFiles} requested files received."),
+            "completion log");
     }
 
-    private static void SendAck(byte[] hash, byte status)
+    private static bool SendAck(byte[] hash, byte status)
     {
-        AnomalyMessaging.Send(new FileAckMessage
+        try
         {
-            SessionId = _sessionId,
-            Hash = hash,
-            Status = status
-        });
+            return AnomalyMessaging.TrySend(new FileAckMessage
+            {
+                SessionId = _sessionId,
+                Hash = hash,
+                Status = status
+            });
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static IEnumerator WatchTimeout(ulong sessionId)
@@ -343,19 +533,86 @@ public static class FileTransferClient
         if (_state == State.Aborted)
             return;
 
-        MelonLogger.Error($"FileTransfer: Aborted session {_sessionId:x16}: {reason}.");
-        DisposeBuffers();
+        // Revoke all authorization-bearing state before any diagnostics or UI
+        // operation. TransferFinished drives the content fail-closed disconnect,
+        // so it must run before best-effort presentation callbacks.
+        ulong abortedSessionId = _sessionId;
+        int completedFiles = _completedFiles;
+        _state = State.Aborted;
+        _manifestSnapshot = null;
+        _manifestSha256 = null;
+        _manifest.Clear();
         _requested.Clear();
         _completionReceived.Clear();
-        _state = State.Aborted;
-        FileTransferOverlay.Hide();
-        FileTransferEvents.OnComplete(new FileTransferCompleteEventArgs(false, _completedFiles));
+        DisposeBuffers();
+
+        InvokeIsolated(TransferFinished, false, "TransferFinished");
+        try { FileTransferEvents.OnComplete(new FileTransferCompleteEventArgs(false, completedFiles)); }
+        catch (Exception exception)
+        {
+            try { MelonLogger.Error($"FileTransfer: failure event dispatch failed: {exception}"); }
+            catch { }
+        }
+        try { FileTransferOverlay.Hide(); }
+        catch (Exception exception)
+        {
+            try { MelonLogger.Error($"FileTransfer: failed to hide the aborted transfer overlay: {exception}"); }
+            catch { }
+        }
+        try { MelonLogger.Error($"FileTransfer: Aborted session {abortedSessionId:x16}: {reason}."); }
+        catch { }
     }
 
     private static void DisposeBuffers()
     {
-        foreach (var buffer in _buffers.Values)
-            buffer.Dispose();
+        foreach (var buffer in new List<ChunkBuffer>(_buffers.Values))
+        {
+            try { buffer.Dispose(); }
+            catch (Exception exception)
+            {
+                try { MelonLogger.Error($"FileTransfer: Failed to dispose a receive buffer: {exception}"); }
+                catch { /* later buffers still need cleanup */ }
+            }
+        }
         _buffers.Clear();
+    }
+
+    private static bool HashesEqual(byte[] first, byte[] second)
+    {
+        if (first == null || second == null || first.Length != second.Length)
+            return false;
+        int difference = 0;
+        for (int index = 0; index < first.Length; index++)
+            difference |= first[index] ^ second[index];
+        return difference == 0;
+    }
+
+    private static void InvokeIsolated<T>(Action<T> handlers, T value, string name)
+    {
+        foreach (Delegate handler in handlers?.GetInvocationList() ?? Array.Empty<Delegate>())
+        {
+            try { ((Action<T>)handler)(value); }
+            catch (Exception exception)
+            {
+                try { MelonLogger.Error($"FileTransfer.{name} subscriber failed: {exception}"); }
+                catch { /* logging must not suppress later subscribers */ }
+            }
+        }
+    }
+
+    private static void InvokeBestEffort(Action action, string name)
+    {
+        try { action(); }
+        catch (Exception exception)
+        {
+            try { MelonLogger.Error($"FileTransfer: {name} failed: {exception}"); }
+            catch { }
+        }
+    }
+
+    private static void SafeLogWarning(string message)
+    {
+        try { MelonLogger.Warning(message); }
+        catch { }
     }
 }

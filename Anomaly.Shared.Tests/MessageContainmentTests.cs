@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Anomaly.Shared.Assets;
 using Anomaly.Shared.Content;
 using Anomaly.Shared.Networking;
@@ -12,6 +13,33 @@ namespace Anomaly.Shared.Tests;
 
 public sealed class MessageContainmentTests
 {
+    [Fact]
+    public void Canonical_custom_item_base_depends_only_on_the_stock_enum_maximum()
+    {
+        Assert.Equal(61, CatalogBuilder.ComputeIdBase(60));
+        Assert.Throws<InvalidOperationException>(() => CatalogBuilder.ComputeIdBase(int.MaxValue));
+    }
+
+    [Fact]
+    public void ReplayTransmitCounterSaturatesBeforeWireWrap()
+    {
+        long counter = uint.MaxValue - 2L;
+
+        Assert.Equal(uint.MaxValue - 1U, AnomalyReplayState.TryAdvanceTxCounter(ref counter));
+        Assert.Equal(0U, AnomalyReplayState.TryAdvanceTxCounter(ref counter));
+        Assert.Equal(uint.MaxValue - 1L, counter);
+    }
+
+    [Fact]
+    public void ReplayReceiveRejectsReservedMaximumCounter()
+    {
+        var state = new AnomalyReplayState();
+
+        Assert.Equal(
+            AnomalyReplayState.RxResult.RejectedInvalid,
+            state.TryAcceptRx(MessageChannel.ReliableOrdered, uint.MaxValue, out _));
+    }
+
     [Fact]
     public void Every_built_in_message_declares_fail_closed_policy()
     {
@@ -44,6 +72,29 @@ public sealed class MessageContainmentTests
         Assert.Throws<KeyNotFoundException>(() => AnomalyMessageRegistry.GetHash(name));
     }
 
+    [Theory]
+    [InlineData("anomaly:content:catalog")]
+    [InlineData("not-namespaced")]
+    [InlineData("Example:message")]
+    [InlineData("example::message")]
+    public void Public_registry_rejects_reserved_or_malformed_names(string name)
+    {
+        Assert.ThrowsAny<Exception>(() =>
+            AnomalyMessageRegistry.Register(name, () => new TestClientMessage(name)));
+    }
+
+    [Fact]
+    public void Exact_duplicate_registration_requires_the_same_type_and_policy()
+    {
+        string name = "test:duplicate:" + Guid.NewGuid().ToString("N");
+        AnomalyMessageRegistry.Register(name, () => new TestClientMessage(name));
+        AnomalyMessageRegistry.Register(name, () => new TestClientMessage(name));
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            AnomalyMessageRegistry.Register(name, () => new TestServerMessage(name)));
+        Assert.Contains("different message contract", error.Message);
+    }
+
     [Fact]
     public void Manifest_round_trip_binds_session_hash_size_kind_and_safe_path()
     {
@@ -56,6 +107,7 @@ public sealed class MessageContainmentTests
                 new FileManifestMessage.FileEntry("audio/word.ogg", hash, 1024, AssetKind.AudioClip)
             }
         };
+        source.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(source.Files);
 
         FileManifestMessage decoded = RoundTrip(source, () => new FileManifestMessage());
 
@@ -65,6 +117,26 @@ public sealed class MessageContainmentTests
         Assert.Equal(hash, decoded.Files[0].Hash);
         Assert.Equal(1024u, decoded.Files[0].Size);
         Assert.Equal(AssetKind.AudioClip, decoded.Files[0].Kind);
+    }
+
+    [Fact]
+    public void Approved_manifest_snapshot_requires_exact_hash_and_asset_kind()
+    {
+        byte[] textureHash = Enumerable.Repeat((byte)0xA1, 32).ToArray();
+        byte[] audioHash = Enumerable.Repeat((byte)0xB2, 32).ToArray();
+        var snapshot = new AssetManifestSnapshot(new[]
+        {
+            new FileManifestMessage.FileEntry("textures/item.png", textureHash, 64, AssetKind.Texture2D),
+            new FileManifestMessage.FileEntry("audio/word.ogg", audioHash, 64, AssetKind.AudioClip),
+        });
+
+        Assert.Equal(2, snapshot.Count);
+        Assert.True(snapshot.Contains((byte[])textureHash.Clone(), AssetKind.Texture2D));
+        Assert.True(snapshot.Contains((byte[])audioHash.Clone(), AssetKind.AudioClip));
+        Assert.False(snapshot.Contains(textureHash, AssetKind.AudioClip));
+        Assert.False(snapshot.Contains(audioHash, AssetKind.Texture2D));
+        Assert.False(snapshot.Contains(Enumerable.Repeat((byte)0xCC, 32).ToArray(), AssetKind.Texture2D));
+        Assert.False(snapshot.Contains(new byte[31], AssetKind.Texture2D));
     }
 
     [Fact]
@@ -98,7 +170,7 @@ public sealed class MessageContainmentTests
                     path,
                     new byte[32],
                     1,
-                    AssetKind.AssetBundle)
+                    AssetKind.Texture2D)
             }
         };
 
@@ -119,6 +191,15 @@ public sealed class MessageContainmentTests
     }
 
     [Fact]
+    public void Consent_request_file_ack_and_activation_share_the_ordered_channel()
+    {
+        Assert.Equal(MessageChannel.ReliableOrdered, new ContentCatalogDecisionMessage().TransportChannel);
+        Assert.Equal(MessageChannel.ReliableOrdered, new FileRequestMessage().TransportChannel);
+        Assert.Equal(MessageChannel.ReliableOrdered, new FileAckMessage().TransportChannel);
+        Assert.Equal(MessageChannel.ReliableOrdered, new ContentCatalogAckMessage().TransportChannel);
+    }
+
+    [Fact]
     public void Chunk_rejects_data_over_the_streaming_ceiling()
     {
         var chunk = new FileChunkMessage
@@ -134,25 +215,161 @@ public sealed class MessageContainmentTests
     }
 
     [Fact]
-    public void Content_catalog_rejects_role_activation_in_items_only_profile()
+    public void Content_catalog_round_trip_preserves_canonical_items_only_contract()
     {
-        var message = new ContentCatalogMessage
-        {
-            Catalog = new ContentCatalog
+        byte[] manifest = Enumerable.Repeat((byte)0x44, 32).ToArray();
+        ContentCatalog catalog = CatalogBuilder.Build(
+            new[]
             {
-                Entries =
+                new CatalogEntry
                 {
-                    new CatalogEntry
-                    {
-                        Key = "example:unsafe_role",
-                        Kind = CatalogEntryKind.Role,
-                        DisplayName = "Unsafe role"
-                    }
+                    Key = "example:item",
+                    BaseTemplateId = 1,
+                    DisplayName = "Example item",
+                    Description = "Items only",
+                    IconHash = Enumerable.Repeat((byte)0x55, 32).ToArray(),
+                    IconSize = 128,
                 }
-            }
+            },
+            120,
+            127,
+            manifest);
+
+        ContentCatalogMessage decoded = RoundTrip(
+            new ContentCatalogMessage { Catalog = catalog },
+            () => new ContentCatalogMessage());
+
+        CatalogEntry item = Assert.Single(decoded.Catalog.Entries);
+        Assert.Equal("example:item", item.Key);
+        Assert.Equal(120, item.AssignedId);
+        Assert.Equal(1, item.BaseTemplateId);
+        Assert.Equal(catalog.CatalogSha256, decoded.Catalog.CatalogSha256);
+        Assert.Equal(manifest, decoded.Catalog.ManifestSha256);
+    }
+
+    [Fact]
+    public void Content_catalog_rejects_duplicate_ids_even_with_recomputed_hash()
+    {
+        byte[] manifest = Enumerable.Repeat((byte)0x66, 32).ToArray();
+        var catalog = new ContentCatalog
+        {
+            ManifestSha256 = manifest,
+            Entries =
+            {
+                new CatalogEntry { Key = "example:first", AssignedId = 120, BaseTemplateId = 1, DisplayName = "First" },
+                new CatalogEntry { Key = "example:second", AssignedId = 120, BaseTemplateId = 2, DisplayName = "Second" },
+            },
+        };
+        catalog.CatalogSha256 = CatalogBuilder.ComputeCatalogHash(catalog);
+
+        Assert.Throws<InvalidDataException>(() => Serialize(new ContentCatalogMessage { Catalog = catalog }));
+    }
+
+    [Fact]
+    public void Content_catalog_builder_rejects_duplicate_keys_before_assigning_ids()
+    {
+        var entries = new[]
+        {
+            new CatalogEntry { Key = "example:duplicate", BaseTemplateId = 1, DisplayName = "First" },
+            new CatalogEntry { Key = "example:duplicate", BaseTemplateId = 2, DisplayName = "Second" },
         };
 
-        Assert.Throws<InvalidDataException>(() => Serialize(message));
+        Assert.Throws<InvalidDataException>(() => CatalogBuilder.Build(
+            entries,
+            120,
+            127,
+            FileManifestMessage.ComputeManifestSha256(
+                Array.Empty<FileManifestMessage.FileEntry>())));
+        Assert.All(entries, entry => Assert.Equal(0, entry.AssignedId));
+    }
+
+    [Fact]
+    public void Content_catalog_rejects_noncanonical_key_order_even_with_recomputed_hash()
+    {
+        ContentCatalog catalog = CatalogBuilder.Build(
+            new[]
+            {
+                new CatalogEntry { Key = "example:first", BaseTemplateId = 1, DisplayName = "First" },
+                new CatalogEntry { Key = "example:second", BaseTemplateId = 2, DisplayName = "Second" },
+            },
+            120,
+            127,
+            FileManifestMessage.ComputeManifestSha256(Array.Empty<FileManifestMessage.FileEntry>()));
+        catalog.Entries.Reverse();
+        catalog.CatalogSha256 = CatalogBuilder.ComputeCatalogHash(catalog);
+
+        Assert.Throws<InvalidDataException>(() =>
+            ContentCatalogMessage.ValidateCatalog(catalog, validateDeclaredHash: true));
+    }
+
+    [Fact]
+    public void Content_catalog_rejects_noncontiguous_assigned_ids_even_with_recomputed_hash()
+    {
+        byte[] manifest = FileManifestMessage.ComputeManifestSha256(
+            Array.Empty<FileManifestMessage.FileEntry>());
+        ContentCatalog catalog = CatalogBuilder.Build(
+            new[]
+            {
+                new CatalogEntry { Key = "example:first", BaseTemplateId = 1, DisplayName = "First" },
+                new CatalogEntry { Key = "example:second", BaseTemplateId = 2, DisplayName = "Second" },
+            },
+            120,
+            127,
+            manifest);
+        catalog.Entries[1].AssignedId++;
+        catalog.CatalogSha256 = CatalogBuilder.ComputeCatalogHash(catalog);
+
+        Assert.Throws<InvalidDataException>(() =>
+            ContentCatalogMessage.ValidateCatalog(catalog, validateDeclaredHash: true));
+    }
+
+    [Fact]
+    public void Content_catalog_accepts_largest_full_text_case_below_payload_ceiling()
+    {
+        ContentCatalog catalog = BuildFullTextCatalog(56);
+
+        byte[] payload = Serialize(new ContentCatalogMessage { Catalog = catalog });
+
+        Assert.Equal(260019, payload.Length);
+        Assert.True(payload.Length <= ContentCatalogMessage.MaxCatalogPayloadBytes);
+    }
+
+    [Fact]
+    public void Content_catalog_rejects_first_full_text_case_above_payload_ceiling()
+    {
+        ContentCatalog catalog = BuildFullTextCatalog(57);
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
+            ContentCatalogMessage.ValidateCatalog(catalog, validateDeclaredHash: true));
+
+        Assert.Contains("payload ceiling", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Consent_activation_and_enrollment_messages_round_trip_strictly()
+    {
+        byte[] catalogHash = Enumerable.Repeat((byte)0x77, 32).ToArray();
+        byte[] manifestHash = Enumerable.Repeat((byte)0x88, 32).ToArray();
+        ContentCatalogDecisionMessage decision = RoundTrip(new ContentCatalogDecisionMessage
+        {
+            CatalogSha256 = catalogHash,
+            ManifestSha256 = manifestHash,
+            Decision = ContentCatalogDecision.Approved,
+        }, () => new ContentCatalogDecisionMessage());
+        Assert.Equal(ContentCatalogDecision.Approved, decision.Decision);
+
+        ContentCatalogAckMessage activation = RoundTrip(new ContentCatalogAckMessage
+        {
+            CatalogSha256 = catalogHash,
+            ManifestSha256 = manifestHash,
+            Status = ContentCatalogActivationStatus.Activated,
+        }, () => new ContentCatalogAckMessage());
+        Assert.Empty(activation.FailedKeys);
+
+        EnrollmentIdentityMessage enrollment = RoundTrip(
+            new EnrollmentIdentityMessage { EnrollmentId = "local-player@anomaly" },
+            () => new EnrollmentIdentityMessage());
+        Assert.Equal("local-player@anomaly", enrollment.EnrollmentId);
     }
 
     [Fact]
@@ -207,6 +424,93 @@ public sealed class MessageContainmentTests
         Assert.Equal(11, stream.Position);
     }
 
+    [Fact]
+    public void Text_bearing_messages_reject_malformed_utf8()
+    {
+        Assert.Throws<DecoderFallbackException>(() => DeserializeMalformedText(
+            new AssetOverrideTextureMessage(),
+            writer =>
+            {
+                writer.Write(1u);
+                WriteMalformedLengthPrefixedUtf8(writer);
+                writer.Write((ushort)0);
+                writer.Write(new byte[32]);
+            }));
+
+        Assert.Throws<DecoderFallbackException>(() => DeserializeMalformedText(
+            new AssetClearOverrideMessage(),
+            writer =>
+            {
+                writer.Write(1u);
+                WriteMalformedLengthPrefixedUtf8(writer);
+                writer.Write((ushort)0);
+            }));
+
+        Assert.Throws<DecoderFallbackException>(() => DeserializeMalformedText(
+            new AnnouncerVocabularyMessage(),
+            writer =>
+            {
+                writer.Write((ushort)1);
+                WriteMalformedLengthPrefixedUtf8(writer);
+                writer.Write(new byte[32]);
+                writer.Write(1f);
+                writer.Write((byte)0);
+            }));
+
+        Assert.Throws<DecoderFallbackException>(() => DeserializeMalformedText(
+            new CapabilitySnapshotMessage(),
+            writer =>
+            {
+                writer.Write(1u);
+                writer.Write(1u);
+                writer.Write((byte)1);
+                writer.Write((byte)2);
+                writer.Write((byte)0xC3);
+                writer.Write((byte)0x28);
+                writer.Write((ushort)1);
+                writer.Write((ushort)0);
+                writer.Write((ushort)0);
+            }));
+    }
+
+    private static ContentCatalog BuildFullTextCatalog(int count)
+    {
+        CatalogEntry[] entries = Enumerable.Range(0, count)
+            .Select(index => new CatalogEntry
+            {
+                Key = $"example:item{index:D3}",
+                BaseTemplateId = 1,
+                DisplayName = new string('N', ContentCatalogMessage.MaxNameBytes),
+                Description = new string('D', ContentCatalogMessage.MaxDescriptionBytes),
+            })
+            .ToArray();
+        return CatalogBuilder.Build(
+            entries,
+            1,
+            127,
+            FileManifestMessage.ComputeManifestSha256(Array.Empty<FileManifestMessage.FileEntry>()));
+    }
+
+    private static void DeserializeMalformedText(IAnomalyMessage message, Action<BinaryWriter> write)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+        {
+            write(writer);
+            writer.Flush();
+        }
+        stream.Position = 0;
+        using var reader = new BinaryReader(stream);
+        message.Deserialize(reader);
+    }
+
+    private static void WriteMalformedLengthPrefixedUtf8(BinaryWriter writer)
+    {
+        writer.Write((ushort)2);
+        writer.Write((byte)0xC3);
+        writer.Write((byte)0x28);
+    }
+
     private static byte[] Serialize(IAnomalyMessage message)
     {
         using var stream = new MemoryStream();
@@ -239,6 +543,26 @@ public sealed class MessageContainmentTests
         public AnomalyMessageDirection Direction => AnomalyMessageDirection.Bidirectional;
         public AnomalyMessageAuthPhase AuthPhase => AnomalyMessageAuthPhase.AuthenticatedSession;
         public int MaxPayloadBytes => 0;
+        public void Serialize(BinaryWriter writer) { }
+        public void Deserialize(BinaryReader reader) { }
+    }
+
+    private sealed class TestClientMessage : AuthenticatedClientToServerMessage, IAnomalyMessage
+    {
+        public TestClientMessage(string name) => MessageName = name;
+        public string MessageName { get; }
+        public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
+        public override int MaxPayloadBytes => 0;
+        public void Serialize(BinaryWriter writer) { }
+        public void Deserialize(BinaryReader reader) { }
+    }
+
+    private sealed class TestServerMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
+    {
+        public TestServerMessage(string name) => MessageName = name;
+        public string MessageName { get; }
+        public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
+        public override int MaxPayloadBytes => 0;
         public void Serialize(BinaryWriter writer) { }
         public void Deserialize(BinaryReader reader) { }
     }

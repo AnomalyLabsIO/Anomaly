@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using Anomaly.Client.Api.Modding;
+using Anomaly.Client.Api.Compatibility;
 using MelonLoader;
 using MelonLoader.Utils;
 using Newtonsoft.Json;
@@ -166,6 +167,14 @@ internal static class ManagedModRuntime
             {
                 var manifest = ReadJson<ModManifest>(manifestPath, MaxManifestBytes);
                 if (manifest == null) throw new InvalidDataException("Manifest was empty.");
+                if (!GameVersionCompatibility.IsSupported(
+                        manifest.SupportedGameVersions,
+                        Il2CppGameCore.Version.Major,
+                        Il2CppGameCore.Version.Minor,
+                        Il2CppGameCore.Version.Revision))
+                    throw new InvalidDataException(
+                        $"Managed module does not support game {Il2CppGameCore.Version.Major}." +
+                        $"{Il2CppGameCore.Version.Minor}.{Il2CppGameCore.Version.Revision}.");
                 var actualHash = ComputeSha256(assemblyPath);
                 if (!string.Equals(actualHash, manifest.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Assembly SHA-256 does not match the manifest.");

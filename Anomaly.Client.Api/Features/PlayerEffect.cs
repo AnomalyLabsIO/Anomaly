@@ -48,5 +48,10 @@ public class PlayerEffect
         return effect;
     }
 
+    internal static bool Unregister(StatusEffectBase effectBase) =>
+        effectBase != null && _effects.Remove(effectBase);
+
+    internal static void ClearAll() => _effects.Clear();
+
     public override string ToString() => $"PlayerEffect({Name}, Enabled={IsEnabled}, Intensity={Intensity})";
 }

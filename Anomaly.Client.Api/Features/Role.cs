@@ -40,5 +40,10 @@ public class Role
         return role;
     }
 
+    internal static bool Unregister(PlayerRoleBase roleBase) =>
+        roleBase != null && _roles.Remove(roleBase);
+
+    internal static void ClearAll() => _roles.Clear();
+
     public override string ToString() => $"Role({Type})";
 }

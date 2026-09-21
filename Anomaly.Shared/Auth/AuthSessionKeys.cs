@@ -3,7 +3,7 @@ using System;
 namespace Anomaly.Shared.Auth;
 
 /// <summary>
-/// Protocol-v2 key schedule output. LegacyTransportKey is null unless a caller
+/// Directional authenticated transport key-schedule output. LegacyTransportKey is null unless a caller
 /// explicitly requests the loopback-only protocol-migration key schedule.
 /// </summary>
 public sealed class AuthSessionKeys : IDisposable

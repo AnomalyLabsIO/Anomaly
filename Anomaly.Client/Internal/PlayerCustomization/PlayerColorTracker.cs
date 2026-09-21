@@ -6,10 +6,13 @@ using Anomaly.Client.Api.Assets;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Internal;
+using Anomaly.Client.Api.Modding;
 using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Api.Rendering;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
+using Il2CppMirror;
 using Il2CppPlayerRoles;
 using Il2CppPlayerRoles.FirstPersonControl.Thirdperson;
 using MelonLoader;
@@ -25,6 +28,7 @@ namespace Anomaly.Client.Internal.PlayerCustomization;
 /// </summary>
 internal static class PlayerColorTracker
 {
+    private const int MaximumRemotePlayerColors = 256;
     private const string ConfigModId = "anomaly";
     private const string FavoriteColorEntryId = "class_d_favorite_color";
     private const string DefaultColorHex = "#FFFFFF";
@@ -34,41 +38,55 @@ internal static class PlayerColorTracker
 
     private static Color _localColor = Color.white;
     private static readonly Dictionary<uint, Color> _byNetId = new();
+    private static readonly RemoteStateCapacityGuard<uint, uint> Capacity =
+        new(MaximumRemotePlayerColors, 1);
     private static Texture2D _neutralBaseMap;
     private static MelonPreferences_Category _preferences;
     private static MelonPreferences_Entry<string> _favoriteColorEntry;
-    private static bool _initialized;
+    private static readonly TransactionalInitializer Initializer = new();
+    private static bool _resourcesInitialized;
 
     internal static void Init()
     {
-        if (_initialized)
-            return;
-        _initialized = true;
-
-        try
+        if (!_resourcesInitialized)
         {
-            _neutralBaseMap = LoadEmbeddedNeutralBaseMap();
-            if (_neutralBaseMap == null)
+            try
             {
-                MelonLogger.Warning(
-                    $"PlayerColorTracker: neutral base map '{NeutralBaseMapResource}' not embedded; " +
-                    "falling back to _BaseColor multiply only (warm-palette tints look correct, " +
-                    "cool-palette tints look dark/black against the orange jumpsuit).");
+                _neutralBaseMap = LoadEmbeddedNeutralBaseMap();
+                if (_neutralBaseMap == null)
+                {
+                    MelonLogger.Warning(
+                        $"PlayerColorTracker: neutral base map '{NeutralBaseMapResource}' not embedded; " +
+                        "falling back to _BaseColor multiply only (warm-palette tints look correct, " +
+                        "cool-palette tints look dark/black against the orange jumpsuit).");
+                }
+
+                EnsurePreferences();
+                _localColor = LoadLocalColor();
             }
-
-            EnsurePreferences();
-            _localColor = LoadLocalColor();
-        }
-        catch (Exception ex)
-        {
-            MelonLogger.Error($"PlayerColorTracker.Init (resources/config): {ex}");
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"PlayerColorTracker.Init (resources/config): {ex}");
+            }
+            _resourcesInitialized = true;
         }
 
-        AnomalyMessaging.MessageReceived += HandleMessageReceived;
-        RoleEvents.Changed += HandleRoleChanged;
-        PlayerEvents.Removed += HandlePlayerRemoved;
-        ClientEvents.Ready += HandleClientReady;
-        ClientEvents.Disconnected += HandleClientDisconnected;
+        Initializer.Initialize(
+            new InitializationStep(
+                () => AnomalyMessaging.MessageReceived += HandleMessageReceived,
+                () => AnomalyMessaging.MessageReceived -= HandleMessageReceived),
+            new InitializationStep(
+                () => RoleEvents.Changed += HandleRoleChanged,
+                () => RoleEvents.Changed -= HandleRoleChanged),
+            new InitializationStep(
+                () => PlayerEvents.Removed += HandlePlayerRemoved,
+                () => PlayerEvents.Removed -= HandlePlayerRemoved),
+            new InitializationStep(
+                () => ClientEvents.Ready += HandleClientReady,
+                () => ClientEvents.Ready -= HandleClientReady),
+            new InitializationStep(
+                () => ClientEvents.Disconnected += HandleClientDisconnected,
+                () => ClientEvents.Disconnected -= HandleClientDisconnected));
     }
 
     /// <summary>
@@ -120,6 +138,15 @@ internal static class PlayerColorTracker
 
         try
         {
+            if (pcm.NetId == 0 || !Capacity.TryAdd(pcm.NetId, pcm.NetId))
+            {
+                RejectRemoteState(
+                    pcm.NetId == 0
+                        ? "received a player color for reserved netId zero"
+                        : $"player-color capacity exceeded ({MaximumRemotePlayerColors})");
+                return;
+            }
+
             var color = BytesToColor(pcm.R, pcm.G, pcm.B);
             _byNetId[pcm.NetId] = color;
 
@@ -163,7 +190,9 @@ internal static class PlayerColorTracker
         {
             if (args?.Player?.ReferenceHub == null)
                 return;
-            _byNetId.Remove(args.Player.ReferenceHub.netId);
+            uint netId = args.Player.ReferenceHub.netId;
+            _byNetId.Remove(netId);
+            Capacity.Remove(netId, netId);
         }
         catch (Exception ex)
         {
@@ -179,6 +208,23 @@ internal static class PlayerColorTracker
     private static void HandleClientDisconnected(ClientDisconnectedEventArgs _)
     {
         _byNetId.Clear();
+        Capacity.Clear();
+    }
+
+    private static void RejectRemoteState(string reason)
+    {
+        _byNetId.Clear();
+        Capacity.Clear();
+        try { AnomalyMessaging.ClearTransportSession(); }
+        catch { /* disconnect remains mandatory */ }
+        try { NetworkClient.connection?.Disconnect(); }
+        catch { /* the transport may already be closing */ }
+        try
+        {
+            FeatureHealth.Report("anomaly", "networking", FeatureHealthStatus.Failed, reason);
+            MelonLogger.Error("Authenticated player-color state was rejected: " + reason);
+        }
+        catch { /* diagnostics must not weaken fail-closed teardown */ }
     }
 
     private static Color ColorFor(Player player)

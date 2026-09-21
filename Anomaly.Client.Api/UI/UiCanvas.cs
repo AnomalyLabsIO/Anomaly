@@ -24,7 +24,7 @@ public enum UiLayer
 
 /// <summary>
 /// Wraps the root Anomaly canvas. Created once during client startup and kept
-/// alive across scene loads via <see cref="Object.DontDestroyOnLoad"/>. Provides
+/// alive across scene loads via <c>UnityEngine.Object.DontDestroyOnLoad</c>. Provides
 /// per-layer parent <see cref="RectTransform"/>s that mods use as instantiation
 /// targets.
 /// </summary>

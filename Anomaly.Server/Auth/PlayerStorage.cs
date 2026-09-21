@@ -6,6 +6,7 @@ public class PlayerStorage
 {
     public string NickName { get; set; }
     public string UserId { get; set; }
+    public ulong EnrollmentReservation { get; set; }
     public byte[] ClientToServerKey { get; set; }
     public byte[] ServerToClientKey { get; set; }
     public byte[] SessionId { get; set; }

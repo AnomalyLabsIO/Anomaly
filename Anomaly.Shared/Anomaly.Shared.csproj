@@ -11,13 +11,14 @@
         <RootNamespace>Anomaly.Shared</RootNamespace>
         <AssemblyName>Anomaly.Shared</AssemblyName>
         <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-        <RuntimeIdentifiers>win</RuntimeIdentifiers>
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
         <FileAlignment>512</FileAlignment>
         <LangVersion>latest</LangVersion>
         <DeployLocal Condition="'$(DeployLocal)' == ''">false</DeployLocal>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-        <PlatformTarget>AnyCPU</PlatformTarget>
+        <PlatformTarget>x64</PlatformTarget>
+        <Prefer32Bit>false</Prefer32Bit>
         <DebugSymbols>true</DebugSymbols>
         <DebugType>full</DebugType>
         <Optimize>false</Optimize>
@@ -27,7 +28,8 @@
         <WarningLevel>4</WarningLevel>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-        <PlatformTarget>AnyCPU</PlatformTarget>
+        <PlatformTarget>x64</PlatformTarget>
+        <Prefer32Bit>false</Prefer32Bit>
         <DebugType>pdbonly</DebugType>
         <Optimize>true</Optimize>
         <OutputPath>bin\Release\</OutputPath>
@@ -35,9 +37,13 @@
         <ErrorReport>prompt</ErrorReport>
         <WarningLevel>4</WarningLevel>
     </PropertyGroup>
+    <PropertyGroup>
+        <DocumentationFile>$(OutputPath)$(AssemblyName).xml</DocumentationFile>
+        <NoWarn>$(NoWarn);1591</NoWarn>
+    </PropertyGroup>
     <ItemGroup>
         <Reference Include="BouncyCastle.Cryptography">
-          <HintPath>..\..\Server\server\SCPSL_Data\Managed\BouncyCastle.Cryptography.dll</HintPath>
+          <HintPath>$(AnomalyServerReferenceDir)\BouncyCastle.Cryptography.dll</HintPath>
         </Reference>
         <Reference Include="System"/>
         <Reference Include="System.Core"/>
@@ -63,36 +69,30 @@
         <Compile Include="Auth\ServerHandshake.cs" />
         <Compile Include="Auth\ServerIdentityRotationRecord.cs" />
         <Compile Include="Assets\AssetKind.cs" />
+        <Compile Include="Assets\AssetManifestSnapshot.cs" />
         <Compile Include="Content\CatalogTypes.cs" />
         <Compile Include="Content\CatalogBuilder.cs" />
-        <Compile Include="Content\ContentAssetId.cs" />
         <Compile Include="Content\ModNamespace.cs" />
-        <Compile Include="Content\IContentRegistrar.cs" />
         <Compile Include="Capabilities\CapabilityDescriptor.cs" />
         <Compile Include="Networking\AnomalyChannel.cs" />
         <Compile Include="Networking\AnomalyMessagePolicy.cs" />
         <Compile Include="Networking\AnomalyMessageRegistry.cs" />
         <Compile Include="Networking\AnomalyReplayState.cs" />
         <Compile Include="Networking\AnomalySequenceState.cs" />
+        <Compile Include="Networking\TransportPacketPolicy.cs" />
         <Compile Include="Networking\HalfHelper.cs" />
         <Compile Include="Networking\IAnomalyMessage.cs" />
         <Compile Include="Networking\MessageChannel.cs" />
         <Compile Include="Networking\Messages\AnnouncerVocabularyMessage.cs" />
         <Compile Include="Networking\Messages\AssetClearAllOverridesMessage.cs" />
         <Compile Include="Networking\Messages\AssetClearOverrideMessage.cs" />
-        <Compile Include="Networking\Messages\AssetDespawnMessage.cs" />
         <Compile Include="Networking\Messages\AssetOverrideTextureMessage.cs" />
-        <Compile Include="Networking\Messages\AssetReloadMessage.cs" />
-        <Compile Include="Networking\Messages\AssetSetActiveMessage.cs" />
-        <Compile Include="Networking\Messages\AssetSetTextureMessage.cs" />
-        <Compile Include="Networking\Messages\AssetSetTransformMessage.cs" />
-        <Compile Include="Networking\Messages\AssetSpawnMessage.cs" />
-        <Compile Include="Networking\Messages\BoneTransformsMessage.cs" />
         <Compile Include="Networking\Messages\ContentCatalogMessage.cs" />
+        <Compile Include="Networking\Messages\ContentCatalogDecisionMessage.cs" />
         <Compile Include="Networking\Messages\ContentCatalogAckMessage.cs" />
+        <Compile Include="Networking\Messages\EnrollmentIdentityMessage.cs" />
         <Compile Include="Networking\Messages\CapabilityChallengeMessage.cs" />
         <Compile Include="Networking\Messages\CapabilitySnapshotMessage.cs" />
-        <Compile Include="Networking\Messages\EmotionBlendShapesMessage.cs" />
         <Compile Include="Networking\Messages\FacilityAtlasEditsMessage.cs" />
         <Compile Include="Networking\Messages\FacilityLayoutRecipeMessage.cs" />
         <Compile Include="Networking\Messages\FileAckMessage.cs" />
@@ -112,10 +112,6 @@
       local test client's MelonLoader UserLibs folder. Override $(AnomalyServerDepsDir)
       or $(AnomalyClientUserLibsDir) via env var or a .csproj.user file to redirect.
     -->
-    <PropertyGroup>
-      <AnomalyServerDepsDir Condition="'$(AnomalyServerDepsDir)' == ''">E:\Projects\AnomalyLabs\Server\server\AppData\SCP Secret Laboratory\LabAPI\dependencies\global</AnomalyServerDepsDir>
-      <AnomalyClientUserLibsDir Condition="'$(AnomalyClientUserLibsDir)' == ''">E:\Projects\AnomalyLabs\ModdedFiles\loadouts\dev\local\UserLibs</AnomalyClientUserLibsDir>
-    </PropertyGroup>
     <Target Name="CopySharedToLocalTargets" AfterTargets="Build">
       <Message Importance="high" Text="Anomaly.Shared: copying $(TargetFileName) -&gt; $(AnomalyServerDepsDir)" Condition="'$(DeployLocal)' == 'true' And Exists('$(AnomalyServerDepsDir)')" />
       <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyServerDepsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="'$(DeployLocal)' == 'true' And Exists('$(AnomalyServerDepsDir)')" />

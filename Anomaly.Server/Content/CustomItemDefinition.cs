@@ -20,15 +20,6 @@ namespace Anomaly.Server.Content
         /// <summary>Optional item description line.</summary>
         public string Description { get; set; } = "";
 
-        /// <summary>Item weight in kilograms.</summary>
-        public float Weight { get; set; } = 0.1f;
-
-        /// <summary>Relative path to an AssetBundle file carrying the model (optional).</summary>
-        public string ModelBundlePath { get; set; }
-
-        /// <summary>Asset name of the model GameObject within the bundle.</summary>
-        public string ModelAssetName { get; set; } = "";
-
         /// <summary>Relative path to a PNG icon (optional).</summary>
         public string IconPath { get; set; }
 

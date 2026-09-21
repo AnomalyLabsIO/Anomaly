@@ -1,6 +1,7 @@
 using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
+using Anomaly.Client.Api.Internal;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
 
@@ -13,13 +14,21 @@ namespace Anomaly.Client.Internal.Round;
 /// </summary>
 internal static class RoundStateReceiver
 {
-    private static bool _hooked;
+    private static readonly TransactionalInitializer Initializer = new();
+    private static readonly RoundStateConnectionGate ConnectionGate = new();
 
     internal static void Init()
     {
-        if (_hooked) return;
-        _hooked = true;
-        AnomalyMessaging.MessageReceived += OnMessage;
+        Reset();
+        Initializer.Initialize(new InitializationStep(
+            () => AnomalyMessaging.MessageReceived += OnMessage,
+            () => AnomalyMessaging.MessageReceived -= OnMessage));
+    }
+
+    internal static void Reset()
+    {
+        ConnectionGate.Reset();
+        RoundEvents.CurrentPhase = ConnectionGate.CurrentPhase;
     }
 
     private static void OnMessage(IAnomalyMessage msg)
@@ -30,11 +39,11 @@ internal static class RoundStateReceiver
 
     private static void DispatchPhase(RoundPhase newPhase)
     {
-        var previous = RoundEvents.CurrentPhase;
-        if (newPhase == previous) return;
+        if (!ConnectionGate.TryAccept(newPhase, out RoundPhase previous))
+            return;
 
         var args = new RoundPhaseChangedEventArgs(previous, newPhase);
-        RoundEvents.CurrentPhase = newPhase;
+        RoundEvents.CurrentPhase = ConnectionGate.CurrentPhase;
 
         RoundEvents.OnPhaseChanged(args);
 

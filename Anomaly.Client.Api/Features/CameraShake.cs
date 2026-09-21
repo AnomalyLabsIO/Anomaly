@@ -20,7 +20,7 @@ public static class CameraShake
 {
     /// <summary>
     /// True if the camera-shake controller's singleton is currently
-    /// initialized. Mods that fire shakes from <see cref="ClientEvents.Ready"/>
+    /// initialized. Mods that fire shakes from <see cref="Events.Handlers.ClientEvents.Ready"/>
     /// or later can usually skip this check.
     /// </summary>
     public static bool IsAvailable => CameraShakeController.Singleton != null;

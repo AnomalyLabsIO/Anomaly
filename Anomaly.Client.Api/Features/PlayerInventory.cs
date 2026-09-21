@@ -107,5 +107,10 @@ public class PlayerInventory
         return wrapper;
     }
 
+    internal static bool Unregister(Inventory inventory) =>
+        inventory != null && _inventories.Remove(inventory);
+
+    internal static void ClearAll() => _inventories.Clear();
+
     public override string ToString() => $"PlayerInventory({Count}/{MaxSlots})";
 }

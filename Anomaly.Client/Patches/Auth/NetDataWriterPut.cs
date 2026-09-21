@@ -21,9 +21,6 @@ namespace Anomaly.Client.Patches.Auth;
 [HarmonyPatch]
 public static class NetDataWriterPut
 {
-    private static int _lastRefusedFrame = -1;
-    private static int _lastDisconnectFrame = -1;
-
     [HarmonyPatch(typeof(CustomLiteNetLib4MirrorTransport), nameof(CustomLiteNetLib4MirrorTransport.GetConnectData))]
     [HarmonyPrefix]
     public static bool OnPrefix1(NetDataWriter writer)
@@ -41,7 +38,9 @@ public static class NetDataWriterPut
 
     [HarmonyPatch(typeof(CustomLiteNetLib4MirrorTransport), nameof(CustomLiteNetLib4MirrorTransport.OnConncetionRefused))]
     [HarmonyPrefix]
-    public static bool ConnectionRefused(DisconnectInfo disconnectinfo)
+    public static bool ConnectionRefused(
+        CustomLiteNetLib4MirrorTransport __instance,
+        DisconnectInfo disconnectinfo)
     {
         if (!AuthHandler.UsingAnomalyAuth)
             return true;
@@ -52,23 +51,29 @@ public static class NetDataWriterPut
         // call in the same frame would read past the consumed bytes, misread
         // the handshake response as a real rejection, and forward it to the
         // vanilla handler — which tears down the connection.
-        int frame = Time.frameCount;
-        if (frame == _lastRefusedFrame)
+        if (!PatchInvocationGuard.ShouldFireAuthentication(
+                __instance,
+                PatchInvocationGuard.ConnectionRefused))
             return false;
-        _lastRefusedFrame = frame;
 
-        MelonLogger.Msg($"Connection refused - Reason: {disconnectinfo.Reason}, HasData: {disconnectinfo.AdditionalData?.RawData != null}");
+        try
+        {
+            MelonLogger.Msg(
+                $"Connection refused - Reason: {disconnectinfo.Reason}, " +
+                $"HasData: {disconnectinfo.AdditionalData?.RawData != null}");
+        }
+        catch { }
         return AuthHandler.RejectAuth(disconnectinfo);
     }
 
     [HarmonyPatch(typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientDisconnect))]
     [HarmonyPrefix]
-    public static void OnClientDisconnect()
+    public static void OnClientDisconnect(CustomNetworkManager __instance)
     {
-        int frame = Time.frameCount;
-        if (frame == _lastDisconnectFrame)
+        if (!PatchInvocationGuard.ShouldFireAuthentication(
+                __instance,
+                PatchInvocationGuard.ClientDisconnect))
             return;
-        _lastDisconnectFrame = frame;
 
         AuthHandler.OnDisconnected();
     }

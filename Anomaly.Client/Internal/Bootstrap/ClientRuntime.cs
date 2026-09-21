@@ -1,14 +1,20 @@
 using System;
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Input;
+using Anomaly.Client.Api.Modding;
+using Anomaly.Client.Api.Networking;
+using Anomaly.Client.Api.Persistence;
 using Anomaly.Client.Api.Scheduling;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Internal.Effects;
+using Anomaly.Client.Internal.Round;
 using Anomaly.Client.Api.Internal.Input;
 using Anomaly.Client.Api.Internal.Scheduling;
 using Anomaly.Client.Internal.Stats;
 using Anomaly.Client.Api.Internal.Wrappers;
+using Anomaly.Client.Patches.Menu.ModSettings;
 using Il2CppAdminToys;
 using Il2CppCassie;
 using Il2CppCustomPlayerEffects;
@@ -20,9 +26,10 @@ using Il2CppInventorySystem.Items.Firearms.ShotEvents;
 using Il2CppInventorySystem.Items.Pickups;
 using Il2CppInventorySystem.Items.ThrowableProjectiles;
 using Il2CppMapGeneration.Distributors;
+using Il2CppMapGeneration;
+using Il2CppMirror;
 using Il2CppPlayerRoles;
 using Il2CppPlayerRoles.PlayableScps.Scp079.Cameras;
-using Il2CppPlayerStatsSystem;
 using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
@@ -34,86 +41,123 @@ namespace Anomaly.Client.Internal.Bootstrap;
 
 internal static class ClientRuntime
 {
-    private static bool _initialized;
+    private static readonly TransactionalInitializer Initializer = new();
+    private static readonly ClientLifecycleGate LifecycleGate = new();
 
-    internal static bool IsInitialized => _initialized;
+    internal static bool IsInitialized => Initializer.IsInitialized;
 
     internal static void Initialize()
     {
-        if (_initialized)
+        if (Initializer.IsInitialized)
             return;
 
-        _initialized = true;
-
-        ShotEventManager.OnShot += DelegateSupport.ConvertDelegate<ShotEventManager.Shot>(
+        var shot = DelegateSupport.ConvertDelegate<ShotEventManager.Shot>(
             new Action<ShotEvent>(HandleFirearmShot));
+        var cassie = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<CassieLineSource>>(
+            new Action<CassieLineSource>(HandleAnnouncerLineStarted));
+        var warheadProgress = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<bool>>(
+            new Action<bool>(HandleWarheadProgressChanged));
+        var warheadDetonated = DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
+            new Action(HandleWarheadDetonated));
+        var teslaAdded = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<TeslaGate>>(
+            new Action<TeslaGate>(HandleTeslaAdded));
+        var teslaRemoved = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<TeslaGate>>(
+            new Action<TeslaGate>(HandleTeslaRemoved));
+        var teslaBursted = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<TeslaGate>>(
+            new Action<TeslaGate>(HandleTeslaBursted));
+        var elevatorSpawned = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<ElevatorChamber>>(
+            new Action<ElevatorChamber>(HandleElevatorSpawned));
+        var elevatorRemoved = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<ElevatorChamber>>(
+            new Action<ElevatorChamber>(HandleElevatorRemoved));
+        var elevatorMoved = DelegateSupport.ConvertDelegate<ElevatorChamber.ElevatorMoved>(
+            new Action<Bounds, ElevatorChamber, Vector3, Quaternion>(HandleElevatorMoved));
+        var cameraCreated = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<Scp079Camera>>(
+            new Action<Scp079Camera>(HandleCameraCreated));
+        var cameraRemoved = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<Scp079Camera>>(
+            new Action<Scp079Camera>(HandleCameraRemoved));
+        var cameraStateChanged = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<Scp079Camera>>(
+            new Action<Scp079Camera>(HandleCameraStateChanged));
+        var roomRemoved = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<RoomIdentifier>>(
+            new Action<RoomIdentifier>(HandleRoomRemoved));
 
-        try
-        {
-            CassieLineSource.OnStartedPlaying += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<CassieLineSource>>(
-                new Action<CassieLineSource>(HandleAnnouncerLineStarted));
-        }
-        catch (Exception ex)
-        {
-            MelonLogger.Warning($"ClientRuntime.Initialize: failed to hook CassieLineSource.OnStartedPlaying: {ex.Message}");
-        }
-
-        TryHookStaticEvent("AlphaWarheadController.OnProgressChanged", () =>
-            AlphaWarheadController.OnProgressChanged += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<bool>>(
-                new Action<bool>(HandleWarheadProgressChanged)));
-
-        TryHookStaticEvent("AlphaWarheadController.OnDetonated", () =>
-            AlphaWarheadController.OnDetonated += DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
-                new Action(HandleWarheadDetonated)));
-
-        TryHookStaticEvent("TeslaGate.OnAdded", () =>
-            TeslaGate.OnAdded += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<TeslaGate>>(
-                new Action<TeslaGate>(HandleTeslaAdded)));
-
-        TryHookStaticEvent("TeslaGate.OnRemoved", () =>
-            TeslaGate.OnRemoved += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<TeslaGate>>(
-                new Action<TeslaGate>(HandleTeslaRemoved)));
-
-        TryHookStaticEvent("TeslaGate.OnBursted", () =>
-            TeslaGate.OnBursted += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<TeslaGate>>(
-                new Action<TeslaGate>(HandleTeslaBursted)));
-
-        TryHookStaticEvent("ElevatorChamber.OnElevatorSpawned", () =>
-            ElevatorChamber.OnElevatorSpawned += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<ElevatorChamber>>(
-                new Action<ElevatorChamber>(HandleElevatorSpawned)));
-
-        TryHookStaticEvent("ElevatorChamber.OnElevatorRemoved", () =>
-            ElevatorChamber.OnElevatorRemoved += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<ElevatorChamber>>(
-                new Action<ElevatorChamber>(HandleElevatorRemoved)));
-
-        TryHookStaticEvent("ElevatorChamber.OnElevatorMoved", () =>
-            ElevatorChamber.OnElevatorMoved += DelegateSupport.ConvertDelegate<ElevatorChamber.ElevatorMoved>(
-                new Action<Bounds, ElevatorChamber, Vector3, Quaternion>(HandleElevatorMoved)));
-
-        TryHookStaticEvent("Scp079Camera.OnInstanceCreated", () =>
-            Scp079Camera.OnInstanceCreated += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<Scp079Camera>>(
-                new Action<Scp079Camera>(HandleCameraCreated)));
-
-        TryHookStaticEvent("Scp079Camera.OnInstanceRemoved", () =>
-            Scp079Camera.OnInstanceRemoved += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<Scp079Camera>>(
-                new Action<Scp079Camera>(HandleCameraRemoved)));
-
-        TryHookStaticEvent("Scp079Camera.OnAnyCameraStateChanged", () =>
-            Scp079Camera.OnAnyCameraStateChanged += DelegateSupport.ConvertDelegate<Il2CppSystem.Action<Scp079Camera>>(
-                new Action<Scp079Camera>(HandleCameraStateChanged)));
-
-        PlayerRegistry.Resync();
+        Initializer.Initialize(
+            RequiredHook("ShotEventManager.OnShot",
+                () => ShotEventManager.OnShot += shot,
+                () => ShotEventManager.OnShot -= shot),
+            RequiredHook("CassieLineSource.OnStartedPlaying",
+                () => CassieLineSource.OnStartedPlaying += cassie,
+                () => CassieLineSource.OnStartedPlaying -= cassie),
+            RequiredHook("AlphaWarheadController.OnProgressChanged",
+                () => AlphaWarheadController.OnProgressChanged += warheadProgress,
+                () => AlphaWarheadController.OnProgressChanged -= warheadProgress),
+            RequiredHook("AlphaWarheadController.OnDetonated",
+                () => AlphaWarheadController.OnDetonated += warheadDetonated,
+                () => AlphaWarheadController.OnDetonated -= warheadDetonated),
+            RequiredHook("TeslaGate.OnAdded",
+                () => TeslaGate.OnAdded += teslaAdded,
+                () => TeslaGate.OnAdded -= teslaAdded),
+            RequiredHook("TeslaGate.OnRemoved",
+                () => TeslaGate.OnRemoved += teslaRemoved,
+                () => TeslaGate.OnRemoved -= teslaRemoved),
+            RequiredHook("TeslaGate.OnBursted",
+                () => TeslaGate.OnBursted += teslaBursted,
+                () => TeslaGate.OnBursted -= teslaBursted),
+            RequiredHook("ElevatorChamber.OnElevatorSpawned",
+                () => ElevatorChamber.OnElevatorSpawned += elevatorSpawned,
+                () => ElevatorChamber.OnElevatorSpawned -= elevatorSpawned),
+            RequiredHook("ElevatorChamber.OnElevatorRemoved",
+                () => ElevatorChamber.OnElevatorRemoved += elevatorRemoved,
+                () => ElevatorChamber.OnElevatorRemoved -= elevatorRemoved),
+            RequiredHook("ElevatorChamber.OnElevatorMoved",
+                () => ElevatorChamber.OnElevatorMoved += elevatorMoved,
+                () => ElevatorChamber.OnElevatorMoved -= elevatorMoved),
+            RequiredHook("Scp079Camera.OnInstanceCreated",
+                () => Scp079Camera.OnInstanceCreated += cameraCreated,
+                () => Scp079Camera.OnInstanceCreated -= cameraCreated),
+            RequiredHook("Scp079Camera.OnInstanceRemoved",
+                () => Scp079Camera.OnInstanceRemoved += cameraRemoved,
+                () => Scp079Camera.OnInstanceRemoved -= cameraRemoved),
+            RequiredHook("Scp079Camera.OnAnyCameraStateChanged",
+                () => Scp079Camera.OnAnyCameraStateChanged += cameraStateChanged,
+                () => Scp079Camera.OnAnyCameraStateChanged -= cameraStateChanged),
+            RequiredHook("RoomIdentifier.OnRemoved",
+                () => RoomIdentifier.OnRemoved += roomRemoved,
+                () => RoomIdentifier.OnRemoved -= roomRemoved),
+            new InitializationStep(PlayerRegistry.Resync, PlayerRegistry.Clear));
     }
 
-    private static void TryHookStaticEvent(string description, Action subscribe)
+    internal static void Shutdown()
     {
-        try { subscribe(); }
-        catch (Exception ex) { MelonLogger.Warning($"ClientRuntime: failed to hook {description}: {ex.Message}"); }
+        ClientApi.IsClientReady = false;
+        Initializer.Reset();
+        LifecycleGate.Reset();
+        ClearRuntimeCaches();
     }
 
-    internal static void HandleClientConnected()
+    private static InitializationStep RequiredHook(
+        string description,
+        Action subscribe,
+        Action unsubscribe)
     {
-        RunSafely(() =>
+        return new InitializationStep(
+            () =>
+            {
+                try { subscribe(); }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Required client runtime hook '{description}' could not be installed.", ex);
+                }
+            },
+            unsubscribe);
+    }
+
+    internal static void HandleClientConnected(CustomNetworkManager manager)
+    {
+        if (!LifecycleGate.TryConnect(NetworkManagerId(manager)))
+            return;
+
+        RunRequiredLifecycleSafely(() =>
         {
             ClientApi.IsClientReady = false;
             EffectStateTracker.Clear();
@@ -125,45 +169,38 @@ internal static class ClientRuntime
         }, nameof(HandleClientConnected));
     }
 
-    internal static void HandleClientDisconnected()
+    internal static void HandleClientDisconnected(CustomNetworkManager manager)
     {
-        RunSafely(() =>
+        if (!LifecycleGate.TryDisconnect(NetworkManagerId(manager)))
+            return;
+
+        RunRequiredLifecycleSafely(() =>
         {
             (string serverIp, ushort serverPort) = GetServerEndpoint();
 
             ClientApi.IsClientReady = false;
             // Dispatch disconnect before clearing so subscribers see the final state.
-            // Scheduler.ClearAll runs last so tasks scheduled during disconnect
-            // handlers (short-lived server-session work) still get cancelled.
             ClientEvents.OnDisconnected(new ClientDisconnectedEventArgs(serverIp, serverPort));
-            EffectStateTracker.Clear();
-            HealthStateTracker.Clear();
-            PlayerRegistry.Clear();
-            Item.ClearAll();
-            Projectile.ClearAllProjectiles();
-            Pickup.ClearAll();
-            Door.ClearAll();
-            Generator.ClearAll();
-            Tesla.ClearAll();
-            Elevator.ClearAll();
-            FacilityCamera.ClearAll();
-            Ragdoll.ClearAll();
-            global::Anomaly.Client.Api.Features.Locker.ClearAll();
-            CharacterModels.Reset();
-            CameraManager.Reset();
-            ClientVisibility.ReleaseAll();
-            LocalPlayerMotion.ResetSequence();
-            Hud.ResetAll();
-            ScreenEffects.Reset();
-            VirtualInputs.Reset();
-            WorldObjects.Reset();
-            Scheduler.ClearAll();
-        }, nameof(HandleClientDisconnected));
+
+            // Handlers may persist final session state. Flush it before the
+            // scheduler boundary cancels debounce tasks.
+            RuntimeTeardown.FlushBeforeCancel(
+                FlushPendingWrites,
+                () =>
+                {
+                    RoundStateReceiver.Reset();
+                    ClearRuntimeCaches();
+                    Scheduler.ClearAll();
+                });
+        }, nameof(HandleClientDisconnected), disconnectOnFailure: false);
     }
 
-    internal static void HandleClientStarted()
+    internal static void HandleClientStarted(CustomNetworkManager manager)
     {
-        RunSafely(() =>
+        if (!LifecycleGate.TryStart(NetworkManagerId(manager)))
+            return;
+
+        RunRequiredLifecycleSafely(() =>
         {
             ClientApi.IsClientReady = false;
             EffectStateTracker.Clear();
@@ -172,9 +209,12 @@ internal static class ClientRuntime
         }, nameof(HandleClientStarted));
     }
 
-    internal static void HandleClientReady()
+    internal static void HandleClientReady(CustomNetworkManager manager)
     {
-        RunSafely(() =>
+        if (!LifecycleGate.TryReady(NetworkManagerId(manager)))
+            return;
+
+        RunRequiredLifecycleSafely(() =>
         {
             ClientApi.IsClientReady = true;
             PlayerRegistry.Resync();
@@ -190,28 +230,39 @@ internal static class ClientRuntime
 
     internal static void HandleSceneLoaded(Scene scene, LoadSceneMode sceneMode)
     {
-        RunSafely(() =>
+        if (sceneMode == LoadSceneMode.Single)
+            LifecycleGate.BeginSceneTransition();
+        RunRequiredLifecycleSafely(() =>
         {
-            EffectStateTracker.Clear();
-            HealthStateTracker.Clear();
+            if (sceneMode == LoadSceneMode.Single)
+            {
+                ClientApi.IsClientReady = false;
+                ClearRuntimeCaches();
+            }
+
             PlayerRegistry.Resync();
             ClientEvents.OnSceneLoaded(new SceneLoadedEventArgs(scene, sceneMode));
+
+            if (sceneMode == LoadSceneMode.Single)
+            {
+                RuntimeTeardown.FlushBeforeCancel(FlushPendingWrites, Scheduler.ClearAll);
+            }
         }, nameof(HandleSceneLoaded));
     }
 
     internal static void Update()
     {
-        if (!_initialized)
+        if (!Initializer.IsInitialized)
             return;
 
-        RunSafely(() =>
-        {
-            SchedulerTick.Update();
-            InputPoller.Update();
-            VirtualInputs.TickProviders();
-            EffectStateTracker.Update();
-            HealthStateTracker.Update();
-        }, nameof(Update));
+        // Let a required per-frame service failure reach Core.UpdateFeature so
+        // feature health flips to Failed and the authenticated session is torn
+        // down instead of continuing in a partially-wired state.
+        SchedulerTick.Update();
+        InputPoller.Update();
+        VirtualInputs.TickProviders();
+        EffectStateTracker.Update();
+        HealthStateTracker.Update();
     }
 
     internal static void HandlePlayerAdded(ReferenceHub hub)
@@ -235,6 +286,7 @@ internal static class ClientRuntime
                 PlayerEvents.OnRemoved(new PlayerRemovedEventArgs(player));
 
             HealthStateTracker.Reset(hub);
+            ClearPlayerCaches(hub);
             PlayerRegistry.Remove(hub);
         }, nameof(HandlePlayerRemoved));
     }
@@ -247,6 +299,8 @@ internal static class ClientRuntime
             if (player != null)
                 RoleEvents.OnChanged(new PlayerRoleChangedEventArgs(player, previousRole, newRole));
 
+            Role.Unregister(previousRole);
+            PlayerAnchors.ClearAll();
             HealthStateTracker.Reset(hub);
         }, nameof(HandleRoleChanged));
     }
@@ -255,6 +309,7 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
+            Item.ReconcileInventory(hub?.inventory);
             PlayerWrapper player = PlayerRegistry.Get(hub);
             if (player != null)
                 InventoryEvents.OnItemsChanged(new InventoryChangedEventArgs(player));
@@ -265,30 +320,13 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
+            if (hub != null && !hub.isLocalPlayer)
+                Item.Unregister(previousItem.SerialNumber);
+
             PlayerWrapper player = PlayerRegistry.Get(hub);
             if (player != null)
                 InventoryEvents.OnCurrentItemChanged(new CurrentItemChangedEventArgs(player, previousItem, currentItem));
         }, nameof(HandleCurrentItemChanged));
-    }
-
-    internal static void HandlePlayerDamaged(ReferenceHub hub, DamageHandlerBase damageHandler)
-    {
-        RunSafely(() =>
-        {
-            PlayerWrapper player = PlayerRegistry.Get(hub);
-            if (player != null)
-                StatsEvents.OnDamaged(new PlayerDamagedEventArgs(player, damageHandler));
-        }, nameof(HandlePlayerDamaged));
-    }
-
-    internal static void HandlePlayerDied(ReferenceHub hub, DamageHandlerBase damageHandler)
-    {
-        RunSafely(() =>
-        {
-            PlayerWrapper player = PlayerRegistry.Get(hub);
-            if (player != null)
-                StatsEvents.OnDied(new PlayerDiedEventArgs(player, damageHandler));
-        }, nameof(HandlePlayerDied));
     }
 
     internal static void HandlePickupAdded(ItemPickupBase pickupBase)
@@ -385,6 +423,7 @@ internal static class ClientRuntime
             Tesla wrapper = Tesla.Get(teslaBase);
             if (wrapper != null)
                 TeslaEvents.OnRemoved(new TeslaEventArgs(wrapper));
+            Tesla.Unregister(teslaBase);
         }, nameof(HandleTeslaRemoved));
     }
 
@@ -418,6 +457,7 @@ internal static class ClientRuntime
             Elevator wrapper = Elevator.Get(chamberBase);
             if (wrapper != null)
                 ElevatorEvents.OnRemoved(new ElevatorEventArgs(wrapper));
+            Elevator.Unregister(chamberBase);
         }, nameof(HandleElevatorRemoved));
     }
 
@@ -451,6 +491,7 @@ internal static class ClientRuntime
             FacilityCamera wrapper = FacilityCamera.Get(cameraBase);
             if (wrapper != null)
                 FacilityCameraEvents.OnRemoved(new FacilityCameraEventArgs(wrapper));
+            FacilityCamera.Unregister(cameraBase);
         }, nameof(HandleCameraRemoved));
     }
 
@@ -482,7 +523,83 @@ internal static class ClientRuntime
             AdminToy adminToy = AdminToy.Get(adminToyBase);
             if (adminToy != null)
                 AdminToyEvents.OnRemoved(new AdminToyRemovedEventArgs(adminToy));
+            AdminToy.Unregister(adminToyBase);
         }, nameof(HandleAdminToyRemoved));
+    }
+
+    private static void HandleRoomRemoved(RoomIdentifier roomIdentifier)
+    {
+        RunSafely(() => Room.Unregister(roomIdentifier), nameof(HandleRoomRemoved));
+    }
+
+    private static void FlushPendingWrites()
+    {
+        ModSettingsSaveScheduler.Flush();
+        ClientPersistence.FlushAll();
+    }
+
+    private static void ClearRuntimeCaches()
+    {
+        EffectStateTracker.Clear();
+        HealthStateTracker.Clear();
+        PlayerRegistry.Clear();
+        Item.ClearAll();
+        Projectile.ClearAllProjectiles();
+        Pickup.ClearAll();
+        AdminToy.ClearAll();
+        Door.ClearAll();
+        Generator.ClearAll();
+        Tesla.ClearAll();
+        Elevator.ClearAll();
+        FacilityCamera.ClearAll();
+        Ragdoll.ClearAll();
+        global::Anomaly.Client.Api.Features.Locker.ClearAll();
+        Role.ClearAll();
+        Room.ClearAll();
+        PlayerInventory.ClearAll();
+        PlayerEffects.ClearAll();
+        PlayerEffect.ClearAll();
+        PlayerStatsWrapper.ClearAll();
+        PlayerStat.ClearAll();
+        PlayerAnchors.ClearAll();
+        CharacterModels.Reset();
+        CameraManager.Reset();
+        ClientVisibility.ReleaseAll();
+        LocalPlayerMotion.ResetSequence();
+        Hud.ResetAll();
+        ScreenEffects.Reset();
+        VirtualInputs.Reset();
+        InputPoller.Reset();
+        WorldObjects.Reset();
+    }
+
+    private static void ClearPlayerCaches(ReferenceHub hub)
+    {
+        if (hub == null)
+            return;
+
+        try { Role.Unregister(hub.roleManager?.CurrentRole); } catch { }
+        try { PlayerInventory.Unregister(hub.inventory); } catch { }
+        try { PlayerEffects.Unregister(hub.playerEffectsController); } catch { }
+        try { PlayerStatsWrapper.Unregister(hub.playerStats); } catch { }
+        try
+        {
+            if (hub.inventory?.UserInventory?.Items != null)
+            {
+                foreach (var pair in hub.inventory.UserInventory.Items)
+                    Item.Unregister(pair.Value);
+            }
+        }
+        catch { }
+
+        // Parent unregister operations evict their owned child effect/stat
+        // wrappers without invalidating unrelated players' caches.
+        try
+        {
+            PlayerWrapper player = PlayerRegistry.Get(hub);
+            PlayerAnchors.Unregister(player?.CharacterModel);
+        }
+        catch { }
     }
 
     private static (string serverIp, ushort serverPort) GetServerEndpoint()
@@ -497,6 +614,12 @@ internal static class ClientRuntime
         }
     }
 
+    private static long NetworkManagerId(CustomNetworkManager manager)
+    {
+        try { return manager?.Pointer.ToInt64() ?? 0; }
+        catch { return 0; }
+    }
+
     private static void RunSafely(Action action, string context)
     {
         try
@@ -506,6 +629,35 @@ internal static class ClientRuntime
         catch (Exception ex)
         {
             MelonLogger.Error($"ClientRuntime.{context}: {ex}");
+        }
+    }
+
+    private static void RunRequiredLifecycleSafely(
+        Action action,
+        string context,
+        bool disconnectOnFailure = true)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            Initializer.Reset();
+            LifecycleGate.Reset();
+            ClientApi.IsClientReady = false;
+            if (disconnectOnFailure)
+                AnomalyMessaging.FailClosedTransport($"Required lifecycle callback {context} failed.");
+            try
+            {
+                FeatureHealth.Report(
+                    "anomaly",
+                    "runtime-hooks",
+                    FeatureHealthStatus.Failed,
+                    $"Required lifecycle callback {context} failed: {ex.GetType().Name}: {ex.Message}");
+                MelonLogger.Error($"ClientRuntime.{context}: required lifecycle failure: {ex}");
+            }
+            catch { }
         }
     }
 }
