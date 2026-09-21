@@ -102,9 +102,11 @@ try {
     }
 
     Invoke-RecordedGate 'release-build' `
-        'dotnet build Anomaly.slnx -c Release -p:DeployLocal=false -p:ContinuousIntegrationBuild=true -warnaserror --nologo' {
+        'dotnet build Anomaly.slnx -t:Rebuild -c Release -p:DeployLocal=false -p:ContinuousIntegrationBuild=true -warnaserror --nologo' {
+        # Local incremental outputs may have been compiled with different CI/path-map
+        # properties. Rebuild both candidates so the comparison uses identical inputs.
         & dotnet build (Join-Path $gateRepositoryRoot 'Anomaly.slnx') `
-            -c Release -p:DeployLocal=false -p:ContinuousIntegrationBuild=true `
+            -t:Rebuild -c Release -p:DeployLocal=false -p:ContinuousIntegrationBuild=true `
             -warnaserror --nologo
         if ($LASTEXITCODE -ne 0) { throw 'Release/x64 solution build failed.' }
     }
