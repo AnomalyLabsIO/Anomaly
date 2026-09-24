@@ -23,7 +23,8 @@ namespace Anomaly.Server.Networking
 
         internal static AnomalyReplayState GetOrCreate(ReferenceHub hub)
         {
-            return States.GetOrAdd(hub, _ => new AnomalyReplayState());
+            return AuthenticatedTransportSessions.GetReplayState(hub) ??
+                   States.GetOrAdd(hub, _ => new AnomalyReplayState());
         }
 
         internal static AnomalySequenceState GetSequenceOrCreate(ReferenceHub hub)

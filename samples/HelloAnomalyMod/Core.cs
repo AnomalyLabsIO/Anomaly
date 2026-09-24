@@ -3,6 +3,9 @@ using Anomaly.Client.Api.Compatibility;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Api.Input;
+using Anomaly.Client.Api.Networking;
+using Anomaly.Shared.Networking;
+using HelloAnomaly.Protocol;
 using Anomaly.Client.Api.Scheduling;
 using Anomaly.Client.Api.UI.ModSettings;
 using MelonLoader;
@@ -31,6 +34,10 @@ public sealed class Core : MelonMod
         _enabled = category.CreateEntry("enabled", true, "Enable greeting", "Allow the sample command and F6 binding to greet you.");
         ModSettings.RegisterEntry(_enabled, new ModSettingMetadata { Group = "Greetings", Order = 0 });
         CommandRegistry.Register(ModId, new HelloCommand(this));
+        CommandRegistry.Register(ModId, new ServerHelloCommand());
+        AnomalyMessageRegistry.Register(HelloRequest.Name, () => new HelloRequest());
+        AnomalyMessageRegistry.Register(HelloReply.Name, () => new HelloReply());
+        AnomalyMessaging.MessageReceived += OnServerMessage;
         _binding = InputRegistry.Register(new InputBindingDefinition(BindingId, "Greeting", new InputKey(KeyCode.F6)));
         InputRegistry.Pressed += OnPressed;
         ClientEvents.Ready += OnReady;
@@ -41,6 +48,7 @@ public sealed class Core : MelonMod
     public override void OnDeinitializeMelon()
     {
         ClientEvents.Ready -= OnReady;
+        AnomalyMessaging.MessageReceived -= OnServerMessage;
         ClientEvents.Disconnected -= OnDisconnected;
         InputRegistry.Pressed -= OnPressed;
         CancelHeartbeat();
@@ -65,6 +73,12 @@ public sealed class Core : MelonMod
 
     private void OnDisconnected(ClientDisconnectedEventArgs _) => CancelHeartbeat();
 
+    private static void OnServerMessage(IAnomalyMessage message)
+    {
+        if (message is HelloReply reply)
+            MelonLogger.Msg($"Server replied to request {reply.Token}; custom content activated: {reply.ContentActivated}.");
+    }
+
     private void CancelHeartbeat()
     {
         _heartbeat?.Cancel();
@@ -80,5 +94,30 @@ public sealed class Core : MelonMod
         public string Description => "Checks the sample's command and preference.";
         public void Execute(CommandContext context) => context.Reply(_owner._enabled?.Value == true
             ? "Hello from an ordinary MelonLoader mod." : "Greeting disabled in Settings → Mods.");
+    }
+
+    private sealed class ServerHelloCommand : ICommand
+    {
+        private uint _token;
+        public string Name => "server";
+        public IReadOnlyList<string> Aliases => Array.Empty<string>();
+        public string Description => "Queries the matching HelloAnomalyServer companion over authenticated messaging.";
+        public void Execute(CommandContext context)
+        {
+            if (Anomaly.Client.Api.Features.Client.EnrollmentId == null)
+            {
+                context.Reply("Wait for authenticated server enrollment before sending.");
+                return;
+            }
+            try
+            {
+                AnomalyMessaging.Send(new HelloRequest { Token = ++_token });
+                context.Reply("Request sent; the matching server companion's reply appears in the log.");
+            }
+            catch (InvalidOperationException)
+            {
+                context.Reply("The authenticated transport is not ready.");
+            }
+        }
     }
 }

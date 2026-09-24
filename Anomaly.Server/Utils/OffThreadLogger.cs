@@ -10,7 +10,7 @@ namespace Anomaly.Server.Utils;
 /// Bounded bridge from LiteNetLib/background threads to LabAPI's main-thread logger.
 /// Duplicate pending entries are coalesced and only a fixed number are drained per frame.
 /// </summary>
-public static class OffThreadLogger
+internal static class OffThreadLogger
 {
     private const int MaximumQueuedEntries = 2048;
     private const int MaximumMessageCharacters = 4096;

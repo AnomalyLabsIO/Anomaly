@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <AnomalySdkRoot Condition="'$(AnomalySdkRoot)' == '' And Exists('$(MSBuildThisFileDirectory)..\lib\net48\Anomaly.Server.dll')">$(MSBuildThisFileDirectory)..</AnomalySdkRoot>
+    <AnomalyServerReferenceDir Condition="'$(AnomalyServerReferenceDir)' == '' And '$(AnomalyServerGameDir)' != ''">$(AnomalyServerGameDir)\SCPSL_Data\Managed</AnomalyServerReferenceDir>
+    <AnomalyLabApiDir Condition="'$(AnomalyLabApiDir)' == ''">$(AnomalyServerReferenceDir)</AnomalyLabApiDir>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(AnomalySdkRoot)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\Anomaly.Server\Anomaly.Server.csproj" AdditionalProperties="DeployLocal=false" Private="false" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(AnomalySdkRoot)' != ''">
+    <Reference Include="Anomaly.Server" HintPath="$(AnomalySdkRoot)\lib\net48\Anomaly.Server.dll" Private="false" />
+    <Reference Include="Anomaly.Shared" HintPath="$(AnomalySdkRoot)\lib\net48\Anomaly.Shared.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp" HintPath="$(AnomalyServerReferenceDir)\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="LabApi" HintPath="$(AnomalyLabApiDir)\LabApi.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(AnomalyServerReferenceDir)\UnityEngine.CoreModule.dll" Private="false" />
+  </ItemGroup>
+  <Target Name="ValidateServerSampleReferences" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(AnomalySdkRoot)' == '' And !Exists('$(MSBuildThisFileDirectory)..\Anomaly.Server\Anomaly.Server.csproj')" Text="Set AnomalySdkRoot to the matching extracted SDK." />
+    <Error Condition="'$(AnomalySdkRoot)' != '' And !Exists('$(AnomalySdkRoot)\lib\net48\Anomaly.Server.dll')" Text="AnomalySdkRoot must contain lib/net48/Anomaly.Server.dll." />
+    <Error Condition="!Exists('$(AnomalyServerReferenceDir)\Assembly-CSharp.dll')" Text="Set AnomalyServerGameDir to the matching dedicated server, or set AnomalyServerReferenceDir." />
+    <Error Condition="!Exists('$(AnomalyLabApiDir)\LabApi.dll')" Text="The configured LabAPI reference is missing: $(AnomalyLabApiDir)/LabApi.dll." />
+  </Target>
+</Project>

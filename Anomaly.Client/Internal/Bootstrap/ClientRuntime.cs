@@ -165,6 +165,7 @@ internal static class ClientRuntime
             PlayerRegistry.Resync();
 
             (string serverIp, ushort serverPort) = GetServerEndpoint();
+            Anomaly.Client.Internal.Map.FacilityRecipeClient.BeginConnection();
             ClientEvents.OnConnected(new ClientConnectedEventArgs(serverIp, serverPort));
         }, nameof(HandleClientConnected));
     }
@@ -259,6 +260,7 @@ internal static class ClientRuntime
         // feature health flips to Failed and the authenticated session is torn
         // down instead of continuing in a partially-wired state.
         SchedulerTick.Update();
+        Anomaly.Client.Internal.Map.FacilityRecipeClient.Tick();
         InputPoller.Update();
         VirtualInputs.TickProviders();
         EffectStateTracker.Update();

@@ -33,7 +33,10 @@ foreach ($projectRelativePath in $explicitProjects) {
     })
 
     $missing = @($sourceFiles | Where-Object { $_ -notin $declared } | Sort-Object)
-    $stale = @($declared | Where-Object { $_ -notin $sourceFiles } | Sort-Object)
+    # Linked source files can live in another project; verify their declared path too.
+    $stale = @($declared | Where-Object {
+        -not (Test-Path -LiteralPath (Join-Path $projectDirectory $_) -PathType Leaf)
+    } | Sort-Object)
     if ($missing.Count -gt 0 -or $stale.Count -gt 0) {
         throw ("Compile list mismatch in {0}. Missing: [{1}] Stale: [{2}]" -f
             $projectRelativePath, ($missing -join ', '), ($stale -join ', '))

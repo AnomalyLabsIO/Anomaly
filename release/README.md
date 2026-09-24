@@ -44,17 +44,19 @@ API, secret, or two-build reproducibility gate; use
 verified from their PE assembly metadata. Framework exclusions are exact names
 provided by the declared .NET runtime. Host exclusions are exact names tied to
 MelonLoader 0.7.2 or the SCP:SL 14.2.7 client/server and must be observed in the
-resolved MSBuild inputs. The client and server archives carry Bouncy Castle;
-the server additionally carries the pinned `System.Numerics.Vectors` 4.1.3.0
-and `System.Threading.Tasks.Extensions` 4.2.0.1 assemblies. The SCP:SL, Unity,
-IL2CPP interop, MelonLoader, LabAPI, and CLR/framework assemblies remain
-host-provided and are not redistributed.
+resolved MSBuild inputs. The client archive carries Bouncy Castle; the server
+uses the SCP:SL 14.2.7 game's Managed copy, whose assembly version is pinned
+in the closure declaration. The server carries Lib.Harmony 2.2.2. The client
+uses MelonLoader 0.7.2's HarmonyX 2.10.2 and Newtonsoft.Json 13.0.4 instead
+of redistributing competing copies. The SCP:SL, Unity, IL2CPP interop,
+MelonLoader, LabAPI, and
+CLR/framework assemblies remain host-provided and are not redistributed.
 
 Every client, server, and SDK archive includes the project `LICENSE`, `NOTICE`,
 and the exact `THIRD_PARTY_DEPENDENCIES.md` whose SHA-256 is bound into the
 dependency inventory. The declaration contains an assembly-by-assembly map for
-all redistributed third-party runtime DLLs, including the complete Mono.Cecil
-and MonoMod closure carried by the client archive.
+all redistributed third-party runtime DLLs. Mono.Cecil remains a build-tool
+dependency and is not carried by the client archive.
 
 The developer SDK includes `BouncyCastle.Cryptography.dll` beside
 `Anomaly.Shared.dll` under `lib/net48` because `AuthCrypto` exposes Bouncy

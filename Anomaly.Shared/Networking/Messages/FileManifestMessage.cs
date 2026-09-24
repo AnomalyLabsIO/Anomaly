@@ -100,7 +100,7 @@ namespace Anomaly.Shared.Networking.Messages
                 aggregateBytes += size;
                 if (aggregateBytes > MaxAggregateBytes)
                     throw new InvalidDataException($"Manifest aggregate size exceeded {MaxAggregateBytes} bytes.");
-                AssetKind kind = (AssetKind)reader.ReadByte();
+                FileContentKind kind = (FileContentKind)reader.ReadByte();
                 ValidateKind(kind);
                 ValidateKindPath(kind, path);
                 Files.Add(new FileEntry(path, hash, size, kind));
@@ -131,21 +131,21 @@ namespace Anomaly.Shared.Networking.Messages
             }
         }
 
-        private static void ValidateKind(AssetKind kind)
+        private static void ValidateKind(FileContentKind kind)
         {
-            if (kind != AssetKind.Texture2D && kind != AssetKind.AudioClip)
+            if (kind != FileContentKind.Bundle && kind != FileContentKind.PackIndex)
                 throw new InvalidDataException("Manifest contained an unsupported asset kind.");
         }
 
-        private static void ValidateKindPath(AssetKind kind, string path)
+        private static void ValidateKindPath(FileContentKind kind, string path)
         {
             string extension = Path.GetExtension(path);
-            if (kind == AssetKind.Texture2D &&
-                !string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("Remote textures must use the PNG format.");
-            if (kind == AssetKind.AudioClip &&
-                !string.Equals(extension, ".ogg", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("Remote audio must use the OGG format.");
+            if (kind == FileContentKind.Bundle &&
+                !string.Equals(extension, ".bundle", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Remote bundles must use the .bundle format.");
+            if (kind == FileContentKind.PackIndex &&
+                !string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Pack indexes must use JSON.");
         }
 
         public static byte[] ComputeManifestSha256(IEnumerable<FileEntry> files)
@@ -157,7 +157,7 @@ namespace Anomaly.Shared.Networking.Messages
             using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
             using (var sha256 = SHA256.Create())
             {
-                writer.Write(Encoding.ASCII.GetBytes("ANOMALY-FILE-MANIFEST-V1"));
+                writer.Write(Encoding.ASCII.GetBytes("ANOMALY-FILE-MANIFEST-V2"));
                 var ordered = files.OrderBy(file => file.Path, StringComparer.Ordinal)
                     .ThenBy(file => BitConverter.ToString(file.Hash ?? Array.Empty<byte>()), StringComparer.Ordinal)
                     .ToList();
@@ -199,9 +199,9 @@ namespace Anomaly.Shared.Networking.Messages
             public string Path;
             public byte[] Hash;
             public uint Size;
-            public AssetKind Kind;
+            public FileContentKind Kind;
 
-            public FileEntry(string path, byte[] hash, uint size, AssetKind kind)
+            public FileEntry(string path, byte[] hash, uint size, FileContentKind kind)
             {
                 Path = path;
                 Hash = hash;

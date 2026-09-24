@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Anomaly.Server.Assets;
+using System.Text;
+using Anomaly.Server.Api.Assets;
+using Anomaly.Server.Api.Content;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Shared.Assets;
 using Anomaly.Shared.Content;
@@ -16,6 +18,7 @@ namespace Anomaly.Server.Content
     internal static class ContentRegistry
     {
         private const int ItemIdCeiling = 127;
+        private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
 
         private static readonly Dictionary<string, CustomItemDefinition> Items =
             new Dictionary<string, CustomItemDefinition>(StringComparer.Ordinal);
@@ -23,9 +26,6 @@ namespace Anomaly.Server.Content
             new Dictionary<string, int>(StringComparer.Ordinal);
         private static readonly Dictionary<int, CatalogEntry> ItemById =
             new Dictionary<int, CatalogEntry>();
-        private static readonly Dictionary<int, ItemLogicBase> ItemLogic =
-            new Dictionary<int, ItemLogicBase>();
-        private static string _registrationError;
 
         public static bool Frozen { get; private set; }
         public static bool Materialized { get; private set; }
@@ -34,39 +34,50 @@ namespace Anomaly.Server.Content
         internal static void Add(CustomItemDefinition definition)
         {
             if (definition == null)
-            {
-                RejectRegistration("a null custom item definition was registered");
-                return;
-            }
+                throw new ArgumentNullException(nameof(definition));
             if (Frozen)
-            {
-                Logger.Warn($"Anomaly.Content: cannot register item '{definition.Key}' after the catalog is frozen.");
-                return;
-            }
+                throw new InvalidOperationException("The content catalog is frozen. Restart the server to change registrations.");
             if (!ModNamespace.IsValidContentKey(definition.Key))
-            {
-                RejectRegistration($"invalid item key '{definition.Key}' (expected 'modid:name', lowercase)");
-                return;
-            }
+                throw new ArgumentException("Item keys must use the lowercase 'modid:name' form.", nameof(definition));
             if (Items.ContainsKey(definition.Key))
+                throw new InvalidOperationException($"Custom item '{definition.Key}' is already registered.");
+            if (!Enum.IsDefined(typeof(ItemType), definition.BaseTemplate) ||
+                (int)definition.BaseTemplate < 0 || (int)definition.BaseTemplate > ItemIdCeiling)
+                throw new ArgumentException("BaseTemplate must name a vanilla item in the supported item ID range.", nameof(definition));
+            if (string.IsNullOrWhiteSpace(definition.DisplayName))
+                throw new ArgumentException("DisplayName must be non-empty.", nameof(definition));
+            try
             {
-                RejectRegistration($"duplicate item key '{definition.Key}'");
-                return;
+                if (Utf8.GetByteCount(definition.Key) > ContentCatalogMessage.MaxKeyBytes ||
+                    Utf8.GetByteCount(definition.DisplayName) > ContentCatalogMessage.MaxNameBytes ||
+                    Utf8.GetByteCount(definition.Description ?? string.Empty) > ContentCatalogMessage.MaxDescriptionBytes)
+                    throw new ArgumentException("The item key, display name or description exceeds the catalog's UTF-8 byte limit.", nameof(definition));
             }
-            Items.Add(definition.Key, definition);
+            catch (EncoderFallbackException exception)
+            {
+                throw new ArgumentException("Item text must contain valid Unicode.", nameof(definition), exception);
+            }
+            Items.Add(definition.Key, new CustomItemDefinition
+            {
+                Key = definition.Key,
+                BaseTemplate = definition.BaseTemplate,
+                DisplayName = definition.DisplayName,
+                Description = definition.Description,
+                IconAddress = definition.IconAddress,
+            });
         }
 
-        internal static bool Freeze()
+        internal static bool Freeze(AssetPackSnapshot snapshot = null)
         {
             if (Frozen)
                 return Materialized;
 
+            AssetPackSnapshot ownedSnapshot = snapshot == null ? ServerAssetManager.AcquireSnapshot() : null;
+            snapshot ??= ownedSnapshot;
             Frozen = true;
             try
             {
-                if (!string.IsNullOrEmpty(_registrationError))
-                    throw new InvalidOperationException(_registrationError);
-                var entries = Items.Values.Select(BuildItemEntry).ToList();
+                var entries = Items.Values.Select(item => BuildItemEntry(item, snapshot)).ToList();
                 var availableItems = InventoryItemLoader.AvailableItems;
                 if (availableItems == null)
                     throw new InvalidOperationException("InventoryItemLoader.AvailableItems is unavailable.");
@@ -75,7 +86,8 @@ namespace Anomaly.Server.Content
                     entries,
                     itemBase,
                     ItemIdCeiling,
-                    ServerAssetManager.ComputeCurrentManifestSha256());
+                    snapshot.BuildManifest(1).ManifestSha256,
+                    snapshot.CopyPacks());
                 ContentCatalogMessage.ValidateCatalog(Catalog, validateDeclaredHash: true);
 
                 if (!ServerContentRegistrar.RegisterItems(Catalog.Entries))
@@ -85,8 +97,6 @@ namespace Anomaly.Server.Content
                 {
                     KeyToId.Add(entry.Key, entry.AssignedId);
                     ItemById.Add(entry.AssignedId, entry);
-                    if (Items.TryGetValue(entry.Key, out CustomItemDefinition definition) && definition.Logic != null)
-                        ItemLogic.Add(entry.AssignedId, definition.Logic);
                 }
 
                 Materialized = true;
@@ -102,7 +112,6 @@ namespace Anomaly.Server.Content
                 bool registrarClean = ServerContentRegistrar.Reset();
                 KeyToId.Clear();
                 ItemById.Clear();
-                ItemLogic.Clear();
                 Catalog = EmptyCatalog();
                 Materialized = false;
                 SafeLogError(
@@ -110,9 +119,14 @@ namespace Anomaly.Server.Content
                     $"(registrarClean={registrarClean}): {exception}");
                 return false;
             }
+            finally { ownedSnapshot?.Dispose(); }
         }
 
-        internal static bool TryGetId(string key, out int id) => KeyToId.TryGetValue(key, out id);
+        internal static bool TryGetId(string key, out int id)
+        {
+            id = 0;
+            return key != null && KeyToId.TryGetValue(key, out id);
+        }
 
         internal static bool TryGetKey(int id, out string key)
         {
@@ -126,7 +140,6 @@ namespace Anomaly.Server.Content
         }
 
         internal static bool TryGetItemEntry(int id, out CatalogEntry entry) => ItemById.TryGetValue(id, out entry);
-        internal static bool TryGetItemLogic(int id, out ItemLogicBase logic) => ItemLogic.TryGetValue(id, out logic);
         internal static bool IsCustomItemId(int id) => ItemById.ContainsKey(id);
         internal static IEnumerable<CatalogEntry> ItemEntries => ItemById.Values;
 
@@ -135,15 +148,15 @@ namespace Anomaly.Server.Content
         /// snapshot offered to a future connection. Active connection catalogs
         /// are never mutated by file-watcher changes.
         /// </summary>
-        internal static ContentCatalog CreateOfferCatalog(byte[] manifestSha256)
+        internal static ContentCatalog CreateOfferCatalog(byte[] manifestSha256, AssetPackSnapshot snapshot)
         {
-            if (!Freeze())
+            if (!Freeze(snapshot))
                 throw new InvalidOperationException("The server item catalog is not materialized.");
 
             var entries = new List<CatalogEntry>();
             foreach (CustomItemDefinition definition in Items.Values.OrderBy(item => item.Key, StringComparer.Ordinal))
             {
-                CatalogEntry current = BuildItemEntry(definition);
+                CatalogEntry current = BuildItemEntry(definition, snapshot);
                 if (!KeyToId.TryGetValue(current.Key, out current.AssignedId))
                     throw new InvalidOperationException($"Item '{current.Key}' has no frozen assigned id.");
                 entries.Add(current);
@@ -153,6 +166,7 @@ namespace Anomaly.Server.Content
             {
                 ManifestSha256 = (byte[])manifestSha256.Clone(),
                 Entries = entries,
+                Packs = snapshot.CopyPacks(),
             };
             offer.CatalogSha256 = CatalogBuilder.ComputeCatalogHash(offer);
             ContentCatalogMessage.ValidateCatalog(offer, validateDeclaredHash: true);
@@ -173,22 +187,14 @@ namespace Anomaly.Server.Content
                 Items.Clear();
                 KeyToId.Clear();
                 ItemById.Clear();
-                ItemLogic.Clear();
                 Catalog = EmptyCatalog();
                 Frozen = false;
                 Materialized = false;
-                _registrationError = null;
             }
 
             if (!registrarClean)
                 throw new InvalidOperationException(
                     "One or more server item templates remain pending cleanup; a clean reload is blocked.");
-        }
-
-        private static void RejectRegistration(string reason)
-        {
-            _registrationError ??= reason;
-            SafeLogError($"Anomaly.Content: catalog registration rejected: {reason}. The complete catalog will fail closed.");
         }
 
         private static void SafeLogInfo(string message)
@@ -203,7 +209,7 @@ namespace Anomaly.Server.Content
             catch { }
         }
 
-        private static CatalogEntry BuildItemEntry(CustomItemDefinition definition)
+        private static CatalogEntry BuildItemEntry(CustomItemDefinition definition, AssetPackSnapshot snapshot = null)
         {
             var entry = new CatalogEntry
             {
@@ -213,18 +219,15 @@ namespace Anomaly.Server.Content
                 Description = definition.Description ?? string.Empty,
             };
 
-            if (!string.IsNullOrWhiteSpace(definition.IconPath))
+            if (definition.IconAddress.HasValue)
             {
-                byte[] hash = AssetRegistry.GetHashByPath(definition.IconPath);
-                if (hash == null || !ServerAssetManager.TryGetAsset(hash, out ServerAssetManager.AssetInfo asset) ||
-                    asset.Kind != AssetKind.Texture2D ||
-                    !string.Equals(Path.GetExtension(asset.RelativePath), ".png", StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException(
-                        $"Item '{definition.Key}' icon '{definition.IconPath}' is missing or is not a PNG.");
-                entry.IconHash = (byte[])hash.Clone();
-                entry.IconSize = asset.Size;
+                AssetAddress address = definition.IconAddress.Value;
+                AssetPackSnapshot.AssetRecord asset;
+                bool found = snapshot == null ? ServerAssetManager.TryGetAsset(address, out asset) : snapshot.TryGetAsset(address, out asset);
+                if (!found || (asset.Kind != AssetKind.Texture2D && asset.Kind != AssetKind.Sprite))
+                    throw new InvalidDataException("Item icon is missing or is not a Texture2D/Sprite: " + address);
+                entry.IconAddress = address.Value;
             }
-
             return entry;
         }
 

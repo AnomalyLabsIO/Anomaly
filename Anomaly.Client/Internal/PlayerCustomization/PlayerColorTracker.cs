@@ -34,7 +34,7 @@ internal static class PlayerColorTracker
     private const string DefaultColorHex = "#FFFFFF";
     private const string JumpsuitGameObjectPrefix = "jumpsuit_LOD";
     private const string NeutralBaseMapResource =
-        "Anomaly.Client.Resources.PlayerCustomization.ClassD_jumpsuit_BaseMap_neutral.png";
+        "Anomaly.Client.Resources.PlayerCustomization.ClassD_jumpsuit_BaseMap_neutral.rgba32";
 
     private static Color _localColor = Color.white;
     private static readonly Dictionary<uint, Color> _byNetId = new();
@@ -45,6 +45,7 @@ internal static class PlayerColorTracker
     private static MelonPreferences_Entry<string> _favoriteColorEntry;
     private static readonly TransactionalInitializer Initializer = new();
     private static bool _resourcesInitialized;
+    private static uint _localColorSentForNetId;
 
     internal static void Init()
     {
@@ -81,9 +82,6 @@ internal static class PlayerColorTracker
             new InitializationStep(
                 () => PlayerEvents.Removed += HandlePlayerRemoved,
                 () => PlayerEvents.Removed -= HandlePlayerRemoved),
-            new InitializationStep(
-                () => ClientEvents.Ready += HandleClientReady,
-                () => ClientEvents.Ready -= HandleClientReady),
             new InitializationStep(
                 () => ClientEvents.Disconnected += HandleClientDisconnected,
                 () => ClientEvents.Disconnected -= HandleClientDisconnected));
@@ -123,7 +121,8 @@ internal static class PlayerColorTracker
         try
         {
             var (r, g, b) = ColorToBytes(_localColor);
-            AnomalyMessaging.Send(new SetFavoriteColorMessage { R = r, G = g, B = b });
+            if (AnomalyMessaging.TrySend(new SetFavoriteColorMessage { R = r, G = g, B = b }))
+                _localColorSentForNetId = LocalPlayer.Instance.ReferenceHub.netId;
         }
         catch (Exception ex)
         {
@@ -133,6 +132,12 @@ internal static class PlayerColorTracker
 
     private static void HandleMessageReceived(IAnomalyMessage msg)
     {
+        // Ordinary inbound messages are dispatched only after authenticated map
+        // bootstrap and the local hub exist. The scene-ready event can precede both.
+        // A fast round restart keeps the transport but creates a new player hub.
+        if (_localColorSentForNetId != LocalPlayer.Instance?.ReferenceHub?.netId)
+            SendLocalColor();
+
         if (msg is not PlayerColorChangedMessage pcm)
             return;
 
@@ -200,13 +205,9 @@ internal static class PlayerColorTracker
         }
     }
 
-    private static void HandleClientReady(ClientReadyEventArgs _)
-    {
-        SendLocalColor();
-    }
-
     private static void HandleClientDisconnected(ClientDisconnectedEventArgs _)
     {
+        _localColorSentForNetId = 0;
         _byNetId.Clear();
         Capacity.Clear();
     }
@@ -327,9 +328,24 @@ internal static class PlayerColorTracker
         if (stream == null)
             return null;
 
-        using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        return PngLoader.TryDecode(ms.ToArray());
+        Texture2D texture = null;
+        try
+        {
+            byte[] bytes = Rgba32Resource.Read(stream, out int width, out int height);
+            var pixels = new Color32[checked(width * height)];
+            for (int i = 0; i < pixels.Length; i++)
+                pixels[i] = new Color32(bytes[i * 4], bytes[i * 4 + 1], bytes[i * 4 + 2], bytes[i * 4 + 3]);
+            texture = new Texture2D(width, height, TextureFormat.RGBA32, mipChain: false);
+            texture.SetPixels32(pixels);
+            texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            return texture;
+        }
+        catch (Exception exception)
+        {
+            if (texture != null) UnityEngine.Object.Destroy(texture);
+            MelonLogger.Warning("Invalid embedded neutral RGBA32 map; using tint-only fallback: " + exception.Message);
+            return null;
+        }
     }
 
     private static (byte R, byte G, byte B) ColorToBytes(Color c)

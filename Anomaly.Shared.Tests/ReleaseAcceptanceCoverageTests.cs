@@ -14,6 +14,24 @@ namespace Anomaly.Shared.Tests;
 public sealed class ReleaseAcceptanceCoverageTests : IDisposable
 {
     [Fact]
+    public void Registration_detaches_author_definition_before_catalog_freeze()
+    {
+        var definition = ValidDefinition("example:original");
+        definition.DisplayName = "Original name";
+        ContentRegistry.Add(definition);
+        definition.Key = "example:changed";
+        definition.DisplayName = "Changed name";
+
+        ContentCatalog catalog = CreateOffer();
+
+        Assert.Single(catalog.Entries);
+        Assert.Equal("example:original", catalog.Entries[0].Key);
+        Assert.Equal("Original name", catalog.Entries[0].DisplayName);
+        Assert.True(ContentRegistry.TryGetId("example:original", out _));
+        Assert.False(ContentRegistry.TryGetId("example:changed", out _));
+    }
+
+    [Fact]
     public void Reserved_slot_fullness_check_receives_authenticated_id_and_flags_once()
     {
         string observedId = null;
@@ -74,15 +92,47 @@ public sealed class ReleaseAcceptanceCoverageTests : IDisposable
     }
 
     [Fact]
-    public void Duplicate_item_registration_rejects_the_complete_catalog()
+    public void Invalid_registration_throws_without_poisoning_existing_items()
     {
-        ContentRegistry.Add(ValidDefinition("example:duplicate"));
-        ContentRegistry.Add(ValidDefinition("example:duplicate"));
+        ContentRegistry.Add(ValidDefinition("example:original"));
+        Assert.Throws<ArgumentNullException>(() => ContentRegistry.Add(null));
+        Assert.Throws<ArgumentException>(() => ContentRegistry.Add(ValidDefinition("INVALID KEY")));
+        Assert.Throws<InvalidOperationException>(() => ContentRegistry.Add(ValidDefinition("example:original")));
 
-        Assert.Throws<InvalidOperationException>(() =>
-            ContentRegistry.CreateOfferCatalog(EmptyManifestHash()));
-        Assert.False(ContentRegistry.Materialized);
-        Assert.False(ContentRegistry.TryGetId("example:duplicate", out _));
+        ContentCatalog catalog = CreateOffer();
+        Assert.Single(catalog.Entries);
+        Assert.Equal("example:original", catalog.Entries[0].Key);
+        Assert.True(ContentRegistry.Materialized);
+        Assert.Throws<InvalidOperationException>(() => ContentRegistry.Add(ValidDefinition("example:late")));
+        Assert.False(ContentRegistry.TryGetId("example:late", out _));
+    }
+
+    [Theory]
+    [InlineData("base")]
+    [InlineData("empty-name")]
+    [InlineData("long-key")]
+    [InlineData("long-name")]
+    [InlineData("long-description")]
+    [InlineData("invalid-unicode")]
+    public void Invalid_definition_fields_are_rejected_without_poisoning_the_catalog(string field)
+    {
+        ContentRegistry.Add(ValidDefinition("example:original"));
+        var rejected = ValidDefinition("example:rejected");
+        switch (field)
+        {
+            case "base": rejected.BaseTemplate = (ItemType)(-1); break;
+            case "empty-name": rejected.DisplayName = " "; break;
+            case "long-key": rejected.Key = string.Join(".", Enumerable.Repeat(new string('a', 32), 4)) + ":item"; break;
+            case "long-name": rejected.DisplayName = new string('\u00e9', (ContentCatalogMessage.MaxNameBytes / 2) + 1); break;
+            case "long-description": rejected.Description = new string('a', ContentCatalogMessage.MaxDescriptionBytes + 1); break;
+            case "invalid-unicode": rejected.DisplayName = "\ud800"; break;
+        }
+        Assert.Throws<ArgumentException>(() => ContentRegistry.Add(rejected));
+        Assert.False(ContentRegistry.Frozen);
+        ContentCatalog catalog = CreateOffer();
+        Assert.Single(catalog.Entries);
+        Assert.Equal("example:original", catalog.Entries[0].Key);
+        Assert.False(ContentRegistry.TryGetId(rejected.Key, out _));
     }
 
     [Fact]
@@ -159,7 +209,7 @@ public sealed class ReleaseAcceptanceCoverageTests : IDisposable
     private static ContentCatalog FreezeSingleItem()
     {
         ContentRegistry.Add(ValidDefinition("example:item"));
-        return ContentRegistry.CreateOfferCatalog(EmptyManifestHash());
+        return CreateOffer();
     }
 
     private static CustomItemDefinition ValidDefinition(string key) => new()
@@ -169,6 +219,12 @@ public sealed class ReleaseAcceptanceCoverageTests : IDisposable
         DisplayName = "Example item",
         Description = "Acceptance fixture",
     };
+
+    private static ContentCatalog CreateOffer()
+    {
+        using var snapshot = Anomaly.Server.FileTransfer.AssetPackSnapshot.Empty();
+        return ContentRegistry.CreateOfferCatalog(EmptyManifestHash(), snapshot);
+    }
 
     private static byte[] EmptyManifestHash() =>
         FileManifestMessage.ComputeManifestSha256(

@@ -22,8 +22,8 @@ namespace Anomaly.Client.Assets
     /// </summary>
     public static class OverrideRegistry
     {
-        private const int MaximumOverrides = 1024;
-        private const int MaximumOverridesPerNetId = 32;
+        private const int MaximumOverrides = TextureOverridePolicy.MaximumOverrides;
+        private const int MaximumOverridesPerNetId = TextureOverridePolicy.MaximumOverridesPerObject;
 
         private readonly struct Key : IEquatable<Key>
         {
@@ -47,8 +47,9 @@ namespace Anomaly.Client.Assets
 
         private class Entry
         {
-            public byte[] TextureHash;
+            public AssetAddress TextureAddress;
             public Material AppliedMaterial;
+            public int TexturePropertyId;
             public Texture OriginalTexture;
             public bool Applied;
         }
@@ -115,16 +116,20 @@ namespace Anomaly.Client.Assets
             var snapshot = new List<KeyValuePair<Key, Entry>>(_overrides);
             _overrides.Clear();
             Capacity.Clear();
+            var failures = new List<Exception>();
 
             foreach (var kv in snapshot)
             {
                 try { Restore(kv.Value, $"disconnect cleanup for netId {kv.Key.NetId}"); }
                 catch (Exception exception)
                 {
+                    _overrides[kv.Key] = kv.Value;
+                    failures.Add(exception);
                     try { MelonLogger.Warning($"OverrideRegistry isolated cleanup failure: {exception}"); }
                     catch { }
                 }
             }
+            if (failures.Count > 0) throw new AggregateException("Texture bindings could not be restored before bundle unload.", failures);
         }
 
         private static void OnMessage(Shared.Networking.IAnomalyMessage msg)
@@ -139,9 +144,10 @@ namespace Anomaly.Client.Assets
 
         private static void HandleOverride(AssetOverrideTextureMessage msg)
         {
-            byte[] textureHash = msg.TextureHash == null ? null : (byte[])msg.TextureHash.Clone();
             if (msg.NetId == 0 ||
-                !AnomalyResources.IsRemoteAssetAuthorized(textureHash, AssetKind.Texture2D))
+                !Anomaly.Client.Content.ContentCatalogClient.IsActivated ||
+                !AssetAddress.TryParse(msg.TextureAddress, out var textureAddress) ||
+                !AssetBundleManager.IsRemoteAsset(textureAddress, AssetKind.Texture2D))
             {
                 RejectRemoteState("received a texture override outside the activated manifest");
                 return;
@@ -161,7 +167,7 @@ namespace Anomaly.Client.Assets
             if (_overrides.TryGetValue(key, out var existing))
                 Restore(existing, $"replacement for netId {key.NetId}");
 
-            var entry = new Entry { TextureHash = textureHash };
+            var entry = new Entry { TextureAddress = textureAddress };
             _overrides[key] = entry;
             Apply(key, entry);
         }
@@ -172,9 +178,9 @@ namespace Anomaly.Client.Assets
             if (!_overrides.TryGetValue(key, out var entry))
                 return;
 
+            Restore(entry, $"clear for netId {key.NetId}");
             _overrides.Remove(key);
             Capacity.Remove(key.NetId, key);
-            Restore(entry, $"clear for netId {key.NetId}");
             AssetEvents.OnOverrideCleared(new AssetOverrideClearedEventArgs(msg.NetId, msg.ComponentPath, msg.MaterialIndex));
         }
 
@@ -189,8 +195,8 @@ namespace Anomaly.Client.Assets
             Capacity.RemoveScope(msg.NetId);
             foreach (var pair in toRemove)
             {
-                _overrides.Remove(pair.Key);
                 Restore(pair.Value, $"clear-all for netId {pair.Key.NetId}");
+                _overrides.Remove(pair.Key);
                 AssetEvents.OnOverrideCleared(new AssetOverrideClearedEventArgs(
                     pair.Key.NetId,
                     pair.Key.ComponentPath,
@@ -203,21 +209,28 @@ namespace Anomaly.Client.Assets
             if (!entry.Applied)
                 return;
 
+            bool restored = false;
             try
             {
                 if (entry.AppliedMaterial != null)
-                    entry.AppliedMaterial.mainTexture = entry.OriginalTexture;
+                    entry.AppliedMaterial.SetTexture(entry.TexturePropertyId, entry.OriginalTexture);
+                AssetLifetime.Release(entry.OriginalTexture);
+                restored = true;
             }
             catch (Exception exception)
             {
                 try { MelonLogger.Warning($"OverrideRegistry failed to restore {context}: {exception}"); }
                 catch { }
+                throw;
             }
             finally
             {
-                entry.Applied = false;
-                entry.AppliedMaterial = null;
-                entry.OriginalTexture = null;
+                if (restored)
+                {
+                    entry.Applied = false;
+                    entry.AppliedMaterial = null;
+                    entry.OriginalTexture = null;
+                }
             }
         }
 
@@ -226,7 +239,7 @@ namespace Anomaly.Client.Assets
             // Revoke logical capacity and restore every applied override before
             // relying on a disconnect callback that may never arrive.
             try { Clear(); }
-            catch { _overrides.Clear(); Capacity.Clear(); }
+            catch { Capacity.Clear(); }
             try { AnomalyMessaging.ClearTransportSession(); }
             catch { /* disconnect remains mandatory */ }
             try { NetworkClient.connection?.Disconnect(); }
@@ -241,14 +254,14 @@ namespace Anomaly.Client.Assets
 
         private static void Apply(Key key, Entry entry)
         {
-            if (!AnomalyResources.TryGetTexture(entry.TextureHash, out var tex))
+            if (!AnomalyResources.TryGetTexture(entry.TextureAddress, out var tex))
             {
                 // Texture bytes not available yet; leave pending.
                 entry.Applied = false;
                 return;
             }
 
-            var original = OverrideApplier.ApplyTexture(key.NetId, key.ComponentPath, key.MaterialIndex, tex, out var material);
+            var original = OverrideApplier.ApplyTexture(key.NetId, key.ComponentPath, key.MaterialIndex, tex, out var material, out int texturePropertyId);
             if (material == null)
             {
                 // Target not resolvable yet; leave pending.
@@ -259,14 +272,15 @@ namespace Anomaly.Client.Assets
             // Only store OriginalTexture the first time we apply; subsequent
             // re-applies (e.g. after role change) should not overwrite the true
             // original with the intermediate override texture.
-            if (!entry.Applied)
-                entry.OriginalTexture = original;
-
+            entry.OriginalTexture = original;
             entry.AppliedMaterial = material;
+            entry.TexturePropertyId = texturePropertyId;
             entry.Applied = true;
+            try { AssetLifetime.Retain(original); }
+            catch { Restore(entry, "retention failure"); throw; }
 
             AssetEvents.OnOverrideApplied(new AssetOverrideAppliedEventArgs(
-                key.NetId, key.ComponentPath, key.MaterialIndex, entry.TextureHash));
+                key.NetId, key.ComponentPath, key.MaterialIndex, entry.TextureAddress));
         }
 
     }

@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Collections;
 using System.Security.Cryptography;
 using System.Threading;
@@ -24,19 +25,6 @@ namespace Anomaly.Server.Content
         public static bool Reset() => true;
     }
 
-    public sealed class CustomItemDefinition
-    {
-        public string Key { get; set; }
-        public InventorySystem.ItemType BaseTemplate { get; set; } = InventorySystem.ItemType.Coin;
-        public string DisplayName { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-        public string IconPath { get; set; }
-        public ItemLogicBase Logic { get; set; }
-    }
-
-    public abstract class ItemLogicBase
-    {
-    }
 }
 
 namespace InventorySystem
@@ -53,11 +41,19 @@ namespace InventorySystem
     }
 }
 
-namespace Anomaly.Server.Assets
+namespace Anomaly.Server.Api.Assets
 {
     internal static class AssetRegistry
     {
-        public static byte[] GetHashByPath(string path) => null;
+    }
+}
+
+namespace Anomaly.Server.Api.Content
+{
+    internal static class CustomItems
+    {
+        internal static int ReadyPublications;
+        internal static bool RaisePlayerReady(ReferenceHub hub) { ReadyPublications++; return true; }
     }
 }
 
@@ -95,9 +91,11 @@ namespace Mirror
     public sealed class NetworkConnectionToClient
     {
         public bool isReady;
+        public int DisconnectCount { get; private set; }
 
         public void Disconnect()
         {
+            DisconnectCount++;
             isReady = false;
         }
     }
@@ -108,10 +106,13 @@ namespace MEC
     public struct CoroutineHandle
     {
         public bool IsRunning { get; internal set; }
+        internal int Id;
     }
 
     public static class Timing
     {
+        private static int _nextId;
+        private static readonly Dictionary<int, IEnumerator<float>> Routines = new Dictionary<int, IEnumerator<float>>();
         public static float WaitForOneFrame => 0f;
         public static bool ThrowOnKill { get; set; }
         public static bool ThrowOnRun { get; set; }
@@ -122,13 +123,23 @@ namespace MEC
         {
             if (ThrowOnRun)
                 throw new InvalidOperationException("injected coroutine-start failure");
-            return new CoroutineHandle { IsRunning = routine != null };
+            int id = ++_nextId; Routines[id] = routine; return new CoroutineHandle { IsRunning = routine != null, Id = id };
         }
 
+        public static void RunPendingStarts()
+        {
+            foreach (var entry in Routines.ToArray())
+            {
+                if (!entry.Value.GetType().Name.Contains("StartWhenReady")) continue;
+                for (int step = 0; step < 4 && entry.Value.MoveNext(); step++) { }
+                Routines.Remove(entry.Key);
+            }
+        }
         public static void KillCoroutines(CoroutineHandle handle)
         {
             if (ThrowOnKill)
                 throw new InvalidOperationException("injected coroutine-cancellation failure");
+            if (Routines.TryGetValue(handle.Id, out var routine)) { Routines.Remove(handle.Id); routine.Dispose(); }
         }
     }
 }
@@ -173,6 +184,8 @@ namespace Anomaly.Server.Networking
 {
     internal static class AnomalyMessaging
     {
+        public static event Action<ReferenceHub, IAnomalyMessage> MessageReceived;
+        public static void RaiseForTests(ReferenceHub hub, IAnomalyMessage message) => MessageReceived?.Invoke(hub, message);
         public static readonly List<IAnomalyMessage> Sent = new List<IAnomalyMessage>();
         public static Func<IAnomalyMessage, bool> TrySendResult =
             _ => true;
@@ -204,62 +217,65 @@ namespace Anomaly.Server.Networking
 
 namespace Anomaly.Server.FileTransfer
 {
+    // Deterministic publisher boundary: the real snapshot copier and chunk reader are linked below.
     internal static class ServerAssetManager
     {
-        private static readonly Dictionary<string, AssetInfo> Assets =
-            new Dictionary<string, AssetInfo>(StringComparer.Ordinal);
-
+        private static AssetPackSnapshot _snapshot = AssetPackSnapshot.Empty();
+        private static string _sourceRoot;
+        public static bool IsReady => true;
         public static void SetAssets(params AssetInfo[] assets)
         {
-            Assets.Clear();
-            foreach (AssetInfo asset in assets)
-                Assets[ToHex(asset.Hash)] = asset;
-        }
-
-        public static FileManifestMessage BuildManifest(
-            ulong sessionId,
-            out Dictionary<string, AssetInfo> snapshot)
-        {
-            snapshot = new Dictionary<string, AssetInfo>(StringComparer.Ordinal);
-            var message = new FileManifestMessage { SessionId = sessionId };
-            foreach (KeyValuePair<string, AssetInfo> pair in Assets)
+            _snapshot.Dispose();
+            _snapshot = AssetPackSnapshot.Empty();
+            if (_sourceRoot != null)
             {
-                AssetInfo asset = pair.Value;
-                asset.Hash = (byte[])asset.Hash.Clone();
-                snapshot.Add(pair.Key, asset);
-                message.Files.Add(new FileManifestMessage.FileEntry(
-                    asset.RelativePath,
-                    (byte[])asset.Hash.Clone(),
-                    asset.Size,
-                    asset.Kind));
+                string spool = Path.Combine(_sourceRoot, ".anomaly-spool");
+                if (!SpinWait.SpinUntil(() => !Directory.Exists(spool) || !Directory.EnumerateDirectories(spool).Any(), 5000))
+                    throw new InvalidOperationException("Fixture snapshot was still leased during test cleanup.");
+                Directory.Delete(_sourceRoot, true);
+                _sourceRoot = null;
             }
-            message.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(message.Files);
-            return message;
+            if (assets.Length == 0) return;
+            _sourceRoot = Path.Combine(Path.GetTempPath(), "anomaly-transfer-fixture-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_sourceRoot);
+            for (int i = 0; i < assets.Length; i++)
+            {
+                AssetInfo file = assets[i];
+                string name = "fixture" + i + ".bundle";
+                File.Copy(file.FullPath, Path.Combine(_sourceRoot, name));
+                var index = new AssetPackIndex
+                {
+                    SchemaVersion = 1, PackId = "fixture:pack" + i, Namespace = "fixture",
+                    UnityVersion = AssetPackIndex.SupportedUnityVersion,
+                    Platform = AssetPackIndex.SupportedPlatform,
+                    GameProfile = AssetPackIndex.SupportedGameProfile,
+                    BundleFile = name, BundleSha256 = ToHex(file.Hash), BundleBytes = file.Size,
+                    Assets = new List<PackAssetEntry>
+                    {
+                        new PackAssetEntry { Address = "mods/fixture/audio/test", EntryName = "mods/fixture/audio/test", Kind = "AudioClip", SampleFrames = 48000, SampleRate = 48000, Channels = 1 }
+                    },
+                };
+                var json = Newtonsoft.Json.Linq.JObject.FromObject(index);
+                foreach (var asset in json["Assets"]) ((Newtonsoft.Json.Linq.JObject)asset).Remove("AssetKind");
+                File.WriteAllText(Path.Combine(_sourceRoot, "fixture" + i + ".index.json"), json.ToString());
+            }
+            _snapshot.Dispose();
+            _snapshot = AssetPackSnapshot.Build(_sourceRoot);
         }
-
-        public static string ToHex(byte[] hash)
-            => BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
-
-        public static byte[] ComputeCurrentManifestSha256()
-            => FileManifestMessage.ComputeManifestSha256(Array.Empty<FileManifestMessage.FileEntry>());
-
-        public static bool TryGetAsset(byte[] hash, out AssetInfo asset)
-        {
-            asset = default;
-            return hash != null && Assets.TryGetValue(ToHex(hash), out asset);
-        }
-
-        public struct AssetInfo
+        public static AssetPackSnapshot AcquireSnapshot() => _snapshot.Retain();
+        public static bool TryGetAsset(AssetAddress address, out AssetPackSnapshot.AssetRecord asset) => _snapshot.TryGetAsset(address, out asset);
+        public static byte[] ComputeCurrentManifestSha256() => _snapshot.BuildManifest(1).ManifestSha256;
+        public static string ToHex(byte[] hash) => BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+        internal struct AssetInfo
         {
             public string FullPath;
             public string RelativePath;
             public byte[] Hash;
             public uint Size;
-            public AssetKind Kind;
+            public FileContentKind Kind;
         }
     }
 }
-
 namespace Anomaly.Client.Api.Features
 {
     internal static class Paths
@@ -290,7 +306,8 @@ namespace Anomaly.Client.Api.FileTransfer
         public static string ToHex(byte[] hash)
             => BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
 
-        public static bool HasFile(byte[] hash) => false;
+        public static Func<byte[], bool> HasFileResult { get; set; } = _ => false;
+        public static bool HasFile(byte[] hash) => HasFileResult(hash);
 
         public static void Evict(long maximumBytes)
         {
@@ -370,6 +387,12 @@ namespace Anomaly.Client.Api.Events.Handlers
             add { }
             remove { }
         }
+
+        public static event Action<Anomaly.Client.Api.Events.Args.ClientDisconnectedEventArgs> Disconnected
+        {
+            add { }
+            remove { }
+        }
     }
 
     internal static class FileTransferEvents
@@ -390,7 +413,7 @@ namespace Anomaly.Client.Api.Events.Handlers
     }
 }
 
-namespace Anomaly.Client.Api.Internal.Localization
+namespace Anomaly.Client.Api.Localization
 {
     internal static class Tr
     {
@@ -398,12 +421,14 @@ namespace Anomaly.Client.Api.Internal.Localization
     }
 }
 
-namespace Anomaly.Client.Api.Localization
+namespace Anomaly.Client.Api.Internal.Localization
 {
     internal static class TrKeys
     {
         public const string FileTransfer_Connecting = "file-transfer-connecting";
         public const string FileTransfer_LoadingLevel = "file-transfer-loading";
+        public const string Prompt_AllowContent = "allow-content";
+        public const string Prompt_SkipContent = "skip-content";
     }
 }
 
@@ -417,16 +442,41 @@ namespace Anomaly.Client.Api.Networking
             remove { }
         }
         public static readonly List<IAnomalyMessage> Sent = new List<IAnomalyMessage>();
+        public static readonly List<string> TransportEvents = new List<string>();
+        public static Func<IAnomalyMessage, bool> TrySendResult = _ => true;
+        public static Func<IAnomalyMessage, Exception> TrySendException = _ => null;
+        public static int SessionRevocations;
 
         public static void Send(IAnomalyMessage message) => Sent.Add(message);
 
         public static bool TrySend(IAnomalyMessage message)
         {
             Sent.Add(message);
-            return true;
+            if (message is ContentCatalogAckMessage acknowledgement && acknowledgement.Status == ContentCatalogActivationStatus.Failed)
+                TransportEvents.Add("ack");
+            Exception exception = TrySendException(message);
+            if (exception != null) throw exception;
+            return TrySendResult(message);
         }
 
-        public static void ResetForTests() => Sent.Clear();
+        public static void ResetForTests()
+        {
+            Sent.Clear(); TransportEvents.Clear();
+            TrySendResult = _ => true; TrySendException = _ => null;
+            SessionRevocations = 0; TransportFailures = 0;
+            Il2CppMirror.NetworkClient.connection = null;
+            UnityEngine.Time.realtimeSinceStartupAsDouble = 0;
+            MelonLoader.MelonCoroutines.ResetForTests();
+        }
+
+        public static int TransportFailures { get; set; }
+        public static void ClearTransportSession() { SessionRevocations++; TransportEvents.Add("revoke"); }
+        public static void FailClosedTransport(string reason)
+        {
+            TransportFailures++;
+            ClearTransportSession();
+            Il2CppMirror.NetworkClient.connection?.Disconnect();
+        }
     }
 }
 
@@ -435,15 +485,18 @@ namespace Anomaly.Client.Components
     internal static class FileTransferOverlay
     {
         public static bool ThrowOnHide { get; set; }
+        public static bool Visible { get; private set; }
 
         public static void Show()
         {
+            Visible = true;
         }
 
         public static void Hide()
         {
             if (ThrowOnHide)
                 throw new InvalidOperationException("injected overlay failure");
+            Visible = false;
         }
 
         public static void SetStatus(string status)
@@ -462,6 +515,24 @@ namespace Anomaly.Client.Components
 
 namespace Il2CppMirror
 {
+    internal class NetworkConnection
+    {
+        internal IntPtr Pointer { get; set; } = new IntPtr(1);
+        internal bool ThrowOnUpdate;
+        internal int Updates, Disconnects;
+        internal void Update()
+        {
+            Updates++;
+            Anomaly.Client.Api.Networking.AnomalyMessaging.TransportEvents.Add("flush");
+            if (ThrowOnUpdate) throw new InvalidOperationException("injected Mirror flush failure");
+        }
+        internal void Disconnect()
+        {
+            Disconnects++;
+            Anomaly.Client.Api.Networking.AnomalyMessaging.TransportEvents.Add("disconnect");
+        }
+    }
+    internal static class NetworkClient { internal static NetworkConnection connection; }
     internal static class NetworkServer
     {
         public static bool active => false;
@@ -494,12 +565,23 @@ namespace MelonLoader
 
     internal static class MelonCoroutines
     {
-        public static object Start(IEnumerator routine) => new object();
+        internal static readonly List<IEnumerator> Started = new();
+        internal static bool ReturnNull, ThrowOnStart;
+        public static object Start(IEnumerator routine)
+        {
+            Anomaly.Client.Api.Networking.AnomalyMessaging.TransportEvents.Add("schedule");
+            if (ThrowOnStart) throw new InvalidOperationException("injected coroutine scheduling failure");
+            if (ReturnNull) return null;
+            Started.Add(routine);
+            return new object();
+        }
+        internal static void ResetForTests() { Started.Clear(); ReturnNull = ThrowOnStart = false; }
     }
 }
 
 namespace UnityEngine
 {
+    internal static class Time { internal static double realtimeSinceStartupAsDouble; }
     internal sealed class WaitForSeconds
     {
         public WaitForSeconds(float seconds)

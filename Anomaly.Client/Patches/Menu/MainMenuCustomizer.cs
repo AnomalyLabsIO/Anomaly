@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Api.Features;
@@ -27,7 +26,6 @@ namespace Anomaly.Client.Patches.Menu;
 /// </summary>
 internal static class MainMenuCustomizer
 {
-    private const string LogoFileName = "logo.png";
     private const string WelcomePath = "News/Welcome";
     private const string ServerBrowserLoadingPath = "Servers/ServerBrowser/Loading";
     private const string ConnectPopupRootPath = "ConnectPopup/root";
@@ -35,6 +33,7 @@ internal static class MainMenuCustomizer
 
     private static bool _hooked;
     private static int _connectPopupMenuId;
+    private static readonly System.Collections.Generic.List<(RawImage Target, Texture Original)> LogoBindings = new();
 
     internal static void Init()
     {
@@ -140,19 +139,7 @@ internal static class MainMenuCustomizer
     {
         try
         {
-            string logoFilePath = Path.Combine(Paths.SkinsPath, LogoFileName);
-            if (!File.Exists(logoFilePath))
-            {
-                MelonLogger.Msg($"MainMenuCustomizer: no custom logo at '{logoFilePath}', skipping.");
-                return;
-            }
-
-            var tex = LocalTextures.TryLoad(logoFilePath);
-            if (tex == null)
-            {
-                MelonLogger.Warning($"MainMenuCustomizer: failed to decode '{logoFilePath}'.");
-                return;
-            }
+            if (!AssetBundleManager.TryGetLocalTexture("game/skin/logo", out var tex)) return;
 
             // Scene has multiple GameObjects named "Logo" in different sub-trees, but
             // only the active main-menu one (Canvas/Logo, RawImage, stock texture
@@ -164,6 +151,12 @@ internal static class MainMenuCustomizer
                 if (raw == null || raw.gameObject == null) continue;
                 if (!raw.gameObject.activeInHierarchy) continue;
                 if (!string.Equals(raw.gameObject.name, "Logo", StringComparison.Ordinal)) continue;
+                if (!LogoBindings.Exists(binding => binding.Target == raw))
+                {
+                    var original = raw.texture;
+                    AssetLifetime.Retain(original);
+                    LogoBindings.Add((raw, original));
+                }
                 raw.texture = tex;
                 swapped++;
             }
@@ -175,6 +168,16 @@ internal static class MainMenuCustomizer
         {
             MelonLogger.Warning($"MainMenuCustomizer: logo failed: {ex.Message}");
         }
+    }
+
+    internal static void RestoreLogo()
+    {
+        foreach (var binding in LogoBindings)
+        {
+            if (binding.Target != null) binding.Target.texture = binding.Original;
+            AssetLifetime.Release(binding.Original);
+        }
+        LogoBindings.Clear();
     }
 
     private static void TryApplyAuthStatus(Il2Cpp.NewMainMenu menu, bool? connected = null)

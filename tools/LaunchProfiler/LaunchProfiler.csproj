@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>Anomaly.LaunchProfiler</AssemblyName>
+    <AnomalyRequiresClientInterop>true</AnomalyRequiresClientInterop>
+    <AnomalyRequiresClientMelon>true</AnomalyRequiresClientMelon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <Compile Include="../EarlyAccessUiSmoke/ScreenshotPng.cs" Link="ScreenshotPng.cs" />
+    <Reference Include="MelonLoader" HintPath="$(AnomalyClientMelonLibDir)\MelonLoader.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="$(AnomalyClientMelonLibDir)\0Harmony.dll" Private="false" />
+    <Reference Include="Il2CppInterop.Runtime" HintPath="$(AnomalyClientMelonLibDir)\Il2CppInterop.Runtime.dll" Private="false" />
+    <Reference Include="Assembly-CSharp" HintPath="$(AnomalyClientInteropDir)\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="Il2Cppmscorlib" HintPath="$(AnomalyClientInteropDir)\Il2Cppmscorlib.dll" Private="false" />
+    <Reference Include="Il2CppSystem.Core" HintPath="$(AnomalyClientInteropDir)\Il2CppSystem.Core.dll" Private="false" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(AnomalyClientInteropDir)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="UnityEngine.UI" HintPath="$(AnomalyClientInteropDir)\UnityEngine.UI.dll" Private="false" />
+    <Reference Include="UnityEngine.UIModule" HintPath="$(AnomalyClientInteropDir)\UnityEngine.UIModule.dll" Private="false" />
+    <Reference Include="Unity.TextMeshPro" HintPath="$(AnomalyClientInteropDir)\Unity.TextMeshPro.dll" Private="false" />
+    <Reference Include="UnityEngine.ScreenCaptureModule" HintPath="$(AnomalyClientInteropDir)\UnityEngine.ScreenCaptureModule.dll" Private="false" />
+    <Reference Include="UnityEngine.ImageConversionModule" HintPath="$(AnomalyClientInteropDir)\UnityEngine.ImageConversionModule.dll" Private="false" />
+  </ItemGroup>
+</Project>

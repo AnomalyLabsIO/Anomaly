@@ -27,8 +27,8 @@ namespace Anomaly.Client.Patches.Audio
     /// The same <see cref="CassieLine"/> instance is reused across every play
     /// of a given ApiName, so once we mutate <c>.Clip</c> the override sticks.
     /// We capture the original clip in <see cref="_originalClips"/> on first
-    /// substitution, so <see cref="RestoreAll"/> can revert all mutations on
-    /// disconnect — keeping the engine's database clean for the next session.
+    /// substitution. Disconnect restores the effective local replacement while
+    /// preserving that baseline; final shutdown restores the true stock clip.
     /// </para>
     /// </remarks>
     [HarmonyPatch(typeof(CassieLineSource), nameof(CassieLineSource.Schedule))]
@@ -50,7 +50,10 @@ namespace Anomaly.Client.Patches.Audio
                     return;
 
                 if (!_originalClips.ContainsKey(cassieLine))
+                {
+                    AssetLifetime.Retain(cassieLine.Clip);
                     _originalClips[cassieLine] = cassieLine.Clip;
+                }
 
                 if (cassieLine.Clip != overrideClip)
                     cassieLine.Clip = overrideClip;
@@ -83,16 +86,31 @@ namespace Anomaly.Client.Patches.Audio
         }
 
         /// <summary>
-        /// Restores every CASSIE line we mutated to its pre-override clip.
-        /// Called from the disconnect handler so the next session starts with
-        /// the database in its vanilla state.
+        /// Restores the remaining local replacement or true stock clip after
+        /// the remote address layer has been revoked.
         /// </summary>
         public static void RestoreAll()
         {
-            foreach (var kv in _originalClips)
+            foreach (var kv in new List<KeyValuePair<CassieLine, AudioClip>>(_originalClips))
             {
+                if (kv.Key != null && PathOverrideRegistry.TryGetAudioClip(kv.Key.ApiName, out var remaining))
+                {
+                    kv.Key.Clip = remaining;
+                    continue; // Preserve the true stock baseline while a local replacement remains.
+                }
                 if (kv.Key != null)
                     kv.Key.Clip = kv.Value;
+                AssetLifetime.Release(kv.Value);
+                _originalClips.Remove(kv.Key);
+            }
+        }
+
+        internal static void RestoreStockAll()
+        {
+            foreach (var kv in _originalClips)
+            {
+                if (kv.Key != null) kv.Key.Clip = kv.Value;
+                AssetLifetime.Release(kv.Value);
             }
             _originalClips.Clear();
         }

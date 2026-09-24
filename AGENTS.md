@@ -80,8 +80,9 @@ Run commands from the repository root unless noted otherwise.
 - The repository has xUnit test projects using `Microsoft.NET.Test.Sdk`:
   - `dotnet test Anomaly.Client.Api.Tests/Anomaly.Client.Api.Tests.csproj -c Debug -p:DeployLocal=false`
   - `dotnet test Anomaly.Shared.Tests/Anomaly.Shared.Tests.csproj -c Debug -p:DeployLocal=false`
+  - `dotnet test Anomaly.Server.Tests/Anomaly.Server.Tests.csproj -c Debug -p:DeployLocal=false`
   - `dotnet test Anomaly.Bootstrap.Tests/Anomaly.Bootstrap.Tests.csproj -c Debug -p:DeployLocal=false`
-- API/Bootstrap tests target .NET 8; Shared tests target .NET Framework 4.8. Builds still require the configured local game/loader references.
+- API/Bootstrap tests target .NET 8; Shared/Server tests target .NET Framework 4.8. Server tests link real dispatch/bootstrap/session code with inert engine boundaries. Builds still require the configured local game/loader references.
 - The isolated client path regression test requires PowerShell 7 (`pwsh`) on `PATH` to launch fresh processes before MelonLoader path initialization.
 - Check public API compatibility after building the API project:
   - `dotnet run --project tools/PublicApiBaseline/PublicApiBaseline.csproj -- Anomaly.Client.Api/bin/Debug/net6.0/Anomaly.Client.Api.dll Anomaly.Client.Api/PublicAPI.Shipped.txt`
@@ -103,7 +104,8 @@ Run commands from the repository root unless noted otherwise.
 - `Anomaly.Client/Internal/{Bootstrap,Effects,Stats,Map,Round,Networking}` are bootstrap orchestration and state trackers reached only from patches — never from Api.
 - `Anomaly.Server/Auth` is preauth/session state for server validation.
 - `Anomaly.Server/Patches` is Harmony patches against server transport/auth flow.
-- `Anomaly.Server/API/Plugins` is the server-side plugin discovery. The client side intentionally has no equivalent — `Anomaly.Client.Api` is a peer library that exposes events/helpers/wrappers for other mods to consume, and does not orchestrate their lifecycle.
+- `Anomaly.Server/Api/` is the author-facing server surface (`Anomaly.Server.Api.*`) within the same LabAPI plugin assembly. Use native LabAPI players, items, event handlers/arguments, commands, configuration, and plugin lifecycle. There is no Anomaly server plugin discovery or custom item-logic lifecycle; companions are ordinary LabAPI plugins.
+- Server implementation outside `Api/` is internal, apart from the LabAPI `Plugin` and `Config` entry types. `Anomaly.Server/MODDING.md` describes the supported API and pre-release migration; `PublicAPI.Shipped.txt` pins its managed contract. The developer SDK includes server DLL/XML/baseline and the `samples/HelloAnomalyServer` starter.
 - `Anomaly.Server/{Assets,FileTransfer,Round,Networking}` are server-authoritative bridges that relay state to clients over the Anomaly message channel (`0xFE`).
 - `Anomaly.Shared/Auth` is protocol payloads and crypto helpers (ECDSA identity, X25519 handshake, AES-GCM).
 - `Anomaly.Shared/Networking/Messages` is the full set of wire messages used between Client and Server.

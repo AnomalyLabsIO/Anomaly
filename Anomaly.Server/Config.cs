@@ -3,8 +3,8 @@ namespace Anomaly.Server;
 public class Config
 {
     /// <summary>
-    /// Path to the server's asset directory. Files in this directory
-    /// will be transferred to clients on connection. Leave empty to disable.
+    /// Directory of completed offline-authored .index.json and .bundle pairs.
+    /// Pairs are indexed on a worker and offered after authentication. Leave empty to disable.
     /// </summary>
     public string AssetDirectory { get; set; } = "";
 
@@ -41,10 +41,4 @@ public class Config
     /// </summary>
     public int PasswordBlockSeconds { get; set; } = 300;
 
-    /// <summary>
-    /// When true, a client whose custom-content catalog hash does not match the server's
-    /// (or that fails to register catalog entries) is disconnected. Default false: the
-    /// server instead logs the mismatch and refuses to grant the affected custom content
-    /// to that client, leaving the rest of the session intact.
-    /// </summary>
 }

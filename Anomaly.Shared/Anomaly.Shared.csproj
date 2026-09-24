@@ -69,6 +69,14 @@
         <Compile Include="Auth\ServerHandshake.cs" />
         <Compile Include="Auth\ServerIdentityRotationRecord.cs" />
         <Compile Include="Assets\AssetKind.cs" />
+        <Compile Include="Assets\AssetAddress.cs" />
+        <Compile Include="Assets\AssetAddressWire.cs" />
+        <Compile Include="Assets\DecorativeVisualInstance.cs" />
+        <Compile Include="Assets\FileContentKind.cs" />
+        <Compile Include="Assets\AssetPackIndex.cs" />
+        <Compile Include="Assets\AssetPackIndexCodec.cs" />
+        <Compile Include="Assets\BoundedPackJson.cs" />
+        <Compile Include="Assets\StockAssetProfile.cs" />
         <Compile Include="Assets\AssetManifestSnapshot.cs" />
         <Compile Include="Content\CatalogTypes.cs" />
         <Compile Include="Content\CatalogBuilder.cs" />
@@ -88,13 +96,18 @@
         <Compile Include="Networking\Messages\AssetClearOverrideMessage.cs" />
         <Compile Include="Networking\Messages\AssetOverrideTextureMessage.cs" />
         <Compile Include="Networking\Messages\ContentCatalogMessage.cs" />
+        <Compile Include="Networking\Messages\DecorativeVisualSnapshotMessage.cs" />
+        <Compile Include="Networking\Messages\DecorativeVisualUpdateMessage.cs" />
         <Compile Include="Networking\Messages\ContentCatalogDecisionMessage.cs" />
         <Compile Include="Networking\Messages\ContentCatalogAckMessage.cs" />
         <Compile Include="Networking\Messages\EnrollmentIdentityMessage.cs" />
         <Compile Include="Networking\Messages\CapabilityChallengeMessage.cs" />
         <Compile Include="Networking\Messages\CapabilitySnapshotMessage.cs" />
-        <Compile Include="Networking\Messages\FacilityAtlasEditsMessage.cs" />
-        <Compile Include="Networking\Messages\FacilityLayoutRecipeMessage.cs" />
+        <Compile Include="Networking\Messages\FacilityAtlasEditsCodec.cs" />
+        <Compile Include="Networking\Messages\FacilityRecipeCodec.cs" />
+        <Compile Include="Networking\Messages\FacilityPlacementPlan.cs" />
+        <Compile Include="Networking\Messages\FacilitySnapshotMessage.cs" />
+        <Compile Include="Networking\FacilityGenerationGate.cs" />
         <Compile Include="Networking\Messages\FileAckMessage.cs" />
         <Compile Include="Networking\Messages\FileChunkMessage.cs" />
         <Compile Include="Networking\Messages\FileManifestMessage.cs" />
@@ -104,7 +117,11 @@
         <Compile Include="Networking\Messages\RoundStateMessage.cs" />
         <Compile Include="Networking\Messages\SetFavoriteColorMessage.cs" />
         <Compile Include="Networking\Messages\PlayerColorChangedMessage.cs" />
+        <Compile Include="Assets\TextureOverridePolicy.cs" />
         <Compile Include="Properties\AssemblyInfo.cs"/>
+        <EmbeddedResource Include="Assets\CassieProfile.tsv">
+            <LogicalName>Anomaly.Shared.Assets.CassieProfile.tsv</LogicalName>
+        </EmbeddedResource>
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
     <!--

@@ -4,6 +4,7 @@ using System.IO;
 using System.Security.Cryptography;
 using Anomaly.Server.Networking;
 using Anomaly.Server.Content;
+using Anomaly.Server.Api.Content;
 using Anomaly.Shared.Assets;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
@@ -13,10 +14,11 @@ using Logger = LabApi.Features.Console.Logger;
 
 namespace Anomaly.Server.FileTransfer;
 
-public class FileTransferSession
+internal class FileTransferSession
 {
     private enum State
     {
+        AwaitingConsent,
         AwaitingRequest,
         Sending,
         AwaitingAck,
@@ -26,8 +28,8 @@ public class FileTransferSession
 
     private static readonly Dictionary<ReferenceHub, FileTransferSession> ActiveSessions =
         new Dictionary<ReferenceHub, FileTransferSession>();
-    private static readonly Dictionary<ReferenceHub, AssetManifestSnapshot> ApprovedManifests =
-        new Dictionary<ReferenceHub, AssetManifestSnapshot>();
+    private static readonly Dictionary<ReferenceHub, AssetPackSnapshot> ApprovedManifests =
+        new Dictionary<ReferenceHub, AssetPackSnapshot>();
     private static readonly object BudgetLock = new object();
 
     private const int MaxActiveTransfers = 8;
@@ -45,13 +47,18 @@ public class FileTransferSession
     private readonly ulong _sessionId;
     private readonly FileManifestMessage _manifestMessage;
     private readonly Dictionary<string, ServerAssetManager.AssetInfo> _manifest;
-    private readonly AssetManifestSnapshot _assetSnapshot;
+    private readonly AssetPackSnapshot _assetSnapshot;
+    private AssetChunkReader _chunkReader;
+    private bool _snapshotTransferred;
+    private sealed class PendingStart { internal CoroutineHandle Handle; }
+    private static readonly Dictionary<ReferenceHub, PendingStart> PendingStarts = new Dictionary<ReferenceHub, PendingStart>();
     private readonly Queue<ServerAssetManager.AssetInfo> _pendingFiles =
         new Queue<ServerAssetManager.AssetInfo>();
 
-    private State _state = State.AwaitingRequest;
+    private State _state = State.AwaitingConsent;
     private ServerAssetManager.AssetInfo _currentFile;
     private bool _hasCurrentFile;
+    private bool _failureClosed;
     private int _retryCount;
     private long _reservedBytes;
     private bool _budgetReserved;
@@ -59,41 +66,84 @@ public class FileTransferSession
     private CoroutineHandle _sendHandle;
     private CoroutineHandle _watchdogHandle;
 
-    private FileTransferSession(ReferenceHub hub)
+    private FileTransferSession(ReferenceHub hub, AssetPackSnapshot snapshot)
     {
         _hub = hub;
         _sessionId = CreateSessionId();
-        _manifestMessage = ServerAssetManager.BuildManifest(_sessionId, out var snapshot);
-        _manifest = snapshot;
-        _assetSnapshot = new AssetManifestSnapshot(_manifestMessage.Files);
+        _assetSnapshot = snapshot;
+        _manifestMessage = snapshot.BuildManifest(_sessionId);
+        _manifest = snapshot.Files;
         _lastActivityUtc = DateTime.UtcNow;
     }
 
-    public static void StartForPlayer(ReferenceHub hub, Action<byte[]> beforeManifestSend = null)
+    public static void StartForPlayer(ReferenceHub hub, Action<byte[], AssetPackSnapshot> beforeManifestSend = null)
     {
-        if (hub == null)
-            return;
-
+        if (hub == null) return;
         CleanupPlayer(hub);
-        var session = new FileTransferSession(hub);
-        ActiveSessions[hub] = session;
+        var pending = new PendingStart();
+        PendingStarts[hub] = pending;
+        try { pending.Handle = Timing.RunCoroutine(StartWhenReady(hub, pending, beforeManifestSend)); }
+        catch
+        {
+            PendingStarts.Remove(hub);
+            ContentGrantGate.Remove(hub.netId);
+            Plugin.QuarantineAuthenticatedPlayer(hub, "asset-offer-scheduler-failure");
+            hub.connectionToClient?.Disconnect();
+        }
+    }
+
+    private static IEnumerator<float> StartWhenReady(ReferenceHub hub, PendingStart pending, Action<byte[], AssetPackSnapshot> beforeManifestSend)
+    {
+        // Yield before publication so the pending handle is installed before this coroutine removes it.
+        yield return Timing.WaitForOneFrame;
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (!ServerAssetManager.IsReady && DateTime.UtcNow < deadline)
+        {
+            if (!PendingStarts.TryGetValue(hub, out var current) || !ReferenceEquals(current, pending)) yield break;
+            yield return Timing.WaitForOneFrame;
+        }
+        if (!PendingStarts.TryGetValue(hub, out var owner) || !ReferenceEquals(owner, pending)) yield break;
+        PendingStarts.Remove(hub);
+        if (hub == null || hub.connectionToClient == null || !hub.connectionToClient.isReady) yield break;
+        var snapshot = ServerAssetManager.AcquireSnapshot();
+        FileTransferSession session = null;
         try
         {
-            beforeManifestSend?.Invoke((byte[])session._manifestMessage.ManifestSha256.Clone());
+            if (!ServerAssetManager.IsReady) throw new TimeoutException("Initial pack indexing did not complete.");
+            session = new FileTransferSession(hub, snapshot);
+            ActiveSessions[hub] = session;
+            beforeManifestSend?.Invoke((byte[])session._manifestMessage.ManifestSha256.Clone(), snapshot);
             session.SendManifest();
         }
         catch (Exception exception)
         {
-            session.EndSession(false, "content offer preparation failed: " + exception.Message);
-            throw;
+            if (session != null)
+            {
+                try { session.EndSession(false, "content offer preparation failed: " + exception.Message); }
+                finally
+                {
+                    // The catalog callback may already have aborted and removed this
+                    // session. That cleanup must not suppress admission revocation.
+                    session.FailClosedAuthenticatedPlayer("asset-offer-failure");
+                }
+            }
+            else { snapshot.Dispose(); Plugin.QuarantineAuthenticatedPlayer(hub, "asset-index-failure"); hub.connectionToClient?.Disconnect(); }
         }
     }
-
     public static void CleanupPlayer(ReferenceHub hub)
     {
         if (hub == null)
             return;
-        ApprovedManifests.Remove(hub);
+        if (PendingStarts.TryGetValue(hub, out var pending))
+        {
+            PendingStarts.Remove(hub);
+            StopPendingBestEffort(pending);
+        }
+        if (ApprovedManifests.TryGetValue(hub, out var approved))
+        {
+            ApprovedManifests.Remove(hub);
+            approved.Dispose();
+        }
         if (ActiveSessions.TryGetValue(hub, out var session))
             session.EndSession(
                 false,
@@ -101,11 +151,43 @@ public class FileTransferSession
                 failClosed: false);
     }
 
-    internal static bool IsAssetApproved(ReferenceHub hub, byte[] hash, AssetKind expectedKind) =>
-        hub != null &&
-        ApprovedManifests.TryGetValue(hub, out AssetManifestSnapshot manifest) &&
-        manifest.Contains(hash, expectedKind);
+    internal static bool ApproveForPlayer(ReferenceHub hub)
+    {
+        if (hub == null || !ActiveSessions.TryGetValue(hub, out var session) ||
+            session._state != State.AwaitingConsent ||
+            ContentGrantGate.GetReadiness(hub.netId) != ContentReadiness.Approved)
+            return false;
 
+        session._state = State.AwaitingRequest;
+        session._lastActivityUtc = DateTime.UtcNow;
+        try
+        {
+            session._watchdogHandle = Timing.RunCoroutine(session.Watchdog());
+            return true;
+        }
+        catch (Exception exception)
+        {
+            session.EndSession(false, "approved transfer watchdog could not start: " + exception.Message);
+            return false;
+        }
+    }
+
+    internal static bool IsAssetApproved(ReferenceHub hub, AssetAddress address, AssetKind kind) =>
+        hub != null && ContentGrantGate.GetReadiness(hub.netId) == ContentReadiness.Activated &&
+        ApprovedManifests.TryGetValue(hub, out AssetPackSnapshot snapshot) && snapshot.Contains(address, kind);
+
+    internal static bool IsAssetApproved(ReferenceHub hub, AssetAddress address, AssetKind kind, byte[] indexHash) =>
+        IsAssetApproved(hub, address, kind) && ApprovedManifests[hub].TryGetAsset(address, out var record) &&
+        HashesEqual(record.IndexHash, indexHash);
+
+    internal static IEnumerable<string> OfferedFailureKeys(ReferenceHub hub)
+    {
+        AssetPackSnapshot snapshot = ActiveSessions.TryGetValue(hub, out var session) ? session._assetSnapshot :
+            ApprovedManifests.TryGetValue(hub, out var approved) ? approved : null;
+        if (snapshot == null) yield break;
+        foreach (var pack in snapshot.CopyPacks()) yield return pack.PackId;
+        foreach (var asset in snapshot.Assets) yield return asset.Address.Value;
+    }
     public static void Reset()
     {
         var sessions = new List<FileTransferSession>(ActiveSessions.Values);
@@ -113,7 +195,11 @@ public class FileTransferSession
             session.EndSession(false, "server reset", failClosed: false);
 
         ActiveSessions.Clear();
+        foreach (var snapshot in ApprovedManifests.Values) snapshot.Dispose();
         ApprovedManifests.Clear();
+        var pendingStarts = new List<PendingStart>(PendingStarts.Values);
+        PendingStarts.Clear();
+        foreach (var pending in pendingStarts) StopPendingBestEffort(pending);
         lock (BudgetLock)
         {
             _reservedTransferCount = 0;
@@ -143,8 +229,8 @@ public class FileTransferSession
         {
             if (!AnomalyMessaging.TrySendToClient(_hub, _manifestMessage))
                 throw new InvalidOperationException("the authenticated manifest could not be delivered");
-            _lastActivityUtc = DateTime.UtcNow;
-            _watchdogHandle = Timing.RunCoroutine(Watchdog());
+            // One bounded manifest is retained per connected player. Reading the
+            // consent prompt has no deadline and reserves no active-transfer budget.
             try
             {
                 Logger.Info(
@@ -162,6 +248,11 @@ public class FileTransferSession
 
     private void HandleFileRequest(FileRequestMessage request)
     {
+        if (_state == State.AwaitingConsent)
+        {
+            EndSession(false, "file request arrived before matching user consent");
+            return;
+        }
         if (_state != State.AwaitingRequest)
         {
             Logger.Warn($"FileTransfer: Rejected duplicate/out-of-state request from {_hub.LoggedNameFromRefHub()}.");
@@ -267,135 +358,39 @@ public class FileTransferSession
 
     private IEnumerator<float> SendFileChunks(ServerAssetManager.AssetInfo asset)
     {
-        FileStream stream;
-        try
+        int total = checked((int)((asset.Size + FileChunkMessage.MaxChunkBytes - 1) / FileChunkMessage.MaxChunkBytes));
+        if (total <= 0 || total > FileChunkMessage.MaxChunksPerFile) { EndSession(false, "chunk budget exceeded", false); yield break; }
+        _chunkReader?.Dispose();
+        var reader = _chunkReader = new AssetChunkReader(_assetSnapshot, asset);
+        int index = 0;
+        while (!reader.IsCompleted)
         {
-            stream = new FileStream(asset.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        }
-        catch (Exception ex)
-        {
-            EndSession(false, $"failed to open '{asset.RelativePath}': {ex.Message}", false);
-            yield break;
-        }
-
-        using (stream)
-        using (var sha = SHA256.Create())
-        {
-            long streamLength;
-            try
-            {
-                streamLength = stream.Length;
-            }
-            catch (Exception ex)
-            {
-                EndSession(false, $"failed to inspect '{asset.RelativePath}': {ex.Message}", false);
-                yield break;
-            }
-
-            if (streamLength != asset.Size)
-            {
-                EndSession(false, $"asset changed size after manifest: '{asset.RelativePath}'", false);
-                yield break;
-            }
-
-            int totalChunks = checked((int)((asset.Size + FileChunkMessage.MaxChunkBytes - 1) /
-                                            FileChunkMessage.MaxChunkBytes));
-            if (totalChunks <= 0 || totalChunks > FileChunkMessage.MaxChunksPerFile)
-            {
-                EndSession(false, $"asset exceeded the chunk-count limit: '{asset.RelativePath}'", false);
-                yield break;
-            }
-
-            for (int i = 0; i < totalChunks; i++)
-            {
-                if (_state != State.Sending)
-                    yield break;
-                if (_hub.connectionToClient == null || !_hub.connectionToClient.isReady)
-                {
-                    EndSession(false, "connection was lost during transfer", false);
-                    yield break;
-                }
-
-                int expectedLength = (int)Math.Min(
-                    FileChunkMessage.MaxChunkBytes,
-                    (long)asset.Size - stream.Position);
-                var data = new byte[expectedLength];
-                try
-                {
-                    int read = 0;
-                    while (read < expectedLength)
-                    {
-                        int current = stream.Read(data, read, expectedLength - read);
-                        if (current == 0)
-                            break;
-                        read += current;
-                    }
-                    if (read != expectedLength)
-                    {
-                        EndSession(false, $"asset was truncated during transfer: '{asset.RelativePath}'", false);
-                        yield break;
-                    }
-
-                    sha.TransformBlock(data, 0, data.Length, data, 0);
-                    if (!AnomalyMessaging.TrySendToClient(_hub, new FileChunkMessage
-                    {
-                        SessionId = _sessionId,
-                        Hash = (byte[])asset.Hash.Clone(),
-                        ChunkIndex = checked((ushort)i),
-                        TotalChunks = checked((ushort)totalChunks),
-                        Data = data
-                    }))
-                        throw new InvalidOperationException("the authenticated chunk could not be delivered");
-                }
-                catch (Exception ex)
-                {
-                    EndSession(false, $"failed to stream '{asset.RelativePath}': {ex.Message}", false);
-                    yield break;
-                }
-                _lastActivityUtc = DateTime.UtcNow;
-                yield return Timing.WaitForSeconds(DefaultChunkIntervalMs / 1000f);
-            }
-
-            try
-            {
-                sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-            }
-            catch (Exception ex)
-            {
-                EndSession(false, $"failed to verify '{asset.RelativePath}': {ex.Message}", false);
-                yield break;
-            }
-            if (!HashesEqual(sha.Hash, asset.Hash))
-            {
-                EndSession(false, $"asset changed content after manifest: '{asset.RelativePath}'", false);
-                yield break;
-            }
-
-            try
-            {
-                if (!AnomalyMessaging.TrySendToClient(_hub, new FileTransferCompleteMessage
-                    {
-                        SessionId = _sessionId,
-                        Hash = (byte[])asset.Hash.Clone()
-                    }))
-                {
-                    throw new InvalidOperationException(
-                        "the authenticated completion marker could not be delivered");
-                }
-            }
-            catch (Exception ex)
-            {
-                EndSession(
-                    false,
-                    $"completion marker send failed for '{asset.RelativePath}': {ex.Message}",
-                    false);
-                yield break;
-            }
-            _state = State.AwaitingAck;
+            if (_state != State.Sending) yield break;
+            if (_hub.connectionToClient == null || !_hub.connectionToClient.isReady) { EndSession(false, "connection lost", false); yield break; }
+            if (!reader.TryRead(out byte[] data)) { yield return Timing.WaitForOneFrame; continue; }
+            bool sent = false;
+            try { sent = AnomalyMessaging.TrySendToClient(_hub, new FileChunkMessage { SessionId = _sessionId, Hash = (byte[])asset.Hash.Clone(), ChunkIndex = checked((ushort)index++), TotalChunks = checked((ushort)total), Data = data }); }
+            catch (Exception exception) { EndSession(false, "chunk send failed: " + exception.Message, false); }
+            if (!sent) { EndSession(false, "chunk send failed", false); yield break; }
             _lastActivityUtc = DateTime.UtcNow;
+            yield return Timing.WaitForSeconds(DefaultChunkIntervalMs / 1000f);
         }
+        reader.Dispose();
+        _chunkReader = null;
+        if (reader.Error != null || index != total) { EndSession(false, reader.Error ?? "incomplete spool read", false); yield break; }
+        bool completeSent = false;
+        try { completeSent = AnomalyMessaging.TrySendToClient(_hub, new FileTransferCompleteMessage { SessionId = _sessionId, Hash = (byte[])asset.Hash.Clone() }); }
+        catch (Exception exception) { EndSession(false, "completion send failed: " + exception.Message, false); }
+        if (!completeSent) { EndSession(false, "completion send failed", false); yield break; }
+        _state = State.AwaitingAck;
+        _lastActivityUtc = DateTime.UtcNow;
     }
 
+    private static void StopPendingBestEffort(PendingStart pending)
+    {
+        try { if (pending.Handle.IsRunning) Timing.KillCoroutines(pending.Handle); }
+        catch (Exception exception) { try { Logger.Warn("FileTransfer: pending offer cancellation failed after ownership was revoked: " + exception.Message); } catch { } }
+    }
     private void HandleFileAck(FileAckMessage ack)
     {
         if (_state != State.AwaitingAck || !_hasCurrentFile)
@@ -439,7 +434,7 @@ public class FileTransferSession
         while (_state != State.Complete && _state != State.Aborted)
         {
             yield return Timing.WaitForSeconds(1f);
-            if (DateTime.UtcNow - _lastActivityUtc > SessionTimeout)
+            if (_state != State.AwaitingConsent && DateTime.UtcNow - _lastActivityUtc > SessionTimeout)
             {
                 EndSession(false, $"timed out while {_state.ToString().ToLowerInvariant()}", false);
                 yield break;
@@ -493,6 +488,8 @@ public class FileTransferSession
         // touching the external scheduler. A failed coroutine cancellation
         // cannot retain an active/approved transfer or exhaust future slots.
         ReleaseBudget();
+        _chunkReader?.Dispose();
+        _chunkReader = null;
 
         bool ownedActiveSession = false;
         if (ActiveSessions.TryGetValue(_hub, out var current) && ReferenceEquals(current, this))
@@ -501,8 +498,7 @@ public class FileTransferSession
             ActiveSessions.Remove(_hub);
         }
 
-        if (!completed && ownedActiveSession)
-            ApprovedManifests.Remove(_hub);
+        if (!completed && !_snapshotTransferred) _assetSnapshot.Dispose();
 
         if (!completed && failClosed && ownedActiveSession)
         {
@@ -527,7 +523,7 @@ public class FileTransferSession
 
         if (!ContentGrantGate.TryCompleteTransfer(_hub.netId))
         {
-            ApprovedManifests.Remove(_hub);
+            _assetSnapshot.Dispose();
             if (ownedActiveSession)
             {
                 ContentGrantGate.Remove(_hub.netId);
@@ -543,9 +539,10 @@ public class FileTransferSession
             return;
         }
 
-        try { ApprovedManifests[_hub] = _assetSnapshot; }
+        try { ApprovedManifests[_hub] = _assetSnapshot; _snapshotTransferred = true; }
         catch (Exception exception)
         {
+            if (!_snapshotTransferred) _assetSnapshot.Dispose();
             if (ownedActiveSession)
             {
                 ContentGrantGate.Remove(_hub.netId);
@@ -595,6 +592,8 @@ public class FileTransferSession
 
     private void FailClosedAuthenticatedPlayer(string context)
     {
+        if (_failureClosed) return;
+        _failureClosed = true;
         Exception quarantineFailure = null;
         Exception disconnectFailure = null;
         try { Plugin.QuarantineAuthenticatedPlayer(_hub, context); }

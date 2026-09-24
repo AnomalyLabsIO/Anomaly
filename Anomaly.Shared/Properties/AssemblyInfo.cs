@@ -19,6 +19,7 @@ using System.Runtime.CompilerServices;
 // COM, set the ComVisible attribute to true on that type.
 [assembly: ComVisible(false)]
 [assembly: InternalsVisibleTo("Anomaly.Shared.Tests")]
+[assembly: InternalsVisibleTo("Anomaly.Server.Tests")]
 [assembly: InternalsVisibleTo("Anomaly.Client")]
 [assembly: InternalsVisibleTo("Anomaly.Client.Api")]
 [assembly: InternalsVisibleTo("Anomaly.Server")]

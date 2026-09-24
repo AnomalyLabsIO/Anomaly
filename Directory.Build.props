@@ -17,7 +17,6 @@
     <AnomalyGeneratedReferenceDir Condition="'$(AnomalyGeneratedReferenceDir)' == ''">$(AnomalyRepositoryRoot)obj\generated-references</AnomalyGeneratedReferenceDir>
     <AnomalyServerPublicizedAssembly Condition="'$(AnomalyServerPublicizedAssembly)' == ''">$(AnomalyGeneratedReferenceDir)\Assembly-CSharp.dll</AnomalyServerPublicizedAssembly>
     <AnomalyLabApiDir Condition="'$(AnomalyLabApiDir)' == ''">$(AnomalyServerReferenceDir)</AnomalyLabApiDir>
-    <AnomalyHarmonyPath Condition="'$(AnomalyHarmonyPath)' == ''">$(AnomalyServerRoot)\0Harmony.dll</AnomalyHarmonyPath>
 
     <AnomalyLocalLoadoutRoot Condition="'$(AnomalyLocalLoadoutRoot)' == ''">$([System.IO.Path]::GetFullPath('$(AnomalyRepositoryRoot)..\ModdedFiles\loadouts\dev\local'))</AnomalyLocalLoadoutRoot>
     <AnomalyClientModsDir Condition="'$(AnomalyClientModsDir)' == ''">$(AnomalyLocalLoadoutRoot)\Mods</AnomalyClientModsDir>

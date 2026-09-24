@@ -18,7 +18,7 @@ using Mirror.LiteNetLib4Mirror;
 namespace Anomaly.Server.Patches;
 
 [HarmonyPatch(typeof(CustomLiteNetLib4MirrorTransport), nameof(CustomLiteNetLib4MirrorTransport.ProcessConnectionRequest))]
-public static class ProcessConnectionRequestPatch
+internal static class ProcessConnectionRequestPatch
 {
     private const byte HandshakeResponseCode = 100;
     private const byte RetryCookieResponseCode = 101;
@@ -641,7 +641,8 @@ public static class ProcessConnectionRequestPatch
                     {
                         storedPlayer = AuthHandler.StorePlayer(request.RemoteEndPoint, player);
                         if (storedPlayer)
-                            request.Accept();
+                            player.AcceptedPeer = request.Accept() ??
+                                throw new InvalidOperationException("Accepted transport peer was unavailable.");
                     });
                 }
                 catch

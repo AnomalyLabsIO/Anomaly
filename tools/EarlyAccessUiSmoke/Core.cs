@@ -22,7 +22,7 @@ using ApiClient = Anomaly.Client.Api.Features.Client;
 namespace Anomaly.EarlyAccessUiSmoke;
 
 // Opt-in test-only MelonMod. Never included in runtime release packages.
-public sealed class Core : MelonMod
+public sealed partial class Core : MelonMod
 {
     private readonly Queue<(string Name, Action Action)> _steps = new();
     private string _output;
@@ -46,6 +46,7 @@ public sealed class Core : MelonMod
     private GameObject _selectionBeforePrompt;
     private bool _movementBeforePrompt;
     private bool _needsNickname;
+    private bool _dedicatedDummyControlSmoke;
     private static Type Prompt => Type.GetType("Anomaly.Client.Components.PasswordPrompt, Anomaly.Client", true);
     private static BindingFlags All => BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
 
@@ -55,6 +56,18 @@ public sealed class Core : MelonMod
         if (string.IsNullOrEmpty(_output)) return;
         Directory.CreateDirectory(_output);
         Application.runInBackground = true;
+        FacilityCatalogFailureProbe.Initialize(_output);
+        _localHostingSmoke = Environment.GetEnvironmentVariable("ANOMALY_LOCAL_HOSTING_SMOKE") == "1";
+        _dummyVisibilitySmoke = Environment.GetEnvironmentVariable("ANOMALY_DUMMY_VISIBILITY_SMOKE") == "1";
+        _dedicatedDummyControlSmoke = Environment.GetEnvironmentVariable("ANOMALY_DEDICATED_DUMMY_SMOKE") == "1";
+        if (_localHostingSmoke || _dedicatedDummyControlSmoke || FacilityCatalogFailureProbe.Enabled)
+        {
+            ClientEvents.CanvasReady += OnCanvasReady;
+            ClientEvents.Ready += OnReady;
+            ClientEvents.Disconnected += OnDisconnected;
+            _next = Time.realtimeSinceStartupAsDouble + 90;
+            return;
+        }
         var category = MelonPreferences.CreateCategory("example_smoke", "Early access UI verification");
         _preferencesPath = Path.Combine(Anomaly.Client.Api.Features.Paths.AnomalyPath, "smoke-preferences.cfg");
         category.SetFilePath(_preferencesPath);
@@ -66,6 +79,7 @@ public sealed class Core : MelonMod
         ClientEvents.CanvasReady += OnCanvasReady;
         ClientEvents.Ready += OnReady;
         ClientEvents.Disconnected += OnDisconnected;
+        InitializeServerApiSmoke();
         _next = Time.realtimeSinceStartupAsDouble + 90;
     }
 
@@ -74,6 +88,9 @@ public sealed class Core : MelonMod
         ClientEvents.CanvasReady -= OnCanvasReady;
         ClientEvents.Ready -= OnReady;
         ClientEvents.Disconnected -= OnDisconnected;
+        ReleaseDummyInputs();
+        FacilityCatalogFailureProbe.Shutdown();
+        ShutdownServerApiSmoke();
     }
 
     private void OnReady(ClientReadyEventArgs _) => _readyEvents++;
@@ -85,6 +102,10 @@ public sealed class Core : MelonMod
         _started = true;
         _canvasInstanceId = UiCanvas.Root.GetInstanceID();
         _next = Time.realtimeSinceStartupAsDouble + 8;
+        if (FacilityCatalogFailureProbe.Enabled) { EnqueueFacilityCatalogFailureProbe(); return; }
+        if (_localHostingSmoke) { EnqueueLocalHostingSmoke(); return; }
+        if (_dedicatedDummyControlSmoke) { EnqueueDedicatedDummyControlSmoke(); return; }
+        if (_serverApiSmoke) { EnqueueServerApiSmoke(); return; }
         var sizes = Environment.GetEnvironmentVariable("ANOMALY_UI_SMOKE_CONNECTION_ONLY") == "1"
             ? Array.Empty<(int, int)>() : new[] { (1280, 720), (1920, 1080), (3440, 1440) };
         foreach (var size in sizes)
@@ -391,6 +412,16 @@ public sealed class Core : MelonMod
 
     public override void OnUpdate()
     {
+        if ((_dummyVisibilitySmoke || _dedicatedDummyControlSmoke) && !_failed)
+        {
+            try { MuteDummyMenuMusicContinuous(); }
+            catch (Exception ex) { Fail("Menu music mute: " + ex); return; }
+        }
+        if (_localHostingSmoke && _watchHostingWarning && !_failed)
+        {
+            try { CheckHostingWarning(); }
+            catch (Exception ex) { Fail("Local hosting warning: " + ex); return; }
+        }
         if (string.IsNullOrEmpty(_output) || _failed || Time.realtimeSinceStartupAsDouble < _next) return;
         if (!_started) { Fail("Main menu did not become ready within 90 seconds."); return; }
         if (_wait != null)
@@ -467,8 +498,9 @@ public sealed class Core : MelonMod
             "Framework canvas survives scene transitions with the same identity");
         Require(Resources.FindObjectsOfTypeAll<Canvas>().Count(canvas => canvas != null && canvas.name == "Anomaly.Root") == 1,
             "Exactly one framework root canvas exists");
-        Require(Resources.FindObjectsOfTypeAll<Canvas>().Count(canvas => canvas != null && canvas.name == "AnomalyModalCanvas") == 1,
-            "Exactly one persistent modal canvas exists");
+        int modalCount = Resources.FindObjectsOfTypeAll<Canvas>().Count(canvas => canvas != null && canvas.name == "AnomalyModalCanvas");
+        Require(modalCount == (Instance() == null ? 0 : 1),
+            "The lazily created modal canvas has exactly one owner");
     }
 
     private static object Instance() => Prompt.GetField("_instance", All).GetValue(null);

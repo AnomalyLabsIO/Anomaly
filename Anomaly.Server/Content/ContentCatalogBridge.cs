@@ -1,4 +1,5 @@
 using System;
+using Anomaly.Server.Api.Content;
 using System.Collections.Generic;
 using Anomaly.Server.Auth;
 using Anomaly.Server.FileTransfer;
@@ -6,8 +7,6 @@ using Anomaly.Server.Networking;
 using Anomaly.Shared.Content;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
-using LabApi.Events.Arguments.PlayerEvents;
-using PlayerEvents = LabApi.Events.Handlers.PlayerEvents;
 using Logger = LabApi.Features.Console.Logger;
 
 namespace Anomaly.Server.Content
@@ -23,7 +22,6 @@ namespace Anomaly.Server.Content
                 return;
             _initialized = true;
             AnomalyMessaging.MessageReceived += HandleMessage;
-            PlayerEvents.UsedItem += HandleUsedItem;
         }
 
         internal static void Disable()
@@ -31,7 +29,6 @@ namespace Anomaly.Server.Content
             if (_initialized)
             {
                 AnomalyMessaging.MessageReceived -= HandleMessage;
-                PlayerEvents.UsedItem -= HandleUsedItem;
                 _initialized = false;
             }
             ContentGrantGate.Reset();
@@ -39,12 +36,12 @@ namespace Anomaly.Server.Content
 
         internal static bool EnsureFrozen() => ContentRegistry.Freeze();
 
-        internal static void OfferForPlayer(ReferenceHub hub, byte[] manifestSha256)
+        internal static void OfferForPlayer(ReferenceHub hub, byte[] manifestSha256, AssetPackSnapshot snapshot)
         {
             try
             {
-                EnsureFrozen();
-                ContentCatalog catalog = ContentRegistry.CreateOfferCatalog(manifestSha256);
+                ContentRegistry.Freeze(snapshot);
+                ContentCatalog catalog = ContentRegistry.CreateOfferCatalog(manifestSha256, snapshot);
                 ContentGrantGate.RecordOffer(hub.netId, catalog);
                 if (!AnomalyMessaging.TrySendToClient(hub, new ContentCatalogMessage { Catalog = catalog }))
                 {
@@ -99,6 +96,13 @@ namespace Anomaly.Server.Content
                 return;
             }
 
+            if (approved)
+            {
+                if (!FileTransferSession.ApproveForPlayer(sender))
+                    FailProtocol(sender, "approved content could not start its transfer deadline");
+                return;
+            }
+
             if (!approved)
             {
                 try { FileTransferSession.CleanupPlayer(sender); }
@@ -120,6 +124,7 @@ namespace Anomaly.Server.Content
             var knownKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (CatalogEntry entry in ContentRegistry.Catalog.Entries)
                 knownKeys.Add(entry.Key);
+            foreach (string key in FileTransferSession.OfferedFailureKeys(sender)) knownKeys.Add(key);
             foreach (string failedKey in acknowledgement.FailedKeys)
             {
                 if (!knownKeys.Contains(failedKey))
@@ -136,7 +141,7 @@ namespace Anomaly.Server.Content
                     acknowledgement.CatalogSha256,
                     acknowledgement.ManifestSha256,
                     activated,
-                    () => Content.RaisePlayerReady(sender),
+                    () => CustomItems.RaisePlayerReady(sender),
                     out bool publicationSucceeded))
             {
                 RejectMismatch(sender, "activation did not match an approved catalog");
@@ -204,21 +209,5 @@ namespace Anomaly.Server.Content
             catch { }
         }
 
-        private static void HandleUsedItem(PlayerUsedItemEventArgs ev)
-        {
-            try
-            {
-                if (ev?.Player == null || ev.UsableItem == null ||
-                    !ContentRegistry.TryGetItemLogic((int)ev.UsableItem.Type, out ItemLogicBase logic))
-                    return;
-                if (ContentGrantGate.GetReadiness(ev.Player.ReferenceHub.netId) != ContentReadiness.Activated)
-                    return;
-                logic.OnUsed(ev.Player);
-            }
-            catch (Exception exception)
-            {
-                Logger.Error($"Anomaly.Content custom item OnUsed handler failed in isolation: {exception}");
-            }
-        }
     }
 }

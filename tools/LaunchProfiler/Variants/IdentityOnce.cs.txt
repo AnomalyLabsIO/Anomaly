@@ -1,0 +1,60 @@
+    private PreparedPlayerAuth PrepareExisting(byte[] serialized)
+    {
+        var auth = DeserializeStrict(serialized);
+        if (string.IsNullOrWhiteSpace(auth.Identity) || auth.Identity == "pending")
+            throw new InvalidDataException("The client identity profile does not contain a usable identity.");
+        if (auth.Username != null
+            && (auth.Username.Length > 32 || auth.Username.Any(char.IsControl)))
+            throw new InvalidDataException("The stored nickname is invalid.");
+
+        // Preserve the entire legacy migration path, including validation of the
+        // newly protected output before any durable write. Only warm protected
+        // profiles participate in the once-only decryption experiment.
+        if (string.IsNullOrEmpty(auth.IdentityProtection))
+        {
+            ValidatePrivateIdentity(auth);
+            byte[] legacyIdentity = auth.GetIdentity(_unprotect);
+            try { auth.SetIdentity(legacyIdentity, _protect); }
+            finally { Array.Clear(legacyIdentity, 0, legacyIdentity.Length); }
+            ValidateStoredIdentityLineage(auth);
+            SynchronizeIdentityPublic(ref auth);
+            return new PreparedPlayerAuth(auth, requiresWrite: true);
+        }
+
+        byte[] identity = auth.GetIdentity(_unprotect);
+        byte[] currentPublic = null;
+        try
+        {
+            // One unprotect/parse for normal protected profiles.
+            var parsedIdentity = AuthCrypto.ReadIdentity(identity);
+            currentPublic = AuthCrypto.WritePublic(parsedIdentity);
+            bool requiresWrite = false;
+            var chain = auth.GetIdentityRotationChain();
+            if (chain != null && !chain.TryValidate(currentPublic, out _, out var error))
+                throw new InvalidDataException("Stored client identity rotation chain is invalid: " + error);
+
+            if (string.IsNullOrWhiteSpace(auth.IdentityPublic))
+            {
+                auth.IdentityPublic = Convert.ToBase64String(currentPublic);
+                requiresWrite = true;
+            }
+            else
+            {
+                byte[] storedPublic = Convert.FromBase64String(auth.IdentityPublic);
+                try
+                {
+                    if (storedPublic.Length != ClientHandshake.IdentityPublicSize
+                        || !PasswordAuth.FixedTimeEquals(storedPublic, currentPublic))
+                        throw new InvalidDataException(
+                            "Stored identity_public does not match the protected private identity.");
+                }
+                finally { Array.Clear(storedPublic, 0, storedPublic.Length); }
+            }
+            return new PreparedPlayerAuth(auth, requiresWrite);
+        }
+        finally
+        {
+            Array.Clear(identity, 0, identity.Length);
+            if (currentPublic != null) Array.Clear(currentPublic, 0, currentPublic.Length);
+        }
+    }

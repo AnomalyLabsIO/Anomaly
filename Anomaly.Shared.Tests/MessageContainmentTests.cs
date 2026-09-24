@@ -104,7 +104,7 @@ public sealed class MessageContainmentTests
             SessionId = 42,
             Files =
             {
-                new FileManifestMessage.FileEntry("audio/word.ogg", hash, 1024, AssetKind.AudioClip)
+                new FileManifestMessage.FileEntry("audio/word.bundle", hash, 1024, FileContentKind.Bundle)
             }
         };
         source.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(source.Files);
@@ -113,10 +113,10 @@ public sealed class MessageContainmentTests
 
         Assert.Equal(42ul, decoded.SessionId);
         Assert.Single(decoded.Files);
-        Assert.Equal("audio/word.ogg", decoded.Files[0].Path);
+        Assert.Equal("audio/word.bundle", decoded.Files[0].Path);
         Assert.Equal(hash, decoded.Files[0].Hash);
         Assert.Equal(1024u, decoded.Files[0].Size);
-        Assert.Equal(AssetKind.AudioClip, decoded.Files[0].Kind);
+        Assert.Equal(FileContentKind.Bundle, decoded.Files[0].Kind);
     }
 
     [Fact]
@@ -126,17 +126,17 @@ public sealed class MessageContainmentTests
         byte[] audioHash = Enumerable.Repeat((byte)0xB2, 32).ToArray();
         var snapshot = new AssetManifestSnapshot(new[]
         {
-            new FileManifestMessage.FileEntry("textures/item.png", textureHash, 64, AssetKind.Texture2D),
-            new FileManifestMessage.FileEntry("audio/word.ogg", audioHash, 64, AssetKind.AudioClip),
+            new FileManifestMessage.FileEntry("textures/item.index.json", textureHash, 64, FileContentKind.PackIndex),
+            new FileManifestMessage.FileEntry("audio/word.bundle", audioHash, 64, FileContentKind.Bundle),
         });
 
         Assert.Equal(2, snapshot.Count);
-        Assert.True(snapshot.Contains((byte[])textureHash.Clone(), AssetKind.Texture2D));
-        Assert.True(snapshot.Contains((byte[])audioHash.Clone(), AssetKind.AudioClip));
-        Assert.False(snapshot.Contains(textureHash, AssetKind.AudioClip));
-        Assert.False(snapshot.Contains(audioHash, AssetKind.Texture2D));
-        Assert.False(snapshot.Contains(Enumerable.Repeat((byte)0xCC, 32).ToArray(), AssetKind.Texture2D));
-        Assert.False(snapshot.Contains(new byte[31], AssetKind.Texture2D));
+        Assert.True(snapshot.Contains((byte[])textureHash.Clone(), FileContentKind.PackIndex));
+        Assert.True(snapshot.Contains((byte[])audioHash.Clone(), FileContentKind.Bundle));
+        Assert.False(snapshot.Contains(textureHash, FileContentKind.Bundle));
+        Assert.False(snapshot.Contains(audioHash, FileContentKind.PackIndex));
+        Assert.False(snapshot.Contains(Enumerable.Repeat((byte)0xCC, 32).ToArray(), FileContentKind.PackIndex));
+        Assert.False(snapshot.Contains(new byte[31], FileContentKind.PackIndex));
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public sealed class MessageContainmentTests
                     path,
                     new byte[32],
                     1,
-                    AssetKind.Texture2D)
+                    FileContentKind.PackIndex)
             }
         };
 
@@ -227,8 +227,8 @@ public sealed class MessageContainmentTests
                     BaseTemplateId = 1,
                     DisplayName = "Example item",
                     Description = "Items only",
-                    IconHash = Enumerable.Repeat((byte)0x55, 32).ToArray(),
-                    IconSize = 128,
+                    IconAddress = "mods/example/icons/item",
+
                 }
             },
             120,
@@ -330,7 +330,7 @@ public sealed class MessageContainmentTests
 
         byte[] payload = Serialize(new ContentCatalogMessage { Catalog = catalog });
 
-        Assert.Equal(260019, payload.Length);
+        Assert.Equal(259853, payload.Length);
         Assert.True(payload.Length <= ContentCatalogMessage.MaxCatalogPayloadBytes);
     }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Anomaly.Shared.Content;
+using Anomaly.Shared.Assets;
 
 namespace Anomaly.Shared.Networking.Messages
 {
@@ -16,8 +17,8 @@ namespace Anomaly.Shared.Networking.Messages
     public class ContentCatalogAckMessage : AuthenticatedClientToServerMessage, IAnomalyMessage
     {
         private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
-        public const int MaxFailedKeys = ContentCatalogMessage.MaxEntries;
-        public const int MaxFailedKeyBytes = ContentCatalogMessage.MaxKeyBytes;
+        public const int MaxFailedKeys = 128;
+        public const int MaxFailedKeyBytes = AssetAddress.MaxLength;
         public override int MaxPayloadBytes => 64 * 1024;
         public string MessageName => "anomaly:content:catalogack";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
@@ -80,7 +81,7 @@ namespace Anomaly.Shared.Networking.Messages
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (string key in FailedKeys)
             {
-                if (!ModNamespace.IsValidContentKey(key) || !seen.Add(key) ||
+                if ((!ModNamespace.IsValidContentKey(key) && !AssetPackIndexCodec.IsPackId(key) && !AssetAddress.TryParse(key, out _)) || !seen.Add(key) ||
                     Utf8.GetByteCount(key) > MaxFailedKeyBytes)
                     throw new InvalidDataException("Failed-key list contained an invalid or duplicate key.");
             }

@@ -348,6 +348,11 @@
 		</Reference>
 		<Reference Include="MelonLoader">
 			<HintPath>$(AnomalyClientMelonLibDir)\MelonLoader.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Newtonsoft.Json">
+			<HintPath>$(AnomalyClientMelonLibDir)\Newtonsoft.Json.dll</HintPath>
+			<Private>false</Private>
 		</Reference>
 		<Reference Include="Il2CppInterop.Runtime">
 			<HintPath>$(AnomalyClientMelonLibDir)\Il2CppInterop.Runtime.dll</HintPath>
@@ -358,14 +363,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<!-- Pure-managed PNG decoder used by PngLoader. Zero native deps, ~20KB, MIT.
-		     Required because UnityEngine.ImageConversion.LoadImage throws
-		     MissingMethodException in this Il2CppInterop build. -->
-		<PackageReference Include="BigGustave" Version="1.0.3" />
-		<!-- Pure-managed OGG Vorbis decoder used by OggLoader. AOT-safe, MIT.
-		     Used to materialize user/server-supplied .ogg overrides into AudioClip. -->
-		<PackageReference Include="NVorbis" Version="0.10.5" />
-		<PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1" />
 		<!-- Managed YamlDotNet for LocalizationService (i18n YAML files). Version
 		     pinned to match what SCPSL itself ships (11.0.x); the Il2CppYamlDotNet
 		     reference above is the Il2Cpp wrapper used by game code, not callable
@@ -394,10 +391,6 @@
 		<Message Importance="high" Text="Anomaly.Client.Api: copying $(TargetFileName) -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)')" />
 		<Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)')" />
 		<Warning Text="Anomaly.Client.Api: AnomalyClientUserLibsDir does not exist: $(AnomalyClientUserLibsDir)" Condition="!Exists('$(AnomalyClientUserLibsDir)')" />
-		<Message Importance="high" Text="Anomaly.Client.Api: copying BigGustave.dll -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)BigGustave.dll')" />
-		<Copy SourceFiles="$(OutputPath)BigGustave.dll" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)BigGustave.dll')" />
-		<Message Importance="high" Text="Anomaly.Client.Api: copying NVorbis.dll -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)NVorbis.dll')" />
-		<Copy SourceFiles="$(OutputPath)NVorbis.dll" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)NVorbis.dll')" />
 		<Message Importance="high" Text="Anomaly.Client.Api: copying YamlDotNet.dll -&gt; $(AnomalyClientUserLibsDir)" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)YamlDotNet.dll')" />
 		<Copy SourceFiles="$(OutputPath)YamlDotNet.dll" DestinationFolder="$(AnomalyClientUserLibsDir)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" Condition="Exists('$(AnomalyClientUserLibsDir)') And Exists('$(OutputPath)YamlDotNet.dll')" />
 	</Target>

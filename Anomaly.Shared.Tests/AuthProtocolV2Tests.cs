@@ -487,16 +487,24 @@ public sealed class AuthProtocolV2Tests
         Assert.True(AuthConnectionContext.IsNormalizedEndpoint(normalized));
     }
 
-    [Fact]
-    public void ProtocolV1HandshakeIsRejectedWithoutDowngrade()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void OlderProtocolHandshakesAreRejectedWithoutDowngrade(byte version)
     {
         var encoded = new byte[ClientHandshake.MinimumSize];
-        encoded[0] = 1;
+        encoded[0] = version;
 
         var error = Assert.Throws<AnomalyProtocolVersionMismatchException>(
             () => ClientHandshake.Decode(encoded));
-        Assert.Equal((byte)1, error.PeerVersion);
+        Assert.Equal(version, error.PeerVersion);
         Assert.Equal(AnomalyProtocol.CurrentVersion, error.OurVersion);
+        var serverError = Assert.Throws<AnomalyProtocolVersionMismatchException>(
+            () => ServerHandshake.Decode(new[] { version }));
+        Assert.Equal(version, serverError.PeerVersion);
+        Assert.Equal(AnomalyProtocol.CurrentVersion, serverError.OurVersion);
     }
 
     [Fact]

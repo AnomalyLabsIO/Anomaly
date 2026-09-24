@@ -46,6 +46,10 @@ public static class PrefabRegistrationFix
         ("Il2CppMapGeneration.Distributors.SpawnablesDistributorSettings", "RegisterSpawnables"),
         ("Il2CppMapGeneration.RoomConnectors.RoomConnectorDistributorSettings", "RegisterSpawnables"),
         ("Il2CppAchievements.AchievementManager", "LocalPlayerStarted"),
+        // Normally registered by Inventory.OnLocalClientStarted. That native
+        // subscription is also absent in the supported loader runtime, leaving
+        // fast round restarts unable to request the client's reconnect.
+        ("Il2CppRoundRestarting.RoundRestart", "OnClientStarted"),
     };
 
     /// <summary>

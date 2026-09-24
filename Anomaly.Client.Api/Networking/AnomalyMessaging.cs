@@ -14,6 +14,7 @@ namespace Anomaly.Client.Api.Networking;
 
 public static class AnomalyMessaging
 {
+    internal static Action<Anomaly.Shared.Networking.Messages.FacilitySnapshotMessage> FacilitySnapshotReceived;
     public static event Action<IAnomalyMessage> MessageReceived;
 
     private static readonly object TransportSync = new();
@@ -48,22 +49,10 @@ public static class AnomalyMessaging
             return false;
         }
 
-        uint counter = AnomalyReplayTable.Instance.NextTxCounter(msg.TransportChannel);
-        if (counter == 0 || counter == uint.MaxValue)
+        if (!AnomalyMessageRegistry.TryGetSendContract(
+                msg, AnomalyMessageDirection.ClientToServer, out uint hash, out var channel, out var policy))
         {
-            FailClosedTransport("Replay counter exhausted before reuse.");
-            return false;
-        }
-        uint hash = AnomalyMessageRegistry.GetHash(msg.MessageName);
-
-        if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var policy))
-        {
-            MelonLogger.Warning($"AnomalyMessaging.Send: No policy registered for '{msg.MessageName}'.");
-            return false;
-        }
-        if (policy.Direction == AnomalyMessageDirection.ServerToClient)
-        {
-            MelonLogger.Warning($"AnomalyMessaging.Send: '{msg.MessageName}' is server-to-client only.");
+            SafeLogWarning("AnomalyMessaging.Send: Message did not match a registered client-to-server contract.");
             return false;
         }
 
@@ -85,13 +74,19 @@ public static class AnomalyMessaging
         }
 
         // Build the full envelope: [0xFE][4:counter][inner]
+        uint counter = AnomalyReplayTable.Instance.NextTxCounter(channel);
+        if (counter == 0 || counter == uint.MaxValue)
+        {
+            FailClosedTransport("Replay counter exhausted before reuse.");
+            return false;
+        }
         var data = new byte[5 + inner.Length];
         data[0] = AnomalyChannel.ChannelId;
         BitConverter.GetBytes(counter).CopyTo(data, 1);
         Array.Copy(inner, 0, data, 5, inner.Length);
 
         if (!FitsDeployedTransport(
-                msg.TransportChannel,
+                channel,
                 data.Length + AuthTransportCrypto.NonceSize + AuthTransportCrypto.TagSize,
                 out string transportFailure))
         {
@@ -106,7 +101,7 @@ public static class AnomalyMessaging
             return EncryptedMessageTransport.Send(
                 EncryptedChannelManager.SecurityLevel.Unsecured,
                 data,
-                (int)msg.TransportChannel);
+                (int)channel);
         }
 
         byte[] encrypted;
@@ -133,7 +128,7 @@ public static class AnomalyMessaging
             if (EncryptedMessageTransport.Send(
                     EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
                     encrypted,
-                    (int)msg.TransportChannel))
+                    (int)channel))
                 return true;
         }
         catch (Exception exception)
@@ -152,7 +147,8 @@ public static class AnomalyMessaging
     internal static void OnReceived(
         byte[] anomalyPayload,
         bool encryptedAndAuthenticated,
-        bool localTransport)
+        bool localTransport,
+        bool beforeHubReady = false)
     {
         if (!encryptedAndAuthenticated && !localTransport)
         {
@@ -272,10 +268,35 @@ public static class AnomalyMessaging
         }
         catch (Exception ex)
         {
+            if (message is Anomaly.Shared.Networking.Messages.FacilitySnapshotMessage)
+            {
+                FailClosedTransport("The authenticated facility snapshot was malformed: " + ex.Message);
+                return;
+            }
             RegisterProtocolViolation(
                 $"AnomalyMessaging.OnReceived: Failed to deserialize '{message.MessageName}': " +
                 $"{ex.GetType().Name}: {ex.Message}",
                 localTransport);
+            return;
+        }
+
+        if (message is Anomaly.Shared.Networking.Messages.FacilitySnapshotMessage snapshot)
+        {
+            try
+            {
+                var receiver = FacilitySnapshotReceived ??
+                    throw new InvalidOperationException("The facility bootstrap receiver is unavailable.");
+                receiver(snapshot);
+            }
+            catch (Exception exception)
+            {
+                FailClosedTransport("The authenticated facility snapshot could not be applied: " + exception.Message);
+            }
+            return;
+        }
+        if (beforeHubReady)
+        {
+            FailClosedTransport("Only authenticated facility bootstrap is permitted before player readiness.");
             return;
         }
 
@@ -307,13 +328,18 @@ public static class AnomalyMessaging
 
         foreach (Delegate subscriber in MessageReceived?.GetInvocationList() ?? Array.Empty<Delegate>())
         {
+            if (!localTransport && !HasTransportSession())
+                return;
             try { ((Action<IAnomalyMessage>)subscriber)(message); }
             catch (Exception ex)
             {
                 SafeLogError($"AnomalyMessaging.OnReceived: Isolated handler exception for '{message.MessageName}': {ex}");
             }
         }
-        NetworkMessageEvents.OnMessageReceived(message);
+        if (!localTransport && !HasTransportSession())
+            return;
+        try { NetworkMessageEvents.OnMessageReceived(message); }
+        catch (Exception ex) { SafeLogError($"AnomalyMessaging.MessageReceived publication failed: {ex}"); }
     }
 
     internal static void ResetSession(uint roundEpoch)

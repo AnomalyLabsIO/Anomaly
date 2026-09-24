@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>Anomaly.AssetBundleSmoke</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(AnomalyClientInteropDir)\*.dll" Private="false" />
+    <Reference Include="MelonLoader" HintPath="$(AnomalyClientMelonLibDir)\MelonLoader.dll" Private="false" />
+    <Reference Include="Il2CppInterop.Runtime" HintPath="$(AnomalyClientMelonLibDir)\Il2CppInterop.Runtime.dll" Private="false" />
+    <Reference Include="Anomaly.Client.Api" HintPath="..\..\Anomaly.Client.Api\bin\Debug\net6.0\Anomaly.Client.Api.dll" Private="false" />
+    <Reference Include="Anomaly.Shared" HintPath="..\..\Anomaly.Shared\bin\Debug\Anomaly.Shared.dll" Private="false" />
+    <Compile Include="..\EarlyAccessUiSmoke\ScreenshotPng.cs" Link="ScreenshotPng.cs" />
+    <Compile Include="..\ServerApiSmoke\SmokeMessages.cs" Link="SmokeMessages.cs" />
+  </ItemGroup>
+</Project>

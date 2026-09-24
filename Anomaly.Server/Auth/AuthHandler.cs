@@ -6,7 +6,7 @@ using Anomaly.Shared.Auth;
 
 namespace Anomaly.Server.Auth;
 
-public static class AuthHandler
+internal static class AuthHandler
 {
     private static readonly TimeSpan HandshakeTtl = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan StoredPlayerTtl = TimeSpan.FromSeconds(60);
@@ -163,6 +163,25 @@ public static class AuthHandler
             player = null;
             return false;
         }
+        return true;
+    }
+
+    internal static bool TryTakePlayerForPeer(IPEndPoint endPoint, object peer, out PlayerStorage player)
+    {
+        player = null;
+        if (peer == null || !_storedPlayers.TryGetValue(endPoint, out var candidate) ||
+            !ReferenceEquals(candidate.AcceptedPeer, peer))
+            return false;
+        if (!((ICollection<KeyValuePair<IPEndPoint, PlayerStorage>>)_storedPlayers)
+            .Remove(new KeyValuePair<IPEndPoint, PlayerStorage>(endPoint, candidate)))
+            return false;
+        if (DateTime.UtcNow - candidate.CreatedAtUtc > StoredPlayerTtl)
+        {
+            EnrollmentSessionRegistry.Cancel(candidate.UserId, candidate.EnrollmentReservation);
+            candidate.ClearSecrets();
+            return false;
+        }
+        player = candidate;
         return true;
     }
 

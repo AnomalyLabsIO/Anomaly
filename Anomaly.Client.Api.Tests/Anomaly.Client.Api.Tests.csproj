@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Anomaly.Client.Api\Anomaly.Client.Api.csproj" AdditionalProperties="DeployLocal=false" />
     <Compile Include="..\Anomaly.Client\Internal\Modding\ModContext.cs" Link="Runtime\ModContext.cs" />
+    <Compile Include="..\Anomaly.Client\Internal\Hosting\LocalHostGrantCoordinator.cs" Link="Runtime\LocalHostGrantCoordinator.cs" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(AnomalyClientInteropDir)\UnityEngine.CoreModule.dll" />
     <Reference Include="MelonLoader" HintPath="$(AnomalyClientMelonLibDir)\MelonLoader.dll" />
   </ItemGroup>

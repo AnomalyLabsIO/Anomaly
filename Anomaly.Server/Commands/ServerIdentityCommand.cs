@@ -10,8 +10,10 @@ namespace Anomaly.Server.Commands;
 /// not registered for this security-sensitive operation.
 /// </summary>
 [CommandHandler(typeof(GameConsoleCommandHandler))]
-public sealed class ServerIdentityCommand : ICommand
+internal sealed class ServerIdentityCommand : ICommand
 {
+    public ServerIdentityCommand() { }
+
     public string Command => "anomalyidentity";
 
     public string[] Aliases => Array.Empty<string>();

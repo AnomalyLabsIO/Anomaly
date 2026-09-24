@@ -1,6 +1,6 @@
 # Player Customization Resources
 
-Drop neutralized HDRP base-map PNGs in this folder. They are embedded into
+Convert neutralized HDRP base-map PNGs offline with `tools/Convert-NeutralMap.ps1`. Place the resulting `.rgba32` resource in this folder. It is embedded into
 `Anomaly.Client.dll` at build time (via the `<EmbeddedResource Include="..." />`
 glob in `Anomaly.Client.csproj`) and loaded by `PlayerColorTracker` and other
 customization features as `_BaseColorMap` overrides paired with a
@@ -8,7 +8,7 @@ customization features as `_BaseColorMap` overrides paired with a
 
 ## Currently expected files
 
-### `ClassD_jumpsuit_BaseMap_neutral.png` (Class D jumpsuit color customization)
+### `ClassD_jumpsuit_BaseMap_neutral.rgba32` (Class D jumpsuit color customization)
 
 A luminance-preserving, chroma-flattened version of the stock SCP:SL Class D
 jumpsuit base map.
@@ -33,3 +33,5 @@ The neutralized PNG is intentionally **not** committed to the repo because it
 is derived from Northwood's SCP:SL texture asset; each developer (or the
 in-house build pipeline) should bake their own copy from a local SCP:SL
 install before producing a release build.
+
+The binary format is an 8-byte ASCII ARGBA32 plus NUL signature, two little-endian 32-bit dimensions, and bottom-up RGBA bytes. Dimensions are bounded to 4096 on each axis and the payload must match exactly. Runtime code performs no PNG decoding. The converter preserves alpha and reverses rows to match the former PNG loader's Unity pixel orientation. Original PNGs are never changed.

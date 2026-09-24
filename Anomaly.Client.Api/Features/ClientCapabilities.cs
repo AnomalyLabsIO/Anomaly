@@ -65,6 +65,9 @@ public static class ClientCapabilities
         {
             if (Entries.ContainsKey(descriptor.Id))
                 throw new InvalidOperationException($"Capability '{descriptor.Id}' is already registered.");
+            if (Entries.Count >= CapabilitySnapshotMessage.MaxCapabilities)
+                throw new InvalidOperationException(
+                    $"At most {CapabilitySnapshotMessage.MaxCapabilities} client capabilities can be registered.");
 
             registration = new Registration(descriptor.Id);
             Entries.Add(descriptor.Id, new Entry

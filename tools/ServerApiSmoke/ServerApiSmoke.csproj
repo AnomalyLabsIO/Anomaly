@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>Anomaly.ServerApiSmoke</AssemblyName>
+  </PropertyGroup>
+  <Import Project="..\..\samples\Anomaly.Server.Sample.props" />
+  <ItemGroup>
+    <Reference Include="mscorlib" HintPath="$(AnomalyServerReferenceDir)\mscorlib.dll" Private="false" />
+    <Reference Include="System.Text.Json" HintPath="$(AnomalyServerReferenceDir)\System.Text.Json.dll" Private="false" />
+    <Reference Include="System.Memory" HintPath="$(AnomalyServerReferenceDir)\System.Memory.dll" Private="false" />
+    <Reference Include="UnityEngine.PhysicsModule" HintPath="$(AnomalyServerReferenceDir)\UnityEngine.PhysicsModule.dll" Private="false" />
+    <Reference Include="Mirror" HintPath="$(AnomalyServerReferenceDir)\Mirror.dll" Private="false" />
+  </ItemGroup>
+</Project>

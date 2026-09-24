@@ -43,3 +43,7 @@ Public API compatibility is covered by the `Anomaly.Client.Api.Tests` contract t
 Use DLLs and XML documentation from one release set. The checked baseline also
 records constant values, parameter defaults, visibility, and type modifiers so
 compatibility reviews cover more than member names.
+
+## AssetBundle protocol 6 migration
+
+Rebuild companion mods against the matching current DLL set. The pre-release managed versions remain unchanged. Resource lookup, texture overrides and item icons now use typed AssetAddress values instead of raw-file hashes/paths. TryGetSprite and TryGetMesh join texture/audio lookup. Raw PNG skins and OGG/WAV overrides are replaced by offline-authored bundle/index pairs. See [ASSETBUNDLES.md](../ASSETBUNDLES.md) for authoring, lifetimes and API examples.

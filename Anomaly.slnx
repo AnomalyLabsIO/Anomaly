@@ -1,10 +1,13 @@
 <Solution>
+  <Project Path="Anomaly.AssetValidation/Anomaly.AssetValidation.csproj" />
+  <Project Path="Anomaly.AssetValidation.Tests/Anomaly.AssetValidation.Tests.csproj" />
   <Project Path="Anomaly.Bootstrap/Anomaly.Bootstrap.csproj" />
   <Project Path="Anomaly.Bootstrap.Tests/Anomaly.Bootstrap.Tests.csproj" />
   <Project Path="Anomaly.Client/Anomaly.Client.csproj" Id="305945be-80b7-4120-a40c-df8a56f9aad4" />
   <Project Path="Anomaly.Client.Api/Anomaly.Client.Api.csproj" />
   <Project Path="Anomaly.Client.Api.Tests/Anomaly.Client.Api.Tests.csproj" />
   <Project Path="Anomaly.Server/Anomaly.Server.csproj" Id="5b1bd184-cf04-444a-ad8b-9e00cac92ab5" />
+  <Project Path="Anomaly.Server.Tests/Anomaly.Server.Tests.csproj" />
   <Project Path="Anomaly.Shared/Anomaly.Shared.csproj" Id="aafe496c-e163-48ff-bdb4-5c794ab76a05" />
   <Project Path="Anomaly.Shared.Tests/Anomaly.Shared.Tests.csproj" />
   <Project Path="samples/HelloAnomalyModule/HelloAnomalyModule.csproj" />

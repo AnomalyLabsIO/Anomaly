@@ -1,3 +1,5 @@
+using Anomaly.Server.Api.Content;
+using System;
 using System.Collections.Generic;
 using Anomaly.Shared.Content;
 
@@ -6,6 +8,16 @@ namespace Anomaly.Server.Content
     /// <summary>Per-client consent and all-or-nothing activation state.</summary>
     internal static class ContentGrantGate
     {
+        internal static event Action<uint> Activated;
+        internal static event Action<uint> Revoked;
+        internal static bool PublishActivated(uint netId)
+        {
+            if (GetReadiness(netId) != ContentReadiness.Activated) return false;
+            bool success = true;
+            foreach (Delegate handler in Activated?.GetInvocationList() ?? Array.Empty<Delegate>())
+                try { ((Action<uint>)handler)(netId); } catch { success = false; }
+            return success;
+        }
         private sealed class State
         {
             public ContentReadiness Readiness;
@@ -89,8 +101,16 @@ namespace Anomaly.Server.Content
             state.Readiness == ContentReadiness.Activated &&
             ContentRegistry.TryGetId(key, out _);
 
-        internal static void Remove(uint netId) => ByNetId.Remove(netId);
-        internal static void Reset() => ByNetId.Clear();
+        internal static void Remove(uint netId)
+        {
+            ByNetId.Remove(netId);
+            foreach (Delegate handler in Revoked?.GetInvocationList() ?? Array.Empty<Delegate>())
+                try { ((Action<uint>)handler)(netId); } catch { }
+        }
+        internal static void Reset()
+        {
+            foreach (uint netId in new List<uint>(ByNetId.Keys)) Remove(netId);
+        }
 
         private static bool TryMatch(
             uint netId,

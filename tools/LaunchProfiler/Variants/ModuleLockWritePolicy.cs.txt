@@ -1,0 +1,25 @@
+using System;
+using System.IO;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+namespace Anomaly.Client.Internal.Modding;
+
+internal static class ModuleLockWritePolicy
+{
+    internal static bool ShouldWrite(string path, object value)
+    {
+        try
+        {
+            // Bound the extra read and fail back to the original write on any mismatch.
+            var file = new FileInfo(path);
+            if (!file.Exists || file.Length > 1024 * 1024) return true;
+            var previous = JObject.Parse(File.ReadAllText(path));
+            var current = JObject.FromObject(value);
+            previous.Remove("ResolvedUtc");
+            current.Remove("ResolvedUtc");
+            return !JToken.DeepEquals(previous, current);
+        }
+        catch { return true; }
+    }
+}

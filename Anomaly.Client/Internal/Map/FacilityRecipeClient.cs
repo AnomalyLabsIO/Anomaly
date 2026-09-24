@@ -1,73 +1,132 @@
 using System;
-using System.Collections.Generic;
+using System.Diagnostics;
+using Anomaly.Client.Auth;
+using Anomaly.Client.Api.Networking;
+using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
 using Il2CppMapGeneration;
+using Il2CppMirror;
 using MelonLoader;
-using UnityEngine;
 
-namespace Anomaly.Client.Internal.Map
+namespace Anomaly.Client.Internal.Map;
+
+/// <summary>Accepts only authenticated snapshots and holds generation/readiness until the matching seed exists.</summary>
+internal static class FacilityRecipeClient
 {
-    /// <summary>
-    /// Stores facility recipe state for the client patches. The former plain-Mirror,
-    /// pre-auth bootstrap receiver is intentionally disabled in v1; any future receiver
-    /// must use the authenticated Anomaly transport before mutating generation state.
-    /// </summary>
-    internal static class FacilityRecipeClient
+    private static readonly FacilityGenerationGate Gate = new();
+    private static bool _sceneAvailable;
+    private static bool _failed;
+    private static bool _readyPending;
+    private static bool _playerPending;
+    internal static FacilitySnapshotMessage CurrentSnapshot => Gate.Snapshot;
+    internal static bool IsGenerating => Gate.Generating && !_failed;
+    internal static bool IsReady => Gate.Completed && !_failed && _sceneAvailable && SeedSynchronizer.MapGenerated;
+
+    internal static void RegisterHandlers()
     {
-        private static readonly Dictionary<(FacilityZone zone, Vector2IntKey coords), FacilityRecipeEntry> _entries =
-            new Dictionary<(FacilityZone, Vector2IntKey), FacilityRecipeEntry>();
+        Clear();
+        AnomalyMessaging.FacilitySnapshotReceived = ReceiveSnapshot;
+    }
 
-        private static readonly List<AtlasPixelEdit> _atlasEdits = new List<AtlasPixelEdit>();
-        private static bool _disabledWarningLogged;
+    internal static void BeginConnection()
+    {
+        if (AuthHandler.UsingAnomalyAuth && !NetworkServer.active) Gate.BeginWaiting(Now);
+    }
 
-        internal static void RegisterHandlers()
+    internal static void ReceiveSnapshot(FacilitySnapshotMessage snapshot)
+    {
+        try
         {
-            Clear();
-            if (!_disabledWarningLogged)
-            {
-                _disabledWarningLogged = true;
-                MelonLogger.Warning(
-                    "FacilityRecipeClient: facility recipe/atlas bootstrap is disabled in v1; " +
-                    "plain-Mirror pre-auth handlers were not registered.");
-            }
+            Gate.ReceiveSnapshot(snapshot);
+            if (!Gate.Completed) Gate.BeginWaiting(Now);
+            TryGenerate();
         }
+        catch (Exception exception) { FailGeneration(exception); }
+    }
 
-        internal static bool TryGet(FacilityZone zone, Vector2Int coords, out FacilityRecipeEntry entry)
-            => _entries.TryGetValue((zone, new Vector2IntKey(coords)), out entry);
-
-        internal static void Clear()
+    internal static void ReceiveSeed(int seed)
+    {
+        try
         {
-            _entries.Clear();
-            _atlasEdits.Clear();
+            Gate.ReceiveSeed(seed);
+            if (!Gate.Completed) Gate.BeginWaiting(Now);
+            TryGenerate();
         }
+        catch (Exception exception) { FailGeneration(exception); }
+    }
 
-        internal static List<AtlasPixelEdit> GetAtlasEdits(FacilityZone zone, int atlasIdx)
+    internal static void SceneAvailable()
+    {
+        _sceneAvailable = true;
+        Gate.BeginWaiting(Now);
+        TryGenerate();
+    }
+
+    internal static void SceneDestroyed()
+    {
+        _sceneAvailable = false;
+        FacilityStructureRotation.Clear();
+        Gate.EndScene();
+        Gate.BeginWaiting(Now);
+    }
+
+    private static double Now => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+    internal static void Tick()
+    {
+        if (!AuthHandler.UsingAnomalyAuth || _failed || IsReady) return;
+        if (Gate.HasTimedOut(Now)) FailGeneration(new TimeoutException("Authenticated facility bootstrap was not available within 30 seconds."));
+    }
+
+    internal static bool DeferReady()
+    {
+        if (IsReady) return false;
+        _readyPending = true;
+        if (_sceneAvailable) Gate.BeginWaiting(Now);
+        return true;
+    }
+
+    internal static bool DeferPlayer()
+    {
+        if (IsReady) return false;
+        _playerPending = true;
+        if (_sceneAvailable) Gate.BeginWaiting(Now);
+        return true;
+    }
+
+    private static void TryGenerate()
+    {
+        if (_failed || !_sceneAvailable || SeedSynchronizer._singleton == null || SeedSynchronizer.MapGenerated || !Gate.TryBegin()) return;
+        try
         {
-            var list = new List<AtlasPixelEdit>();
-            byte z = (byte)zone;
-            byte a = (byte)atlasIdx;
-            foreach (var e in _atlasEdits)
-                if (e.ZoneId == z && e.AtlasIdx == a) list.Add(e);
-            return list;
+            FacilityGeneration.ValidateAssets(Gate.Snapshot);
+            // The wrapper call travels managed -> native with a blittable four-byte seed.
+            SeedSynchronizer.ClientReceiveSeed(new SeedSynchronizer.SeedMessage { Value = Gate.Snapshot.Seed });
+            if (!SeedSynchronizer.MapGenerated || _failed)
+                throw new InvalidOperationException("Authenticated facility generation did not complete.");
+            if (!FacilityGeneration.EqualDigest(Gate.Snapshot.RoomsDigest, FacilityGenerationDiagnostics.ComputeRoomsDigest()))
+                throw new InvalidOperationException("Generated facility room/child identity digest differs from the server.");
+            Gate.Complete();
+            MelonLogger.Msg($"Facility bootstrap accepted: generation={Gate.Snapshot.GenerationId}, seed={Gate.Snapshot.Seed}, digest={Convert.ToBase64String(Gate.Snapshot.Digest)}.");
+            if (_readyPending) { _readyPending = false; NetworkClient.Ready(); }
+            if (_playerPending) { _playerPending = false; NetworkClient.AddPlayer(); }
         }
+        catch (Exception exception) { FailGeneration(exception); }
+    }
 
-        /// <summary>
-        /// Dictionary-friendly wrapper around <see cref="Vector2Int"/>. The
-        /// Il2Cpp-generated <c>Vector2Int</c> doesn't implement managed
-        /// <see cref="IEquatable{T}"/> or a fast <see cref="object.GetHashCode"/>,
-        /// so using it directly as a Dictionary key is lossy.
-        /// </summary>
-        internal readonly struct Vector2IntKey : System.IEquatable<Vector2IntKey>
-        {
-            public readonly int X;
-            public readonly int Y;
+    internal static void FailGeneration(Exception exception)
+    {
+        _failed = true;
+        _readyPending = _playerPending = false;
+        AnomalyMessaging.FailClosedTransport("Facility bootstrap/generation failed: " + exception.Message);
+        MelonLogger.Error("Facility generation rejected: " + exception);
+    }
 
-            public Vector2IntKey(int x, int y) { X = x; Y = y; }
-            public Vector2IntKey(Vector2Int v) : this(v.x, v.y) { }
-
-            public bool Equals(Vector2IntKey other) => X == other.X && Y == other.Y;
-            public override bool Equals(object obj) => obj is Vector2IntKey k && Equals(k);
-            public override int GetHashCode() => (X * 397) ^ Y;
-        }
+    internal static void Clear()
+    {
+        Gate.Reset();
+        FacilityGenerationDiagnostics.Clear();
+        FacilityStructureRotation.Clear();
+        _sceneAvailable = false;
+        _failed = _readyPending = _playerPending = false;
     }
 }

@@ -6,23 +6,19 @@ public static class Paths
 {
     /// <summary>The operating system's application-data directory; not Anomaly's storage root.</summary>
     public static string ApplicationDataPath { get; }
-
     /// <summary>Instance-local Anomaly storage, equivalent to <see cref="AnomalyUserDataPath"/>.</summary>
     public static string AnomalyPath { get; }
-
     public static string FileCachePath { get; }
     public static string CrashReportsPath { get; }
-
     /// <summary>Anomaly's directory beneath MelonLoader's configured UserData directory.</summary>
     public static string AnomalyUserDataPath { get; }
+    /// <summary>Completed local .bundle and .index.json pairs, authored offline.</summary>
+    public static string AssetBundlesPath { get; }
+    /// <summary>Legacy source-image location. Raw skins are no longer loaded or created here.</summary>
     public static string SkinsPath { get; }
-
-    /// <summary>
-    /// Root for player-supplied local audio overrides. Layout mirrors the
-    /// engine's audio lookup path beneath <c>Overrides/AudioClip/</c>
-    /// (for example, <c>Overrides/AudioClip/ALERT.ogg</c>).
-    /// </summary>
+    /// <summary>Legacy source-media location, retained for migration tools; no runtime loading.</summary>
     public static string OverridesPath { get; }
+    /// <summary>Legacy source-audio location, retained for migration tools; no runtime loading.</summary>
     public static string AudioOverridesPath { get; }
 
     static Paths()
@@ -32,52 +28,27 @@ public static class Paths
         AnomalyPath = AnomalyUserDataPath;
         FileCachePath = Path.Combine(AnomalyPath, "FileCache");
         CrashReportsPath = Path.Combine(AnomalyPath, "CrashReports");
-
+        AssetBundlesPath = Path.Combine(AnomalyPath, "AssetBundles");
         SkinsPath = Path.Combine(MelonEnvironment.UserDataDirectory, "Skins");
-        if (!Directory.Exists(AnomalyUserDataPath))
-            Directory.CreateDirectory(AnomalyUserDataPath);
-        if (!Directory.Exists(SkinsPath))
-            Directory.CreateDirectory(SkinsPath);
-
-        OverridesPath = Path.Combine(AnomalyUserDataPath, "Overrides");
+        OverridesPath = Path.Combine(AnomalyPath, "Overrides");
         AudioOverridesPath = Path.Combine(OverridesPath, "AudioClip");
-
-        bool createdOverridesRoot = !Directory.Exists(OverridesPath);
-        Directory.CreateDirectory(OverridesPath);
-        Directory.CreateDirectory(AudioOverridesPath);
-
-        if (createdOverridesRoot)
-            WriteOverridesReadme();
-    }
-
-    private static void WriteOverridesReadme()
-    {
+        Directory.CreateDirectory(AssetBundlesPath);
         try
         {
-            string readme = Path.Combine(OverridesPath, "README.md");
-            if (File.Exists(readme))
-                return;
-
-            File.WriteAllText(readme,
-                "# Anomaly Asset Overrides\n\n" +
-                "Drop local audio replacements here to override stock SCP:SL clips.\n\n" +
-                "## Layout\n\n" +
-                "Files live under `AudioClip/<unity-path>.<ext>`, where `<unity-path>` mirrors\n" +
-                "the path the engine uses to look up the clip.\n\n" +
-                "Examples:\n\n" +
-                "```\n" +
-                "AudioClip/ALERT.ogg              ← replaces CASSIE \"ALERT\" voiceline\n" +
-                "AudioClip/SCP/096_idle.ogg       ← replaces SCP-096 idle sound\n" +
-                "```\n\n" +
-                "See the full asset catalog at https://docs.anomalylabs.io/reference/07-asset-catalog-audio/\n\n" +
-                "## Supported formats\n\n" +
-                "- Local audio: `.ogg` (Vorbis) or `.wav` (PCM int16/24/32 or float32)\n\n" +
-                "Authenticated server content is hash-addressed and does not use or replace\n" +
-                "this local path-override surface.\n");
+            string readme = Path.Combine(AssetBundlesPath, "README.md");
+            if (!File.Exists(readme))
+                File.WriteAllText(readme,
+                    "# Anomaly AssetBundles\n\n" +
+                    "Copy completed .bundle and .index.json pairs here. Restart the client after changes.\n" +
+                    "Author packs offline with Unity 6000.0.43f1 for Windows x64; the client validates their contents before loading.\n\n" +
+                    "Catalog addresses select assets, independently of source folders: game/skin/logo, game/skin/background,\n" +
+                    "supported game/cassie/<name> replacements, or mods/<namespace>/<asset> additions.\n" +
+                    "Skin replacements are local-only. Bundles cannot supply scripts or prefabs.\n\n" +
+                    "Raw PNG/OGG/WAV files are no longer loaded at runtime. Keep originals for offline conversion.\n");
         }
         catch
         {
-            // Readme creation is best-effort; never block the static ctor on it.
+            // Documentation is best-effort; existing owner instructions are never overwritten.
         }
     }
 }

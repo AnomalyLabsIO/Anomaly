@@ -1,0 +1,117 @@
+using System;
+using System.IO;
+using System.Linq;
+using Anomaly.Client.Auth;
+using Anomaly.Shared.Auth;
+using Newtonsoft.Json;
+using Xunit;
+
+namespace Anomaly.LaunchProfiler.Tests;
+
+public sealed class IdentityOnceTests
+{
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void UnprotectsOnceAndClearsReturnedPrivateBuffer(bool mismatch, bool rotated)
+    {
+        string path = Path.Combine(Path.GetTempPath(), "anomaly-profiler-" + Guid.NewGuid() + ".json");
+        byte[] identity = AuthCrypto.CreateIdentity();
+        byte[] oldIdentity = AuthCrypto.CreateIdentity();
+        byte[] exposed = null;
+        try
+        {
+            var profile = new PlayerAuth { Username = "Profiler test" };
+            profile.SetIdentity(identity, Clone);
+            if (rotated) profile.SetIdentityRotationChain(ClientIdentityRotationChain.Create(oldIdentity, identity));
+            if (mismatch) profile.IdentityPublic = Convert.ToBase64String(new byte[ClientHandshake.IdentityPublicSize]);
+            string original = JsonConvert.SerializeObject(profile);
+            File.WriteAllText(path, original);
+            int unprotectCalls = 0;
+            var store = new PlayerAuthProfileStore(path, Clone, bytes =>
+            {
+                unprotectCalls++;
+                exposed = Clone(bytes);
+                return exposed;
+            }, (source, destination, backup) => File.Replace(source, destination, backup));
+            if (mismatch) Assert.Throws<InvalidDataException>(() => store.LoadExisting(out _));
+            else
+            {
+                var loaded = store.LoadExisting(out bool migrated);
+                Assert.False(migrated);
+                Assert.Equal(profile.IdentityPublic, loaded.IdentityPublic);
+            }
+            Assert.Equal(1, unprotectCalls);
+            Assert.NotNull(exposed);
+            Assert.All(exposed, value => Assert.Equal((byte)0, value));
+            Assert.Equal(original, File.ReadAllText(path));
+            Assert.False(File.Exists(path + ".bak"));
+            Assert.False(File.Exists(path + ".tmp"));
+        }
+        finally
+        {
+            Array.Clear(identity, 0, identity.Length);
+            Array.Clear(oldIdentity, 0, oldIdentity.Length);
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void LegacyProfileMigratesWithExactOriginalBackup()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "anomaly-profiler-migrate-" + Guid.NewGuid() + ".json");
+        byte[] identity = AuthCrypto.CreateIdentity();
+        try
+        {
+            string original = JsonConvert.SerializeObject(new PlayerAuth
+            {
+                Username = "Legacy", Identity = Convert.ToBase64String(identity),
+            }, Formatting.Indented);
+            File.WriteAllText(path, original);
+            int protections = 0;
+            var store = new PlayerAuthProfileStore(path, bytes => { protections++; return Clone(bytes); }, Clone,
+                (source, destination, backup) => File.Replace(source, destination, backup));
+            PlayerAuth loaded = store.LoadExisting(out bool migrated);
+            Assert.True(migrated);
+            Assert.Equal(1, protections);
+            Assert.Equal(PlayerAuth.DpapiProtection, loaded.IdentityProtection);
+            Assert.Equal(Convert.ToBase64String(AuthCrypto.WritePublic(AuthCrypto.ReadIdentity(identity))), loaded.IdentityPublic);
+            Assert.Equal(original, File.ReadAllText(path + ".bak"));
+            Assert.False(File.Exists(path + ".tmp"));
+        }
+        finally
+        {
+            Array.Clear(identity, 0, identity.Length);
+            foreach (string suffix in new[] { "", ".bak", ".tmp" })
+                if (File.Exists(path + suffix)) File.Delete(path + suffix);
+        }
+    }
+
+    private static byte[] Clone(byte[] value) => (byte[])value.Clone();
+
+    [Fact]
+    public void LegacyInvalidProtectedOutputCannotReplaceOriginalProfile()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "anomaly-profiler-invalid-protect-" + Guid.NewGuid() + ".json");
+        byte[] identity = AuthCrypto.CreateIdentity();
+        try
+        {
+            string original = JsonConvert.SerializeObject(new PlayerAuth { Identity = Convert.ToBase64String(identity), Username = "Legacy" });
+            File.WriteAllText(path, original);
+            var store = new PlayerAuthProfileStore(path, _ => new byte[] { 42 }, Clone,
+                (source, destination, backup) => File.Replace(source, destination, backup));
+            Assert.Throws<InvalidOperationException>(() => store.LoadExisting(out _));
+            Assert.Equal(original, File.ReadAllText(path));
+            Assert.False(File.Exists(path + ".bak"));
+            Assert.False(File.Exists(path + ".tmp"));
+        }
+        finally
+        {
+            Array.Clear(identity, 0, identity.Length);
+            foreach (string suffix in new[] { "", ".bak", ".tmp" })
+                if (File.Exists(path + suffix)) File.Delete(path + suffix);
+        }
+    }
+}

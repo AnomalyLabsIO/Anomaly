@@ -1,17 +1,19 @@
+using Anomaly.Shared.Assets;
+
 namespace Anomaly.Client.Api.Events.Args;
 
 public class AssetOverrideAppliedEventArgs : EventArgs
 {
-    public AssetOverrideAppliedEventArgs(uint netId, string componentPath, int materialIndex, byte[] textureHash)
+    public AssetOverrideAppliedEventArgs(uint netId, string componentPath, int materialIndex, AssetAddress textureAddress)
     {
         NetId = netId;
         ComponentPath = componentPath;
         MaterialIndex = materialIndex;
-        TextureHash = textureHash;
+        TextureAddress = textureAddress;
     }
 
     public uint NetId { get; }
     public string ComponentPath { get; }
     public int MaterialIndex { get; }
-    public byte[] TextureHash { get; }
+    public AssetAddress TextureAddress { get; }
 }

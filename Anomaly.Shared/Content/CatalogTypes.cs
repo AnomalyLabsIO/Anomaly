@@ -21,9 +21,10 @@ namespace Anomaly.Shared.Content
             writer.Write(bytes);
         }
 
-        public static string ReadStr(BinaryReader reader)
+        public static string ReadStr(BinaryReader reader, int maximumBytes = ushort.MaxValue)
         {
             int length = reader.ReadUInt16();
+            if (length > maximumBytes) throw new InvalidDataException("Catalog string exceeded its field limit.");
             return Utf8.GetString(ReadExactly(reader, length, "Catalog text was truncated."));
         }
 
@@ -88,9 +89,8 @@ namespace Anomaly.Shared.Content
         public string DisplayName = string.Empty;
         public string Description = string.Empty;
 
-        /// <summary>Optional icon PNG content hash and encoded byte size.</summary>
-        public byte[] IconHash;
-        public uint IconSize;
+        /// <summary>Optional Texture2D address in an offered, validated pack.</summary>
+        public string IconAddress;
 
         public void WriteTo(BinaryWriter writer)
         {
@@ -99,8 +99,7 @@ namespace Anomaly.Shared.Content
             CatalogIo.WriteStr(writer, Key);
             CatalogIo.WriteStr(writer, DisplayName);
             CatalogIo.WriteStr(writer, Description);
-            CatalogIo.WriteOptionalHash(writer, IconHash);
-            writer.Write(IconSize);
+            CatalogIo.WriteStr(writer, IconAddress);
         }
 
         public static CatalogEntry ReadFrom(BinaryReader reader)
@@ -109,11 +108,10 @@ namespace Anomaly.Shared.Content
             {
                 AssignedId = reader.ReadInt32(),
                 BaseTemplateId = reader.ReadInt32(),
-                Key = CatalogIo.ReadStr(reader),
-                DisplayName = CatalogIo.ReadStr(reader),
-                Description = CatalogIo.ReadStr(reader),
-                IconHash = CatalogIo.ReadOptionalHash(reader),
-                IconSize = reader.ReadUInt32(),
+                Key = CatalogIo.ReadStr(reader, 128),
+                DisplayName = CatalogIo.ReadStr(reader, 512),
+                Description = CatalogIo.ReadStr(reader, 4096),
+                IconAddress = CatalogIo.ReadStr(reader, Assets.AssetAddress.MaxLength),
             };
         }
     }
@@ -125,12 +123,34 @@ namespace Anomaly.Shared.Content
     /// </summary>
     public sealed class ContentCatalog
     {
-        public const byte CurrentSchemaVersion = 1;
+        public const byte CurrentSchemaVersion = 2;
         public const int Sha256Bytes = 32;
 
         public byte SchemaVersion = CurrentSchemaVersion;
         public byte[] CatalogSha256 = new byte[Sha256Bytes];
         public byte[] ManifestSha256 = new byte[Sha256Bytes];
         public List<CatalogEntry> Entries = new List<CatalogEntry>();
+        public List<CatalogPack> Packs = new List<CatalogPack>();
+    }
+
+    /// <summary>Both files are bound into the authenticated catalog and transfer manifest.</summary>
+    public sealed class CatalogPack
+    {
+        public string PackId = string.Empty;
+        public byte[] IndexHash;
+        public uint IndexSize;
+        public byte[] BundleHash;
+        public uint BundleSize;
+        public void WriteTo(BinaryWriter writer)
+        {
+            CatalogIo.WriteStr(writer, PackId);
+            CatalogIo.WriteRequiredHash(writer, IndexHash); writer.Write(IndexSize);
+            CatalogIo.WriteRequiredHash(writer, BundleHash); writer.Write(BundleSize);
+        }
+        public static CatalogPack ReadFrom(BinaryReader reader) => new CatalogPack
+        {
+            PackId = CatalogIo.ReadStr(reader, 128), IndexHash = CatalogIo.ReadRequiredHash(reader), IndexSize = reader.ReadUInt32(),
+            BundleHash = CatalogIo.ReadRequiredHash(reader), BundleSize = reader.ReadUInt32(),
+        };
     }
 }

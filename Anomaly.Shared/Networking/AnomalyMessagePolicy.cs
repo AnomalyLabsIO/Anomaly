@@ -13,7 +13,7 @@ namespace Anomaly.Shared.Networking
 
     /// <summary>
     /// Earliest authentication phase in which a message may be sent or received.
-    /// Anomaly application protocol v3 has no custom-message traffic before the encrypted session key is
+    /// Anomaly application protocol v4 has no custom-message traffic before the encrypted session key is
     /// installed, so every built-in message currently declares
     /// <see cref="AuthenticatedSession"/> explicitly.
     /// </summary>

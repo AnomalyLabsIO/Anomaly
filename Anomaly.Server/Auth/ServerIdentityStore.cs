@@ -385,7 +385,7 @@ internal static class ServerIdentityStore
     }
 }
 
-public sealed class ServerIdentityFile
+internal sealed class ServerIdentityFile
 {
     public string IdentityBase64 { get; set; } = string.Empty;
     public string EnrollmentSecretBase64 { get; set; } = string.Empty;

@@ -33,6 +33,7 @@ public static class NetworkManagerRegisterClientMessages
     private static bool _contentReady;
     private static bool _enrollmentReady;
     private static bool _overrideReady;
+    private static bool _visualReady;
     private static bool _pathOverrideReady;
     private static bool _announcerReady;
     private static bool _roundReady;
@@ -61,12 +62,12 @@ public static class NetworkManagerRegisterClientMessages
             ready &= TryInitialize("content", ref _contentReady, ContentCatalogClient.Init);
             ready &= TryInitialize("enrollment", ref _enrollmentReady, EnrollmentIdentityReceiver.Init);
             ready &= TryInitialize("asset-overrides", ref _overrideReady, OverrideRegistry.Init);
+            ready &= TryInitialize("decorative-visuals", ref _visualReady, DecorativeVisualClient.Init);
             ready &= TryInitialize("path-overrides", ref _pathOverrideReady, PathOverrideRegistry.Init);
             ready &= TryInitialize("announcer", ref _announcerReady, AnnouncerVocabularyReceiver.Init);
             ready &= TryInitialize("round-state", ref _roundReady, RoundStateReceiver.Init);
 
-            // v1 containment: this emits a degraded-state warning and intentionally
-            // does not register the former plain-Mirror pre-auth bootstrap handlers.
+            // Facility bootstrap uses the internal authenticated message receiver.
             FacilityRecipeClient.RegisterHandlers();
 
             IsReady = ready;
@@ -159,7 +160,6 @@ public static class NetworkManagerRegisterClientMessages
                 }
             }),
             new CleanupStep("announcer vocabulary", AnnouncerVocabularyReceiver.Clear),
-            new CleanupStep("announcer schedule", CassieLineSourceSchedulePatch.RestoreAll),
-            new CleanupStep("Unity resources", AnomalyResources.UnloadAll));
+            new CleanupStep("announcer schedule", CassieLineSourceSchedulePatch.RestoreAll));
     }
 }

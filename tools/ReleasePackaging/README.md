@@ -14,15 +14,21 @@ Runtime package closure is checked from the assembly metadata in every staged
 DLL. Each assembly reference must resolve to another packaged DLL, an exact
 framework-provided name, or an exact host-provided name with a documented
 provider. Host-provided names must also occur in the captured MSBuild reference
-inputs. Missing dependencies, stale provider declarations, duplicate assembly
-identities, native files disguised as DLLs, and post-package closure changes all
-fail creation or verification. The generated schema-v2 dependency inventory
-records every edge and the packaged/framework/host resolution chosen for it.
-`release/Test-PackageClosure.ps1` audits a valid release and then removes a
-known transitive Harmony dependency from an isolated copy to prove the same
-closure engine rejects incomplete payloads.
+inputs. Pinned host versions must match both the compiled references and the
+resolved input assembly identities. Optional host file-version pins also match
+the resolved DLL's file version, which distinguishes Newtonsoft builds that
+share an assembly version. Pinned packaged versions must match the staged DLL
+and compiled references. Missing dependencies, stale provider
+declarations, duplicate assembly identities, native files disguised as DLLs,
+and post-package closure changes all fail creation or verification. The
+generated schema-v2 dependency inventory records every edge and the
+packaged/framework/host resolution chosen for it. `release/Test-PackageClosure.ps1`
+audits a valid release, then removes AssetsTools.NET and changes Harmony, Bouncy
+Castle, and Newtonsoft versions in isolated copies to prove rejection.
 
-The developer SDK also carries `BouncyCastle.Cryptography.dll` because public
+The server runtime uses the `BouncyCastle.Cryptography.dll` supplied by the
+SCP:SL 14.2.7 game's Managed directory. The developer SDK carries its own copy
+because public
 `Anomaly.Shared.Auth.AuthCrypto` signatures expose Bouncy Castle types.
 `reference/sdk-reference-metadata.json` records that compile dependency and the
 separately supplied game/interop profile. `release/Test-SdkCompileClosure.ps1`

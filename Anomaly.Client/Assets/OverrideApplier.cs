@@ -1,7 +1,6 @@
-using Anomaly.Client.Api.Assets;
 using Il2CppMirror;
-using MelonLoader;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Anomaly.Client.Assets
 {
@@ -12,6 +11,30 @@ namespace Anomaly.Client.Assets
     /// </summary>
     internal static class OverrideApplier
     {
+        // SCP:SL's HDRP and character shaders do not consistently expose
+        // Unity's legacy _MainTex property. Prefer the shader's declaration,
+        // then the supported pipelines' base-color texture names.
+        private static bool TryGetTextureProperty(Material material, out int propertyId)
+        {
+            var shader = material.shader;
+            if (shader != null)
+            {
+                for (int i = 0; i < shader.GetPropertyCount(); i++)
+                {
+                    if ((shader.GetPropertyFlags(i) & ShaderPropertyFlags.MainTexture) == 0) continue;
+                    propertyId = shader.GetPropertyNameId(i);
+                    return true;
+                }
+            }
+            foreach (string name in new[] { "_BaseColorMap", "_BaseMap", "_MainTex" })
+            {
+                propertyId = Shader.PropertyToID(name);
+                if (material.HasProperty(propertyId)) return true;
+            }
+            propertyId = 0;
+            return false;
+        }
+
         /// <summary>
         /// Resolves the target material. Returns null if the NetworkIdentity is
         /// not spawned on this client, or the component path does not point at a
@@ -46,12 +69,13 @@ namespace Anomaly.Client.Assets
 
         /// <summary>
         /// Applies <paramref name="newTexture"/> to the material and returns the
-        /// previous <c>mainTexture</c> so it can be restored later. Also needs the
+        /// previous selected base-texture property so it can be restored later. Also needs the
         /// <see cref="Renderer"/> so the mutated materials array can be written back.
         /// </summary>
-        public static Texture ApplyTexture(uint netId, string componentPath, int materialIndex, Texture newTexture, out Material material)
+        public static Texture ApplyTexture(uint netId, string componentPath, int materialIndex, Texture newTexture, out Material material, out int texturePropertyId)
         {
             material = null;
+            texturePropertyId = 0;
             if (!NetworkClient.spawned.TryGetValue(netId, out var ni) || ni == null || ni.gameObject == null)
                 return null;
 
@@ -61,15 +85,17 @@ namespace Anomaly.Client.Assets
             var mats = renderer.materials;
             if (materialIndex < 0 || materialIndex >= mats.Length) return null;
 
-            material = mats[materialIndex];
-            var original = material.mainTexture;
+            var target = mats[materialIndex];
+            if (target == null || !TryGetTextureProperty(target, out texturePropertyId)) return null;
+            material = target;
+            var original = material.GetTexture(texturePropertyId);
             bool textureChanged = false;
             try
             {
                 // Set ownership before invoking Unity: a property setter may
                 // mutate native state and still throw before returning.
                 textureChanged = true;
-                material.mainTexture = newTexture;
+                material.SetTexture(texturePropertyId, newTexture);
                 renderer.materials = mats;
                 return original;
             }
@@ -80,7 +106,7 @@ namespace Anomaly.Client.Assets
                 // only records ownership after this method returns successfully.
                 if (textureChanged)
                 {
-                    try { material.mainTexture = original; }
+                    try { material.SetTexture(texturePropertyId, original); }
                     catch { }
                     try { renderer.materials = mats; }
                     catch { }
@@ -106,7 +132,8 @@ namespace Anomaly.Client.Assets
             var mats = renderer.materials;
             if (materialIndex < 0 || materialIndex >= mats.Length) return;
 
-            mats[materialIndex].mainTexture = originalTexture;
+            if (!TryGetTextureProperty(mats[materialIndex], out int propertyId)) return;
+            mats[materialIndex].SetTexture(propertyId, originalTexture);
             renderer.materials = mats;
         }
 

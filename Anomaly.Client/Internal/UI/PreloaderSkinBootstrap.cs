@@ -1,8 +1,5 @@
 using System;
-using System.IO;
-using Anomaly.Client.Api.Features;
 using Anomaly.Client.Assets;
-using Anomaly.Client.Api.Assets;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -12,17 +9,14 @@ namespace Anomaly.Client.Internal.UI;
 
 /// <summary>
 /// Swaps the PreLoader scene's <c>Canvas/Background</c> and <c>Canvas/Image</c>
-/// sprites with user-provided PNGs (<c>logo.png</c>, <c>background.png</c>)
-/// from <see cref="Paths.SkinsPath"/>. Fired from <c>Core.OnSceneWasLoaded</c>.
+/// sprites with validated local pack textures. Server packs never affect skins.
 /// </summary>
 internal static class PreloaderSkinBootstrap
 {
-    private const string LogoFileName = "logo.png";
-    private const string BackgroundFileName = "background.png";
-
     private static bool _hooked;
     private static string _lastDispatchName;
     private static float _lastDispatchRealtime;
+    private static readonly System.Collections.Generic.List<(Image Target, Sprite Original, Sprite Replacement)> Bindings = new();
 
     internal static void Init()
     {
@@ -67,14 +61,9 @@ internal static class PreloaderSkinBootstrap
 
     private static void ApplySkin(Scene scene)
     {
-        string logoPath = Path.Combine(Paths.SkinsPath, LogoFileName);
-        string bgPath = Path.Combine(Paths.SkinsPath, BackgroundFileName);
-        bool haveLogo = File.Exists(logoPath);
-        bool haveBg = File.Exists(bgPath);
-        if (!haveLogo && !haveBg) return;
-
-        Texture2D logoTex = haveLogo ? LocalTextures.TryLoad(logoPath) : null;
-        Texture2D bgTex = haveBg ? LocalTextures.TryLoad(bgPath) : null;
+        AssetBundleManager.TryGetLocalTexture("game/skin/logo", out var logoTex);
+        AssetBundleManager.TryGetLocalTexture("game/skin/background", out var bgTex);
+        if (logoTex == null && bgTex == null) return;
 
         Sprite logoSprite = logoTex != null ? NamedSprite(logoTex, "AnomalyLogo") : null;
         Sprite bgSprite = bgTex != null ? NamedSprite(bgTex, "AnomalyBackground") : null;
@@ -96,11 +85,15 @@ internal static class PreloaderSkinBootstrap
                 canvasMatches++;
                 if (bgSprite != null)
                 {
+                    AssetLifetime.Retain(bgChild.sprite);
+                    Bindings.Add((bgChild, bgChild.sprite, bgSprite));
                     bgChild.sprite = bgSprite;
                     bgSwaps++;
                 }
                 if (logoSprite != null)
                 {
+                    AssetLifetime.Retain(logoChild.sprite);
+                    Bindings.Add((logoChild, logoChild.sprite, logoSprite));
                     logoChild.sprite = logoSprite;
                     logoSwaps++;
                 }
@@ -108,6 +101,17 @@ internal static class PreloaderSkinBootstrap
         }
 
         MelonLogger.Msg($"PreloaderSkin: matched={canvasMatches} bg={bgSwaps} logo={logoSwaps}");
+    }
+
+    internal static void RestoreAll()
+    {
+        foreach (var binding in Bindings)
+        {
+            if (binding.Target != null && binding.Target.sprite == binding.Replacement) binding.Target.sprite = binding.Original;
+            AssetLifetime.Release(binding.Original);
+            if (binding.Replacement != null) UnityEngine.Object.Destroy(binding.Replacement);
+        }
+        Bindings.Clear();
     }
 
     private static Image FindDirectChildImage(Transform parent, string childNameLower)

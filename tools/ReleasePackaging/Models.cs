@@ -21,6 +21,7 @@ internal sealed class PackageEntryDefinition
 {
     public string Source { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
+    public string? AssemblyVersion { get; set; }
 }
 
 internal sealed class RuntimeClosureDefinition
@@ -35,6 +36,8 @@ internal sealed class HostProvidedAssemblyDefinition
 {
     public string Name { get; set; } = string.Empty;
     public string Provider { get; set; } = string.Empty;
+    public string? AssemblyVersion { get; set; }
+    public string? FileVersion { get; set; }
 }
 
 internal sealed class DependencyInventory
@@ -54,6 +57,9 @@ internal sealed class ResolvedInput
 {
     public string Project { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string AssemblyName { get; set; } = string.Empty;
+    public string AssemblyVersion { get; set; } = string.Empty;
+    public string FileVersion { get; set; } = string.Empty;
     public long SizeBytes { get; set; }
     public string Sha256 { get; set; } = string.Empty;
 }

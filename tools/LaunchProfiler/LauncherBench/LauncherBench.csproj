@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <LauncherBin Condition="'$(LauncherBin)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\anomaly-launcher\Anomaly.Launcher\bin\Release\net8.0\win-x64</LauncherBin>
+    <LiteSource Condition="'$(LiteSource)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\anomaly-launcher-lite\src\Anomaly.Lite.Core</LiteSource>
+    <MelonNet6 Condition="'$(MelonNet6)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\ModdedFiles\games\latest\MelonLoader\net6</MelonNet6>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Anomaly.Launcher"><HintPath>$(LauncherBin)\Anomaly.Launcher.dll</HintPath></Reference>
+    <Reference Include="Anomaly.InstallerCore"><HintPath>$(LauncherBin)\Anomaly.InstallerCore.dll</HintPath></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(LauncherBin)\Newtonsoft.Json.dll</HintPath></Reference>
+    <Reference Include="System.Reflection.Metadata"><HintPath>$(LauncherBin)\System.Reflection.Metadata.dll</HintPath></Reference>
+    <Reference Include="System.Collections.Immutable"><HintPath>$(LauncherBin)\System.Collections.Immutable.dll</HintPath></Reference>
+    <Reference Include="Tomlet"><HintPath>$(MelonNet6)\Tomlet.dll</HintPath></Reference>
+    <!-- Compile the existing Lite preparation/validation implementation unchanged. -->
+    <Compile Include="$(LiteSource)\**\*.cs" Exclude="$(LiteSource)\bin\**;$(LiteSource)\obj\**" Link="LiteSource\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

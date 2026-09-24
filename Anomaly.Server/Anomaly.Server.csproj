@@ -16,6 +16,8 @@
         <LangVersion>12</LangVersion>
         <DeployLocal Condition="'$(DeployLocal)' == ''">false</DeployLocal>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        <DocumentationFile>bin\$(Configuration)\Anomaly.Server.xml</DocumentationFile>
+        <NoWarn>$(NoWarn);1591</NoWarn>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
         <PlatformTarget>x64</PlatformTarget>
@@ -42,10 +44,11 @@
     </PropertyGroup>
     <ItemGroup>
         <Reference Include="0Harmony">
-          <HintPath>$(AnomalyHarmonyPath)</HintPath>
+          <HintPath>$(PkgLib_Harmony)\lib\net48\0Harmony.dll</HintPath>
+          <Private>true</Private>
         </Reference>
         <Reference Include="Assembly-CSharp">
-          <HintPath>$(AnomalyServerPublicizedAssembly)</HintPath>
+          <HintPath>..\..\..\SCPSL\Talky\packages\ExMod.Exiled.9.14.2\lib\net48\Assembly-CSharp-Publicized.dll</HintPath>
         </Reference>
         <Reference Include="Assembly-CSharp-firstpass">
           <HintPath>$(AnomalyServerReferenceDir)\Assembly-CSharp-firstpass.dll</HintPath>
@@ -113,18 +116,11 @@
         <Reference Include="System.IO.Compression.FileSystem">
           <HintPath>$(AnomalyServerReferenceDir)\System.IO.Compression.FileSystem.dll</HintPath>
         </Reference>
-        <Reference Include="System.IO.Pipelines">
-          <HintPath>$(AnomalyServerReferenceDir)\System.IO.Pipelines.dll</HintPath>
-        </Reference>
         <Reference Include="System.Net.Http">
           <HintPath>$(AnomalyServerReferenceDir)\System.Net.Http.dll</HintPath>
         </Reference>
         <Reference Include="System.Numerics">
           <HintPath>$(AnomalyServerReferenceDir)\System.Numerics.dll</HintPath>
-        </Reference>
-        <Reference Include="System.Numerics.Vectors">
-          <HintPath>$(PkgSystem_Numerics_Vectors)\lib\net46\System.Numerics.Vectors.dll</HintPath>
-          <Private>true</Private>
         </Reference>
         <Reference Include="System.Runtime">
           <HintPath>$(AnomalyServerReferenceDir)\System.Runtime.dll</HintPath>
@@ -135,10 +131,6 @@
         <Reference Include="System.Runtime.Serialization">
           <HintPath>$(AnomalyServerReferenceDir)\System.Runtime.Serialization.dll</HintPath>
         </Reference>
-        <Reference Include="System.Threading.Tasks.Extensions">
-          <HintPath>$(PkgSystem_Threading_Tasks_Extensions)\lib\net461\System.Threading.Tasks.Extensions.dll</HintPath>
-          <Private>true</Private>
-        </Reference>
         <Reference Include="System.Security">
           <HintPath>$(AnomalyServerReferenceDir)\System.Security.dll</HintPath>
         </Reference>
@@ -147,9 +139,6 @@
         </Reference>
         <Reference Include="System.Text.Encodings.Web">
           <HintPath>$(AnomalyServerReferenceDir)\System.Text.Encodings.Web.dll</HintPath>
-        </Reference>
-        <Reference Include="System.Text.Json">
-          <HintPath>$(AnomalyServerReferenceDir)\System.Text.Json.dll</HintPath>
         </Reference>
         <Reference Include="System.Transactions">
           <HintPath>$(AnomalyServerReferenceDir)\System.Transactions.dll</HintPath>
@@ -171,12 +160,7 @@
         </Reference>
     </ItemGroup>
     <ItemGroup>
-      <!-- The deployed Text.Json/Pipelines assemblies require these exact
-           strong-name versions; the stock server directory contains older
-           facade versions. Ship this pinned closure with the plugin. -->
-      <PackageReference Include="System.Numerics.Vectors" Version="4.4.0"
-                        GeneratePathProperty="true" ExcludeAssets="compile;runtime" />
-      <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4"
+      <PackageReference Include="Lib.Harmony" Version="2.2.2"
                         GeneratePathProperty="true" ExcludeAssets="compile;runtime" />
     </ItemGroup>
     <ItemGroup>
@@ -195,6 +179,12 @@
         <Compile Include="Commands\PasswordCommand.cs" />
         <Compile Include="Commands\ServerIdentityCommand.cs" />
         <Compile Include="Config.cs" />
+        <Compile Include="Api\Networking\ClientMessaging.cs" />
+        <Compile Include="Api\Events\Handlers\ClientEvents.cs" />
+        <Compile Include="Api\Events\Arguments\ClientEventArgs.cs" />
+        <Compile Include="Api\Events\Arguments\ClientMessageReceivedEventArgs.cs" />
+        <Compile Include="Api\Events\Arguments\PlayerMotionAppliedEventArgs.cs" />
+        <Compile Include="Api\Events\Arguments\FacilityLayoutFinalizingEventArgs.cs" />
         <Compile Include="Patches\PlayerAuthenticationManagerPatch.cs" />
         <Compile Include="Patches\ProcessConnectionRequestPatch.cs" />
         <Compile Include="Patches\FpcMotionHandoffPatch.cs" />
@@ -202,35 +192,44 @@
         <Compile Include="Properties\AssemblyInfo.cs"/>
         <Compile Include="Networking\AnomalyMessaging.cs" />
         <Compile Include="Networking\AuthenticatedTransportSessions.cs" />
+        <Compile Include="Networking\ConnectionBootstrap.cs" />
         <Compile Include="Networking\EncryptedTransportCounterGuard.cs" />
         <Compile Include="Networking\AnomalyReplayTable.cs" />
         <Compile Include="Assets\AssetFileWatcher.cs" />
-        <Compile Include="Assets\AssetOverrides.cs" />
-        <Compile Include="Assets\AssetRegistry.cs" />
-        <Compile Include="Features\Announcer.cs" />
+        <Compile Include="Api\Assets\AssetOverrides.cs" />
+        <Compile Include="Api\Assets\AssetRegistry.cs" />
+        <Compile Include="Api\Features\Announcer.cs" />
         <Compile Include="Features\PlayerColorState.cs" />
         <Compile Include="Features\PlayerColorBridge.cs" />
-        <Compile Include="Features\ClientCapabilities.cs" />
-        <Compile Include="Features\PlayerMotion.cs" />
+        <Compile Include="Api\Features\ClientCapabilities.cs" />
+        <Compile Include="Api\Features\PlayerMotion.cs" />
         <Compile Include="Internal\Motion\FpcMotionHandoff.cs" />
         <Compile Include="Lifecycle\ServerLifecycleTransaction.cs" />
-        <Compile Include="Content\Content.cs" />
+        <Compile Include="Api\Content\CustomItems.cs" />
         <Compile Include="Content\ContentCatalogBridge.cs" />
         <Compile Include="Content\ContentActivationCoordinator.cs" />
         <Compile Include="Content\ServerContentRegistrar.cs" />
         <Compile Include="Content\ContentRegistry.cs" />
         <Compile Include="Content\ContentGrantGate.cs" />
-        <Compile Include="Content\ContentReadiness.cs" />
-        <Compile Include="Content\CustomItemDefinition.cs" />
-        <Compile Include="Content\ItemLogicBase.cs" />
+        <Compile Include="Api\Content\ContentReadiness.cs" />
+        <Compile Include="Api\Content\CustomItemDefinition.cs" />
         <Compile Include="FileTransfer\FileTransferSession.cs" />
         <Compile Include="FileTransfer\ServerAssetManager.cs" />
-        <Compile Include="Map\FacilityGlyphs.cs" />
-        <Compile Include="Map\FacilityBootstrapMessages.cs" />
-        <Compile Include="Map\FacilityLayout.cs" />
-        <Compile Include="Map\RecipeEntry.cs" />
-        <Compile Include="Map\Patches\AtlasZoneGeneratorPatch.cs" />
-        <Compile Include="Map\Patches\SeedSynchronizerPatch.cs" />
+        <Compile Include="FileTransfer\AssetPackSnapshot.cs" />
+        <Compile Include="FileTransfer\AssetChunkReader.cs" />
+        <Compile Include="Assets\DecorativeVisualState.cs" />
+        <Compile Include="Api\Assets\DecorativeVisualScope.cs" />
+        <Compile Include="Api\Map\FacilityGlyphs.cs" />
+
+        <Compile Include="Api\Map\FacilityLayout.cs" />
+        <Compile Include="Api\Map\FacilityRoomPlacement.cs" />
+        <Compile Include="Internal\Map\FacilityLayoutRuntime.cs" />
+        <Compile Include="Internal\Map\FacilityGeneration.cs" />
+        <Compile Include="Internal\Map\FacilityGenerationDiagnostics.cs" />
+        <Compile Include="Api\Events\Handlers\MapEvents.cs" />
+
+        <Compile Include="Patches\Map\AtlasZoneGeneratorPatch.cs" />
+        <Compile Include="Patches\Map\SeedSynchronizerPatch.cs" />
         <Compile Include="Utils\OffThreadLogger.cs" />
     </ItemGroup>
     <ItemGroup>

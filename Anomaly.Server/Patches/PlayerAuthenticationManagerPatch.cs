@@ -19,7 +19,7 @@ using NetworkManagerUtils.Dummies;
 namespace Anomaly.Server.Patches;
 
 [HarmonyPatch]
-public static class PlayerAuthenticationManagerPatch
+internal static class PlayerAuthenticationManagerPatch
 {
     private const int EncryptedMessageHeaderSize = 5;
     private const uint GenericTransportRateKeyPrefix = 0xFFF00000u;
@@ -68,12 +68,10 @@ public static class PlayerAuthenticationManagerPatch
             PlayerStorage player = null;
             try
             {
-                // Claiming the accepted phase-two handoff and registering its
-                // authenticated hub are one admission transaction. Teardown can
-                // therefore observe either the stored player or the registered hub,
-                // never an invisible map-to-hub gap.
-                if (!AuthHandler.TryTakePlayer(endPoint, out player))
-                    throw new InvalidOperationException("No stored authenticated handoff was found.");
+                // Adopt the same connection-owned keys and counters used for map bootstrap.
+                if (!AuthenticatedTransportSessions.TryAdoptConnection(__instance._hub, out player) ||
+                    !ReferenceEquals(player.AcceptedPeer, peer))
+                    throw new InvalidOperationException("No matching authenticated connection session was found.");
 
                 handoff = PrepareAuthenticatedHandoff(__instance, endPoint, player);
             }
@@ -137,7 +135,6 @@ public static class PlayerAuthenticationManagerPatch
 
         instance.UserId = player.UserId;
         instance._hub.nicknameSync.UpdateNickname(player.NickName);
-        AuthenticatedTransportSessions.Register(instance._hub, player);
         instance._hub.encryptedChannelManager.EncryptionKey = null;
 
         if (!EnrollmentSessionRegistry.TryActivate(
@@ -651,7 +648,7 @@ public static class PlayerAuthenticationManagerPatch
                         hub,
                         conn,
                         rawLimiter.RegisterProtocolViolation(),
-                        "Rejected a legacy or malformed directional AEAD v2 envelope for application protocol v3.");
+                        "Rejected a legacy or malformed directional AEAD v2 envelope for application protocol v4.");
                     return false;
                 }
 

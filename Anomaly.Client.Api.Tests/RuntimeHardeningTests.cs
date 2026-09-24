@@ -15,37 +15,27 @@ namespace Anomaly.Client.Api.Tests;
 public sealed class RuntimeHardeningTests
 {
     [Fact]
-    public void RemoteAudioRequiresOggContentSignature()
+    public void Typed_resources_require_a_live_resolver_and_preserve_exact_address_and_kind()
     {
-        Assert.True(AudioClipFactory.HasOggHeader("OggS"u8.ToArray()));
-        Assert.False(AudioClipFactory.HasOggHeader("RIFF"u8.ToArray()));
-        Assert.False(AudioClipFactory.HasOggHeader(new byte[] { (byte)'O', (byte)'g' }));
-    }
-
-    [Fact]
-    public void Remote_resources_fail_closed_and_require_exact_hash_and_kind()
-    {
-        byte[] approved = Enumerable.Repeat((byte)0xA5, 32).ToArray();
-        byte[] other = Enumerable.Repeat((byte)0x5A, 32).ToArray();
-        AnomalyResources.SetRemoteAssetAuthorization(null);
+        AnomalyResources.SetResolver(null);
+        Assert.False(AnomalyResources.TryGetTexture(AssetAddress.Parse("mods/example/logo"), out _));
+        int calls = 0;
         try
         {
-            Assert.False(AnomalyResources.IsRemoteAssetAuthorized(approved, AssetKind.Texture2D));
-
-            AnomalyResources.SetRemoteAssetAuthorization((hash, kind) =>
-                hash.SequenceEqual(approved) && kind == AssetKind.Texture2D);
-
-            Assert.True(AnomalyResources.IsRemoteAssetAuthorized((byte[])approved.Clone(), AssetKind.Texture2D));
-            Assert.False(AnomalyResources.IsRemoteAssetAuthorized(approved, AssetKind.AudioClip));
-            Assert.False(AnomalyResources.IsRemoteAssetAuthorized(other, AssetKind.Texture2D));
-            Assert.False(AnomalyResources.IsRemoteAssetAuthorized(new byte[31], AssetKind.Texture2D));
+            AnomalyResources.SetResolver((address, kind) =>
+            {
+                calls++;
+                Assert.Equal("mods/example/logo", address.Value);
+                Assert.Equal(AssetKind.Texture2D, kind);
+                return null;
+            });
+            Assert.False(AnomalyResources.TryGetTexture(default, out _));
+            Assert.Equal(0, calls);
+            Assert.False(AnomalyResources.TryGetTexture(AssetAddress.Parse("mods/example/logo"), out _));
+            Assert.Equal(1, calls);
         }
-        finally
-        {
-            AnomalyResources.SetRemoteAssetAuthorization(null);
-        }
+        finally { AnomalyResources.SetResolver(null); }
     }
-
     [Fact]
     public void Replay_table_separates_and_resets_raw_and_decoded_limiters()
     {

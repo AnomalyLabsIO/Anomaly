@@ -12,6 +12,15 @@
       "externalReferenceProfile": "scpsl-14.2.7-client-interop"
     },
     {
+      "name": "Anomaly.Server",
+      "path": "lib/net48/Anomaly.Server.dll",
+      "targetFramework": "net48",
+      "compileDependencies": [
+        "Anomaly.Shared"
+      ],
+      "externalReferenceProfile": "scpsl-14.2.7-server-labapi"
+    },
+    {
       "name": "Anomaly.Shared",
       "path": "lib/net48/Anomaly.Shared.dll",
       "targetFramework": "net48",
@@ -27,6 +36,12 @@
     }
   ],
   "externalReferenceProfiles": [
+    {
+      "id": "scpsl-14.2.7-server-labapi",
+      "packaged": false,
+      "provider": "Matching SCP:SL 14.2.7 dedicated server and LabAPI",
+      "description": "Game, Unity, and LabAPI references are supplied by the developer's matching server install and are not redistributed in the SDK."
+    },
     {
       "id": "scpsl-14.2.7-client-interop",
       "packaged": false,

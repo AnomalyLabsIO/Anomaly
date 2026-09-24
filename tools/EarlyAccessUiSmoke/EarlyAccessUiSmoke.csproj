@@ -5,6 +5,12 @@
     <Nullable>disable</Nullable>
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>Anomaly.EarlyAccessUiSmoke</AssemblyName>
+    <DefineConstants>$(DefineConstants);FACILITY_CLIENT_SMOKE</DefineConstants>
   </PropertyGroup>
   <Import Project="..\..\samples\Anomaly.Sample.props" />
+  <ItemGroup>
+    <Reference Include="0Harmony" HintPath="$(AnomalyClientMelonLibDir)\0Harmony.dll" Private="false" />
+    <Compile Include="..\ServerApiSmoke\SmokeMessages.cs" Link="SmokeMessages.cs" />
+    <Compile Include="..\ServerApiSmoke\FacilityContents.cs" Link="FacilityContents.cs" />
+  </ItemGroup>
 </Project>

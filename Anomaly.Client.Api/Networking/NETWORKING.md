@@ -10,7 +10,7 @@ helpers live in `Anomaly.Shared.Networking`. Client and server companions
 reference that same assembly. The client and server `AnomalyMessaging` entry
 points are runtime-specific.
 
-Public v1 uses application/auth protocol `3`. A v2/v3 mismatch is rejected
+Public v1 uses application/auth protocol `6`. Older protocol peers are rejected
 clearly during authentication; there is no downgrade path. This protocol bump
 does not change the fixed-layout authentication handshake.
 
@@ -124,16 +124,16 @@ publishing any registry entry.
 Anomaly.Client.Api.Networking.AnomalyMessaging.Send(
     new MyGreetingRequest { Text = "hello", Value = 42 });
 
-// Server call sites, where hub/excludedConnection are runtime objects.
+// Server call sites use native LabAPI Player objects.
 var response = new MyGreetingResponse { Value = 42 };
-Anomaly.Server.Networking.AnomalyMessaging.SendToClient(hub, response);
-Anomaly.Server.Networking.AnomalyMessaging.SendToAll(response);
-Anomaly.Server.Networking.AnomalyMessaging.SendToAllExcept(
-    excludedConnection,
+Anomaly.Server.Api.Networking.ClientMessaging.Send(player, response);
+Anomaly.Server.Api.Networking.ClientMessaging.SendToAll(response);
+Anomaly.Server.Api.Networking.ClientMessaging.SendToAllExcept(
+    excludedPlayer,
     response);
 ```
 
-Receive through the runtime event:
+Receive through the API event (retain named handlers for cleanup in real plugins):
 
 ```csharp
 // Client
@@ -146,11 +146,11 @@ Anomaly.Client.Api.Networking.AnomalyMessaging.MessageReceived += message =>
 };
 
 // Server
-Anomaly.Server.Networking.AnomalyMessaging.MessageReceived += (sender, message) =>
+Anomaly.Server.Api.Events.Handlers.ClientEvents.MessageReceived += ev =>
 {
-    if (message is MyGreetingRequest request)
+    if (ev.Message is MyGreetingRequest request)
     {
-        // sender is the authenticated client's ReferenceHub.
+        // ev.Player is the authenticated client's native LabAPI Player.
     }
 };
 ```
@@ -162,6 +162,12 @@ handler is logged without suppressing later recipients, later subscribers, or
 framework-internal routing.
 
 ## Transport channels
+
+Registration and every send bind the exact runtime type, name, channel,
+direction, authentication phase, payload bound, and round-scoping contract.
+Undefined channels, changed factories, and replacement types borrowing a
+registered name are rejected. Validation and serialization limits are checked
+before a transmit replay counter is consumed.
 
 | Value | Channel | Use |
 |---:|---|---|
@@ -225,3 +231,5 @@ models, weights, or prefab hierarchies.
 enumerate source files explicitly. `Anomaly.Client` also disables default
 compile items. Add new `.cs` files to each affected project. The SDK-style
 `Anomaly.Client.Api` project uses default compile inclusion.
+
+Protocol 6 replaces raw media manifests with completed bundle/index file pairs, binds both hashes into content consent, and adds generation/revision-qualified decorative snapshots and updates. Typed AssetAddress values replace per-media hashes. Asset-dependent state requires the exact Activated acknowledgement after validation and native publication. See [ASSETBUNDLES.md](../../ASSETBUNDLES.md).

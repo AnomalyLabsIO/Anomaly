@@ -1,4 +1,5 @@
 using System.IO;
+using Anomaly.Shared.Assets;
 using System.Text;
 
 namespace Anomaly.Shared.Networking.Messages
@@ -11,7 +12,7 @@ namespace Anomaly.Shared.Networking.Messages
     public class AssetClearOverrideMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
         private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
-        private const int MaxComponentPathBytes = 1024;
+        private const int MaxComponentPathBytes = TextureOverridePolicy.MaximumComponentPathBytes;
         public override int MaxPayloadBytes => 4 + 2 + MaxComponentPathBytes + 2;
         public string MessageName => "anomaly:asset:override-clear";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
@@ -22,6 +23,7 @@ namespace Anomaly.Shared.Networking.Messages
 
         public void Serialize(BinaryWriter writer)
         {
+            TextureOverridePolicy.ValidateTarget(NetId, ComponentPath, MaterialIndex);
             writer.Write(NetId);
 
             var pathBytes = Utf8.GetBytes(ComponentPath ?? "");
@@ -46,6 +48,7 @@ namespace Anomaly.Shared.Networking.Messages
             ComponentPath = Utf8.GetString(pathBytes);
 
             MaterialIndex = reader.ReadUInt16();
+            TextureOverridePolicy.ValidateTarget(NetId, ComponentPath, MaterialIndex);
         }
     }
 }

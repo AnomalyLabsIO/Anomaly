@@ -142,6 +142,11 @@ try {
             (Join-Path $gateRepositoryRoot 'Anomaly.Client.Api/bin/Release/net6.0/Anomaly.Client.Api.dll') `
             (Join-Path $gateRepositoryRoot 'Anomaly.Client.Api/PublicAPI.Shipped.txt')
         if ($LASTEXITCODE -ne 0) { throw 'Shipped public API baseline verification failed.' }
+        & dotnet run --project (Join-Path $gateRepositoryRoot 'tools/PublicApiBaseline/PublicApiBaseline.csproj') `
+            -c Release -- `
+            (Join-Path $gateRepositoryRoot 'Anomaly.Server/bin/Release/Anomaly.Server.dll') `
+            (Join-Path $gateRepositoryRoot 'Anomaly.Server/PublicAPI.Shipped.txt')
+        if ($LASTEXITCODE -ne 0) { throw 'Shipped server API baseline verification failed.' }
     }
 
     Invoke-RecordedGate 'public-api-fixtures' `

@@ -89,6 +89,23 @@ internal static class EnrollmentSessionRegistry
         }
     }
 
+    /// <summary>Retains connection ownership while a fast restart replaces its hub.</summary>
+    internal static bool TrySuspendForRestart(string enrollmentId, ReferenceHub hub, ulong reservation)
+    {
+        if (hub == null || reservation == 0 || string.IsNullOrWhiteSpace(enrollmentId)) return false;
+        lock (Sync)
+        {
+            if (!Entries.TryGetValue(enrollmentId, out var entry) || !ReferenceEquals(entry.ActiveHub, hub))
+                return false;
+            entry.ActiveHub = null;
+            if (!entry.PendingReservations.Contains(reservation)) entry.PendingReservations.Add(reservation);
+            // A login accepted during the scene transition must still supersede
+            // this older connection when its replacement hub tries to promote.
+            entry.PendingReservations.Sort();
+            return true;
+        }
+    }
+
     /// <summary>
     /// Restores the prior active hub only when <paramref name="replacementHub"/>
     /// still owns the enrollment. A newer successful login is never overwritten

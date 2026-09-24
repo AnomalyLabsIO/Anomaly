@@ -67,6 +67,17 @@ public third-party repository, repository UI, and deep-link installation are
 planned but disabled for v1; they are separate from signed official-core
 delivery.
 
+## Trying mods in a local game
+
+Launch the modded client and run `host` in the console, or select **Create Server**
+from the menu. Hosting starts immediately without the **Create Anyway** warning.
+Your local host player receives Remote Admin permissions automatically; there is
+no need to run `adminme`. Disconnecting and hosting again works the same way.
+
+Automatic admin applies only to the host's in-process player connection. Other
+players do not receive permissions through this shortcut. Hosting retains the
+game's existing network configuration.
+
 ## Installing the server
 
 `Anomaly.Server.dll` is a LabAPI plugin. Install the server package relative to
@@ -161,7 +172,18 @@ Ordinary MelonMods own their handles and subscriptions. The separate
 option for framework-owned lifecycle and dependency resolution.
 
 Server companions are LabAPI plugins that reference `Anomaly.Server.dll` and
-`Anomaly.Shared.dll`.
+`Anomaly.Shared.dll` from the matching developer SDK. Start with the packaged
+[HelloAnomalyServer](samples/HelloAnomalyServer/README.md) sample and the
+[server API guide](Anomaly.Server/MODDING.md). Author APIs live under
+`Anomaly.Server.Api.*` and use LabAPI players, items, event handlers, and plugin
+lifecycle. Existing development companions must rebuild against this pre-release
+baseline even though managed versions remain `1.0.0`.
+
+Client and server use application protocol v6. Update both together; older
+protocol peers are rejected during authentication. Facility generation receives
+one authenticated immutable snapshot before the client generates its map.
+Optional content consent has no reading deadline; its transfer inactivity
+timeout starts only after the player approves.
 
 ## Trust, quarantine, and local data
 
@@ -207,3 +229,7 @@ Anomaly core and its in-repository documentation are licensed
 Copyright (c) 2026 AnomalyLabs contributors.
 
 The separate Anomaly launcher retains its GPL-3.0 license.
+
+## AssetBundle content
+
+Local customization and server-delivered content use externally authored Unity 6000.0.43f1 AssetBundles. The headless server only indexes, hashes and transfers completed files. See [ASSETBUNDLES.md](ASSETBUNDLES.md) for supported assets, local skin migration and protocol 6 companion-mod changes.

@@ -199,13 +199,13 @@ prefixes.
 ## Items-only server content
 
 Public v1 custom content is server-registered items. A LabAPI companion calls
-`Anomaly.Server.Content.Content.Register` during `Enable()`:
+`Anomaly.Server.Api.Content.CustomItems.Register` during `Enable()`:
 
 ```csharp
-using Anomaly.Server.Content;
+using Anomaly.Server.Api.Content;
 using InventorySystem;
 
-Content.Register(new CustomItemDefinition
+CustomItems.Register(new CustomItemDefinition
 {
     Key = "mymod:scanner",
     BaseTemplate = ItemType.Coin,
@@ -218,19 +218,22 @@ Content.Register(new CustomItemDefinition
 The stable key uses the lowercase `modid:name` grammar. Anomaly assigns the
 wire item id above the current stock maximum through 127 and clones the stock
 `InventoryItemLoader` template. The item therefore inherits the base model,
-pickup behavior, and weight. Optional `ItemLogicBase.OnUsed` runs from the
-LabAPI used-item event.
+pickup behavior, and weight. Handle item behavior through ordinary LabAPI
+item events and identify the item using `CustomItems.TryGetItemKey`.
+Unsubscribe handlers in the companion plugin's `Disable()`.
 
 Recognition and readiness APIs are:
 
-- `Content.TryGetItemId`
-- `Content.TryGetItemKey`
-- `Content.IsCustomItem`
-- `Content.GetPlayerReadiness`
-- `Content.PlayerReady`, once per successful catalog activation
+- `CustomItems.TryGetItemId`
+- `CustomItems.TryGetItemKey`
+- `CustomItems.IsCustomItem`
+- `CustomItems.GetPlayerReadiness`
+- `Anomaly.Server.Api.Events.ClientEvents.ContentReady`, once per successful
+  player catalog activation
 
-`Content.GiveItem` succeeds only after the exact catalog has activated for
-that player and the server-side item registration is confirmed.
+`CustomItems.TryGiveItem(player, key, out item)` takes a LabAPI `Player` and
+returns the resulting LabAPI item wrapper. It succeeds only after the exact
+catalog has activated for that player and server item registration is confirmed.
 `ContentReadiness` distinguishes `Unknown`, `Offered`, `Approved`,
 `Transferring`, `Declined`, `Activated`, and `Failed`.
 
@@ -247,10 +250,19 @@ allocation checks before activation. Blobs use the instance's content-addressed
 `<MelonLoader UserData>/Anomaly/FileCache/`, while consent/provenance remains
 separate in `Anomaly/content-consent.json` beneath the same UserData directory.
 
-Catalogs are immutable for an active connection. File changes and deletions
+Registration copies each definition. Register during consumer `Enable()`;
+after definitions freeze on first use, catalog changes require a server restart.
+Catalog offers are immutable for an active player session. File changes and deletions
 rebuild the offer for future connections; public v1 does not destructively hot
 reload connected clients. Remote custom roles, effects, models, weights,
 AssetBundles, meshes, generic prefabs, and generic spawning are not supported.
+
+Authenticated facility generation and ordinary messaging do not wait for optional
+content consent. Server `ClientEvents.Connected` means authenticated readiness;
+`ContentReady` means the custom-item catalog has activated. A pending choice
+reserves no active transfer slot and may remain open beyond 30 seconds. The
+30-second transfer inactivity timeout starts only after approval. See the
+[server API guide](../Anomaly.Server/MODDING.md) for lifecycle and migration details.
 
 ## Events
 
@@ -362,3 +374,7 @@ Public remote password authentication is disabled. A server with
 `RequirePassword=true` rejects remote clients until vetted OPAQUE support is
 available; the legacy password path is restricted to explicit loopback or
 migration use.
+
+## Bundle resources
+
+Use typed catalog addresses with AnomalyResources.TryGetTexture, TryGetSprite, TryGetAudioClip and TryGetMesh. Objects are borrowed and remote bindings must be released on disconnect. The coordinated protocol 6 migration requires dependent mods to rebuild; [ASSETBUNDLES.md](../ASSETBUNDLES.md) describes authoring, replacements, budgets and the no-script policy.

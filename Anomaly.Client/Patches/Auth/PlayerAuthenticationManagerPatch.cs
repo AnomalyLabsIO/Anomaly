@@ -234,13 +234,7 @@ public static class PlayerAuthenticationManagerPatch
         }
 
         ReferenceHub hub = LocalPlayer.Instance?.ReferenceHub;
-        if (hub == null && !PlayerRegistry.TryGetLocalHub(out hub))
-        {
-            HandleRawTransportResult(
-                rawLimiter.RegisterProtocolViolation(),
-                "Encrypted message arrived before the local player hub was ready.");
-            return false;
-        }
+        if (hub == null) PlayerRegistry.TryGetLocalHub(out hub);
 
         byte[] decryptedData;
         if (packed.Level == EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated)
@@ -249,7 +243,7 @@ public static class PlayerAuthenticationManagerPatch
             {
                 HandleRawTransportResult(
                     rawLimiter.RegisterProtocolViolation(),
-                    "Rejected a legacy or malformed directional AEAD v2 envelope for application protocol v3.");
+                    "Rejected a legacy or malformed directional AEAD envelope.");
                 return false;
             }
 
@@ -311,7 +305,14 @@ public static class PlayerAuthenticationManagerPatch
             AnomalyMessaging.OnReceived(
                 anomalyPayload,
                 packed.Level == EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
-                NetworkServer.active);
+                NetworkServer.active,
+                beforeHubReady: hub == null);
+            return false;
+        }
+
+        if (hub == null)
+        {
+            AnomalyMessaging.FailClosedTransport("A gameplay message arrived before authenticated map bootstrap completed.");
             return false;
         }
 

@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.IO.Compression;
+using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
@@ -16,6 +18,7 @@ internal static class ReleasePackageBuilder
         "Anomaly.Bootstrap",
         "Anomaly.Client",
         "Anomaly.Client.Api",
+        "Anomaly.AssetValidation",
         "Anomaly.Server",
         "Anomaly.Shared",
     ];
@@ -400,10 +403,22 @@ internal static class ReleasePackageBuilder
                     continue;
                 path = Path.GetFullPath(path);
                 ValidateRegularFile(path, $"Resolved reference for {project}");
+                AssemblyName? identity;
+                try
+                {
+                    identity = AssemblyName.GetAssemblyName(path);
+                }
+                catch (BadImageFormatException)
+                {
+                    identity = null;
+                }
                 var input = new ResolvedInput
                 {
                     Project = project,
                     Name = Path.GetFileName(path),
+                    AssemblyName = identity?.Name ?? string.Empty,
+                    AssemblyVersion = identity?.Version?.ToString() ?? string.Empty,
+                    FileVersion = FileVersionInfo.GetVersionInfo(path).FileVersion ?? string.Empty,
                     SizeBytes = new FileInfo(path).Length,
                     Sha256 = HashFile(path),
                 };
@@ -436,12 +451,21 @@ internal static class ReleasePackageBuilder
             return null;
 
         var packagedAssemblies = new Dictionary<string, ManagedAssemblyMetadata>(StringComparer.OrdinalIgnoreCase);
+        var packagedVersionPins = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in package.Entries
                      .Where(entry => entry.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                      .OrderBy(entry => entry.Path, StringComparer.Ordinal))
         {
             var path = ResolveUnderRoot(packageRoot, entry.Path);
             var metadata = ReadManagedAssembly(path, NormalizeRelativePath(entry.Path));
+            if (entry.AssemblyVersion is not null)
+            {
+                if (!string.Equals(metadata.Version, entry.AssemblyVersion, StringComparison.Ordinal))
+                    throw new InvalidDataException(
+                        $"{closureKind} package '{package.PackageId}' has assembly '{metadata.Name}' version " +
+                        $"{metadata.Version}; expected {entry.AssemblyVersion}.");
+                packagedVersionPins.Add(metadata.Name, entry.AssemblyVersion);
+            }
             if (!packagedAssemblies.TryAdd(metadata.Name, metadata))
                 throw new InvalidDataException(
                     $"Package '{package.PackageId}' contains multiple assemblies named '{metadata.Name}'.");
@@ -465,19 +489,31 @@ internal static class ReleasePackageBuilder
                          .ThenBy(item => item.Version, StringComparer.Ordinal))
             {
                 string resolution;
-                if (packagedAssemblies.ContainsKey(reference.Name))
+                if (packagedAssemblies.TryGetValue(reference.Name, out var packagedDependency))
                 {
                     resolution = "packaged";
+                    if (packagedVersionPins.ContainsKey(reference.Name) &&
+                        !string.Equals(reference.Version, packagedDependency.Version, StringComparison.Ordinal))
+                        throw new InvalidDataException(
+                            $"{closureKind} package '{package.PackageId}' has '{assembly.Name}' requesting " +
+                            $"'{reference.Name}' version {reference.Version}, but packages version " +
+                            $"{packagedDependency.Version}.");
                 }
                 else if (frameworkNames.Contains(reference.Name))
                 {
                     resolution = "framework";
                     referencedFramework.Add(reference.Name);
                 }
-                else if (hostDefinitions.ContainsKey(reference.Name))
+                else if (hostDefinitions.TryGetValue(reference.Name, out var hostDefinition))
                 {
                     resolution = "host";
                     referencedHost.Add(reference.Name);
+                    if (hostDefinition.AssemblyVersion is not null &&
+                        !string.Equals(reference.Version, hostDefinition.AssemblyVersion, StringComparison.Ordinal))
+                        throw new InvalidDataException(
+                            $"{closureKind} package '{package.PackageId}' has '{assembly.Name}' requesting " +
+                            $"host-provided '{reference.Name}' version {reference.Version}; expected " +
+                            $"{hostDefinition.AssemblyVersion}.");
                 }
                 else
                 {
@@ -509,14 +545,35 @@ internal static class ReleasePackageBuilder
         var referenceProjects = definition.ReferenceProjects.ToHashSet(StringComparer.Ordinal);
         foreach (var hostName in referencedHost)
         {
-            var fileName = hostName + ".dll";
-            if (!resolvedInputs.Any(input =>
+            var matchingInputs = resolvedInputs.Where(input =>
                     referenceProjects.Contains(input.Project) &&
-                    string.Equals(input.Name, fileName, StringComparison.OrdinalIgnoreCase)))
+                    string.Equals(input.AssemblyName, hostName, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matchingInputs.Length == 0)
             {
                 throw new InvalidDataException(
                     $"Host-provided dependency '{hostName}' for '{package.PackageId}' was not present in " +
                     "the captured resolved-reference inputs.");
+            }
+            var expectedVersion = hostDefinitions[hostName].AssemblyVersion;
+            var expectedFileVersion = hostDefinitions[hostName].FileVersion;
+            if (expectedVersion is not null || expectedFileVersion is not null)
+            {
+                foreach (var input in matchingInputs)
+                {
+                    if (expectedVersion is not null &&
+                        (!string.Equals(input.AssemblyName, hostName, StringComparison.OrdinalIgnoreCase) ||
+                         !string.Equals(input.AssemblyVersion, expectedVersion, StringComparison.Ordinal)))
+                        throw new InvalidDataException(
+                            $"Resolved input '{input.Name}' for '{input.Project}' has assembly identity " +
+                            $"'{input.AssemblyName}, Version={input.AssemblyVersion}'; expected " +
+                            $"'{hostName}, Version={expectedVersion}' for '{package.PackageId}'.");
+                    if (expectedFileVersion is not null &&
+                        !string.Equals(input.FileVersion, expectedFileVersion, StringComparison.Ordinal))
+                        throw new InvalidDataException(
+                            $"Resolved input '{input.Name}' for '{input.Project}' has file version " +
+                            $"'{input.FileVersion}'; expected '{expectedFileVersion}' for '{package.PackageId}'.");
+                }
             }
         }
 
@@ -602,6 +659,9 @@ internal static class ReleasePackageBuilder
                 "UserLibs/Anomaly.Client.Api.dll",
                 "UserLibs/Anomaly.Shared.dll",
                 "UserLibs/BouncyCastle.Cryptography.dll",
+                "UserLibs/Anomaly.AssetValidation.dll",
+                "UserLibs/AssetsTools.NET.dll",
+                "licenses/AssetsTools.NET.md",
                 "THIRD_PARTY_DEPENDENCIES.md",
                 "LICENSE",
                 "NOTICE",
@@ -610,9 +670,7 @@ internal static class ReleasePackageBuilder
             [
                 "plugins/global/Anomaly.Server.dll",
                 "dependencies/global/Anomaly.Shared.dll",
-                "dependencies/global/BouncyCastle.Cryptography.dll",
-                "dependencies/global/System.Numerics.Vectors.dll",
-                "dependencies/global/System.Threading.Tasks.Extensions.dll",
+                "dependencies/global/0Harmony.dll",
                 "THIRD_PARTY_DEPENDENCIES.md",
                 "LICENSE",
                 "NOTICE",
@@ -623,6 +681,12 @@ internal static class ReleasePackageBuilder
                 "lib/net48/Anomaly.Shared.dll",
                 "lib/net6.0/Anomaly.Client.Api.xml",
                 "lib/net48/Anomaly.Shared.xml",
+                "lib/net48/Anomaly.Server.dll",
+                "lib/net48/Anomaly.Server.xml",
+                "samples/Anomaly.Server.Sample.props",
+                "samples/HelloAnomalyServer/HelloAnomalyServer.csproj",
+                "samples/HelloAnomalyServer/Plugin.cs",
+                "samples/HelloAnomalyServer/README.md",
                 "samples/Anomaly.Sample.props",
                 "samples/HelloAnomalyMod/HelloAnomalyMod.csproj",
                 "samples/HelloAnomalyMod/Core.cs",
@@ -633,6 +697,7 @@ internal static class ReleasePackageBuilder
                 "samples/HelloAnomalyModule/README.md",
                 "lib/net48/BouncyCastle.Cryptography.dll",
                 "reference/Anomaly.Client.Api.PublicAPI.Shipped.txt",
+                "reference/Anomaly.Server.PublicAPI.Shipped.txt",
                 "reference/sdk-reference-metadata.json",
                 "THIRD_PARTY_DEPENDENCIES.md",
                 "LICENSE",
@@ -654,6 +719,12 @@ internal static class ReleasePackageBuilder
             {
                 ValidateRelativePath(entry.Source, "package source");
                 ValidateRelativePath(entry.Path, "package path");
+                if (entry.AssemblyVersion is not null)
+                {
+                    if (!entry.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException($"Assembly version pin requires a DLL entry in '{package.PackageId}'.");
+                    ValidateAssemblyVersion(entry.AssemblyVersion, $"package entry '{entry.Path}'");
+                }
                 var normalizedPath = NormalizeRelativePath(entry.Path);
                 if (!paths.Add(normalizedPath) ||
                     (!names.Add(Path.GetFileName(normalizedPath)) &&
@@ -662,6 +733,25 @@ internal static class ReleasePackageBuilder
             }
             if (contract.Paths.Any(path => !paths.Contains(path)))
                 throw new InvalidDataException($"Package '{package.PackageId}' is missing a required runtime or SDK entry.");
+
+            var excludedDependencies = package.PackageId switch
+            {
+                "anomaly-client" => new[]
+                {
+                    "0Harmony.dll", "Newtonsoft.Json.dll",
+                    "BigGustave.dll", "NVorbis.dll",
+                    "Mono.Cecil.dll", "Mono.Cecil.Mdb.dll", "Mono.Cecil.Pdb.dll", "Mono.Cecil.Rocks.dll",
+                    "MonoMod.Backports.dll", "MonoMod.Core.dll", "MonoMod.Iced.dll",
+                    "MonoMod.ILHelpers.dll", "MonoMod.RuntimeDetour.dll", "MonoMod.Utils.dll",
+                },
+                "anomaly-server" => new[]
+                {
+                    "System.Numerics.Vectors.dll", "System.Threading.Tasks.Extensions.dll",
+                },
+                _ => Array.Empty<string>(),
+            };
+            if (excludedDependencies.Any(name => names.Contains(name, StringComparer.OrdinalIgnoreCase)))
+                throw new InvalidDataException($"Package '{package.PackageId}' includes an excluded dependency.");
 
             var isRuntimePackage = package.PackageId is "anomaly-client" or "anomaly-server";
             if (isRuntimePackage != (package.RuntimeClosure is not null))
@@ -700,6 +790,10 @@ internal static class ReleasePackageBuilder
             ValidateAssemblyName(item.Name, $"host-provided assembly for '{packageId}'");
             if (string.IsNullOrWhiteSpace(item.Provider) || item.Provider.Length > 256)
                 throw new InvalidDataException($"Host provider is invalid for '{item.Name}' in '{packageId}'.");
+            if (item.AssemblyVersion is not null)
+                ValidateAssemblyVersion(item.AssemblyVersion, $"host-provided '{item.Name}' in '{packageId}'");
+            if (item.FileVersion is not null)
+                ValidateFileVersion(item.FileVersion, $"host-provided '{item.Name}' in '{packageId}'");
             if (!hostNames.Add(item.Name) || frameworkNames.Contains(item.Name))
                 throw new InvalidDataException($"Duplicate or ambiguous provided assembly '{item.Name}' in '{packageId}'.");
         }
@@ -714,6 +808,20 @@ internal static class ReleasePackageBuilder
             name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
             name.IndexOfAny(['/', '\\', ':']) >= 0)
             throw new InvalidDataException($"Invalid {label}: {name}");
+    }
+
+    private static void ValidateAssemblyVersion(string version, string label)
+    {
+        if (!Version.TryParse(version, out var parsed) || parsed.Build < 0 || parsed.Revision < 0 ||
+            !string.Equals(parsed.ToString(), version, StringComparison.Ordinal))
+            throw new InvalidDataException($"Invalid assembly version for {label}: {version}");
+    }
+
+    private static void ValidateFileVersion(string version, string label)
+    {
+        if (!Version.TryParse(version, out var parsed) || parsed.Build < 0 || parsed.Revision < 0 ||
+            !string.Equals(parsed.ToString(), version, StringComparison.Ordinal))
+            throw new InvalidDataException($"Invalid file version for {label}: {version}");
     }
 
     private static void CreateArchive(

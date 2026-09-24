@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Anomaly.Server.Assets;
+using Anomaly.Server.Api.Assets;
+using Anomaly.Server.Api.Features;
 using Anomaly.Server.Auth;
 using Anomaly.Server.Content;
 using Anomaly.Server.Features;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Lifecycle;
-using Anomaly.Server.Map;
+using Anomaly.Server.Internal.Map;
 using Anomaly.Server.Networking;
 using Anomaly.Server.Patches;
 using Anomaly.Server.Round;
@@ -18,8 +20,10 @@ using CentralAuth;
 using HarmonyLib;
 using LabApi.Events.Handlers;
 using LabApi.Features.Console;
+using LabApi.Features;
 using LabApi.Loader;
 using LabApi.Loader.Features.Plugins;
+using LabApi.Loader.Features.Plugins.Enums;
 
 namespace Anomaly.Server;
 
@@ -40,7 +44,7 @@ public class Plugin : Plugin<Config>
                 return ReferenceEquals(Instance, plugin) && plugin.IsOperational;
         }
     }
-    public Harmony Harmony { get; }
+    internal Harmony Harmony { get; }
     private bool _configReloadSubscribed;
     private bool _lifecycleHandlersSubscribed;
     private bool _harmonyPatched;
@@ -59,6 +63,12 @@ public class Plugin : Plugin<Config>
 
     public override void Enable()
     {
+        if (IsOperational) return;
+        if (MapGeneration.SeedSynchronizer.MapGenerated)
+        {
+            SafeLogError("Anomaly.Server must be enabled before facility generation. Restart the server to load or replace Anomaly; the current map has no authenticated snapshot.");
+            return;
+        }
         Plugin existing = Instance;
         if (existing != null && !ReferenceEquals(existing, this) && existing._harmonyPatched)
         {
@@ -128,7 +138,7 @@ public class Plugin : Plugin<Config>
             {
                 if (!ServerIdentityStore.LoadOrCreate(out var identityError))
                     throw new InvalidOperationException("Server signing identity is unavailable: " + identityError);
-                Logger.Info($"Application protocol v3 server identity fingerprint: {ServerIdentityStore.Fingerprint}");
+                Logger.Info($"Application protocol v{AnomalyProtocol.CurrentVersion} server identity fingerprint: {ServerIdentityStore.Fingerprint}");
                 if (!AcceptedClientIdentityStore.Initialize(out var acceptedIdentityError))
                     throw new InvalidOperationException(acceptedIdentityError);
                 PreauthGate.Initialize();
@@ -177,8 +187,8 @@ public class Plugin : Plugin<Config>
             [ServerInitializationStage.AssetsAndContent] = () =>
             {
                 ServerAssetManager.Init(Config.AssetDirectory);
-                AssetRegistry.LogSummary();
                 AssetOverrides.Init();
+                DecorativeVisualScope.Init();
                 Announcer.Init();
                 AssetFileWatcher.Start(Config.AssetDirectory);
             },
@@ -201,7 +211,8 @@ public class Plugin : Plugin<Config>
             {
                 RoundStateBroadcaster.Init();
                 RoundStartBridge.Init();
-                FacilityLayout.Init();
+                ConnectionBootstrap.Init();
+                FacilityLayoutRuntime.Init();
             },
             [ServerInitializationStage.RuntimeOverrides] = ApplyRuntimeOverrides,
             [ServerInitializationStage.ConfigReloadSubscription] = () =>
@@ -227,7 +238,8 @@ public class Plugin : Plugin<Config>
     public override string Description { get; } = "Server plugin for the Anomaly modding framework.";
     public override string Author { get; } = "AnomalyLabs";
     public override Version Version => GetType().Assembly.GetName().Version;
-    public override Version RequiredApiVersion => new Version(1, 1, 5);
+    public override Version RequiredApiVersion => new Version(LabApiProperties.CompiledVersion);
+    public override LoadPriority Priority => LoadPriority.Highest;
 
     private static void OnAnomalyMessage(ReferenceHub hub, IAnomalyMessage message)
     {
@@ -250,7 +262,7 @@ public class Plugin : Plugin<Config>
                 throw new InvalidOperationException("The authenticated enrollment identity could not be delivered.");
             FileTransferSession.StartForPlayer(
                 hub,
-                manifestSha256 => ContentCatalogBridge.OfferForPlayer(hub, manifestSha256));
+                (manifestSha256, snapshot) => ContentCatalogBridge.OfferForPlayer(hub, manifestSha256, snapshot));
         }
         catch (Exception exception)
         {
@@ -278,6 +290,14 @@ public class Plugin : Plugin<Config>
         LabApi.Events.Arguments.PlayerEvents.PlayerLeftEventArgs ev)
     {
         ReferenceHub hub = ev?.Player?.ReferenceHub;
+        // Fast restart destroys player objects while retaining Mirror connections.
+        // Keep the connection-owned keys/replay counters for the next authenticated
+        // facility snapshot; normal disconnect still revokes them in its own hook.
+        var connection = hub?.connectionToClient;
+        if (Instance?.IsOperational == true && RoundRestarting.RoundRestart.IsRoundRestarting &&
+            connection != null && Mirror.NetworkServer.connections.TryGetValue(connection.connectionId, out var current) &&
+            ReferenceEquals(connection, current))
+            AuthenticatedTransportSessions.TryReleaseHubForRestart(hub, PlayerAuthenticationManager.AllowSameAccountJoining);
         CleanupPlayerState(hub, "player-left");
     }
 
@@ -350,7 +370,8 @@ public class Plugin : Plugin<Config>
         else
             _ = restoreRuntimeState();
 
-        RunCleanup(context, "facility layout", FacilityLayout.Disable);
+        RunCleanup(context, "connection bootstrap", ConnectionBootstrap.Disable);
+        RunCleanup(context, "facility layout", FacilityLayoutRuntime.Disable);
         RunCleanup(context, "round start bridge", RoundStartBridge.Disable);
         RunCleanup(context, "round state broadcaster", RoundStateBroadcaster.Disable);
 
@@ -368,6 +389,7 @@ public class Plugin : Plugin<Config>
         RunCleanup(context, "asset file watcher", AssetFileWatcher.Stop);
         RunCleanup(context, "announcer", Announcer.Disable);
         RunCleanup(context, "asset overrides", AssetOverrides.Disable);
+        RunCleanup(context, "decorative visuals", DecorativeVisualScope.Disable);
         RunCleanup(context, "server content registrar", () =>
         {
             if (!ServerContentRegistrar.Reset())
@@ -428,6 +450,14 @@ public class Plugin : Plugin<Config>
                 hub,
                 context + "-authenticated-client",
                 quarantineTransport: !disconnectInitiated);
+        }
+        foreach (var connection in AuthenticatedTransportSessions.SnapshotConnections())
+        {
+            AuthenticatedTransportSessions.QuarantineConnection(connection);
+            if (TryRunCleanup(context, "pending authenticated connection disconnect", connection.Disconnect))
+                AuthenticatedTransportSessions.RemoveConnection(connection);
+            else
+                succeeded = false;
         }
         return succeeded;
     }
@@ -577,6 +607,12 @@ public class Plugin : Plugin<Config>
     {
         var required = new List<MethodBase>
         {
+            AccessTools.Method(typeof(MapGeneration.SeedSynchronizer), "Awake"),
+            AccessTools.Method(typeof(MapGeneration.SeedSynchronizer), "GenerateLevel"),
+            AccessTools.Method(typeof(MapGeneration.SeedSynchronizer), "OnNewPlayerConnected"),
+            AccessTools.Method(typeof(MapGeneration.AtlasZoneGenerator), "Generate"),
+            AccessTools.Method(typeof(Mirror.NetworkServer), "OnConnected"),
+            AccessTools.Method(typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnServerDisconnect)),
             AccessTools.Method(
                 typeof(CustomLiteNetLib4MirrorTransport),
                 nameof(CustomLiteNetLib4MirrorTransport.ProcessConnectionRequest)),

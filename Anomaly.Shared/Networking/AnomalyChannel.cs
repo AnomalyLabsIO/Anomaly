@@ -32,12 +32,11 @@ namespace Anomaly.Shared.Networking
     public static class AnomalyProtocol
     {
         /// <summary>
-        /// v3: replaces the incompatible custom-content catalogs with one
-        /// SHA-256-bound items-only contract and adds explicit consent and
-        /// server-local enrollment disclosure. Older versions are intentionally
+        /// v6: transfers indexed AssetBundles, addresses resources by logical catalog
+        /// address, and activates content before dependent state is sent. Older versions are intentionally
         /// rejected; there is no silent downgrade path.
         /// </summary>
-        public const byte CurrentVersion = 3;
+        public const byte CurrentVersion = 6;
     }
 
     /// <summary>

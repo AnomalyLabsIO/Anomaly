@@ -1,185 +1,64 @@
 using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
-using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Utils;
-using Anomaly.Shared.Networking.Messages;
-using MEC;
-using Logger = LabApi.Features.Console.Logger;
 
-namespace Anomaly.Server.Assets
+namespace Anomaly.Server.Assets;
+
+/// <summary>Coalesces changes on workers; active clients retain their original spool generation.</summary>
+internal static class AssetFileWatcher
 {
-    /// <summary>
-    /// Watches the server's asset directory and rebuilds the immutable source
-    /// snapshot used by future connections. Active-session hot reload is
-    /// deliberately disabled in public v1.
-    /// </summary>
-    public static class AssetFileWatcher
+    private static readonly object Sync = new object();
+    private static FileSystemWatcher _watcher;
+    private static Timer _debounce;
+    private static int _epoch;
+    public static void Start(string directory)
     {
-        private static FileSystemWatcher _watcher;
-        private static readonly Dictionary<string, CoroutineHandle> _pendingDebounces = new Dictionary<string, CoroutineHandle>();
-
-        // FileSystemWatcher callbacks fire on threadpool worker threads. MEC's Timing and
-        // the _pendingDebounces dictionary are main-thread-only, so worker threads only
-        // enqueue paths here; a main-thread MEC coroutine (DrainIncoming) drains them and
-        // performs all debounce/scheduling work. Mirrors the OffThreadLogger pattern.
-        private static readonly ConcurrentQueue<string> _incoming = new ConcurrentQueue<string>();
-        private static CoroutineHandle _drainHandle;
-        private const float DebounceSeconds = 0.25f;
-
-        public static void Start(string assetDirectory)
+        Stop();
+        if (string.IsNullOrWhiteSpace(directory)) return;
+        int epoch;
+        lock (Sync) epoch = _epoch;
+        Task.Run(() =>
         {
-            if (string.IsNullOrEmpty(assetDirectory) || !Directory.Exists(assetDirectory))
-            {
-                Logger.Info("AssetFileWatcher: No asset directory, skipping watcher.");
-                return;
-            }
-
-            Stop();
-
-            _watcher = new FileSystemWatcher(assetDirectory)
-            {
-                IncludeSubdirectories = true,
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
-                EnableRaisingEvents = true
-            };
-            _watcher.Changed += OnFileEvent;
-            _watcher.Created += OnFileEvent;
-            _watcher.Deleted += OnFileEvent;
-            _watcher.Renamed += OnFileRenamed;
-
-            _drainHandle = Timing.RunCoroutine(DrainIncoming());
-
-            Logger.Info($"AssetFileWatcher: Watching '{assetDirectory}' for changes.");
-        }
-
-        public static void Stop()
-        {
-            // Called on the main thread (Start / Plugin.Disable), so MEC calls are safe.
-            if (_drainHandle.IsRunning)
-                Timing.KillCoroutines(_drainHandle);
-
-            foreach (var handle in _pendingDebounces.Values)
-                if (handle.IsRunning)
-                    Timing.KillCoroutines(handle);
-            _pendingDebounces.Clear();
-
-            while (_incoming.TryDequeue(out _)) { }
-
-            if (_watcher == null) return;
-            _watcher.EnableRaisingEvents = false;
-            _watcher.Dispose();
-            _watcher = null;
-        }
-
-        // Worker-thread entry points: only enqueue. No MEC, no dictionary access here.
-        private static void OnFileEvent(object sender, FileSystemEventArgs e) => _incoming.Enqueue(e.FullPath);
-        private static void OnFileRenamed(object sender, RenamedEventArgs e)
-        {
-            _incoming.Enqueue(e.OldFullPath);
-            _incoming.Enqueue(e.FullPath);
-        }
-
-        // Main-thread pump: drains worker-thread file events and runs the debounce on the
-        // main thread, where Timing and _pendingDebounces are safe to touch.
-        private static IEnumerator<float> DrainIncoming()
-        {
-            while (true)
-            {
-                while (_incoming.TryDequeue(out var fullPath))
-                    Debounce(fullPath);
-                yield return Timing.WaitForOneFrame;
-            }
-        }
-
-        private static void Debounce(string fullPath)
-        {
-            // Runs on the main thread (via DrainIncoming) — MEC + _pendingDebounces are safe here.
-            OffThreadLogger.Info($"AssetFileWatcher: change detected for '{fullPath}', debouncing.");
-
-            if (_pendingDebounces.TryGetValue(fullPath, out var handle) && handle.IsRunning)
-                Timing.KillCoroutines(handle);
-
-            _pendingDebounces[fullPath] = Timing.CallDelayed(DebounceSeconds, () => ProcessChange(fullPath));
-        }
-
-        private static void ProcessChange(string fullPath)
-        {
-            _pendingDebounces.Remove(fullPath);
-
-            if (!File.Exists(fullPath))
-            {
-                ServerAssetManager.Rescan();
-                Logger.Info($"AssetFileWatcher: Asset removed or renamed '{fullPath}'. Future clients use the rebuilt manifest.");
-                return;
-            }
-
-            byte[] newHash;
+            FileSystemWatcher watcher = null;
             try
             {
-                var info = new FileInfo(fullPath);
-                if (info.Length <= 0 || info.Length > FileManifestMessage.MaxFileBytes ||
-                    ServerAssetManager.InferKind(fullPath) == Anomaly.Shared.Assets.AssetKind.Unknown)
+                Directory.CreateDirectory(directory);
+                watcher = new FileSystemWatcher(directory) { IncludeSubdirectories = true, NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size };
+                watcher.Changed += Changed;
+                watcher.Created += Changed;
+                watcher.Deleted += Changed;
+                watcher.Renamed += Renamed;
+                watcher.Error += (_, __) => QueueRescan();
+                lock (Sync)
                 {
-                    ServerAssetManager.Rescan();
-                    Logger.Warn($"AssetFileWatcher: Ignoring unsupported or over-budget asset '{fullPath}'.");
-                    return;
+                    if (epoch != _epoch) { watcher.Dispose(); return; }
+                    _debounce = new Timer(_ => ServerAssetManager.Rescan(), null, Timeout.Infinite, Timeout.Infinite);
+                    _watcher = watcher;
+                    watcher.EnableRaisingEvents = true;
                 }
-                using (var sha = SHA256.Create())
-                using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    newHash = sha.ComputeHash(stream);
+                // Closes the race between initial enumeration and watcher installation.
+                ServerAssetManager.Rescan();
             }
-            catch (Exception ex)
-            {
-                Logger.Error($"AssetFileWatcher: Failed to rehash '{fullPath}': {ex.Message}");
-                return;
-            }
-
-            // Find the existing registration for this full path, if any.
-            byte[] oldHash = null;
-            foreach (var kv in ServerAssetManager.AllAssets)
-            {
-                if (string.Equals(kv.Value.FullPath, fullPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    oldHash = kv.Value.Hash;
-                    break;
-                }
-            }
-
-            // Always rescan so the manifest stays authoritative for late-joiners.
-            ServerAssetManager.Rescan();
-
-            if (oldHash == null)
-            {
-                Logger.Info($"AssetFileWatcher: New asset detected '{fullPath}' (hash {Hex(newHash)}). Future clients will receive it.");
-                return;
-            }
-
-            if (HashesEqual(oldHash, newHash))
-            {
-                // FileSystemWatcher noise (touch without content change).
-                return;
-            }
-
-            Logger.Info(
-                $"AssetFileWatcher: '{fullPath}' changed: {Hex(oldHash)} → {Hex(newHash)}. " +
-                "Connected clients keep their approved snapshot; future clients receive the rebuilt manifest.");
-        }
-
-        private static bool HashesEqual(byte[] a, byte[] b)
-        {
-            if (a == null || b == null || a.Length != b.Length) return false;
-            for (int i = 0; i < a.Length; i++)
-                if (a[i] != b[i]) return false;
-            return true;
-        }
-
-        private static string Hex(byte[] hash)
-        {
-            if (hash == null) return "<null>";
-            return BitConverter.ToString(hash, 0, Math.Min(8, hash.Length)).Replace("-", "").ToLowerInvariant() + "…";
-        }
+            catch (Exception exception) { watcher?.Dispose(); OffThreadLogger.Warn("Asset watcher failed: " + exception.Message); }
+        });
     }
+    public static void Stop()
+    {
+        FileSystemWatcher watcher;
+        Timer timer;
+        lock (Sync) { _epoch++; watcher = _watcher; timer = _debounce; _watcher = null; _debounce = null; }
+        timer?.Dispose();
+        if (watcher != null) Task.Run(() => watcher.Dispose());
+    }
+    private static void Changed(object sender, FileSystemEventArgs args)
+    {
+        string marker = Path.DirectorySeparatorChar + ".anomaly-spool";
+        if (args.FullPath.EndsWith(marker, StringComparison.OrdinalIgnoreCase) || args.FullPath.IndexOf(marker + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) >= 0) return;
+        if (args.ChangeType != WatcherChangeTypes.Changed || args.FullPath.EndsWith(".index.json", StringComparison.OrdinalIgnoreCase) || args.FullPath.EndsWith(".bundle", StringComparison.OrdinalIgnoreCase)) QueueRescan();
+    }
+    private static void Renamed(object sender, RenamedEventArgs args) { Changed(sender, args); Changed(sender, new FileSystemEventArgs(WatcherChangeTypes.Renamed, Path.GetDirectoryName(args.OldFullPath), Path.GetFileName(args.OldFullPath))); }
+    private static void QueueRescan() { lock (Sync) _debounce?.Change(250, Timeout.Infinite); }
 }

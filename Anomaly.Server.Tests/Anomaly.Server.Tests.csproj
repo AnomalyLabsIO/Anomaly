@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+    <PackageReference Include="xunit" Version="2.7.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj" AdditionalProperties="DeployLocal=false" />
+    <Compile Include="..\Anomaly.Server\Networking\AnomalyMessaging.cs" Link="Production\AnomalyMessaging.cs" />
+    <Compile Include="..\Anomaly.Server\Networking\ConnectionBootstrap.cs" Link="Production\ConnectionBootstrap.cs" />
+    <Compile Include="..\Anomaly.Server\Networking\AuthenticatedTransportSessions.cs" Link="Production\AuthenticatedTransportSessions.cs" />
+    <Compile Include="..\Anomaly.Server\Networking\AnomalyReplayTable.cs" Link="Production\AnomalyReplayTable.cs" />
+    <Compile Include="..\Anomaly.Server\Auth\PlayerStorage.cs" Link="Production\PlayerStorage.cs" />
+    <Compile Include="..\Anomaly.Server\Auth\EnrollmentSessionRegistry.cs" Link="Production\EnrollmentSessionRegistry.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\ServerAssetManager.cs" Link="Production\ServerAssetManager.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\AssetPackSnapshot.cs" Link="Production\AssetPackSnapshot.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\AssetChunkReader.cs" Link="Production\AssetChunkReader.cs" />
+    <Compile Include="..\Anomaly.Server\Assets\DecorativeVisualState.cs" Link="Production\DecorativeVisualState.cs" />
+    <Compile Include="..\Anomaly.Server\Content\ContentGrantGate.cs" Link="Production\ContentGrantGate.cs" />
+    <Compile Include="..\Anomaly.Server\Content\ContentActivationCoordinator.cs" Link="Production\ContentActivationCoordinator.cs" />
+    <Compile Include="..\Anomaly.Server\Api\Content\ContentReadiness.cs" Link="Production\ContentReadiness.cs" />
+    <Compile Include="..\Anomaly.Server\Api\Map\FacilityRoomPlacement.cs" Link="Production\FacilityRoomPlacement.cs" />
+    <Compile Include="..\Anomaly.Server\Api\Events\Arguments\FacilityLayoutFinalizingEventArgs.cs" Link="Production\FacilityLayoutFinalizingEventArgs.cs" />
+    <PackageReference Include="Lib.Harmony" Version="2.2.2" />
+  </ItemGroup>
+</Project>

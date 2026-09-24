@@ -9,6 +9,7 @@ using Anomaly.Client.Api.Scheduling;
 using Anomaly.Client.Api.Features;
 using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Auth;
+using Anomaly.Client.Assets;
 using Anomaly.Client.Commands;
 using Anomaly.Client.Diagnostics;
 using Anomaly.Client.Internal.Bootstrap;
@@ -31,6 +32,7 @@ using MelonLoader;
 using MelonLoader.Utils;
 
 [assembly: MelonInfo(typeof(Anomaly.Client.Core), "Anomaly", "1.0.0", "AnomalyLabs", null)]
+[assembly: MelonID("io.anomalylabs.anomaly")]
 [assembly: MelonGame("Northwood", "SCPSL")]
 [assembly: SupportedGameVersion("14.2.7^")]
 
@@ -74,6 +76,7 @@ public class Core : MelonMod
         _clientRuntimeReady = InitializeFeature("runtime-hooks", ClientRuntime.Initialize);
         _diagnosticsReady = InitializeFeature("diagnostics", DiagnosticBootstrap.Initialize);
         InitializeFeature("ui", UiBootstrap.Init);
+        InitializeFeature("asset-bundles", AssetBundleManager.Initialize);
         _preloaderSkinReady = InitializeFeature("preloader-skin", PreloaderSkinBootstrap.Init);
         InitializeFeature("main-menu", MainMenuCustomizer.Init);
         InitializeFeature("mod-settings", ModSettingsTabInstaller.Init);
@@ -100,6 +103,15 @@ public class Core : MelonMod
         string owner = Instance?.HarmonyInstance?.Id;
         if (string.IsNullOrWhiteSpace(owner))
             throw new InvalidOperationException("MelonLoader did not create Anomaly's Harmony owner.");
+
+        RequireOwnedPatch(owner, typeof(Il2CppMapGeneration.SeedSynchronizer), "ClientReceiveSeed",
+            typeof(Il2CppMapGeneration.SeedSynchronizer.SeedMessage));
+        RequireOwnedPatch(owner, typeof(Il2CppMapGeneration.SeedSynchronizer), "Awake");
+        RequireOwnedPatch(owner, typeof(Il2CppMapGeneration.SeedSynchronizer), "OnDestroy");
+        RequireOwnedPatch(owner, typeof(Il2CppMapGeneration.SeedSynchronizer), "GenerateLevel", typeof(bool));
+        RequireOwnedPatch(owner, typeof(Il2CppMapGeneration.AtlasZoneGenerator), "Generate", typeof(Il2CppSystem.Random));
+        RequireOwnedPatch(owner, typeof(NetworkClient), nameof(NetworkClient.Ready));
+        RequireOwnedPatch(owner, typeof(NetworkClient), nameof(NetworkClient.AddPlayer));
 
         RequireOwnedPatch(owner, typeof(CustomLiteNetLib4MirrorTransport),
             nameof(CustomLiteNetLib4MirrorTransport.GetConnectData), typeof(NetDataWriter));
@@ -134,6 +146,7 @@ public class Core : MelonMod
 
     public override void OnUpdate()
     {
+        UpdateFeature("asset-bundles", AssetBundleManager.Update, failClosed: true);
         if (_clientRuntimeReady)
             _clientRuntimeReady = UpdateFeature("runtime-hooks", ClientRuntime.Update, failClosed: true);
         if (_diagnosticsReady)
@@ -155,6 +168,13 @@ public class Core : MelonMod
         ClientCapabilities.Shutdown();
         ClientVisibility.ReleaseAll();
         LocalPlayerMotionAdapter.Shutdown();
+        ShutdownFeature("asset-bundles", () =>
+        {
+            Anomaly.Client.Content.ContentCatalogClient.ResetForShutdown();
+            PreloaderSkinBootstrap.RestoreAll();
+            MainMenuCustomizer.RestoreLogo();
+            AssetBundleManager.Shutdown();
+        });
         if (_diagnosticsReady) ShutdownFeature("diagnostics", DiagnosticBootstrap.Shutdown);
     }
 

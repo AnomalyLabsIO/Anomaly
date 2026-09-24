@@ -1,4 +1,5 @@
 using System.IO;
+using Anomaly.Shared.Assets;
 using System.Text;
 
 namespace Anomaly.Shared.Networking.Messages
@@ -13,30 +14,29 @@ namespace Anomaly.Shared.Networking.Messages
     public class AssetOverrideTextureMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
         private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
-        private const int MaxComponentPathBytes = 1024;
-        public override int MaxPayloadBytes => 4 + 2 + MaxComponentPathBytes + 2 + 32;
+        private const int MaxComponentPathBytes = TextureOverridePolicy.MaximumComponentPathBytes;
+        public override int MaxPayloadBytes => 4 + 2 + MaxComponentPathBytes + 2 + 2 + AssetAddress.MaxLength;
         public string MessageName => "anomaly:asset:override-texture";
         public MessageChannel TransportChannel => MessageChannel.ReliableOrdered;
 
         public uint NetId { get; set; }
         public string ComponentPath { get; set; } = "";
         public ushort MaterialIndex { get; set; }
-        public byte[] TextureHash { get; set; }
+        public string TextureAddress { get; set; }
 
         public void Serialize(BinaryWriter writer)
         {
+            TextureOverridePolicy.ValidateTarget(NetId, ComponentPath, MaterialIndex);
             writer.Write(NetId);
 
             var pathBytes = Utf8.GetBytes(ComponentPath ?? "");
             if (pathBytes.Length > MaxComponentPathBytes)
                 throw new InvalidDataException($"Component path exceeded {MaxComponentPathBytes} bytes.");
-            if (TextureHash == null || TextureHash.Length != 32)
-                throw new InvalidDataException("Texture hash must be 32 bytes.");
             writer.Write((ushort)pathBytes.Length);
             writer.Write(pathBytes);
 
             writer.Write(MaterialIndex);
-            writer.Write(TextureHash);
+            AssetAddressWire.Write(writer, TextureAddress);
         }
 
         public void Deserialize(BinaryReader reader)
@@ -52,9 +52,8 @@ namespace Anomaly.Shared.Networking.Messages
             ComponentPath = Utf8.GetString(pathBytes);
 
             MaterialIndex = reader.ReadUInt16();
-            TextureHash = reader.ReadBytes(32);
-            if (TextureHash.Length != 32)
-                throw new EndOfStreamException("Texture hash was truncated.");
+            TextureOverridePolicy.ValidateTarget(NetId, ComponentPath, MaterialIndex);
+            TextureAddress = AssetAddressWire.Read(reader);
         }
     }
 }

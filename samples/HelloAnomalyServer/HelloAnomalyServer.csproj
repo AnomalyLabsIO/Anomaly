@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>HelloAnomalyServer</AssemblyName>
+  </PropertyGroup>
+  <Import Project="..\Anomaly.Server.Sample.props" />
+  <ItemGroup>
+    <Compile Include="..\HelloMessages.cs" Link="HelloMessages.cs" />
+  </ItemGroup>
+</Project>

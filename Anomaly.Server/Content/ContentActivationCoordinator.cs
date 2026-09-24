@@ -1,3 +1,4 @@
+using Anomaly.Server.Api.Content;
 using System;
 
 namespace Anomaly.Server.Content
@@ -28,7 +29,7 @@ namespace Anomaly.Server.Content
                 return false;
 
             if (activated)
-                publicationSucceeded = publishReady();
+                publicationSucceeded = publishReady() && ContentGrantGate.PublishActivated(netId);
             return true;
         }
     }

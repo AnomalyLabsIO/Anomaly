@@ -3,7 +3,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $ReleaseOutput,
     [string] $AnomalyClientInteropDir = '',
-    [string] $AnomalyClientMelonLibDir = ''
+    [string] $AnomalyClientMelonLibDir = '',
+    [string] $AnomalyServerReferenceDir = '',
+    [string] $AnomalyLabApiDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,6 +20,13 @@ if (!$AnomalyClientMelonLibDir) {
     if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve the SDK sample MelonLoader reference directory.' }
 }
 $ReleaseOutput = [System.IO.Path]::GetFullPath($ReleaseOutput)
+foreach ($propertyName in @('AnomalyServerReferenceDir', 'AnomalyLabApiDir')) {
+    if (!(Get-Variable -Name $propertyName -ValueOnly)) {
+        $resolvedValue = (& dotnet msbuild (Join-Path $sdkRepositoryRoot 'Anomaly.Server/Anomaly.Server.csproj') "-getProperty:$propertyName").Trim()
+        if ($LASTEXITCODE -ne 0) { throw "Unable to resolve server SDK reference property $propertyName." }
+        Set-Variable -Name $propertyName -Value $resolvedValue
+    }
+}
 $sdkPayload = Join-Path $ReleaseOutput 'payloads/developer-sdk'
 if (-not (Test-Path -LiteralPath $sdkPayload -PathType Container)) {
     throw "Developer SDK payload does not exist: $sdkPayload"
@@ -91,7 +100,7 @@ public static class SdkCompileProbe
         -c Release -warnaserror --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Staged SDK compile closure is incomplete.' }
 
-    foreach ($xmlRelative in @('lib/net6.0/Anomaly.Client.Api.xml', 'lib/net48/Anomaly.Shared.xml')) {
+    foreach ($xmlRelative in @('lib/net6.0/Anomaly.Client.Api.xml', 'lib/net48/Anomaly.Shared.xml', 'lib/net48/Anomaly.Server.xml')) {
         if (!(Test-Path -LiteralPath (Join-Path $stagedSdk $xmlRelative) -PathType Leaf)) {
             throw "SDK IntelliSense documentation is missing: $xmlRelative"
         }
@@ -104,6 +113,13 @@ public static class SdkCompileProbe
             "-p:AnomalyClientMelonLibDir=$AnomalyClientMelonLibDir" -p:DeployLocal=false
         if ($LASTEXITCODE -ne 0) { throw "Packaged SDK starter failed: $sampleName" }
     }
+
+    $serverSampleProject = Join-Path $stagedSdk 'samples/HelloAnomalyServer/HelloAnomalyServer.csproj'
+    if (!(Test-Path -LiteralPath $serverSampleProject -PathType Leaf)) { throw 'Server SDK starter is missing.' }
+    & dotnet build $serverSampleProject -c Release -warnaserror --nologo `
+        "-p:AnomalySdkRoot=$stagedSdk" "-p:AnomalyServerReferenceDir=$AnomalyServerReferenceDir" `
+        "-p:AnomalyLabApiDir=$AnomalyLabApiDir" -p:DeployLocal=false
+    if ($LASTEXITCODE -ne 0) { throw 'Packaged server SDK starter failed.' }
 
     $bouncyCastlePath = Join-Path $stagedSdk 'lib/net48/BouncyCastle.Cryptography.dll'
     if (-not (Test-Path -LiteralPath $bouncyCastlePath -PathType Leaf)) {
@@ -124,7 +140,7 @@ public static class SdkCompileProbe
     }
 
     $global:LASTEXITCODE = 0
-    Write-Host 'Both packaged starters, adjacent XML docs, and positive/negative SDK compile-closure gates passed.'
+    Write-Host 'All client/server packaged starters, adjacent XML docs, and positive/negative SDK compile-closure gates passed.'
 }
 finally {
     $resolvedSdkTestRoot = [System.IO.Path]::GetFullPath($sdkTestRoot)

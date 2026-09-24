@@ -6,8 +6,10 @@ using LabApi.Loader;
 namespace Anomaly.Server.Commands;
 
 [CommandHandler(typeof(GameConsoleCommandHandler))]
-public sealed class PasswordCommand : ICommand
+internal sealed class PasswordCommand : ICommand
 {
+    public PasswordCommand() { }
+
     public string Command => "password";
 
     public string[] Aliases => Array.Empty<string>();

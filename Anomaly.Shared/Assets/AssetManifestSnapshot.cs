@@ -11,8 +11,8 @@ namespace Anomaly.Shared.Assets
     /// </summary>
     internal sealed class AssetManifestSnapshot
     {
-        private readonly Dictionary<string, AssetKind> _assets =
-            new Dictionary<string, AssetKind>(StringComparer.Ordinal);
+        private readonly Dictionary<string, FileContentKind> _assets =
+            new Dictionary<string, FileContentKind>(StringComparer.Ordinal);
 
         public AssetManifestSnapshot(IEnumerable<FileManifestMessage.FileEntry> entries)
         {
@@ -23,7 +23,7 @@ namespace Anomaly.Shared.Assets
             {
                 if (entry.Hash == null || entry.Hash.Length != 32)
                     throw new InvalidDataException("Manifest authorization requires 32-byte SHA-256 hashes.");
-                if (entry.Kind != AssetKind.Texture2D && entry.Kind != AssetKind.AudioClip)
+                if (entry.Kind != FileContentKind.Bundle && entry.Kind != FileContentKind.PackIndex)
                     throw new InvalidDataException("Manifest authorization contained an unsupported asset kind.");
                 string hash = ToHex(entry.Hash);
                 if (_assets.ContainsKey(hash))
@@ -34,11 +34,11 @@ namespace Anomaly.Shared.Assets
 
         public int Count => _assets.Count;
 
-        public bool Contains(byte[] hash, AssetKind expectedKind)
+        public bool Contains(byte[] hash, FileContentKind expectedKind)
         {
             if (hash == null || hash.Length != 32)
                 return false;
-            return _assets.TryGetValue(ToHex(hash), out AssetKind actualKind) &&
+            return _assets.TryGetValue(ToHex(hash), out FileContentKind actualKind) &&
                    actualKind == expectedKind;
         }
 

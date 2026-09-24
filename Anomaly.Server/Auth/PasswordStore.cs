@@ -303,7 +303,7 @@ internal static class PasswordStore
     }
 }
 
-public class PasswordStorageFile
+internal class PasswordStorageFile
 {
     public string SaltBase64 { get; set; } = string.Empty;
     public string VerifierBase64 { get; set; } = string.Empty;

@@ -61,9 +61,6 @@ public static class FileTransferClient
     {
         Initializer.Initialize(
             new InitializationStep(
-                () => AnomalyResources.SetRemoteAssetAuthorization(IsAssetApproved),
-                () => AnomalyResources.SetRemoteAssetAuthorization(null)),
-            new InitializationStep(
                 () => AnomalyMessaging.MessageReceived += OnMessageReceived,
                 () => AnomalyMessaging.MessageReceived -= OnMessageReceived),
             new InitializationStep(
@@ -117,7 +114,7 @@ public static class FileTransferClient
         }
     }
 
-    internal static bool IsAssetApproved(byte[] hash, AssetKind expectedKind) =>
+    internal static bool IsFileApproved(byte[] hash, FileContentKind expectedKind) =>
         _state == State.Complete &&
         _manifestSnapshot != null &&
         _manifestSnapshot.Contains(hash, expectedKind);
@@ -166,13 +163,9 @@ public static class FileTransferClient
         _completedFiles = 0;
         foreach (var file in manifest.Files)
         {
-            string extension = Path.GetExtension(file.Path);
-            if ((file.Kind == Anomaly.Shared.Assets.AssetKind.Texture2D &&
-                 !string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)) ||
-                (file.Kind == Anomaly.Shared.Assets.AssetKind.AudioClip &&
-                 !string.Equals(extension, ".ogg", StringComparison.OrdinalIgnoreCase)))
+            if (file.Kind != FileContentKind.Bundle && file.Kind != FileContentKind.PackIndex)
             {
-                Abort("manifest kind did not match the v1 PNG/OGG allowlist");
+                Abort("manifest contained a file outside the bundle/index allowlist");
                 return;
             }
 
@@ -243,9 +236,7 @@ public static class FileTransferClient
             _state = State.Complete;
             InvokeIsolated(TransferFinished, true, "TransferFinished");
             InvokeBestEffort(() => MelonLogger.Msg("FileTransfer: Approved manifest is already cached."), "cache-hit log");
-            InvokeBestEffort(
-                () => FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_LoadingLevel, _totalAssetsInManifest)),
-                "cache-hit overlay");
+            InvokeBestEffort(FileTransferOverlay.Hide, "cache-hit overlay cleanup");
             InvokeBestEffort(
                 () => FileTransferEvents.OnComplete(new FileTransferCompleteEventArgs(true, 0)),
                 "cache-hit completion event");
@@ -253,6 +244,7 @@ public static class FileTransferClient
         }
 
         _state = State.Receiving;
+        _lastActivityUtc = DateTime.UtcNow;
         try
         {
             MelonCoroutines.Start(WatchTimeout(_sessionId));
@@ -484,9 +476,7 @@ public static class FileTransferClient
         InvokeBestEffort(
             () => MelonLogger.Msg($"FileTransfer: File '{path}' received and verified ({expectedSize} bytes)."),
             "verified-file log");
-        InvokeBestEffort(
-            () => FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_LoadingLevel, _totalAssetsInManifest)),
-            "completion overlay");
+        InvokeBestEffort(FileTransferOverlay.Hide, "completion overlay cleanup");
         InvokeBestEffort(() => FileCache.Evict(500 * 1024 * 1024), "completion cache maintenance");
         InvokeBestEffort(
             () => FileTransferEvents.OnComplete(new FileTransferCompleteEventArgs(true, _completedFiles)),

@@ -8,6 +8,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1" />
+    <PackageReference Include="Lib.Harmony" Version="2.2.2" />
     <PackageReference Include="xunit" Version="2.7.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7">
       <PrivateAssets>all</PrivateAssets>
@@ -18,6 +19,7 @@
     <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj" AdditionalProperties="DeployLocal=false" />
     <Compile Include="..\Anomaly.Client\FileTransfer\ChunkBuffer.cs" Link="ClientFileTransfer\ChunkBuffer.cs" />
     <Compile Include="..\Anomaly.Client\FileTransfer\FileTransferClient.cs" Link="ClientFileTransfer\FileTransferClient.cs" />
+    <Compile Include="..\Anomaly.Client\Content\ContentCatalogClient.cs" Link="ClientContent\ContentCatalogClient.cs" />
     <Compile Include="..\Anomaly.Client.Api\Internal\TransactionalInitializer.cs" Link="ClientRuntime\TransactionalInitializer.cs" />
     <Compile Include="..\Anomaly.Client\Auth\PlayerAuth.cs" Link="ClientAuth\PlayerAuth.cs" />
     <Compile Include="..\Anomaly.Client\Auth\PlayerAuthProfileStore.cs" Link="ClientAuth\PlayerAuthProfileStore.cs" />
@@ -29,19 +31,19 @@
     <Compile Include="..\Anomaly.Server\Auth\PreauthGate.cs" Link="ServerAuth\PreauthGate.cs" />
     <Compile Include="..\Anomaly.Server\Auth\ServerFullnessPolicy.cs" Link="ServerAuth\ServerFullnessPolicy.cs" />
     <Compile Include="..\Anomaly.Server\Content\ContentRegistry.cs" Link="ServerContent\ContentRegistry.cs" />
+    <Compile Include="..\Anomaly.Server\Content\ContentCatalogBridge.cs" Link="ServerContent\ContentCatalogBridge.cs" />
     <Compile Include="..\Anomaly.Server\Content\ContentGrantGate.cs" Link="ServerContent\ContentGrantGate.cs" />
     <Compile Include="..\Anomaly.Server\Content\ContentActivationCoordinator.cs" Link="ServerContent\ContentActivationCoordinator.cs" />
-    <Compile Include="..\Anomaly.Server\Content\ContentReadiness.cs" Link="ServerContent\ContentReadiness.cs" />
+    <Compile Include="..\Anomaly.Server\Api\Content\CustomItemDefinition.cs" Link="ServerContent\CustomItemDefinition.cs" />
+    <Compile Include="..\Anomaly.Server\Api\Content\ContentReadiness.cs" Link="ServerContent\ContentReadiness.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\AssetPackSnapshot.cs" Link="ServerFileTransfer\AssetPackSnapshot.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\AssetChunkReader.cs" Link="ServerFileTransfer\AssetChunkReader.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\FileTransferSession.cs" Link="ServerFileTransfer\FileTransferSession.cs" />
     <Compile Include="..\Anomaly.Server\Utils\OffThreadLogger.cs" Link="ServerUtils\OffThreadLogger.cs" />
     <Compile Include="..\Anomaly.Server\Networking\AnomalyReplayTable.cs" Link="ServerNetworking\AnomalyReplayTable.cs" />
     <Compile Include="..\Anomaly.Server\Networking\AuthenticatedTransportSessions.cs" Link="ServerNetworking\AuthenticatedTransportSessions.cs" />
     <Compile Include="..\Anomaly.Server\Networking\EncryptedTransportCounterGuard.cs" Link="ServerNetworking\EncryptedTransportCounterGuard.cs" />
     <Compile Include="..\Anomaly.Server\Lifecycle\ServerLifecycleTransaction.cs" Link="ServerLifecycle\ServerLifecycleTransaction.cs" />
-    <Reference Include="0Harmony">
-      <HintPath>$(AnomalyHarmonyPath)</HintPath>
-      <Private>true</Private>
-    </Reference>
     <Reference Include="BouncyCastle.Cryptography">
       <HintPath>$(AnomalyServerReferenceDir)\BouncyCastle.Cryptography.dll</HintPath>
       <Private>true</Private>

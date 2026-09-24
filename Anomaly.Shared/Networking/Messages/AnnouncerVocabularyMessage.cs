@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Anomaly.Shared.Assets;
 
 namespace Anomaly.Shared.Networking.Messages
 {
@@ -11,11 +12,22 @@ namespace Anomaly.Shared.Networking.Messages
         public const int MaxWords = 128;
         public const int MaxApiNameBytes = 128;
         public const float MaxDurationSeconds = 30f;
-        public override int MaxPayloadBytes => 32 * 1024;
+        public override int MaxPayloadBytes => 64 * 1024;
         public string MessageName => "anomaly:announcer:vocabulary";
         public MessageChannel TransportChannel => MessageChannel.ReliableUnordered;
 
         public List<Entry> Words { get; set; } = new List<Entry>();
+
+        /// <summary>New registrations cannot shadow stock names or the stock pause token.</summary>
+        public static bool IsValidNewApiName(string apiName)
+        {
+            if (string.IsNullOrEmpty(apiName) || apiName == ".") return false;
+            foreach (char character in apiName)
+                if (char.IsWhiteSpace(character) || char.IsControl(character)) return false;
+            try { if (Utf8.GetByteCount(apiName) > MaxApiNameBytes) return false; }
+            catch (EncoderFallbackException) { return false; }
+            return !StockAssetProfile.TryGetCassie("game/cassie/" + apiName.ToLowerInvariant(), out _);
+        }
 
         public void Serialize(BinaryWriter writer)
         {
@@ -28,8 +40,8 @@ namespace Anomaly.Shared.Networking.Messages
                 var nameBytes = Utf8.GetBytes(word.ApiName ?? "");
                 if (nameBytes.Length > MaxApiNameBytes)
                     throw new InvalidDataException($"Vocabulary name exceeded {MaxApiNameBytes} bytes.");
-                if (nameBytes.Length == 0 || word.AudioHash == null || word.AudioHash.Length != 32)
-                    throw new InvalidDataException("Vocabulary entry name/hash was invalid.");
+                if (!IsValidNewApiName(word.ApiName) || !AssetAddress.TryParse(word.AudioAddress, out AssetAddress address) || address.IsGameReplacement)
+                    throw new InvalidDataException("New vocabulary must reference a mods/ audio address.");
                 if (!names.Add(word.ApiName))
                     throw new InvalidDataException("Vocabulary contained a duplicate API name.");
                 if (float.IsNaN(word.DurationSeconds) || float.IsInfinity(word.DurationSeconds) ||
@@ -37,7 +49,7 @@ namespace Anomaly.Shared.Networking.Messages
                     throw new InvalidDataException("Vocabulary duration was invalid.");
                 writer.Write((ushort)nameBytes.Length);
                 writer.Write(nameBytes);
-                writer.Write(word.AudioHash);
+                AssetAddressWire.Write(writer, word.AudioAddress);
                 writer.Write(word.DurationSeconds);
                 writer.Write(word.Type);
             }
@@ -59,32 +71,33 @@ namespace Anomaly.Shared.Networking.Messages
                 if (nameBytes.Length != nameLength || nameLength == 0)
                     throw new EndOfStreamException("Vocabulary name was truncated or empty.");
                 string apiName = Utf8.GetString(nameBytes);
+                if (!IsValidNewApiName(apiName)) throw new InvalidDataException("Vocabulary cannot shadow stock names or contain control/whitespace characters.");
                 if (!names.Add(apiName))
                     throw new InvalidDataException("Vocabulary contained a duplicate API name.");
-                byte[] audioHash = reader.ReadBytes(32);
-                if (audioHash.Length != 32)
-                    throw new EndOfStreamException("Vocabulary audio hash was truncated.");
+                string audioAddress = AssetAddressWire.Read(reader);
+                if (AssetAddress.Parse(audioAddress).IsGameReplacement)
+                    throw new InvalidDataException("New vocabulary cannot use a stock replacement address.");
                 float durationSeconds = reader.ReadSingle();
                 if (float.IsNaN(durationSeconds) || float.IsInfinity(durationSeconds) ||
                     durationSeconds <= 0f || durationSeconds > MaxDurationSeconds)
                     throw new InvalidDataException("Vocabulary duration was invalid.");
                 byte type = reader.ReadByte();
 
-                Words.Add(new Entry(apiName, audioHash, durationSeconds, type));
+                Words.Add(new Entry(apiName, audioAddress, durationSeconds, type));
             }
         }
 
         public struct Entry
         {
             public string ApiName;
-            public byte[] AudioHash;
+            public string AudioAddress;
             public float DurationSeconds;
             public byte Type;
 
-            public Entry(string apiName, byte[] audioHash, float durationSeconds, byte type)
+            public Entry(string apiName, string audioAddress, float durationSeconds, byte type)
             {
                 ApiName = apiName;
-                AudioHash = audioHash;
+                AudioAddress = audioAddress;
                 DurationSeconds = durationSeconds;
                 Type = type;
             }

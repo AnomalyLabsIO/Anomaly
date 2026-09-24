@@ -11,7 +11,7 @@ using Logger = LabApi.Features.Console.Logger;
 
 namespace Anomaly.Server.Networking;
 
-public static class AnomalyMessaging
+internal static class AnomalyMessaging
 {
     public static event Action<ReferenceHub, IAnomalyMessage> MessageReceived;
 
@@ -32,6 +32,11 @@ public static class AnomalyMessaging
                 return;
             try { ((Action<ReferenceHub>)subscriber)(hub); }
             catch (Exception ex) { SafeLogError($"AnomalyMessaging.ClientReady subscriber threw: {ex}"); }
+        }
+        if (Plugin.IsAuthenticatedAdmissionCurrent(hub))
+        {
+            try { Anomaly.Server.Api.Events.Handlers.ClientEvents.OnConnected(hub); }
+            catch (Exception ex) { SafeLogError($"AnomalyMessaging.Connected publication failed: {ex}"); }
         }
     }
 
@@ -82,20 +87,17 @@ public static class AnomalyMessaging
             return false;
         }
 
-        uint hash = AnomalyMessageRegistry.GetHash(msg.MessageName);
-        if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var policy))
+        if (!AnomalyMessageRegistry.TryGetSendContract(
+                msg, AnomalyMessageDirection.ServerToClient, out uint hash, out var channel, out var policy))
         {
-            SafeLogWarning($"AnomalyMessaging.SendToClient: No policy registered for '{msg.MessageName}'.");
-            return false;
-        }
-        if (policy.Direction == AnomalyMessageDirection.ClientToServer)
-        {
-            SafeLogWarning($"AnomalyMessaging.SendToClient: '{msg.MessageName}' is client-to-server only.");
+            SafeLogWarning("AnomalyMessaging.SendToClient: Message did not match a registered server-to-client contract.");
             return false;
         }
 
+        var data = BuildPayload(msg, 0, hash, policy);
+        if (data == null) return false;
         var state = AnomalyReplayTable.GetOrCreate(hub);
-        uint counter = state.NextTxCounter(msg.TransportChannel);
+        uint counter = state.NextTxCounter(channel);
         if (counter == 0 || counter == uint.MaxValue)
         {
             FailClosedDisconnect(
@@ -103,8 +105,7 @@ public static class AnomalyMessaging
                 "AnomalyMessaging.SendToClient: Counter exhausted; disconnecting before counter reuse.");
             return false;
         }
-        var data = BuildPayload(msg, counter, hash, policy);
-        if (data == null) return false;
+        BitConverter.GetBytes(counter).CopyTo(data, 1);
 
         EncryptedChannelManager.EncryptedMessageOutside packed;
         if (localTransport)
@@ -139,7 +140,7 @@ public static class AnomalyMessaging
         }
 
         if (!FitsDeployedTransport(
-                msg.TransportChannel,
+                channel,
                 packed.Data?.Length ?? 0,
                 out string transportFailure))
         {
@@ -154,7 +155,7 @@ public static class AnomalyMessaging
         }
         try
         {
-            hub.connectionToClient.Send(packed, (int)msg.TransportChannel);
+            hub.connectionToClient.Send(packed, (int)channel);
         }
         catch (Exception exception)
         {
@@ -404,11 +405,18 @@ public static class AnomalyMessaging
 
         foreach (Delegate subscriber in MessageReceived?.GetInvocationList() ?? Array.Empty<Delegate>())
         {
+            if (!localTransport && !Plugin.IsAuthenticatedAdmissionCurrent(sender))
+                return;
             try { ((Action<ReferenceHub, IAnomalyMessage>)subscriber)(sender, message); }
             catch (Exception ex)
             {
                 SafeLogError($"AnomalyMessaging.OnReceived: Isolated handler exception for '{message.MessageName}': {ex}");
             }
+        }
+        if (Plugin.IsAuthenticatedAdmissionCurrent(sender))
+        {
+            try { Anomaly.Server.Api.Events.Handlers.ClientEvents.OnMessageReceived(sender, message); }
+            catch (Exception ex) { SafeLogError($"AnomalyMessaging.MessageReceived publication failed: {ex}"); }
         }
     }
 

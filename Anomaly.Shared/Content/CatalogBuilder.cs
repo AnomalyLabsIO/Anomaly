@@ -10,7 +10,7 @@ namespace Anomaly.Shared.Content
     /// <summary>Deterministic assignment and SHA-256 canonicalization for item catalogs.</summary>
     public static class CatalogBuilder
     {
-        private static readonly byte[] Domain = Encoding.ASCII.GetBytes("ANOMALY-ITEM-CATALOG-V1");
+        private static readonly byte[] Domain = Encoding.ASCII.GetBytes("ANOMALY-CONTENT-CATALOG-V2");
 
         public static int ComputeIdBase(int maxDefinedEnumValue)
         {
@@ -27,7 +27,8 @@ namespace Anomaly.Shared.Content
             IEnumerable<CatalogEntry> entries,
             int itemIdBase,
             int itemIdCeiling,
-            byte[] manifestSha256)
+            byte[] manifestSha256,
+            IEnumerable<CatalogPack> packs = null)
         {
             if (entries == null)
                 throw new ArgumentNullException(nameof(entries));
@@ -51,6 +52,7 @@ namespace Anomaly.Shared.Content
             {
                 ManifestSha256 = (byte[])manifestSha256.Clone(),
                 Entries = sorted,
+                Packs = (packs ?? Enumerable.Empty<CatalogPack>()).OrderBy(pack => pack.PackId, StringComparer.Ordinal).ToList(),
             };
             catalog.CatalogSha256 = ComputeCatalogHash(catalog);
             return catalog;
@@ -78,6 +80,16 @@ namespace Anomaly.Shared.Content
                     if (entry == null)
                         throw new InvalidDataException("Catalog contained a null item.");
                     entry.WriteTo(writer);
+                }
+                var packs = (catalog.Packs ?? throw new InvalidDataException("Catalog pack list is missing."))
+                    .OrderBy(pack => pack?.PackId, StringComparer.Ordinal).ToList();
+                if (packs.Count > Networking.Messages.ContentCatalogMessage.MaxPacks)
+                    throw new InvalidDataException("Catalog pack count exceeded its limit.");
+                writer.Write(packs.Count);
+                foreach (CatalogPack pack in packs)
+                {
+                    if (pack == null) throw new InvalidDataException("Catalog contained a null pack.");
+                    pack.WriteTo(writer);
                 }
                 writer.Flush();
                 stream.Position = 0;

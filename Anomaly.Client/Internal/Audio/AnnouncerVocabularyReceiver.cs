@@ -4,6 +4,9 @@ using Anomaly.Client.Api.Assets;
 using Anomaly.Client.Api.Features;
 using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Networking;
+using Anomaly.Client.Assets;
+using Anomaly.Client.Content;
+using Anomaly.Shared.Assets;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
 using Il2CppCassie;
@@ -41,6 +44,11 @@ internal static class AnnouncerVocabularyReceiver
 
     private static void HandleVocabulary(AnnouncerVocabularyMessage vocabulary)
     {
+        if (!ContentCatalogClient.IsActivated)
+        {
+            AnomalyMessaging.FailClosedTransport("Announcer vocabulary arrived before content activation.");
+            return;
+        }
         int applied = 0;
         foreach (var word in vocabulary.Words)
         {
@@ -56,7 +64,8 @@ internal static class AnnouncerVocabularyReceiver
 
     private static bool TryApply(AnnouncerVocabularyMessage.Entry word)
     {
-        if (string.IsNullOrWhiteSpace(word.ApiName) || word.AudioHash == null || word.AudioHash.Length != 32)
+        if (!AnnouncerVocabularyMessage.IsValidNewApiName(word.ApiName) || !AssetAddress.TryParse(word.AudioAddress, out var address) ||
+            !AssetBundleManager.IsRemoteAsset(address, AssetKind.AudioClip))
             return false;
         if (word.DurationSeconds <= 0f ||
             word.DurationSeconds > AnnouncerVocabularyMessage.MaxDurationSeconds ||
@@ -65,13 +74,13 @@ internal static class AnnouncerVocabularyReceiver
         if (!System.Enum.IsDefined(typeof(CassieClipCategory), (CassieClipCategory)word.Type))
             return false;
 
-        if (!AnomalyResources.TryGetAudioClip(word.AudioHash, out var clip))
+        if (!AnomalyResources.TryGetAudioClip(address, out var clip))
         {
-            MelonLogger.Warning($"Announcer: Audio for server word '{word.ApiName}' is not cached or failed to decode.");
+            MelonLogger.Warning($"Announcer: Audio for server word '{word.ApiName}' is not in an active pack.");
             return false;
         }
-        if (clip.length <= 0f || clip.length > AnnouncerVocabularyMessage.MaxDurationSeconds ||
-            Math.Abs(clip.length - word.DurationSeconds) > Math.Max(0.5f, clip.length * 0.1f))
+        if (clip.samples <= 0 || clip.frequency <= 0 || (double)clip.samples / clip.frequency > AnnouncerVocabularyMessage.MaxDurationSeconds ||
+            Math.Abs((double)clip.samples / clip.frequency - word.DurationSeconds) > 1d / clip.frequency)
         {
             MelonLogger.Warning(
                 $"Announcer: Rejected server word '{word.ApiName}' because its declared duration " +

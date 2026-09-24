@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>Anomaly.AssetPackPolicy</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Anomaly.Shared\Assets\AssetAddress.cs" Link="Assets\AssetAddress.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Assets\AssetKind.cs" Link="Assets\AssetKind.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Assets\AssetPackIndex.cs" Link="Assets\AssetPackIndex.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Assets\AssetPackIndexCodec.cs" Link="Assets\AssetPackIndexCodec.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Assets\BoundedPackJson.cs" Link="Assets\BoundedPackJson.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Assets\StockAssetProfile.cs" Link="Assets\StockAssetProfile.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Content\ModNamespace.cs" Link="Content\ModNamespace.cs" />
+    <EmbeddedResource Include="..\..\Anomaly.Shared\Assets\CassieProfile.tsv" LogicalName="Anomaly.Shared.Assets.CassieProfile.tsv" />
+  </ItemGroup>
+</Project>

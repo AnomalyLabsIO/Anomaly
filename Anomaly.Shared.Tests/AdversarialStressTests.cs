@@ -226,18 +226,18 @@ public sealed class AdversarialStressTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Invalid_only_content_registration_cannot_be_offered_as_an_empty_catalog(bool registerNull)
+    public void Invalid_content_registration_throws_before_changing_the_catalog(bool registerNull)
     {
         ContentRegistry.Reset();
         try
         {
-            ContentRegistry.Add(registerNull
+            Assert.ThrowsAny<ArgumentException>(() => ContentRegistry.Add(registerNull
                 ? null
-                : new CustomItemDefinition { Key = "INVALID KEY" });
+                : new CustomItemDefinition { Key = "INVALID KEY" }));
 
-            Assert.Throws<InvalidOperationException>(() =>
-                ContentRegistry.CreateOfferCatalog(new byte[32]));
+            Assert.False(ContentRegistry.Frozen);
             Assert.False(ContentRegistry.Materialized);
+            Assert.Empty(ContentRegistry.ItemEntries);
         }
         finally
         {
@@ -251,8 +251,9 @@ public sealed class AdversarialStressTests : IDisposable
         ContentRegistry.Reset();
         try
         {
+            using var snapshot = AssetPackSnapshot.Empty();
             ContentCatalog offer = ContentRegistry.CreateOfferCatalog(
-                FileManifestMessage.ComputeManifestSha256(Array.Empty<FileManifestMessage.FileEntry>()));
+                FileManifestMessage.ComputeManifestSha256(Array.Empty<FileManifestMessage.FileEntry>()), snapshot);
 
             Assert.True(ContentRegistry.Materialized);
             Assert.Empty(offer.Entries);
@@ -276,10 +277,10 @@ public sealed class AdversarialStressTests : IDisposable
         ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
         {
             FullPath = path,
-            RelativePath = "audio/test.ogg",
+            RelativePath = "audio/test.bundle",
             Hash = hash,
             Size = (uint)bytes.Length,
-            Kind = AssetKind.AudioClip,
+            Kind = FileContentKind.Bundle,
         });
         var hub = new ReferenceHub();
         int completions = 0;
@@ -289,6 +290,7 @@ public sealed class AdversarialStressTests : IDisposable
         try
         {
             FileTransferSession.StartForPlayer(hub);
+            MEC.Timing.RunPendingStarts();
             FileManifestMessage manifest = Assert.IsType<FileManifestMessage>(
                 Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
             ApproveServerTransfer(hub, manifest);
@@ -327,11 +329,14 @@ public sealed class AdversarialStressTests : IDisposable
             Assert.Equal(0, ActiveTransferCount());
             Assert.Equal(0, ReservedTransferCount());
             Assert.Equal(1, completions);
-            Assert.True(FileTransferSession.IsAssetApproved(hub, hash, AssetKind.AudioClip));
-            Assert.False(FileTransferSession.IsAssetApproved(hub, hash, AssetKind.Texture2D));
+            Assert.False(FileTransferSession.IsAssetApproved(hub, AssetAddress.Parse("mods/fixture/audio/test"), AssetKind.AudioClip));
+            var activatedCatalog = CatalogBuilder.Build(Array.Empty<CatalogEntry>(), 128, 127, manifest.ManifestSha256);
+            Assert.True(ContentGrantGate.TryRecordActivation(hub.netId, activatedCatalog.CatalogSha256, manifest.ManifestSha256, activated: true));
+            Assert.True(FileTransferSession.IsAssetApproved(hub, AssetAddress.Parse("mods/fixture/audio/test"), AssetKind.AudioClip));
+            Assert.False(FileTransferSession.IsAssetApproved(hub, AssetAddress.Parse("mods/fixture/audio/test"), AssetKind.Texture2D));
 
             FileTransferSession.CleanupPlayer(hub);
-            Assert.False(FileTransferSession.IsAssetApproved(hub, hash, AssetKind.AudioClip));
+            Assert.False(FileTransferSession.IsAssetApproved(hub, AssetAddress.Parse("mods/fixture/audio/test"), AssetKind.AudioClip));
         }
         finally
         {
@@ -358,10 +363,10 @@ public sealed class AdversarialStressTests : IDisposable
         ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
         {
             FullPath = path,
-            RelativePath = "audio/completion-failure.ogg",
+            RelativePath = "audio/completion-failure.bundle",
             Hash = hash,
             Size = (uint)bytes.Length,
-            Kind = AssetKind.AudioClip,
+            Kind = FileContentKind.Bundle,
         });
         var hub = new ReferenceHub();
         int completions = 0;
@@ -371,6 +376,7 @@ public sealed class AdversarialStressTests : IDisposable
         try
         {
             FileTransferSession.StartForPlayer(hub);
+            MEC.Timing.RunPendingStarts();
             var manifest = Assert.IsType<FileManifestMessage>(
                 Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
             ApproveServerTransfer(hub, manifest);
@@ -431,16 +437,17 @@ public sealed class AdversarialStressTests : IDisposable
         ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
         {
             FullPath = path,
-            RelativePath = "audio/cancellation-failure.ogg",
+            RelativePath = "audio/cancellation-failure.bundle",
             Hash = hash,
             Size = (uint)bytes.Length,
-            Kind = AssetKind.AudioClip,
+            Kind = FileContentKind.Bundle,
         });
         var hub = new ReferenceHub();
 
         try
         {
             FileTransferSession.StartForPlayer(hub);
+            MEC.Timing.RunPendingStarts();
             var manifest = Assert.IsType<FileManifestMessage>(
                 Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
             ApproveServerTransfer(hub, manifest);
@@ -458,7 +465,7 @@ public sealed class AdversarialStressTests : IDisposable
             Assert.Equal(0, ActiveTransferCount());
             Assert.Equal(0, ReservedTransferCount());
             Assert.Equal(0L, ReservedTransferBytes());
-            Assert.False(FileTransferSession.IsAssetApproved(hub, hash, AssetKind.AudioClip));
+            Assert.False(FileTransferSession.IsAssetApproved(hub, AssetAddress.Parse("mods/fixture/audio/test"), AssetKind.AudioClip));
             Assert.Equal(0, Anomaly.Server.Plugin.QuarantineCount);
             Assert.True(hub.connectionToClient.isReady);
         }
@@ -484,16 +491,17 @@ public sealed class AdversarialStressTests : IDisposable
         ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
         {
             FullPath = source,
-            RelativePath = "audio/interrupted.ogg",
+            RelativePath = "audio/interrupted.bundle",
             Hash = hash,
             Size = (uint)data.Length,
-            Kind = AssetKind.AudioClip,
+            Kind = FileContentKind.Bundle,
         });
         var hub = new ReferenceHub();
 
         try
         {
             FileTransferSession.StartForPlayer(hub);
+            MEC.Timing.RunPendingStarts();
             var manifest = Assert.IsType<FileManifestMessage>(
                 Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
             ApproveServerTransfer(hub, manifest);
@@ -508,7 +516,7 @@ public sealed class AdversarialStressTests : IDisposable
             Assert.Equal(0, ReservedTransferCount());
             Assert.Equal(0L, ReservedTransferBytes());
 
-            using (var buffer = new ChunkBuffer(77, hash, (uint)data.Length, "audio/interrupted.ogg"))
+            using (var buffer = new ChunkBuffer(77, hash, (uint)data.Length, "audio/interrupted.bundle"))
             {
                 Assert.True(buffer.TryAddChunk(
                     0,
@@ -544,16 +552,17 @@ public sealed class AdversarialStressTests : IDisposable
         ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
         {
             FullPath = path,
-            RelativePath = "audio/coroutine-start-failure.ogg",
+            RelativePath = "audio/coroutine-start-failure.bundle",
             Hash = hash,
             Size = (uint)bytes.Length,
-            Kind = AssetKind.AudioClip,
+            Kind = FileContentKind.Bundle,
         });
         var hub = new ReferenceHub();
 
         try
         {
             FileTransferSession.StartForPlayer(hub);
+            MEC.Timing.RunPendingStarts();
             var manifest = Assert.IsType<FileManifestMessage>(
                 Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
             ApproveServerTransfer(hub, manifest);
@@ -596,16 +605,17 @@ public sealed class AdversarialStressTests : IDisposable
         ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
         {
             FullPath = path,
-            RelativePath = "audio/retry-cancellation-failure.ogg",
+            RelativePath = "audio/retry-cancellation-failure.bundle",
             Hash = hash,
             Size = (uint)bytes.Length,
-            Kind = AssetKind.AudioClip,
+            Kind = FileContentKind.Bundle,
         });
         var hub = new ReferenceHub();
 
         try
         {
             FileTransferSession.StartForPlayer(hub);
+            MEC.Timing.RunPendingStarts();
             var manifest = Assert.IsType<FileManifestMessage>(
                 Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
             ApproveServerTransfer(hub, manifest);
@@ -656,16 +666,17 @@ public sealed class AdversarialStressTests : IDisposable
         ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
         {
             FullPath = path,
-            RelativePath = "audio/completion-state-mismatch.ogg",
+            RelativePath = "audio/completion-state-mismatch.bundle",
             Hash = hash,
             Size = (uint)bytes.Length,
-            Kind = AssetKind.AudioClip,
+            Kind = FileContentKind.Bundle,
         });
         var hub = new ReferenceHub();
 
         try
         {
             FileTransferSession.StartForPlayer(hub);
+            MEC.Timing.RunPendingStarts();
             var manifest = Assert.IsType<FileManifestMessage>(
                 Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
             ApproveServerTransfer(hub, manifest);
@@ -692,7 +703,7 @@ public sealed class AdversarialStressTests : IDisposable
             Assert.Equal(1, Anomaly.Server.Plugin.QuarantineCount);
             Assert.Same(hub, Anomaly.Server.Plugin.LastQuarantinedHub);
             Assert.False(hub.connectionToClient.isReady);
-            Assert.False(FileTransferSession.IsAssetApproved(hub, hash, AssetKind.AudioClip));
+            Assert.False(FileTransferSession.IsAssetApproved(hub, AssetAddress.Parse("mods/fixture/audio/test"), AssetKind.AudioClip));
         }
         finally
         {
@@ -721,10 +732,10 @@ public sealed class AdversarialStressTests : IDisposable
             Files =
             {
                 new FileManifestMessage.FileEntry(
-                    "audio/chunks.ogg",
+                    "audio/chunks.bundle",
                     hash,
                     (uint)complete.Length,
-                    AssetKind.AudioClip),
+                    FileContentKind.Bundle),
             },
         };
         manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
@@ -833,10 +844,10 @@ public sealed class AdversarialStressTests : IDisposable
             Files =
             {
                 new FileManifestMessage.FileEntry(
-                    "textures/declined.png",
+                    "textures/declined.index.json",
                     hash,
                     4096,
-                    AssetKind.Texture2D),
+                    FileContentKind.PackIndex),
             },
         };
         manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
@@ -855,7 +866,7 @@ public sealed class AdversarialStressTests : IDisposable
             Assert.Equal(0L, ClientTransferRequestedBytes());
             Assert.Equal(0L, ClientTransferReceivedBytes());
             Assert.Equal(0, ClientTransferBufferCount());
-            Assert.False(FileTransferClient.IsAssetApproved(hash, AssetKind.Texture2D));
+            Assert.False(FileTransferClient.IsFileApproved(hash, FileContentKind.PackIndex));
         }
         finally
         {
@@ -879,10 +890,10 @@ public sealed class AdversarialStressTests : IDisposable
             Files =
             {
                 new FileManifestMessage.FileEntry(
-                    "audio/early-complete.ogg",
+                    "audio/early-complete.bundle",
                     hash,
                     (uint)complete.Length,
-                    AssetKind.AudioClip),
+                    FileContentKind.Bundle),
             },
         };
         manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
@@ -939,10 +950,10 @@ public sealed class AdversarialStressTests : IDisposable
                 Files =
                 {
                     new FileManifestMessage.FileEntry(
-                        "audio/cache-failure.ogg",
+                        "audio/cache-failure.bundle",
                         hash,
                         (uint)complete.Length,
-                        AssetKind.AudioClip),
+                        FileContentKind.Bundle),
                 },
             };
             manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
@@ -993,10 +1004,10 @@ public sealed class AdversarialStressTests : IDisposable
                 Files =
                 {
                     new FileManifestMessage.FileEntry(
-                        "audio/known.ogg",
+                        "audio/known.bundle",
                         advertisedHash,
                         1,
-                        AssetKind.AudioClip),
+                        FileContentKind.Bundle),
                 },
             };
             manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
@@ -1170,8 +1181,11 @@ public sealed class AdversarialStressTests : IDisposable
         var routine = (IEnumerator<float>)sendFileChunks.Invoke(
             session,
             new[] { currentFileField.GetValue(session) });
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
         while (routine.MoveNext())
         {
+            Assert.True(DateTime.UtcNow < deadline, "Chunk reader did not complete within its test deadline.");
+            System.Threading.Thread.Sleep(1);
         }
     }
 
@@ -1188,6 +1202,7 @@ public sealed class AdversarialStressTests : IDisposable
             catalog.CatalogSha256,
             catalog.ManifestSha256,
             approved: true));
+        Assert.True(FileTransferSession.ApproveForPlayer(hub));
     }
 
     private static int ReservedTransferCount()

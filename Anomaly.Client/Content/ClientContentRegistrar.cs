@@ -1,4 +1,6 @@
 using Anomaly.Client.Api.Assets;
+using Anomaly.Client.Assets;
+using Anomaly.Shared.Assets;
 using Anomaly.Shared.Content;
 using Il2Cpp;
 using Il2CppInventorySystem;
@@ -18,6 +20,9 @@ internal static class ClientContentRegistrar
         internal bool AvailablePublished;
         internal bool ActiveItemPublished;
         internal bool TranslationPublished;
+        internal Texture OriginalIcon;
+        internal Texture2D ReplacementIcon;
+        internal bool OriginalIconRetained;
     }
 
     private static readonly Dictionary<int, ItemBase> ActiveItems = new();
@@ -60,18 +65,30 @@ internal static class ClientContentRegistrar
                     throw new InvalidDataException($"Base item id {entry.BaseTemplateId} is unavailable for '{entry.Key}'.");
 
                 Texture2D icon = null;
-                if (entry.IconHash != null &&
-                    !AnomalyResources.TryGetTexture(entry.IconHash, out icon))
-                    throw new InvalidDataException($"Approved PNG icon could not be decoded for '{entry.Key}'.");
+                if (!string.IsNullOrEmpty(entry.IconAddress))
+                {
+                    var address = AssetAddress.Parse(entry.IconAddress);
+                    if (AssetBundleManager.IsRemoteAsset(address, AssetKind.Texture2D))
+                        AnomalyResources.TryGetTexture(address, out icon);
+                    else if (AssetBundleManager.IsRemoteAsset(address, AssetKind.Sprite) &&
+                        AnomalyResources.TryGetSprite(address, out Sprite sprite))
+                        icon = sprite.texture; // The accepted sprite profile requires the complete texture rectangle.
+                    if (icon == null)
+                        throw new InvalidDataException($"Approved pack icon was unavailable for '{entry.Key}'.");
+                }
 
                 ItemBase clone = UnityEngine.Object.Instantiate(template);
                 if (clone == null)
                     throw new InvalidOperationException($"Stock template clone failed for '{entry.Key}'.");
-                var stagedItem = new StagedItem { Entry = entry, Clone = clone };
+                var stagedItem = new StagedItem { Entry = entry, Clone = clone, OriginalIcon = clone.Icon, ReplacementIcon = icon };
                 staged.Add(stagedItem);
                 clone.ItemTypeId = assignedType;
                 if (icon != null)
+                {
+                    AssetLifetime.Retain(stagedItem.OriginalIcon);
+                    stagedItem.OriginalIconRetained = true;
                     clone.Icon = icon;
+                }
                 clone.name = $"Anomaly Item [{entry.Key}]";
             }
 
@@ -178,8 +195,28 @@ internal static class ClientContentRegistrar
                 item.AvailablePublished = loaderStillOwnsClone;
             }
 
+            bool iconsRestored = false;
+            try
+            {
+                // Instantiated inventory items can outlive the catalog template. Remove
+                // every binding owned by this registration before native bundle unload.
+                if (item.ReplacementIcon != null)
+                {
+                    foreach (ItemBase instance in Resources.FindObjectsOfTypeAll<ItemBase>())
+                        if (instance != null && instance.ItemTypeId == itemType && instance.Icon == item.ReplacementIcon)
+                            instance.Icon = item.OriginalIcon;
+                    if (item.Clone != null && item.Clone.Icon == item.ReplacementIcon)
+                        item.Clone.Icon = item.OriginalIcon;
+                }
+                iconsRestored = true;
+            }
+            catch (Exception exception)
+            {
+                MelonLogger.Warning($"Could not restore icons for '{item.Entry.Key}': {exception.Message}");
+            }
+
             bool objectReleased = item.Clone == null;
-            if (!loaderStillOwnsClone && !objectReleased)
+            if (!loaderStillOwnsClone && iconsRestored && !objectReleased)
             {
                 try
                 {
@@ -189,8 +226,13 @@ internal static class ClientContentRegistrar
                 catch { }
             }
 
-            if (loaderStillOwnsClone || !objectReleased)
+            if (loaderStillOwnsClone || !iconsRestored || !objectReleased)
                 PendingCleanup.Add(item);
+            else if (item.OriginalIconRetained)
+            {
+                AssetLifetime.Release(item.OriginalIcon);
+                item.OriginalIconRetained = false;
+            }
         }
 
         ActiveRegistrations.Clear();

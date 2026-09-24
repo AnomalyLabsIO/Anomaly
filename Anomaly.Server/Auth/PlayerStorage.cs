@@ -2,8 +2,9 @@
 
 namespace Anomaly.Server.Auth;
 
-public class PlayerStorage
+internal class PlayerStorage
 {
+    internal object AcceptedPeer { get; set; }
     public string NickName { get; set; }
     public string UserId { get; set; }
     public ulong EnrollmentReservation { get; set; }

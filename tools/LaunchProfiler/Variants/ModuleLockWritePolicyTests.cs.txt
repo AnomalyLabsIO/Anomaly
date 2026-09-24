@@ -1,0 +1,36 @@
+using System;
+using System.IO;
+using Anomaly.Client.Internal.Modding;
+using Newtonsoft.Json.Linq;
+using Xunit;
+
+namespace Anomaly.LaunchProfiler.Tests;
+
+public sealed class ModuleLockWritePolicyTests
+{
+    [Theory]
+    [InlineData("{\"SchemaVersion\":1,\"ResolvedUtc\":\"old\",\"Modules\":[]}", false)]
+    [InlineData("{\"SchemaVersion\":2,\"ResolvedUtc\":\"old\",\"Modules\":[]}", true)]
+    [InlineData("{\"SchemaVersion\":1,\"Modules\":[{\"Id\":\"new\"}]}", true)]
+    [InlineData("{\"SchemaVersion\":1,\"Modules\":[],\"Unknown\":true}", true)]
+    [InlineData("corrupt", true)]
+    public void OnlyEquivalentBookkeepingSkipsWrite(string previous, bool shouldWrite)
+    {
+        string path = Path.Combine(Path.GetTempPath(), "anomaly-lock-profiler-" + Guid.NewGuid() + ".json");
+        try
+        {
+            File.WriteAllText(path, previous);
+            var current = JObject.Parse("{\"SchemaVersion\":1,\"ResolvedUtc\":\"new\",\"Modules\":[]}");
+            Assert.Equal(shouldWrite, ModuleLockWritePolicy.ShouldWrite(path, current));
+            Assert.Equal(previous, File.ReadAllText(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void MissingLockIsWritten()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "anomaly-missing-" + Guid.NewGuid() + ".json");
+        Assert.True(ModuleLockWritePolicy.ShouldWrite(path, new { SchemaVersion = 1, Modules = new object[0] }));
+    }
+}

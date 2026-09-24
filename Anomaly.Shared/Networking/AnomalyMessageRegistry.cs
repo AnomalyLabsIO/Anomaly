@@ -61,6 +61,10 @@ namespace Anomaly.Shared.Networking
                 throw new InvalidOperationException(
                     $"AnomalyMessageRegistry: factory message name '{sample.MessageName}' did not match registration '{name}'.");
 
+            if (!Enum.IsDefined(typeof(MessageChannel), sample.TransportChannel))
+                throw new InvalidOperationException(
+                    $"AnomalyMessageRegistry: '{name}' declared unsupported transport channel {sample.TransportChannel}.");
+
             var directional = sample as IDirectionalAnomalyMessage;
             var bounded = sample as IBoundedAnomalyMessage;
             var phased = sample as IAuthPhaseAnomalyMessage;
@@ -165,13 +169,64 @@ namespace Anomaly.Shared.Networking
 
         public static bool TryCreate(uint hash, out IAnomalyMessage message)
         {
+            message = null;
             if (Factories.TryGetValue(hash, out var factory))
             {
-                message = factory();
+                try
+                {
+                    var candidate = factory();
+                    if (MatchesRegisteredContract(hash, candidate))
+                    {
+                        message = candidate;
+                        return true;
+                    }
+                }
+                catch { /* A broken mod factory cannot escape the receive boundary. */ }
+            }
+            return false;
+        }
+
+        // Transport code uses the immutable registered contract, never a caller's
+        // mutable channel or a different implementation borrowing a registered name.
+        internal static bool TryGetSendContract(
+            IAnomalyMessage message,
+            AnomalyMessageDirection direction,
+            out uint hash,
+            out MessageChannel channel,
+            out AnomalyMessagePolicy policy)
+        {
+            hash = 0;
+            channel = default;
+            policy = default;
+            try
+            {
+                if (message == null || message.MessageName == null ||
+                    !NameToHash.TryGetValue(message.MessageName, out uint registeredHash) ||
+                    !MatchesRegisteredContract(registeredHash, message) ||
+                    HashToPolicy[registeredHash].Direction != direction)
+                    return false;
+
+                hash = registeredHash;
+                channel = HashToChannel[hash];
+                policy = HashToPolicy[hash];
                 return true;
             }
-            message = null;
-            return false;
+            catch { return false; }
+        }
+
+        private static bool MatchesRegisteredContract(uint hash, IAnomalyMessage message)
+        {
+            return message != null &&
+                   HashToType.TryGetValue(hash, out Type type) && message.GetType() == type &&
+                   HashToName.TryGetValue(hash, out string name) &&
+                   string.Equals(name, message.MessageName, StringComparison.Ordinal) &&
+                   HashToChannel.TryGetValue(hash, out MessageChannel channel) &&
+                   message.TransportChannel == channel &&
+                   HashToPolicy.TryGetValue(hash, out AnomalyMessagePolicy policy) &&
+                   message.Direction == policy.Direction &&
+                   message.AuthPhase == policy.AuthPhase &&
+                   message.MaxPayloadBytes == policy.MaxPayloadBytes &&
+                   (message is IRoundScopedAnomalyMessage) == policy.IsRoundScoped;
         }
 
         public static bool TryGetChannel(uint hash, out MessageChannel channel)
@@ -199,6 +254,7 @@ namespace Anomaly.Shared.Networking
         {
             RegisterBuiltIn("anomaly:silentrolechange", () => new SilentRoleChangeMessage());
             RegisterBuiltIn("anomaly:round:state", () => new RoundStateMessage());
+            RegisterBuiltIn("anomaly:facility:snapshot", () => new FacilitySnapshotMessage());
             RegisterBuiltIn("anomaly:filemanifest", () => new FileManifestMessage());
             RegisterBuiltIn("anomaly:filerequest", () => new FileRequestMessage());
             RegisterBuiltIn("anomaly:filechunk", () => new FileChunkMessage());
@@ -210,6 +266,8 @@ namespace Anomaly.Shared.Networking
             RegisterBuiltIn("anomaly:asset:override-clearall", () => new AssetClearAllOverridesMessage());
 
             RegisterBuiltIn("anomaly:announcer:vocabulary", () => new AnnouncerVocabularyMessage());
+            RegisterBuiltIn("anomaly:visual:snapshot", () => new DecorativeVisualSnapshotMessage());
+            RegisterBuiltIn("anomaly:visual:update", () => new DecorativeVisualUpdateMessage());
 
             RegisterBuiltIn("anomaly:player:setfavoritecolor", () => new SetFavoriteColorMessage());
             RegisterBuiltIn("anomaly:player:colorchanged", () => new PlayerColorChangedMessage());

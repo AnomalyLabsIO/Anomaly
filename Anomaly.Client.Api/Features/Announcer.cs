@@ -1,4 +1,7 @@
 using System.Collections.ObjectModel;
+using Anomaly.Client.Api.Assets;
+using Anomaly.Shared.Assets;
+using Anomaly.Shared.Networking.Messages;
 using Il2CppCassie;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
@@ -10,6 +13,7 @@ namespace Anomaly.Client.Api.Features;
 /// </summary>
 public static class Announcer
 {
+    private static readonly Dictionary<CassieLine, AssetAddress> BundleWords = new();
     public static CassieLineDatabase LineDatabase => TryGetDatabase(out CassieLineDatabase db) ? db : null;
 
     public static ReadOnlyCollection<AnnouncerWord> AllLines
@@ -89,9 +93,40 @@ public static class Announcer
         return false;
     }
 
-    public static bool AddWord(string apiName, AudioClip clip, float durationSeconds, CassieClipCategory type = CassieClipCategory.Word)
+    /// <summary>Adds a new word from a typed pack address; duration follows the effective clip.</summary>
+    public static bool AddWord(string apiName, AssetAddress audioAddress, CassieClipCategory type = CassieClipCategory.Word)
     {
-        return TryAddWord(apiName, clip, durationSeconds, type, out _);
+        if (audioAddress.IsGameReplacement || !AnnouncerVocabularyMessage.IsValidNewApiName(apiName) ||
+            BundleWords.Count >= AnnouncerVocabularyMessage.MaxWords ||
+            !AnomalyResources.TryGetAudioClip(audioAddress, out var clip) || clip.frequency <= 0)
+            return false;
+        if (!TryAddWord(apiName, clip, (float)((double)clip.samples / clip.frequency), type, out var line)) return false;
+        BundleWords.Add(line, audioAddress);
+        return true;
+    }
+
+    // Compiled runtime calls these before publishing/releasing an address layer.
+    internal static void RefreshBundleWords()
+    {
+        foreach (var pair in BundleWords.ToArray())
+        {
+            if (AnomalyResources.TryGetAudioClip(pair.Value, out var clip) && clip.frequency > 0)
+            {
+                pair.Key.Clip = clip;
+                pair.Key.Duration = (float)((double)clip.samples / clip.frequency);
+            }
+            else
+            {
+                RemoveWords(new[] { pair.Key });
+                BundleWords.Remove(pair.Key);
+            }
+        }
+    }
+
+    internal static void ClearBundleWords()
+    {
+        RemoveWords(BundleWords.Keys.ToArray());
+        BundleWords.Clear();
     }
 
     internal static bool AddServerWord(string apiName, AudioClip clip, float durationSeconds, CassieClipCategory type, out CassieLine line)

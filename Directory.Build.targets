@@ -34,8 +34,6 @@
            Text="The generated server compile reference is missing at '$(AnomalyServerPublicizedAssembly)'. Set AnomalyServerPublicizedAssembly or allow the reference-publicizer target to generate it from the supported stock game assembly." />
     <Error Condition="'$(AnomalyRequiresServerReferences)' == 'true' And !Exists('$(AnomalyLabApiDir)\LabApi.dll')"
            Text="LabAPI is missing at '$(AnomalyLabApiDir)\LabApi.dll'. Set AnomalyLabApiDir to the supported LabAPI reference directory." />
-    <Error Condition="'$(AnomalyRequiresServerReferences)' == 'true' And !Exists('$(AnomalyHarmonyPath)')"
-           Text="Server Harmony is missing at '$(AnomalyHarmonyPath)'. Set AnomalyHarmonyPath to the deployed 0Harmony.dll." />
   </Target>
 
   <!-- Release tooling invokes this target per runtime project. It records the

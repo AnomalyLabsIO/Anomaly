@@ -13,7 +13,7 @@ dotnet build -c Release -p:AnomalyGameRoot="X:\Games\Anomaly" -p:DeployLocal=fal
 
 When the sample is copied outside the SDK, also pass
 `-p:AnomalySdkRoot="X:\SDKs\Anomaly"` and retain the sibling
-`Anomaly.Sample.props` file. Both roots can instead live in an untracked
+`Anomaly.Sample.props` and `HelloMessages.cs` files. Both roots can instead live in an untracked
 `Directory.Build.props` alongside your project. Use one matching release set.
 The Anomaly source repository is not needed. In a source checkout, the defaults
 use its configured local references and API project.
@@ -36,6 +36,10 @@ Anomaly command/input/config namespaces keep their existing form.
    `ClientEvents.Ready`; disconnecting cancels it, and reconnecting creates one
    replacement task.
 5. Use `anomaly.status` or `anomaly.status --copy` for diagnostics.
+6. If the server has the matching `HelloAnomalyServer` companion, run
+   `example.hello.server` after enrollment. The authenticated reply reports
+   whether your optional content has activated; declining content does not
+   prevent this exchange. Both plugins link the same `../HelloMessages.cs`.
 
 Unity-facing calls and callbacks in this sample run on the game thread. Subscribe
 during initialization: lifecycle events are not replayed to late subscribers.
