@@ -3,6 +3,10 @@ param(
     [Parameter(Mandatory = $true)] [string] $ServerDirectory,
     [Parameter(Mandatory = $true)] [string] $EvidenceDirectory,
     [Parameter(Mandatory = $true)] [string] $AssetDirectory,
+    [string] $AdmissionRequirements = '',
+    [string] $PlainRejection = '',
+    [switch] $BlockAnyAdditionalClientMods,
+    [string[]] $BlockedClientModIds = @(),
     [ValidateRange(1024,65535)] [int] $Port = 27988
 )
 $ErrorActionPreference = 'Stop'
@@ -28,13 +32,25 @@ foreach ($entry in ($layout.packages | Where-Object packageId -eq 'anomaly-serve
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'bin/Release/net48/Anomaly.ServerApiSmoke.dll') -Destination (Join-Path $labRoot 'plugins/global')
 $config = Join-Path $labRoot "configs/$Port/Anomaly/config.yml"
 New-Item -ItemType Directory -Force -Path (Split-Path $config) | Out-Null
-"asset_directory: '$($assets.Replace("'", "''"))'" | Set-Content -LiteralPath $config
+$blockedIdsYaml = if ($BlockedClientModIds.Count -eq 0) { '[]' } else {
+    "`n" + (($BlockedClientModIds | ForEach-Object { "  - '$($_.Replace("'", "''"))'" }) -join "`n")
+}
+@(
+    "asset_directory: '$($assets.Replace("'", "''"))'"
+    "block_any_additional_client_mods: $($BlockAnyAdditionalClientMods.IsPresent.ToString().ToLowerInvariant())"
+    "blocked_client_mod_ids: $blockedIdsYaml"
+) | Set-Content -LiteralPath $config
 New-Item -ItemType Directory -Path $evidence | Out-Null
 $startInfo = [Diagnostics.ProcessStartInfo]::new((Join-Path $server 'SCPSL.exe'))
 $startInfo.WorkingDirectory = $server
 $startInfo.UseShellExecute = $false
 $startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
 $startInfo.Environment['ANOMALY_SERVER_SMOKE_DIR'] = $evidence
+foreach ($name in @('ANOMALY_MOD_ADMISSION_REQUIREMENTS','ANOMALY_MOD_ADMISSION_PLAIN_REJECTION')) {
+    $startInfo.Environment.Remove($name) | Out-Null
+}
+if ($AdmissionRequirements) { $startInfo.Environment['ANOMALY_MOD_ADMISSION_REQUIREMENTS'] = $AdmissionRequirements }
+if ($PlainRejection) { $startInfo.Environment['ANOMALY_MOD_ADMISSION_PLAIN_REJECTION'] = $PlainRejection }
 foreach ($argument in @('-batchmode','-nographics','-stdout',"-port$Port",'-appdatapath',(Join-Path $server 'AppData'),'-configpath',(Join-Path $server "AppData/config/$Port"),'-logFile',(Join-Path $evidence 'server-player.log'))) {
     $startInfo.ArgumentList.Add($argument)
 }

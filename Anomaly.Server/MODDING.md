@@ -41,6 +41,7 @@ server process, so restart after changing or removing registrations.
 | API | Purpose |
 | --- | --- |
 | `Api.Content.CustomItems` | Register definitions, resolve stable keys, inspect readiness, and grant activated items through `TryGiveItem(Player, string, out Item)`. |
+| `Api.Auth.ClientModRequirements` | Require a companion client mod ID within a version range before connection admission. |
 | `Api.Networking.ClientMessaging` | Send bounded authenticated messages to native LabAPI players. Register identical shared message contracts in both runtimes. |
 | `Api.Events.Handlers.ClientEvents` | Connected, MessageReceived, CapabilitiesChanged, ContentReady, and MotionApplied notifications. |
 | `Api.Features.ClientCapabilities` | Inspect the current client capability snapshot. |
@@ -58,6 +59,46 @@ Players may leave consent pending indefinitely without occupying transfer slots
 or bytes. Approval begins the transfer inactivity deadline even before a file
 request arrives. Decline keeps the connection; transfer/activation failure
 revokes the grant and disconnects.
+
+## Client mod admission
+
+To require a companion client mod, retain the registration returned during your
+LabAPI plugin's `Enable()` and dispose it during `Disable()`:
+
+```csharp
+private IDisposable _clientRequirement;
+
+public override void Enable() =>
+    _clientRequirement = ClientModRequirements.Register("example.hello", "0.1.0", "0.2.0");
+
+public override void Disable()
+{
+    _clientRequirement?.Dispose();
+    _clientRequirement = null;
+}
+```
+
+Add `using Anomaly.Server.Api.Auth;`. The minimum is inclusive and the optional
+maximum is exclusive. Versions use two, three, or four numeric components; a
+prerelease does not meet a stable range. Each active registration is checked
+before the connection is accepted. A missing or wrong version yields a detailed
+client-facing rejection. Anomaly.Server implicitly requires its matching
+Anomaly.Client core version and protocol.
+
+Ordinary MelonMods report their `MelonID` when declared, otherwise their
+`MelonInfo` display name. Managed modules report their manifest ID. ID matching
+ignores case, while the displayed name retains the client's spelling. The client sends the full reported list encrypted
+during login. Its inventory has strict size limits; an inventory that cannot
+fit is rejected locally instead of silently truncated.
+
+Server owners can set `BlockAnyAdditionalClientMods` or list exact IDs in
+`BlockedClientModIds` in Anomaly.Server config. Both default to off/empty.
+Block-any allows Anomaly core and mods required by active server plugins; an
+explicit block always wins and a conflict with a requirement is logged. Restart
+Anomaly.Server after changing owner config. Companion registrations take effect
+for future connections as plugins register or dispose them. Multiple admission
+failures are summarized in the client's rejection notice, with the full list
+in server logs.
 
 Texture overrides replace the selected material's base-color texture. The client
 uses the shader's declared main texture, then `_BaseColorMap`, `_BaseMap`, or
@@ -210,7 +251,7 @@ protocol; a namespace edit alone does not make old binaries compatible. These
 are migration instructions, not a claim that the separate Portals repository
 has been migrated or qualified.
 
-The application protocol is v6. Update client and server together; old peers are
+The application protocol is v7. Update client and server together; old peers are
 rejected during the handshake. The authenticated facility snapshot is required
 before client procedural generation; it is independent of content consent.
 

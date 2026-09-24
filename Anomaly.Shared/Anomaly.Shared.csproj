@@ -49,6 +49,7 @@
         <Reference Include="System.Core"/>
         <Reference Include="System.Data"/>
         <Reference Include="System.Numerics" />
+        <Reference Include="System.Runtime.Serialization" />
         <Reference Include="System.Xml"/>
     </ItemGroup>
     <ItemGroup>
@@ -63,6 +64,8 @@
         <Compile Include="Auth\ClientIdentityRotationRecord.cs" />
         <Compile Include="Auth\ClientHandshake.cs" />
         <Compile Include="Auth\ClientLoginAttempt.cs" />
+        <Compile Include="Auth\ClientModInventory.cs" />
+        <Compile Include="Auth\ModAdmissionResponseCodec.cs" />
         <Compile Include="Auth\PasswordAuth.cs" />
         <Compile Include="Auth\PasswordChallenge.cs" />
         <Compile Include="Auth\ServerAuthSession.cs" />

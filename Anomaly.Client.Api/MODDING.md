@@ -35,6 +35,7 @@ using MelonLoader;
 using Anomaly.Client.Api.Compatibility;
 
 [assembly: MelonInfo(typeof(MyMod.Core), "MyMod", "1.0.0", "YourName", null)]
+[assembly: MelonID("mymod")]
 [assembly: MelonGame("Northwood", "SCPSL")]
 [assembly: SupportedGameVersion("14.2.7^")]
 [assembly: MelonAdditionalDependencies("Anomaly.Client")]
@@ -105,6 +106,14 @@ Tr.RegisterMod("mymod");
 ```
 
 There's no "register my mod" call. The registries enforce that ids look like a namespace — they don't maintain a global mod list. The reserved `anomaly` / `anomaly.*` prefix is used by framework built-ins and is rejected if your mod uses it.
+
+Dedicated Anomaly servers can require a companion client mod during connection.
+MelonLoader's optional `MelonID` is the reported ID for an ordinary MelonMod;
+without it, Anomaly reports the `MelonInfo` display name instead. Declare a
+stable `MelonID` matching your Anomaly namespace so server authors can use it
+in their requirement. The report also contains the MelonInfo version. Anomaly
+managed modules use their manifest ID and version. This connection inventory
+is separate from the feature registration namespaces above.
 
 Raw MelonPreferences category IDs are a separate storage identifier. Keep them
 free of dots and use underscores: for Anomaly mod ID `acme.wargames`, use

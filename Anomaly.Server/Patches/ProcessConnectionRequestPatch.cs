@@ -210,6 +210,7 @@ internal static class ProcessConnectionRequestPatch
             var name = string.Empty;
             Connection authenticatedConnection = null;
             string authenticatedServerIdentifier = null;
+            ClientModInventory authenticatedInventory = null;
 
             switch (requestType)
             {
@@ -434,7 +435,8 @@ internal static class ProcessConnectionRequestPatch
                             connection.PasswordChallenge,
                             name,
                             attempt,
-                            out var passwordProof))
+                            out var passwordProof,
+                            out var modInventory))
                     {
                         OffThreadLogger.Warn($"Login attempt validation failed for {ip}. Signature mismatch.");
                         RequestWriter.Reset();
@@ -461,6 +463,7 @@ internal static class ProcessConnectionRequestPatch
                     userId = connection.EnrollmentId;
                     authenticatedConnection = connection;
                     authenticatedServerIdentifier = serverIdentifier;
+                    authenticatedInventory = modInventory;
 
                     OffThreadLogger.Debug($"Verified {name}({userId}) - " + ip);
                     break;
@@ -473,6 +476,24 @@ internal static class ProcessConnectionRequestPatch
                     return false;
             }
             #endregion
+
+            var modIssues = ClientModAdmissionPolicy.Evaluate(authenticatedInventory);
+            if (modIssues.Count != 0)
+            {
+                foreach (var issue in modIssues)
+                {
+                    OffThreadLogger.Warn(
+                        $"Rejected client mod policy for {userId} ({ip}): " +
+                        $"{issue.Code} id={issue.Id}, required={issue.Required}, present={issue.Present}.");
+                }
+
+                RequestWriter.Reset();
+                RequestWriter.Put((byte)RejectionReason.Custom);
+                RequestWriter.Put(ModAdmissionResponseCodec.EncodeBounded(modIssues));
+                request.RejectForce(RequestWriter);
+                CustomLiteNetLib4MirrorTransport.ResetIdleMode();
+                return false;
+            }
 
             #region Banned
             var banInfo = BanHandler.QueryBan(userId, ip);

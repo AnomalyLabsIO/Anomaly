@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Security;
@@ -17,6 +18,11 @@ public class ClientAuthSession
     private byte _gameBackwardRevision;
     private string _connectionContext;
     private ClientIdentityRotationChain _identityRotationChain;
+    private ClientModInventory _modInventory = ClientModInventory.Empty;
+    private bool _modInventoryBound;
+    private byte[] _cachedLoginHash;
+    private byte[] _cachedPasswordProof;
+    private byte[] _cachedEncryptedLogin;
 
     public static ClientAuthSession Generate(byte[] identity)
     {
@@ -69,6 +75,16 @@ public class ClientAuthSession
         _identityRotationChain = rotationChain.Clone();
     }
 
+    public void BindModInventory(ClientModInventory inventory)
+    {
+        if (inventory == null)
+            throw new ArgumentNullException(nameof(inventory));
+        if (_modInventoryBound || _cachedEncryptedLogin != null)
+            throw new InvalidOperationException("Client mod inventory is already bound or the login attempt has been created.");
+        _modInventory = ClientModInventory.Decode(inventory.Encode());
+        _modInventoryBound = true;
+    }
+
     public ClientHandshake CreateHandshake(byte[] retryCookie = null)
     {
         return new ClientHandshake
@@ -115,34 +131,54 @@ public class ClientAuthSession
         byte[] passwordProof)
     {
         var clientHandshake = CreateHandshake();
-        var transcript = AuthTranscript.BuildLogin(
-            clientHandshake,
-            handshake,
-            serverIdentifier,
-            passwordChallenge,
-            displayName);
         var loginTranscriptHash = AuthTranscript.HashLogin(
             clientHandshake,
             handshake,
             serverIdentifier,
             passwordChallenge,
             displayName);
-        var signature = AuthCrypto.SignData(transcript, _identityKeyPair);
-        var payload = ClientLoginAttempt.EncodePlainPayload(signature, passwordProof);
-
         try
         {
+            if (_cachedEncryptedLogin != null)
+            {
+                if (!_cachedLoginHash.SequenceEqual(loginTranscriptHash)
+                    || !SameOptionalBytes(_cachedPasswordProof, passwordProof))
+                    throw new InvalidOperationException("A login attempt is already frozen with different connection data.");
+                return new ClientLoginAttempt { signature = (byte[])_cachedEncryptedLogin.Clone() };
+            }
+
+            var encodedInventory = _modInventory.Encode();
+            var transcript = AuthTranscript.BuildLoginWithModInventory(
+                clientHandshake, handshake, serverIdentifier, passwordChallenge, displayName, encodedInventory);
+            var signature = AuthCrypto.SignData(transcript, _identityKeyPair);
+            var payload = ClientLoginAttempt.EncodePlainPayload(signature, passwordProof, encodedInventory);
             using (var keys = DeriveSessionKeys(handshake, serverIdentifier, passwordChallenge))
             {
-                var encryptedPayload = AuthCrypto.AesEncrypt(keys.LoginKey, _nonce, payload, loginTranscriptHash);
-                return new ClientLoginAttempt { signature = encryptedPayload };
+                try
+                {
+                    var encryptedPayload = AuthCrypto.AesEncrypt(keys.LoginKey, _nonce, payload, loginTranscriptHash);
+                    if (encryptedPayload.Length > ClientLoginAttempt.MaxSize)
+                        throw new InvalidOperationException("Encrypted login attempt exceeds the connection size limit.");
+                    _cachedLoginHash = (byte[])loginTranscriptHash.Clone();
+                    _cachedPasswordProof = passwordProof == null ? null : (byte[])passwordProof.Clone();
+                    _cachedEncryptedLogin = (byte[])encryptedPayload.Clone();
+                    return new ClientLoginAttempt { signature = encryptedPayload };
+                }
+                finally
+                {
+                    Array.Clear(payload, 0, payload.Length);
+                }
             }
         }
         finally
         {
             Array.Clear(loginTranscriptHash, 0, loginTranscriptHash.Length);
-            Array.Clear(payload, 0, payload.Length);
         }
+    }
+
+    private static bool SameOptionalBytes(byte[] left, byte[] right)
+    {
+        return left == null ? right == null : right != null && left.SequenceEqual(right);
     }
 
     public AuthSessionKeys DeriveSessionKeys(

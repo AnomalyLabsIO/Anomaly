@@ -13,7 +13,7 @@ $bundlePath = Join-Path (Split-Path $indexPath) $index.BundleFile
 if ((Get-FileHash -LiteralPath $bundlePath -Algorithm SHA256).Hash -ne $index.BundleSha256 -or
     (Get-Item -LiteralPath $bundlePath).Length -ne $index.BundleBytes) { throw 'Bundle/index identity mismatch.' }
 foreach ($required in @('mods/fixture/textures/checker','mods/fixture/audio/tone')) {
-    if ($required -notin $index.Assets.Address) { throw "Missing smoke fixture address: $required" }
+    if ($required -notin @($index.Assets | ForEach-Object { $_.Address })) { throw "Missing smoke fixture address: $required" }
 }
 New-Item -ItemType Directory -Path $destination | Out-Null
 Copy-Item -LiteralPath $indexPath -Destination (Join-Path $destination 'smoke.index.json')

@@ -106,6 +106,11 @@ public sealed partial class Core : MelonMod
         if (_localHostingSmoke) { EnqueueLocalHostingSmoke(); return; }
         if (_dedicatedDummyControlSmoke) { EnqueueDedicatedDummyControlSmoke(); return; }
         if (_serverApiSmoke) { EnqueueServerApiSmoke(); return; }
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANOMALY_MOD_ADMISSION_EXPECT")))
+        {
+            EnqueueAdmissionProbe();
+            return;
+        }
         var sizes = Environment.GetEnvironmentVariable("ANOMALY_UI_SMOKE_CONNECTION_ONLY") == "1"
             ? Array.Empty<(int, int)>() : new[] { (1280, 720), (1920, 1080), (3440, 1440) };
         foreach (var size in sizes)

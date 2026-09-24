@@ -31,6 +31,13 @@ uses `ClientMessaging.TrySend` to reply. Messaging remains available when the
 player declines content. The client command waits for enrollment disclosure;
 the transport still checks admission when sending and receiving.
 
+To require the matching client mod at connection time, set
+`RequireClientCompanion: true` in this sample plugin's LabAPI config. The sample
+registers `example.hello` in the inclusive `0.1.0` to exclusive `0.2.0` range
+during `Enable()` and disposes the requirement during `Disable()`. Without that
+setting, the companion remains optional as before. Missing or incompatible
+versions produce a detailed client-facing rejection.
+
 The companion does not initiate custom traffic to clients without a request.
 Install the matching companion before using the client command. Its message
 subscriptions, like native item handlers, are removed during `Disable()`.

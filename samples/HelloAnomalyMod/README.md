@@ -23,7 +23,8 @@ loadout `local/Mods/` directory. Approve the changed DLL using the launcher's
 existing trust flow, then start the game. Do not copy game, API or loader DLLs
 from your build references into Mods.
 
-The Anomaly namespace is `example.hello`; the raw MelonPreferences category ID is
+The Anomaly namespace and MelonLoader `MelonID` are `example.hello`, so a server
+plugin can require this client mod during connection. The raw MelonPreferences category ID is
 `example_hello`. Keep preference category IDs free of dots and use underscores:
 the supported loader treats dots as TOML paths, which can lose saved entries.
 Use the raw category ID for `ModSettings.RegisterCategory` metadata too. Dotted

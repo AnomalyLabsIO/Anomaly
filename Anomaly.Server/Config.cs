@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Anomaly.Server;
 
 public class Config
@@ -40,5 +42,11 @@ public class Config
     /// Duration of the temporary password failure block in seconds.
     /// </summary>
     public int PasswordBlockSeconds { get; set; } = 300;
+
+    /// <summary>Rejects reported client mods other than Anomaly and mods required by active server plugins.</summary>
+    public bool BlockAnyAdditionalClientMods { get; set; } = false;
+
+    /// <summary>Mod IDs that are denied even if a server plugin requires them.</summary>
+    public List<string> BlockedClientModIds { get; set; } = new List<string>();
 
 }

@@ -170,6 +170,7 @@
         <Compile Include="Auth\AcceptedClientIdentityJournal.cs" />
         <Compile Include="Auth\AcceptedClientIdentityStore.cs" />
         <Compile Include="Auth\Connection.cs" />
+        <Compile Include="Auth\ClientModAdmissionPolicy.cs" />
         <Compile Include="Auth\EnrollmentSessionRegistry.cs" />
         <Compile Include="Auth\PasswordStore.cs" />
         <Compile Include="Auth\PreauthGate.cs" />
@@ -180,6 +181,7 @@
         <Compile Include="Commands\ServerIdentityCommand.cs" />
         <Compile Include="Config.cs" />
         <Compile Include="Api\Networking\ClientMessaging.cs" />
+        <Compile Include="Api\Auth\ClientModRequirements.cs" />
         <Compile Include="Api\Events\Handlers\ClientEvents.cs" />
         <Compile Include="Api\Events\Arguments\ClientEventArgs.cs" />
         <Compile Include="Api\Events\Arguments\ClientMessageReceivedEventArgs.cs" />

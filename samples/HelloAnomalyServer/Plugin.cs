@@ -1,5 +1,6 @@
 using System;
 using Anomaly.Server.Api.Content;
+using Anomaly.Server.Api.Auth;
 using Anomaly.Server.Api.Events.Arguments;
 using Anomaly.Server.Api.Events.Handlers;
 using Anomaly.Server.Api.Networking;
@@ -19,6 +20,7 @@ namespace HelloAnomalyServer;
 public sealed class Plugin : Plugin<Config>
 {
     private const string ItemKey = "example.server:medkit";
+    private IDisposable _clientModRequirement;
     public override string Name => "Hello Anomaly Server";
     public override string Description => "Minimal server-owned custom item using native LabAPI events.";
     public override string Author => "AnomalyLabs";
@@ -40,6 +42,8 @@ public sealed class Plugin : Plugin<Config>
         ClientEvents.MessageReceived += OnMessageReceived;
         PlayerEvents.UsedItem += OnUsedItem;
         MapEvents.LayoutFinalizing += OnLayoutFinalizing;
+        if (Config.RequireClientCompanion)
+            _clientModRequirement = ClientModRequirements.Register("example.hello", "0.1.0", "0.2.0");
     }
 
     public override void Disable()
@@ -48,6 +52,8 @@ public sealed class Plugin : Plugin<Config>
         ClientEvents.MessageReceived -= OnMessageReceived;
         PlayerEvents.UsedItem -= OnUsedItem;
         MapEvents.LayoutFinalizing -= OnLayoutFinalizing;
+        _clientModRequirement?.Dispose();
+        _clientModRequirement = null;
     }
 
     private void OnLayoutFinalizing(FacilityLayoutFinalizingEventArgs ev)
@@ -93,6 +99,7 @@ public sealed class Plugin : Plugin<Config>
 
 public sealed class Config
 {
+    public bool RequireClientCompanion { get; set; } = false;
     public bool GiveOnContentReady { get; set; } = true;
     public bool EnableFacilityExample { get; set; } = false;
     public RoomName FacilityExampleRoom { get; set; } = RoomName.LczArmory;

@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using Anomaly.Client.Api.Modding;
 using Anomaly.Client.Api.Compatibility;
 using Anomaly.Client.Api.Internal;
+using Anomaly.Shared.Auth;
 using MelonLoader;
 using MelonLoader.Utils;
 using Newtonsoft.Json;
@@ -62,6 +63,11 @@ internal static class ManagedModRuntime
     }
 
     private static readonly List<LoadedModule> Loaded = new();
+
+    internal static IReadOnlyList<ClientModEntry> GetActiveModEntries() =>
+        Loaded.Where(module => !module.Disabled)
+            .Select(module => new ClientModEntry(module.Manifest.Id, module.Manifest.Version))
+            .ToArray();
     private static string _anomalyRoot;
     private static string _moduleRoot;
     private static string _statePath;

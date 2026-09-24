@@ -10,9 +10,9 @@ namespace Anomaly.Shared.Tests;
 public sealed class MessageContractValidationTests
 {
     [Fact]
-    public void Protocol_v6_registers_the_required_facility_snapshot_on_both_peers()
+    public void Protocol_v7_registers_the_required_facility_snapshot_on_both_peers()
     {
-        Assert.Equal((byte)6, AnomalyProtocol.CurrentVersion);
+        Assert.Equal((byte)7, AnomalyProtocol.CurrentVersion);
         AnomalyMessageRegistry.RegisterDefaults();
         uint hash = AnomalyMessageRegistry.GetHash("anomaly:facility:snapshot");
         Assert.True(AnomalyMessageRegistry.TryCreate(hash, out var message));

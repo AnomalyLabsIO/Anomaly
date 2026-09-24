@@ -1,6 +1,6 @@
 # AssetBundle content and local customization
 
-Anomaly protocol 6 transfers externally authored Unity AssetBundles and their JSON indexes. The Windows client profile is SCP:SL 14.2.7 / Unity 6000.0.43f1. Build packs on the owner or modder's device using the separate `Anomaly.AssetAuthoring` Unity project. The dedicated server needs only completed files: no Unity Editor, importers, texture decoder, audio decoder, or bundle decompression runs there.
+Anomaly protocol 7 transfers externally authored Unity AssetBundles and their JSON indexes. The Windows client profile is SCP:SL 14.2.7 / Unity 6000.0.43f1. Build packs on the owner or modder's device using the separate `Anomaly.AssetAuthoring` Unity project. The dedicated server needs only completed files: no Unity Editor, importers, texture decoder, audio decoder, or bundle decompression runs there.
 
 ## Installing a pack
 

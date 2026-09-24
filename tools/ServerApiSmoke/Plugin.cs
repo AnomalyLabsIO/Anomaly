@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using Anomaly.Server.Api.Auth;
 using Anomaly.Server.Api.Assets;
 using Anomaly.Server.Api.Content;
 using Anomaly.Server.Api.Events.Arguments;
@@ -38,6 +39,7 @@ public sealed class Plugin : Plugin<Config>
     private readonly Dictionary<uint, Item> _granted = new Dictionary<uint, Item>();
     private readonly Dictionary<uint, uint> _motionSequences = new Dictionary<uint, uint>();
     private readonly Dictionary<uint, HashSet<uint>> _textureTargets = new Dictionary<uint, HashSet<uint>>();
+    private readonly List<IDisposable> _admissionRequirements = new List<IDisposable>();
     private string _evidence;
     private int _contentReadyCount;
     private int _usedCount;
@@ -56,6 +58,17 @@ public sealed class Plugin : Plugin<Config>
         if (string.IsNullOrWhiteSpace(_evidence)) return;
         _evidence = Path.GetFullPath(_evidence);
         Directory.CreateDirectory(_evidence);
+        var requestedMods = Environment.GetEnvironmentVariable("ANOMALY_MOD_ADMISSION_REQUIREMENTS");
+        if (!string.IsNullOrEmpty(requestedMods))
+        {
+            foreach (var requirement in requestedMods.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = requirement.Split('|');
+                if (parts.Length != 3) throw new InvalidOperationException("Invalid admission smoke requirement.");
+                _admissionRequirements.Add(ClientModRequirements.Register(parts[0], parts[1],
+                    parts[2].Length == 0 ? null : parts[2]));
+            }
+        }
         CaptureCryptoProvider("enabled");
         FacilityScenario.Initialize(_evidence);
         FacilityEventContractProbe.Initialize(_evidence);
@@ -78,6 +91,8 @@ public sealed class Plugin : Plugin<Config>
         ClientEvents.MotionApplied += OnMotionApplied;
         PlayerEvents.UsedItem += OnUsedItem;
         PlayerEvents.Left += OnLeft;
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANOMALY_MOD_ADMISSION_PLAIN_REJECTION")))
+            PlayerEvents.PreAuthenticating += OnPreAuthenticating;
         ServerEvents.MapGenerated += OnMapGenerated;
         ServerEvents.MapGenerating += FacilityScenario.Configure;
         _enabled = true;
@@ -87,6 +102,8 @@ public sealed class Plugin : Plugin<Config>
     public override void Disable()
     {
         if (!_enabled) return;
+        foreach (var requirement in _admissionRequirements) requirement.Dispose();
+        _admissionRequirements.Clear();
         StaticUnityMethods.OnUpdate -= RegisterBundleWord;
         ClientEvents.Connected -= OnConnected;
         ClientEvents.ContentReady -= OnContentReady;
@@ -95,6 +112,7 @@ public sealed class Plugin : Plugin<Config>
         ClientEvents.MotionApplied -= OnMotionApplied;
         PlayerEvents.UsedItem -= OnUsedItem;
         PlayerEvents.Left -= OnLeft;
+        PlayerEvents.PreAuthenticating -= OnPreAuthenticating;
         ServerEvents.MapGenerated -= OnMapGenerated;
         ServerEvents.MapGenerating -= FacilityScenario.Configure;
         StaticUnityMethods.OnUpdate -= CaptureFacilityOnNextUpdate;
@@ -111,6 +129,11 @@ public sealed class Plugin : Plugin<Config>
         StaticUnityMethods.OnUpdate -= RegisterBundleWord;
         try { Announcer.AddWord(WordName, AssetAddress.Parse("mods/fixture/audio/tone")); }
         catch (Exception exception) { Record("word-registration-failed", "{\"error\":" + Quote(exception.Message) + "}"); }
+    }
+    private static void OnPreAuthenticating(PlayerPreAuthenticatingEventArgs ev)
+    {
+        var reason = Environment.GetEnvironmentVariable("ANOMALY_MOD_ADMISSION_PLAIN_REJECTION");
+        if (!string.IsNullOrEmpty(reason)) ev.RejectCustom(reason);
     }
     private void OnConnected(ClientEventArgs ev)
     {

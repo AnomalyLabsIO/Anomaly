@@ -121,8 +121,9 @@ namespace Anomaly.Server.Utils
 {
     internal static class OffThreadLogger
     {
+        internal static readonly System.Collections.Concurrent.ConcurrentQueue<string> Warnings = new();
         internal static void Error(string message) { }
-        internal static void Warn(string message) { }
+        internal static void Warn(string message) => Warnings.Enqueue(message);
         internal static void Info(string message) { }
     }
 }

@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory = $true)] [string] $EvidenceDirectory,
     [string] $LoopbackServer = '',
     [switch] $ConnectionOnly,
+    [string] $AdmissionExpect = '',
     [switch] $ServerApi,
     [string] $ServerApiMode = 'full',
     [switch] $LocalHosting,
@@ -27,7 +28,11 @@ if ($LoopbackServer) {
     }
 }
 if ($ConnectionOnly -and !$LoopbackServer) { throw 'ConnectionOnly requires a loopback test server.' }
+if ($AdmissionExpect -and !$LoopbackServer) { throw 'AdmissionExpect requires a loopback test server.' }
 if ($ServerApi -and !$LoopbackServer) { throw 'ServerApi requires a loopback test server.' }
+if ($AdmissionExpect -and ($ConnectionOnly -or $ServerApi -or $LocalHosting -or $DedicatedDummyControl)) {
+    throw 'AdmissionExpect runs its own connection scenario.'
+}
 if ($LocalHosting -and ($ConnectionOnly -or $ServerApi)) { throw 'LocalHosting runs its own scenario and cannot be combined with ConnectionOnly or ServerApi.' }
 if ($DummyVisibility -and !$LocalHosting) { throw 'DummyVisibility requires LocalHosting.' }
 if ($DedicatedDummyControl -and !$LoopbackServer) { throw 'DedicatedDummyControl requires a loopback test server.' }
@@ -78,11 +83,12 @@ $startInfo.WorkingDirectory = $game
 $startInfo.UseShellExecute = $false
 $startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
 $startInfo.Environment['ANOMALY_UI_SMOKE_DIR'] = $evidence
-foreach ($name in @('ANOMALY_SMOKE_SERVER','ANOMALY_UI_SMOKE_CONNECTION_ONLY','ANOMALY_SERVER_API_SMOKE','ANOMALY_SERVER_API_SMOKE_MODE','ANOMALY_LOCAL_HOSTING_SMOKE','ANOMALY_DUMMY_VISIBILITY_SMOKE','ANOMALY_DEDICATED_DUMMY_SMOKE','ANOMALY_DUMMY_SCREEN_WIDTH','ANOMALY_DUMMY_SCREEN_HEIGHT')) {
+foreach ($name in @('ANOMALY_SMOKE_SERVER','ANOMALY_UI_SMOKE_CONNECTION_ONLY','ANOMALY_MOD_ADMISSION_EXPECT','ANOMALY_SERVER_API_SMOKE','ANOMALY_SERVER_API_SMOKE_MODE','ANOMALY_LOCAL_HOSTING_SMOKE','ANOMALY_DUMMY_VISIBILITY_SMOKE','ANOMALY_DEDICATED_DUMMY_SMOKE','ANOMALY_DUMMY_SCREEN_WIDTH','ANOMALY_DUMMY_SCREEN_HEIGHT')) {
     $startInfo.Environment.Remove($name) | Out-Null
 }
 if ($LoopbackServer) { $startInfo.Environment['ANOMALY_SMOKE_SERVER'] = $LoopbackServer }
 if ($ConnectionOnly) { $startInfo.Environment['ANOMALY_UI_SMOKE_CONNECTION_ONLY'] = '1' }
+if ($AdmissionExpect) { $startInfo.Environment['ANOMALY_MOD_ADMISSION_EXPECT'] = $AdmissionExpect }
 if ($ServerApi) {
     $startInfo.Environment['ANOMALY_SERVER_API_SMOKE'] = '1'
     $startInfo.Environment['ANOMALY_SERVER_API_SMOKE_MODE'] = $ServerApiMode

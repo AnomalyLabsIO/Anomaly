@@ -32,7 +32,7 @@ using MelonLoader;
 using MelonLoader.Utils;
 
 [assembly: MelonInfo(typeof(Anomaly.Client.Core), "Anomaly", "1.0.0", "AnomalyLabs", null)]
-[assembly: MelonID("io.anomalylabs.anomaly")]
+[assembly: MelonID("anomaly.client")]
 [assembly: MelonGame("Northwood", "SCPSL")]
 [assembly: SupportedGameVersion("14.2.7^")]
 

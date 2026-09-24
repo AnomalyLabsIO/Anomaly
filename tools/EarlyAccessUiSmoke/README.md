@@ -240,6 +240,18 @@ After inspecting a complete UI fixture run, use `-ConnectionOnly` with
 `-LoopbackServer` to repeat the two connection cycles without replaying all
 three-resolution fixtures. Keep the earlier screenshots as separate evidence.
 
+For a dedicated server rejection, use `-AdmissionExpect '<text>'` with
+`-LoopbackServer`. The isolated client connects, accepts a first-seen trust
+prompt, waits for that text in Anomaly's connection notice, records
+`admission-notice.txt` and a screenshot, checks phase-two connection cleanup,
+then confirms the notice remains visible until dismissed. Use a fresh evidence
+directory for each rejection case. The test server runner accepts
+`-AdmissionRequirements` with semicolon-separated
+`modId|minimumVersion|maximumVersionExclusive` triples, using an empty third
+field for no upper bound. It also accepts `-BlockAnyAdditionalClientMods`,
+`-BlockedClientModIds`, and `-PlainRejection` to exercise each denial path in a
+private staged server. These are local fixture settings only.
+
 ## Server API and content cycles
 
 Use `-ServerApi` with the ordinary LabAPI fixture described in

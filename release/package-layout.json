@@ -31,6 +31,7 @@
           "System.Runtime",
           "System.Runtime.InteropServices",
           "System.Runtime.InteropServices.RuntimeInformation",
+          "System.Runtime.Serialization",
           "System.Runtime.Serialization.Primitives",
           "System.Security.Cryptography.Algorithms",
           "System.Security.Cryptography.Primitives",

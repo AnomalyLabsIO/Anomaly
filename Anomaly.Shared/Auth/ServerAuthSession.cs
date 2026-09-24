@@ -50,8 +50,24 @@ public class ServerAuthSession
         ClientLoginAttempt attempt,
         out byte[] passwordProof)
     {
+        return Validate(clientHandshake, serverHandshake, serverIdentifier, passwordChallenge,
+            displayName, attempt, out passwordProof, out _);
+    }
+
+    public bool Validate(
+        ClientHandshake clientHandshake,
+        ServerHandshake serverHandshake,
+        string serverIdentifier,
+        PasswordChallenge passwordChallenge,
+        string displayName,
+        ClientLoginAttempt attempt,
+        out byte[] passwordProof,
+        out ClientModInventory inventory)
+    {
         passwordProof = null;
-        if (attempt?.signature == null)
+        inventory = null;
+        if (attempt?.signature == null || attempt.signature.Length < ClientLoginAttempt.MinSize
+            || attempt.signature.Length > ClientLoginAttempt.MaxSize)
             return false;
 
         byte[] payload;
@@ -85,21 +101,31 @@ public class ServerAuthSession
 
         try
         {
-            if (!ClientLoginAttempt.TryDecodePlainPayload(payload, out var signature, out passwordProof))
+            if (!ClientLoginAttempt.TryDecodePlainPayload(payload, out var signature, out passwordProof, out inventory))
+            {
+                passwordProof = null;
+                inventory = null;
                 return false;
+            }
 
-            var transcript = AuthTranscript.BuildLogin(
+            var transcript = AuthTranscript.BuildLoginWithModInventory(
                 clientHandshake,
                 serverHandshake,
                 serverIdentifier,
                 passwordChallenge,
-                displayName);
+                displayName,
+                inventory.Encode());
             var identityPublic = AuthCrypto.ReadPublic(clientHandshake.identityPublic);
-            return AuthCrypto.VerifyData(transcript, signature, identityPublic);
+            if (AuthCrypto.VerifyData(transcript, signature, identityPublic))
+                return true;
+            passwordProof = null;
+            inventory = null;
+            return false;
         }
         catch
         {
             passwordProof = null;
+            inventory = null;
             return false;
         }
         finally

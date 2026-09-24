@@ -39,6 +39,16 @@ public static class AuthHandler
     private const string PromptOwner = "authentication";
     private const byte HandshakeResponseCode = 100;
     private const byte RetryCookieResponseCode = 101;
+    // IPv6/UDP overhead (46), LiteNetLib connect header (18), and the largest
+    // IPv6 SocketAddress (28) leave this many bytes for GetConnectData.
+    private const int MaximumConnectDataBytes = 1432 - 46 - 18 - 28;
+
+    private sealed class ClientModInventoryPreparationException : Exception
+    {
+        internal ClientModInventoryPreparationException(string message, Exception inner = null)
+            : base(message, inner) { }
+    }
+
     private static Dictionary<string, ServerConnection> _connections = new();
     private static readonly ConnectionAttemptGate AttemptGate = new();
     private static readonly TransportDisconnectGate TransportDisconnects = new();
@@ -191,6 +201,22 @@ public static class AuthHandler
                 }
             }
 
+            if (isSecondTime && !connection.ModInventoryBound)
+            {
+                try
+                {
+                    // Capture once for this signed login. Invalid or oversized
+                    // metadata must stop the attempt instead of silently omitting mods.
+                    connection.Session.BindModInventory(ClientModInventoryCollector.Capture());
+                    connection.ModInventoryBound = true;
+                }
+                catch (Exception ex)
+                {
+                    throw new ClientModInventoryPreparationException(
+                        "The loaded client mod list is invalid or too large. Check the game log for the affected mod.", ex);
+                }
+            }
+
             //Writes the Game Version
             writer.Put((byte)(isSecondTime ? 4 : 3));
             writer.Put(Il2CppGameCore.Version.Major);
@@ -239,6 +265,7 @@ public static class AuthHandler
                 var clientHandshake = connection.Session.CreateHandshake(connection.RetryCookie);
 
                 writer.PutBytesWithLength(clientHandshake.Encode());
+                EnsureConnectDataFits(writer);
                 _phase2Sent = false;
             }
             else
@@ -255,6 +282,7 @@ public static class AuthHandler
                 writer.PutBytesWithLength(attempt.Encode());
                 writer.Put(connection.ServerIdentifier, 0);
                 writer.Put(PlayerAuth.Username, 0);
+                EnsureConnectDataFits(writer);
 
                 using (var keys = connection.Session.DeriveSessionKeys(
                            connection.Handshake,
@@ -274,6 +302,14 @@ public static class AuthHandler
                 _phase2Sent = true;
             }
         }
+        catch (ClientModInventoryPreparationException e)
+        {
+            CancelAuthentication(connectionKey, clearAllConnections: true);
+            AnomalyMessaging.FailClosedTransport("Connection data preparation failed: " + e.GetType().Name + ".");
+            ShowAuthenticationFailure("The client mod inventory could not be sent.",
+                e.Message, "AUTH-MOD-INVENTORY");
+            MelonLogger.Error("Client mod inventory preparation failed: " + e);
+        }
         catch(Exception e)
         {
             CancelAuthentication(connectionKey, clearAllConnections: true);
@@ -292,6 +328,14 @@ public static class AuthHandler
             }
             catch { }
         }
+    }
+
+    private static void EnsureConnectDataFits(NetDataWriter writer)
+    {
+        if (writer.Length > MaximumConnectDataBytes)
+            throw new ClientModInventoryPreparationException(
+                $"The connection data is {writer.Length} bytes; the safe limit is {MaximumConnectDataBytes} bytes. " +
+                "Check the game log for oversized client mod metadata or identity history.");
     }
 
     /// <returns>true to run the original handler, false to skip it</returns>
@@ -346,6 +390,12 @@ public static class AuthHandler
                 FailAuthentication(connectionKey, "The server retry response was invalid.",
                     "Reconnect once. If this repeats, ask the server operator to check its Anomaly release and logs.", "AUTH-RETRY");
             }
+            return false;
+        }
+
+        if (requestType == (byte)RejectionReason.Custom)
+        {
+            HandleCustomRejection(connectionKey, data);
             return false;
         }
 
@@ -489,6 +539,95 @@ public static class AuthHandler
 
         ContinueAfterServerTrust(connectionKey, server, port, connection);
         return false;
+    }
+
+    private static void HandleCustomRejection(string connectionKey, NetDataReader data)
+    {
+        string reason = null;
+        try
+        {
+            // The custom rejection contains exactly one bounded LiteNetLib string.
+            if (data.AvailableBytes < 1 ||
+                data.AvailableBytes > ModAdmissionResponseCodec.MaxUtf8Bytes + 4)
+                throw new InvalidDataException("Custom rejection length is outside the accepted range.");
+            reason = data.GetString(ModAdmissionResponseCodec.MaxUtf8Bytes);
+            if (string.IsNullOrWhiteSpace(reason) || !data.EndOfData ||
+                Encoding.UTF8.GetByteCount(reason) > ModAdmissionResponseCodec.MaxUtf8Bytes)
+                throw new InvalidDataException("Custom rejection has invalid or trailing data.");
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning("Could not read the server's custom rejection: " + ex.Message);
+            FailAuthentication(connectionKey, "The server rejected the connection.",
+                "Ask the server operator for its connection requirements.", "AUTH-CUSTOM-REJECT");
+            return;
+        }
+
+        if (ModAdmissionResponseCodec.TryDecode(reason, out var admission))
+        {
+            FailAuthentication(connectionKey, "The server's client mod requirements were not met.",
+                FormatModAdmissionIssues(admission), "AUTH-MOD-REQUIREMENTS");
+            return;
+        }
+
+        if (reason.TrimStart().StartsWith("{", StringComparison.Ordinal))
+        {
+            FailAuthentication(connectionKey, "The server rejected the connection.",
+                "The mod requirements could not be read. Use a matching Anomaly release or ask the server operator for details.",
+                "AUTH-MOD-RESPONSE");
+            return;
+        }
+
+        FailAuthentication(connectionKey, SanitizeDisplayText(reason),
+            "Review the server's connection requirements before reconnecting.", "AUTH-CUSTOM-REJECT");
+    }
+
+    private static string FormatModAdmissionIssues(ModAdmissionResponse response)
+    {
+        var details = new StringBuilder();
+        foreach (ModAdmissionIssue issue in response.Issues)
+        {
+            if (details.Length != 0) details.Append('\n');
+            string id = SanitizeDisplayText(issue.Id);
+            string required = SanitizeDisplayText(issue.Required);
+            string present = SanitizeDisplayText(issue.Present);
+            switch (issue.Code)
+            {
+                case "missing":
+                    details.Append("Missing client mod ‘").Append(id).Append("’ (required: ")
+                        .Append(required).Append(')');
+                    break;
+                case "wrong_version":
+                    details.Append("Incorrect mod version: ‘").Append(id).Append("’ — required ")
+                        .Append(required).Append(", present ").Append(present);
+                    break;
+                case "blocked":
+                    details.Append("Blocked client mod: ‘").Append(id).Append('’');
+                    if (!string.IsNullOrEmpty(present)) details.Append(" (present: ").Append(present).Append(')');
+                    break;
+                case "unexpected":
+                    details.Append("Additional client mod not allowed: ‘").Append(id).Append('’');
+                    if (!string.IsNullOrEmpty(present)) details.Append(" (present: ").Append(present).Append(')');
+                    break;
+            }
+        }
+        if (response.OmittedCount != 0)
+            details.Append("\n").Append(response.OmittedCount).Append(" more mod issue(s) were omitted.");
+        details.Append("\n\nUpdate your client mods to meet the server's requirements, then reconnect.");
+        return details.ToString();
+    }
+
+    private static string SanitizeDisplayText(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var safe = new StringBuilder(value.Length);
+        foreach (char character in value)
+        {
+            if (char.IsControl(character) && character != '\n' && character != '\r' && character != '\t')
+                safe.Append(' ');
+            else safe.Append(character);
+        }
+        return safe.ToString();
     }
 
     private static void ContinueAfterServerTrust(

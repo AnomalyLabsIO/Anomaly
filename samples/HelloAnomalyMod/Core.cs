@@ -12,6 +12,7 @@ using MelonLoader;
 using UnityEngine;
 
 [assembly: MelonInfo(typeof(HelloAnomalyMod.Core), "Hello Anomaly", "0.1.0", "YourName", null)]
+[assembly: MelonID("example.hello")]
 [assembly: MelonGame("Northwood", "SCPSL")]
 [assembly: MelonAdditionalDependencies("Anomaly.Client")]
 [assembly: SupportedGameVersion("14.2.7^")]

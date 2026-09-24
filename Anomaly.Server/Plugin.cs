@@ -144,6 +144,7 @@ public class Plugin : Plugin<Config>
                 PreauthGate.Initialize();
                 AuthHandler.Reset();
                 EnrollmentSessionRegistry.Reset();
+                ClientModAdmissionPolicy.Configure(Config, Version);
             },
             [ServerInitializationStage.MandatoryPatches] = () =>
             {
@@ -405,6 +406,7 @@ public class Plugin : Plugin<Config>
         RunCleanup(context, "replay table", AnomalyReplayTable.Reset);
         RunCleanup(context, "authenticated transport sessions", AuthenticatedTransportSessions.Reset);
         RunCleanup(context, "auth state", AuthHandler.Reset);
+        RunCleanup(context, "client mod admission policy", ClientModAdmissionPolicy.Reset);
         RunCleanup(context, "enrollment sessions", EnrollmentSessionRegistry.Reset);
         RunCleanup(context, "preauth gate", PreauthGate.Reset);
         RunCleanup(context, "password store", PasswordStore.Reset);

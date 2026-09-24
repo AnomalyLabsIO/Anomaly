@@ -234,4 +234,4 @@ when room transforms match on both peers; layout authors must preserve valid
 native topology. A native stage exception rejects that generation and disconnects
 its clients. Exact descriptor parity is a placement check, not a playability test.
 
-Protocol 6 fixtures require completed bundle/index pairs from the external Unity authoring project. Pass Prepare-Assets.ps1 -PackIndexPath with an index exposing mods/fixture/textures/checker and mods/fixture/audio/tone. The script only copies completed files; it no longer generates raw PNG/OGG assets or invokes FFmpeg. Rebuild both smoke mods from the current SDK.
+Protocol 7 fixtures require completed bundle/index pairs from the external Unity authoring project. Pass Prepare-Assets.ps1 -PackIndexPath with an index exposing mods/fixture/textures/checker and mods/fixture/audio/tone. The script only copies completed files; it no longer generates raw PNG/OGG assets or invokes FFmpeg. Rebuild both smoke mods from the current SDK.

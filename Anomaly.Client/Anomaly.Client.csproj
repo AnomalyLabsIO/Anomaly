@@ -382,6 +382,7 @@
 		<Compile Include="Assets\PathOverrideRegistry.cs" />
 		<Compile Include="Assets\ShaderRemapper.cs" />
 		<Compile Include="Auth\AuthHandler.cs" />
+		<Compile Include="Auth\ClientModInventoryCollector.cs" />
 		<Compile Include="Auth\PlayerAuth.cs" />
 		<Compile Include="Auth\PlayerAuthProfileStore.cs" />
 		<Compile Include="Auth\ServerConnection.cs" />

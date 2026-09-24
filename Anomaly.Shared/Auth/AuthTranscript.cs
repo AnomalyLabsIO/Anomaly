@@ -6,7 +6,7 @@ using System.Text;
 namespace Anomaly.Shared.Auth;
 
 /// <summary>
-/// Canonical application-protocol-v6 handshake transcript. Both peers sign or authenticate
+/// Canonical application-protocol-v7 handshake transcript. Both peers sign or authenticate
 /// exactly these bytes; changing any key, nonce, policy field, or session identifier
 /// therefore invalidates the login attempt.
 /// </summary>
@@ -14,6 +14,7 @@ public static class AuthTranscript
 {
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("ANOMALY-AUTH-V2");
     private static readonly byte[] LoginMagic = Encoding.ASCII.GetBytes("ANOMALY-LOGIN-V2");
+    private static readonly byte[] ModInventoryMagic = Encoding.ASCII.GetBytes("ANOMALY-MOD-INVENTORY-V1");
     public const int MaximumServerIdentifierBytes = 128;
     public const int MaximumDisplayNameBytes = 128;
 
@@ -117,6 +118,30 @@ public static class AuthTranscript
         var transcript = BuildLogin(client, server, serverIdentifier, passwordChallenge, displayName);
         using (var sha = SHA256.Create())
             return sha.ComputeHash(transcript);
+    }
+
+    internal static byte[] BuildLoginWithModInventory(
+        ClientHandshake client,
+        ServerHandshake server,
+        string serverIdentifier,
+        PasswordChallenge passwordChallenge,
+        string displayName,
+        byte[] encodedInventory)
+    {
+        if (encodedInventory == null)
+            throw new ArgumentNullException(nameof(encodedInventory));
+        ClientModInventory.Decode(encodedInventory);
+        var login = BuildLogin(client, server, serverIdentifier, passwordChallenge, displayName);
+        using (var stream = new MemoryStream())
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
+        {
+            writer.Write(login);
+            writer.Write(ModInventoryMagic);
+            writer.Write((ushort)encodedInventory.Length);
+            writer.Write(encodedInventory);
+            writer.Flush();
+            return stream.ToArray();
+        }
     }
 
     private static void ValidatePasswordChallenge(PasswordChallenge challenge)

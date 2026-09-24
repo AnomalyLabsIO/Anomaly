@@ -22,6 +22,7 @@ __pycache__/
 *.py[cod]
 .claude/settings.local.json
 steamdb_patch_manifest_map.csv
+/MOD_ADMISSION_SPOOFING.local.md
 
 # Private vanity-identity outputs (contain private key material)
 tools/vanity-results.jsonl*
