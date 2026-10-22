@@ -141,6 +141,36 @@ so cancel-and-clear cleanup must be safe to repeat.
 
 **No assembly hot-unload.** A managed module can be disabled immediately at Anomaly-owned boundaries: its cancellation token is cancelled, commands and scheduled work are removed, tracked subscriptions/resources are disposed, and future owned callbacks are rejected. Its assembly remains loaded in the IL2CPP process, so complete removal takes effect on the next launch. Ordinary MelonMods remain governed by MelonLoader's process-lifetime behavior.
 
+## Patch lifetime
+
+Install process-owned Harmony patches once and reuse them across connection,
+scene, round, and session restarts. Make initialization idempotent using state owned
+by your mod. Keep per-session enablement and resources separate from the installed
+patches so a restart does not add another registration or detour chain.
+
+Choose one installation path. MelonLoader automatically applies discovered Harmony
+patches for an ordinary MelonMod; do not also call `HarmonyInstance.PatchAll()` for
+the same patch classes. If your mod requires manual installation, declare
+`[assembly: HarmonyDontPatchAll]` from `MelonLoader` and own the installation and
+cleanup explicitly. An intentional reinstall should remove the exact prior
+registration using the same owner and retain synchronization around its lifecycle.
+Only remove patches and detours that your mod owns.
+
+Bootstrap logs an advisory warning when successful supported Harmony operations
+leave multiple active registrations for the exact target, patch method, kind, and
+owner. It also warns after observing three successful installations of that tuple
+within five minutes with removals between activations. A deliberate reinstall can
+therefore produce a warning; use its owner and assembly attribution to investigate
+restart churn. These warnings do not deduplicate, remove, or block your patches and
+do not change authentication audit flags.
+
+Duplicate warnings are emitted once per tuple per process, and reinstall warnings
+at most once per tuple per five-minute interval. Tracking is bounded to 4,096 tuples
+and 128 queued records, with at most four warnings emitted per frame and suppressed
+diagnostics summarized. An absent warning does not prove idempotence. Anonymous
+MonoMod/native detours cannot always be attributed to a mod; retain their handles,
+reuse process-owned installations, and dispose only the resources you own.
+
 ## Subsystems
 
 All public APIs live under `Anomaly.Client.Api.*`. Quick pointers:

@@ -6,7 +6,7 @@ and content for your community. Client mods run through MelonLoader, server
 plugins use LabAPI, and Anomaly provides the APIs and networking to connect them.
 
 **[Documentation](https://docs.anomalylabs.io/)** |
-**[Download the launcher](https://github.com/AnomalyLabsIO/anomaly-launcher/releases)** |
+**[Download the launcher](https://github.com/AnomalyLabsIO/scpsl-modlaunch/releases)** |
 **[Server and SDK releases](https://github.com/AnomalyLabsIO/Anomaly/releases)**
 
 Anomaly is in **early access**. The current release supports SCP:SL **14.2.7**. Use compatible Anomaly versions on the client
@@ -84,6 +84,7 @@ it from the same release as your Anomaly installation, then follow a quickstart:
 
 The [full documentation](https://docs.anomalylabs.io/) covers events, commands,
 input, UI, networking, custom content, and packaging your mods.
+>We also supply agent readable API documentation for Anomaly's client and server libraries. See https://docs.anomalylabs.io/llms.txt.
 
 ## Get help
 
@@ -95,11 +96,12 @@ copy a diagnostic summary for your report.
 
 ## License
 
-Anomaly is licensed under [LGPL-2.1-or-later](LICENSE).
-
-Copyright (c) 2026 AnomalyLabs contributors.
+Anomaly is licensed under [LGPL-2.1-or-later](LICENSE). You can use the Anomaly client and server libraries in your own mods and plugins, but you must comply with the license terms. See the [license file](LICENSE) for details.
 
 ## To NorthWood Studios
+
+This is a fan project attempting to provide players with a safe modded experience while respecting your intention for the broader game.
+For more information on what we have implemented to comply with your EULA, or if you have concerns with the project, please contact me and I'll be happy to discuss it.
 
 
 ## Disclaimer

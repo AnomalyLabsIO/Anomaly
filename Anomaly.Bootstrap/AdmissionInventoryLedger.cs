@@ -151,6 +151,90 @@ internal sealed class AdmissionOriginIndex
     }
 }
 
+// Engine-inert cursor: a partial or superseded registry view never replaces the
+// last complete divergence view. Lifetime identities remain in the store.
+internal sealed class AdmissionRegistryReconciliation
+{
+    private readonly Dictionary<object, AdmissionInventoryEntry> _registered;
+    private readonly HashSet<object> _live;
+    private readonly object[] _items;
+    private readonly Dictionary<object, AdmissionRegistryObservation> _divergent = new(ReferenceEqualityComparer.Instance);
+    private int _index;
+    private int _observed;
+    private object? _pendingItem;
+
+    internal AdmissionRegistryReconciliation(long revision,
+        IEnumerable<KeyValuePair<object, AdmissionInventoryEntry>> registered, IEnumerable<object> live)
+    {
+        Revision = revision;
+        _registered = new Dictionary<object, AdmissionInventoryEntry>(registered, ReferenceEqualityComparer.Instance);
+        _live = new HashSet<object>(live, ReferenceEqualityComparer.Instance);
+        var items = new HashSet<object>(_registered.Keys, ReferenceEqualityComparer.Instance);
+        items.UnionWith(_live);
+        _items = items.ToArray();
+    }
+
+    internal long Revision { get; }
+    internal bool IsComplete => _observed == _items.Length;
+    internal int ItemCount => _items.Length;
+
+    internal bool TryTake(out object item)
+    {
+        if (_pendingItem != null)
+            throw new InvalidOperationException("The previous registry item has not been observed.");
+        if (_index == _items.Length) { item = null!; return false; }
+        item = _pendingItem = _items[_index++];
+        return true;
+    }
+
+    internal bool Observe(object item, bool registered, AdmissionInventoryEntry current)
+    {
+        if (!ReferenceEquals(item, _pendingItem))
+            throw new InvalidOperationException("The registry observation does not match the current cursor item.");
+        bool present = _live.Contains(item);
+        bool known = _registered.TryGetValue(item, out var original);
+        bool divergent = known
+            ? !present || !registered || current.Id != original!.Id || current.Version != original.Version
+            : present;
+        if (divergent)
+            _divergent[item] = new AdmissionRegistryObservation(present, registered, current.Id, current.Version);
+        _pendingItem = null;
+        _observed++;
+        return divergent;
+    }
+
+    internal bool TryPublish(long currentRevision, AdmissionInventoryStore store)
+    {
+        if (!IsComplete || Revision != currentRevision) return false;
+        store.ObserveDivergentRegistry(_divergent);
+        return true;
+    }
+}
+
+// Access is serialized by the ledger. Reading a completed admission view needs
+// only latched state; it does not invoke loader metadata or rebuild the inventory.
+internal sealed class AdmissionInventoryPublication
+{
+    private AdmissionInventorySnapshot? _snapshot;
+    private long _registryRevision = -1;
+
+    internal void Publish(AdmissionInventorySnapshot snapshot, long registryRevision)
+    { _snapshot = snapshot; _registryRevision = registryRevision; }
+    internal void Clear() { _snapshot = null; _registryRevision = -1; }
+    internal bool IsCurrent(long generation, long registryRevision) => _snapshot != null &&
+        _snapshot.Generation == generation && _registryRevision == registryRevision;
+
+    internal AdmissionInventorySnapshot Capture(AdmissionInventoryStore store, long registryRevision,
+        bool reconciliationInProgress, int pendingReservations)
+    {
+        if (pendingReservations != 0)
+            throw new InvalidOperationException("A managed module load is still in progress.");
+        if (!store.IsValid || reconciliationInProgress || !IsCurrent(store.Generation, registryRevision))
+            throw new InvalidOperationException("A complete current main-thread inventory reconciliation is required before admission.");
+        return _snapshot!;
+    }
+}
+
 internal static class AdmissionInventoryLedger
 {
     private static readonly object Sync = new();
@@ -160,8 +244,19 @@ internal static class AdmissionInventoryLedger
     private static readonly Dictionary<Type, MelonBase> DeclaredInstances = new();
     private static readonly Dictionary<MelonBase, AdmissionInventoryEntry> Registered = new(ReferenceEqualityComparer.Instance);
     private static readonly Dictionary<string, ModuleReservation> Reservations = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly AdmissionInventoryPublication Publication = new();
     private static bool _installed;
     private static int _pendingReservations;
+    private static long _registryRevision;
+    private static long _nextHeartbeat;
+    private static AdmissionRegistryReconciliation? _heartbeat;
+
+    internal static bool HasPendingHeartbeat
+    {
+        get { lock (Sync) return _installed && (_heartbeat != null || Environment.TickCount64 >= _nextHeartbeat); }
+    }
+
+    internal static void Checkpoint() => ReconcileCheckpoint();
 
     internal static void Install()
     {
@@ -181,6 +276,7 @@ internal static class AdmissionInventoryLedger
             foreach (var melon in MelonBase.RegisteredMelons)
                 OnRegistered(melon);
         }
+        ReconcileCheckpoint();
     }
 
     internal static ModuleReservation ReserveModule(string id, string version, string path)
@@ -201,13 +297,12 @@ internal static class AdmissionInventoryLedger
 
     internal static AdmissionInventorySnapshot CaptureAdmission()
     {
+        if (ProtectedMethodCatalog.IsMainThread)
+            ReconcileCheckpoint();
         lock (Sync)
         {
             EnsureInstalled();
-            Reconcile();
-            if (_pendingReservations != 0)
-                throw new InvalidOperationException("A managed module load is still in progress.");
-            return Store.Capture();
+            return Publication.Capture(Store, _registryRevision, _heartbeat != null, _pendingReservations);
         }
     }
 
@@ -274,7 +369,9 @@ internal static class AdmissionInventoryLedger
         return new AdmissionInventoryEntry(id, melon.Info?.Version ?? string.Empty);
     }
 
-    private static void ObserveMelon(MelonBase melon)
+    private static void ObserveMelon(MelonBase melon) => ObserveMelon(melon, null);
+
+    private static void ObserveMelon(MelonBase melon, AdmissionInventoryEntry? observedEntry)
     {
         if (melon is not MelonMod)
             return;
@@ -298,7 +395,7 @@ internal static class AdmissionInventoryLedger
                 DeclaredInstances[melon.GetType()] = melon;
             try
             {
-                var entry = CurrentEntry(melon);
+                var entry = observedEntry ?? CurrentEntry(melon);
                 if (!Store.ObserveRuntimeIdentity(origin, entry.Id, entry.Version))
                     Divergence("A MelonMod identity differs from its original observed metadata.");
             }
@@ -317,45 +414,137 @@ internal static class AdmissionInventoryLedger
         {
             ObserveMelon(melon);
             Registered[melon] = CurrentEntry(melon);
+            _registryRevision++;
         }
     }
 
     private static void OnUnregistered(MelonBase melon)
     {
+        if (melon is not MelonMod) return;
         lock (Sync)
         {
             ObserveMelon(melon);
             Registered.Remove(melon);
+            _registryRevision++;
             // Code cannot be unloaded from the default context. Keep its claim.
         }
     }
 
-    private static void Reconcile()
+    // Called as one fair scheduler source. A registry snapshot, one mod check,
+    // or final publication is one unit; no lock or live enumerator spans frames.
+    internal static bool ProcessOneHeartbeatItem()
     {
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-            ObserveAssembly(assembly);
-        var live = new HashSet<MelonBase>(MelonBase.RegisteredMelons.Where(melon => melon is MelonMod), ReferenceEqualityComparer.Instance);
-        var divergent = new Dictionary<object, AdmissionRegistryObservation>(ReferenceEqualityComparer.Instance);
-        foreach (var pair in Registered)
+        if (!ProtectedMethodCatalog.IsMainThread) return false;
+        AdmissionRegistryReconciliation? cycle;
+        lock (Sync)
         {
-            var current = CurrentEntry(pair.Key);
-            if (!live.Contains(pair.Key) || !pair.Key.Registered || current.Id != pair.Value.Id || current.Version != pair.Value.Version)
+            if (!_installed) return false;
+            if (!Store.IsValid)
             {
-                divergent[pair.Key] = new AdmissionRegistryObservation(live.Contains(pair.Key), pair.Key.Registered, current.Id, current.Version);
-                Divergence("The loader registry changed outside an observed lifecycle transition.");
+                _heartbeat = null;
+                Publication.Clear();
+                return false;
+            }
+            if (_heartbeat != null && _heartbeat.Revision != _registryRevision)
+                _heartbeat = null;
+            cycle = _heartbeat;
+            if (cycle == null && Environment.TickCount64 < _nextHeartbeat) return false;
+        }
+        if (cycle == null)
+        {
+            StartHeartbeat();
+            return true;
+        }
+
+        if (cycle.TryTake(out object item))
+        {
+            var melon = (MelonBase)item;
+            AdmissionInventoryEntry current = CurrentEntry(melon);
+            bool registered = melon.Registered;
+            lock (Sync)
+            {
+                if (!ReferenceEquals(_heartbeat, cycle) || cycle.Revision != _registryRevision)
+                {
+                    _heartbeat = null;
+                    return true;
+                }
+                // Identity changes advance the store generation immediately on
+                // discovery; publication of the full registry view waits below.
+                ObserveMelon(melon, current);
+                if (cycle.Observe(melon, registered, current))
+                    Divergence("The loader registry changed outside an observed lifecycle transition.");
+            }
+            return true;
+        }
+
+        lock (Sync)
+        {
+            if (!ReferenceEquals(_heartbeat, cycle) || !cycle.TryPublish(_registryRevision, Store))
+            {
+                _heartbeat = null;
+                return true;
+            }
+            Publication.Publish(Store.Capture(), _registryRevision);
+            _heartbeat = null;
+            _nextHeartbeat = Environment.TickCount64 + 1000;
+        }
+        return true;
+    }
+
+    private static void StartHeartbeat()
+    {
+        long revision;
+        KeyValuePair<object, AdmissionInventoryEntry>[] registered;
+        lock (Sync)
+        {
+            revision = _registryRevision;
+            registered = Registered.Select(pair => new KeyValuePair<object, AdmissionInventoryEntry>(pair.Key, pair.Value)).ToArray();
+        }
+        // The AssemblyLoad subscription already captured every later assembly;
+        // repeat assembly-wide reflection is unnecessary during reconciliation.
+        object[] live = MelonBase.RegisteredMelons.Where(melon => melon is MelonMod).Cast<object>().ToArray();
+        var cycle = new AdmissionRegistryReconciliation(revision, registered, live);
+        lock (Sync)
+        {
+            if (revision == _registryRevision)
+                _heartbeat = cycle;
+        }
+    }
+
+    private static void ReconcileCheckpoint()
+    {
+        if (!ProtectedMethodCatalog.IsMainThread)
+            throw new InvalidOperationException("Inventory reconciliation requires the Bootstrap main thread.");
+        long revision;
+        lock (Sync)
+        {
+            EnsureInstalled();
+            if (!Store.IsValid)
+                throw new InvalidOperationException("Loaded mod metadata prevents a valid admission inventory.");
+            // Explicit admission observes every entry anew, even if a periodic
+            // cursor checked an earlier entry on a preceding frame.
+            _heartbeat = null;
+            _nextHeartbeat = 0;
+            revision = _registryRevision;
+        }
+        int restarts = 0;
+        while (true)
+        {
+            ProcessOneHeartbeatItem();
+            lock (Sync)
+            {
+                if (!Store.IsValid)
+                    throw new InvalidOperationException("Loaded mod metadata prevents a valid admission inventory.");
+                if (_heartbeat == null && Publication.IsCurrent(Store.Generation, _registryRevision))
+                    return;
+                if (revision != _registryRevision)
+                {
+                    revision = _registryRevision;
+                    if (++restarts > 4)
+                        throw new InvalidOperationException("The loader registry kept changing during admission reconciliation.");
+                }
             }
         }
-        foreach (var melon in live)
-        {
-            if (!Registered.ContainsKey(melon))
-            {
-                var entry = CurrentEntry(melon);
-                divergent[melon] = new AdmissionRegistryObservation(true, melon.Registered, entry.Id, entry.Version);
-                Divergence("The loader registry contains an unobserved registration.");
-            }
-            ObserveMelon(melon);
-        }
-        Store.ObserveDivergentRegistry(divergent);
     }
 
     private static void Divergence(string reason)

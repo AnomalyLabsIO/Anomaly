@@ -71,6 +71,39 @@ UserLibs, plugin constructors, or every equal-priority plugin. Preexisting suppo
 modifications are therefore audited too. A clean claim means no changes were
 observed under this catalog, not that the process is untampered.
 
+## Verification lifecycle
+
+Bootstrap performs the global preexisting Harmony/MonoMod audit at startup.
+Supported operation hooks publish risk immediately and enqueue exact protected
+targets; catalog registrations also enqueue affected targets. A one-second shared
+schedule checks required Bootstrap, PatchShield, and client patch tuples and
+callback identities. This targeted backstop detects patch-record removal and
+callback-field replacement that bypass supported operation hooks.
+
+Recurring work is sliced across frames, stopping after 1 ms or 32 items. Individual
+patch and detour records are items, and no runtime/catalog lock is retained between
+frames. The budget cannot preempt an indivisible reflection/runtime operation or
+lock acquisition; such overruns are recorded. Pending audit capacity is 16,384
+distinct targets, with overflow reported as incomplete coverage. Required
+descriptors, runtime reflection adapters, assembly observations, trusted tuples,
+and resolved native addresses are cached; no per-second global inventory scan or
+resolver-per-game-patch pass is required.
+
+Client initialization registers its exact mandatory hook descriptors before auth
+initialization. Startup and explicit main-thread admission checkpoints finish any
+required work and reuse completed evidence only when its revisions and required
+completeness match. Worker checkpoints consume completed evidence and fail closed
+when it is unavailable. Per-frame and per-send checks retain immediate health,
+mutation-barrier, native-coverage, and admission-generation validation. Inventory
+registry reconciliation uses Bootstrap's shared recurring schedule.
+
+Ordinary Harmony duplicate/reinstall warnings are advisory. They neither create
+security evidence nor block valid operations. A duplicate is an exact target,
+patch method, kind, and owner appearing more than once; a reinstall warning
+requires three observed successful installations with removal between activations
+within five minutes. Diagnostics have separate bounded storage and emission limits;
+see [Bootstrap diagnostics](README.md#mod-patch-diagnostics).
+
 Bootstrap retains primitive mod identities captured before activation where the
 loader exposes them. Loaded managed modules remain recorded even if construction
 or activation fails. Unregistering/disable never removes a loaded identity;

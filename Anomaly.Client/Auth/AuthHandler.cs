@@ -53,7 +53,6 @@ public static class AuthHandler
     private static readonly ConnectionAttemptGate AttemptGate = new();
     private static readonly TransportDisconnectGate TransportDisconnects = new();
     private static readonly AdmissionSendGate<ClientAdmissionSnapshot> AdmissionSends = new();
-    private static long _nextIntegrityReconciliation;
     private static PlayerAuthProfileStore _profileStore;
     
     public static bool UsingAnomalyAuth { get; internal set; }
@@ -409,10 +408,9 @@ public static class AuthHandler
         {
             try
             {
-                long now = Environment.TickCount64;
-                bool reconcile = now >= _nextIntegrityReconciliation;
-                if (reconcile) _nextIntegrityReconciliation = now + 1000;
-                ClientAdmissionGuard.EnsureCurrent(admission, reconcile);
+                // Bootstrap owns recurring reconciliation. Keep transport admission
+                // health, mutation barriers, and generations checked every frame.
+                ClientAdmissionGuard.EnsureCurrent(admission);
             }
             catch (Exception exception)
             {
@@ -955,7 +953,6 @@ public static class AuthHandler
     private static void ClearCurrentKeys()
     {
         AdmissionSends.Current.ClearAdmission();
-        _nextIntegrityReconciliation = 0;
         CurrentServerFingerprint = null;
         AnomalyMessaging.ClearTransportSession();
     }

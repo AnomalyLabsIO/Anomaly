@@ -11,7 +11,8 @@ internal enum GuardTimingPhase
 {
     CoreResolve, CoreVerify, CoreLogDiagnostics, VerifyResolve, VerifyDeferred,
     VerifyCoverage, VerifyHooks, VerifyStockHooks, VerifyCallbacks, AuditPreexisting,
-    AuditHarmony, AuditManagedDetours, AuditIlHooks, CatalogResolveLoaded, CatalogCandidateClassification
+    AuditHarmony, AuditManagedDetours, AuditIlHooks, CatalogResolveLoaded, CatalogCandidateClassification,
+    GuardSlice, Checkpoint
 }
 
 internal enum GuardTimingCount
@@ -20,13 +21,18 @@ internal enum GuardTimingCount
     ManagedDetours, IlHookMapEntries, IlHooks
 }
 
-internal enum GuardTimingTotal { ResolverCalls, ResolverAssemblies, CandidateClassifications }
+internal enum GuardTimingTotal
+{
+    ResolverCalls, ResolverAssemblies, CandidateClassifications, Checkpoints, CheckpointReuses,
+    CompletedChecks, SliceItems, ItemOverruns, PatchRecords, ManagedDetourRecords, IlHookRecords,
+    CallbackChecks, TargetAudits
+}
 
 internal static class GuardTimingDiagnostics
 {
     internal static readonly bool Enabled = ReadEnabled();
     private static readonly bool FrameCorrelationEnabled = Enabled && ReadFrameCorrelationEnabled();
-    private const int VerifyWindowCapacity = 64;
+    private const int VerifyWindowCapacity = 8192;
     private static readonly VerifyWindow[] VerifyWindows = FrameCorrelationEnabled
         ? new VerifyWindow[VerifyWindowCapacity] : Array.Empty<VerifyWindow>();
     private static int _verifyWindowCount;
@@ -39,9 +45,9 @@ internal static class GuardTimingDiagnostics
         { Start = start; End = end; Thread = Environment.CurrentManagedThreadId; }
     }
     private static readonly object Gate = new();
-    private static readonly Aggregate[] Phases = new Aggregate[15];
+    private static readonly Aggregate[] Phases = new Aggregate[Enum.GetValues<GuardTimingPhase>().Length];
     private static readonly Aggregate[] Counts = new Aggregate[8];
-    private static readonly long[] Totals = new long[3];
+    private static readonly long[] Totals = new long[Enum.GetValues<GuardTimingTotal>().Length];
     [ThreadStatic] private static VerificationCounts _verification;
     private static long _windowStart;
     private static long _nextReport;
@@ -61,7 +67,7 @@ internal static class GuardTimingDiagnostics
                 lock (Gate)
                 {
                     Phases[(int)_phase].Add(elapsed);
-                    if (FrameCorrelationEnabled && _phase == GuardTimingPhase.CoreVerify)
+                    if (FrameCorrelationEnabled && _phase is GuardTimingPhase.GuardSlice or GuardTimingPhase.Checkpoint)
                     {
                         if (_verifyWindowCount < VerifyWindows.Length)
                             VerifyWindows[_verifyWindowCount++] = new VerifyWindow(_start, ended);
@@ -106,6 +112,13 @@ internal static class GuardTimingDiagnostics
     internal static void CountTotal(GuardTimingTotal counter)
     {
         if (Enabled) Interlocked.Increment(ref Totals[(int)counter]);
+    }
+
+    internal static void RecordSlice(int items, int overruns)
+    {
+        if (!Enabled) return;
+        Interlocked.Add(ref Totals[(int)GuardTimingTotal.SliceItems], items);
+        Interlocked.Add(ref Totals[(int)GuardTimingTotal.ItemOverruns], overruns);
     }
 
     internal static void Count(GuardTimingCount counter)

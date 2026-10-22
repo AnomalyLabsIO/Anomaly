@@ -11,7 +11,7 @@ namespace Anomaly.Bootstrap;
 
 // This adapter deliberately targets the loader-provided HarmonyX 2.10.2 / MonoMod
 // 22.7.31 contract. Missing internals are a coverage failure, never a clean audit.
-internal static class RuntimeGuard
+internal static partial class RuntimeGuard
 {
     private static readonly object Sync = new();
     private static readonly object InstallationSync = new();
@@ -28,7 +28,6 @@ internal static class RuntimeGuard
     private static bool _installing;
     private static PatchInstallationTrace? _installationTrace;
     [ThreadStatic] private static Stack<Operation>? _operations;
-    [ThreadStatic] private static bool _verifying;
     [ThreadStatic] private static MethodBase? _canaryTarget;
     [ThreadStatic] private static int _foreignCallbackDepth;
 
@@ -61,7 +60,7 @@ internal static class RuntimeGuard
                 ProtectedMethodCatalog.ResolveLoadedAssemblies();
                 ProtectBackendInfrastructure();
                 RecordRequiredStockHooks();
-                InstallHook(harmony, RequiredMethod(typeof(PatchProcessor), "Patch", Type.EmptyTypes), nameof(PatchPrefix), nameof(HarmonyFinalizer));
+                InstallHook(harmony, RequiredMethod(typeof(PatchProcessor), "Patch", Type.EmptyTypes), nameof(PatchPrefix), nameof(HarmonyInstallFinalizer));
                 InstallHook(harmony, RequiredMethod(typeof(PatchClassProcessor), "ProcessPatchJob"), nameof(ClassPatchPrefix), nameof(HarmonyFinalizer));
                 foreach (MethodInfo method in typeof(PatchProcessor).GetMethods().Where(m => m.Name == "Unpatch"))
                     InstallHook(harmony, method, nameof(UnpatchPrefix), nameof(HarmonyFinalizer));
@@ -103,6 +102,7 @@ internal static class RuntimeGuard
                 InstallHook(harmony, RequiredMethod(typeof(MonoMod.Utils.Extensions), "InvokeWhileNull").MakeGenericMethod(typeof(MethodBase)), nameof(CallbackNullPrefix), nameof(HarmonyFinalizer));
                 _installed = true;
                 _audit.Ready();
+                InitializeVerification();
                 AuditPreexisting();
                 RunCanary(harmony);
                 if (!Verify(requireComplete: false))
@@ -121,63 +121,7 @@ internal static class RuntimeGuard
 
     internal static bool Verify(bool requireComplete = true)
     {
-        if (!_installed || _verifying)
-            return _installed && Snapshot.Healthy;
-        _verifying = true;
-        GuardTimingDiagnostics.BeginVerification();
-        try
-        {
-            using (GuardTimingDiagnostics.Begin(GuardTimingPhase.VerifyResolve))
-                ProtectedMethodCatalog.ResolveLoadedAssemblies();
-            using (GuardTimingDiagnostics.Begin(GuardTimingPhase.VerifyDeferred))
-                DeferredNative.Reconcile();
-            using (GuardTimingDiagnostics.Begin(GuardTimingPhase.VerifyCoverage))
-                if (requireComplete && !ProtectedMethodCatalog.RequiredCoverageComplete)
-                    foreach (string gap in ProtectedMethodCatalog.GetCoverageGaps())
-                        ReportCoverageGap(gap);
-            using (GuardTimingDiagnostics.Begin(GuardTimingPhase.VerifyHooks))
-            foreach (var hook in Hooks)
-            {
-                GuardTimingDiagnostics.Count(GuardTimingCount.RequiredHooks);
-                Patches? info = HostHarmony.GetPatchInfo(hook.Target);
-                if (info == null || !info.Prefixes.Any(p => p.PatchMethod == hook.Prefix) ||
-                    !info.Finalizers.Any(p => p.PatchMethod == hook.Finalizer))
-                    Invalidate("Required guard interceptor missing: " + Describe(hook.Target));
-                else
-                    AuditPatches(hook.Target, info);
-            }
-            using (GuardTimingDiagnostics.Begin(GuardTimingPhase.VerifyStockHooks))
-            foreach (var hook in RequiredStockHooks)
-            {
-                GuardTimingDiagnostics.Count(GuardTimingCount.StockHooks);
-                if (HostHarmony.GetPatchInfo(hook.Target)?.Prefixes.Any(p => p.PatchMethod == hook.Prefix) != true)
-                    Invalidate("Required loader PatchShield interceptor missing: " + Describe(hook.Target));
-            }
-            using (GuardTimingDiagnostics.Begin(GuardTimingPhase.VerifyCallbacks))
-            foreach (var callback in Callbacks)
-            {
-                GuardTimingDiagnostics.Count(GuardTimingCount.Callbacks);
-                Delegate[] current = ((Delegate?)callback.Field.GetValue(null))?.GetInvocationList() ?? Array.Empty<Delegate>();
-                if (current.Length == 0 || !current[0].Equals(callback.Guard) ||
-                    callback.Previous.Where(IsStockShieldCallback).Any(prior => !current.Contains(prior)))
-                    Invalidate("Guard or prior loader callback removed/reordered: " + callback.Field.DeclaringType?.Name + "." + callback.Field.Name);
-                if (callback.Field.Name == "OnDetour" && callback.Field.DeclaringType != typeof(NativeDetour) && !current.Any(IsStockShieldCallback))
-                    Invalidate("Required loader PatchShield detour callback missing: " + callback.Field.DeclaringType?.Name);
-            }
-            using (GuardTimingDiagnostics.Begin(GuardTimingPhase.AuditPreexisting))
-                AuditPreexisting();
-            return Snapshot.Healthy;
-        }
-        catch (Exception ex)
-        {
-            Invalidate("Guard verification failed: " + ex.GetType().Name + ": " + ex.Message);
-            return false;
-        }
-        finally
-        {
-            _verifying = false;
-            GuardTimingDiagnostics.EndVerification();
-        }
+        return VerifyCheckpoint(requireComplete);
     }
 
     private static void ProtectBackendInfrastructure()
@@ -256,7 +200,9 @@ internal static class RuntimeGuard
         AddPatch(patches, ReadOptional<HarmonyMethod>(__instance, "transpiler"), HarmonyPatchType.Transpiler);
         AddPatch(patches, ReadOptional<HarmonyMethod>(__instance, "finalizer"), HarmonyPatchType.Finalizer);
         AddPatch(patches, ReadOptional<HarmonyMethod>(__instance, "ilmanipulator"), HarmonyPatchType.ILManipulator);
-        return BeginHarmony(target, patches, ref __state);
+        bool allowed = BeginHarmony(target, patches, ref __state);
+        if (__state != null) __state.Installation = true;
+        return allowed;
     }
 
     private static bool ClassPatchPrefix(object __0, ref Operation? __state)
@@ -267,7 +213,9 @@ internal static class RuntimeGuard
                      ("transpilers", HarmonyPatchType.Transpiler), ("finalizers", HarmonyPatchType.Finalizer), ("ilmanipulators", HarmonyPatchType.ILManipulator) })
             foreach (HarmonyMethod patch in Read<IEnumerable>(__0, entry.Item1))
                 AddPatch(patches, patch, entry.Item2);
-        return BeginHarmony(target, patches, ref __state);
+        bool allowed = BeginHarmony(target, patches, ref __state);
+        if (__state != null) { __state.Installation = true; __state.PatchJob = __0; }
+        return allowed;
     }
 
     private static bool BeginHarmony(MethodBase target, List<(MethodInfo Method, HarmonyPatchType Kind)> patches, ref Operation? state)
@@ -362,7 +310,20 @@ internal static class RuntimeGuard
             }
             if (!__runOriginal && !__state.Trusted)
                 Block(__state.Target, "Harmony operation vetoed by another guard");
+            QueueProtectedTarget(__state.Target);
+            if (__runOriginal && __exception == null && !__state.Trusted && !__state.Reverse &&
+                (!__state.Installation || __state.PatchJob != null))
+                PatchPerformanceDiagnostics.CompleteHarmonyOperation(__state.Target, __state.BeforePatches,
+                    __state.Installation && PatchPerformanceDiagnostics.IsClassInstallationCompleted(__state.PatchJob!));
         }
+        return __exception;
+    }
+
+    private static Exception? HarmonyInstallFinalizer(Exception? __exception, Operation? __state, bool __runOriginal, MethodInfo? __result)
+    {
+        HarmonyFinalizer(__exception, __state, __runOriginal);
+        if (__state != null && !__state.Trusted && __runOriginal && __exception == null && __result != null)
+            PatchPerformanceDiagnostics.CompleteHarmonyOperation(__state.Target, __state.BeforePatches, installationCompleted: true);
         return __exception;
     }
 
@@ -437,7 +398,7 @@ internal static class RuntimeGuard
     {
         if (__0 == null || _foreignCallbackDepth != 0) return true;
         ProtectedMethodCatalog.RegisterCompiledNativeTarget(__0, __1);
-        object map = typeof(Detour).GetField("_DetourMap", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        object map = GuardRuntimeAdapters.DetourMap.GetValue(null)!;
         Detour[] entries;
         lock (map)
         {
@@ -446,7 +407,7 @@ internal static class RuntimeGuard
         }
         foreach (Detour entry in entries.Reverse())
         {
-            if (typeof(Detour).GetField("_TopDetour", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(entry) is not NativeDetour native)
+            if (GuardRuntimeAdapters.TopDetour.GetValue(entry) is not NativeDetour native)
                 continue;
             lock (Sync)
             {
@@ -496,7 +457,7 @@ internal static class RuntimeGuard
                         if (__state.Trusted)
                             OwnedDetours[__state.Detour] = __state.Target;
                         if (__state.Trusted && __state.Detour is Detour managed &&
-                            typeof(Detour).GetField("_TopDetour", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(managed) is NativeDetour top)
+                            GuardRuntimeAdapters.TopDetour.GetValue(managed) is NativeDetour top)
                         {
                             OwnedDetours[top] = __state.Target;
                             ObservedDetours[top] = __state.Target;
@@ -512,6 +473,7 @@ internal static class RuntimeGuard
                     _audit.EndMutation(__exception != null ? GuardAuditFlags.ExternalDetourModification | GuardAuditFlags.CoverageIncomplete :
                         __state.BeforeDetour != SnapshotDetour(__state.Detour) ? GuardAuditFlags.ExternalDetourModification : GuardAuditFlags.None,
                         "Allowed critical detour operation" + (__exception == null ? ": " : " (failed or partial): ") + Describe(__state.Target) + " <- " + __state.Origin);
+                QueueProtectedTarget(__state.Target);
             }
         }
         return __exception;
@@ -638,9 +600,9 @@ internal static class RuntimeGuard
         // These private maps are the only complete enumerable managed-detour state
         // in the supported MonoMod version. A missing map invalidates the adapter.
         using (GuardTimingDiagnostics.Begin(GuardTimingPhase.AuditManagedDetours))
-            AuditDetourMap(typeof(Detour), "_DetourMap", "Value");
+            AuditDetourMap(ilHook: false);
         using (GuardTimingDiagnostics.Begin(GuardTimingPhase.AuditIlHooks))
-            AuditDetourMap(typeof(ILHook), "_Map", "Value");
+            AuditDetourMap(ilHook: true);
     }
 
     private static void AuditPatches(MethodBase target, Patches info)
@@ -658,19 +620,18 @@ internal static class RuntimeGuard
         }
     }
 
-    private static void AuditDetourMap(Type type, string fieldName, string valueProperty)
+    private static void AuditDetourMap(bool ilHook)
     {
-        object map = type.GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null)
-            ?? throw new MissingFieldException(type.FullName, fieldName);
+        object map = (ilHook ? GuardRuntimeAdapters.IlHookMap : GuardRuntimeAdapters.DetourMap).GetValue(null)!;
         var snapshot = new List<object>();
         lock (map)
         {
-            foreach (object item in (IEnumerable)map)
+            foreach (DictionaryEntry item in (IDictionary)map)
             {
                 if (GuardTimingDiagnostics.Enabled)
-                    GuardTimingDiagnostics.Count(type == typeof(Detour) ? GuardTimingCount.ManagedMapEntries : GuardTimingCount.IlHookMapEntries);
-                object value = item.GetType().GetProperty(valueProperty)!.GetValue(item)!;
-                object chain = value is IList ? value : value.GetType().GetField("Chain")!.GetValue(value)!;
+                    GuardTimingDiagnostics.Count(ilHook ? GuardTimingCount.IlHookMapEntries : GuardTimingCount.ManagedMapEntries);
+                object value = item.Value!;
+                object chain = ilHook ? GuardRuntimeAdapters.ContextChain.GetValue(value)! : value;
                 lock (chain)
                     foreach (object detour in (IEnumerable)chain)
                         snapshot.Add(detour);
@@ -681,9 +642,9 @@ internal static class RuntimeGuard
         foreach (object detour in snapshot)
         {
             if (GuardTimingDiagnostics.Enabled)
-                GuardTimingDiagnostics.Count(type == typeof(Detour) ? GuardTimingCount.ManagedDetours : GuardTimingCount.IlHooks);
+                GuardTimingDiagnostics.Count(ilHook ? GuardTimingCount.IlHooks : GuardTimingCount.ManagedDetours);
             MethodBase? target = GetDetourTarget(detour);
-            if (target == null || !IsApplied(detour) || ProtectedMethodCatalog.Classify(target) == ProtectionScope.None)
+            if (target == null || !GuardRuntimeAdapters.IsChainItemApplied(detour) || ProtectedMethodCatalog.Classify(target) == ProtectionScope.None)
                 continue;
             lock (Sync)
                 if (OwnedDetours.ContainsKey(detour))
@@ -716,19 +677,19 @@ internal static class RuntimeGuard
         MethodPatcher patcher = PatchManager.GetMethodPatcher(target);
         if (patcher.GetType() != typeof(ManagedMethodPatcher))
             return false;
-        var hook = typeof(ManagedMethodPatcher).GetField("ilHook", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(patcher) as ILHook;
+        var hook = GuardRuntimeAdapters.HarmonyIlHook.GetValue(patcher) as ILHook;
         if (hook == null)
             return false;
         if (ReferenceEquals(detour, hook))
             return true;
-        object map = typeof(ILHook).GetField("_Map", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        object map = GuardRuntimeAdapters.IlHookMap.GetValue(null)!;
         lock (map)
         {
             var dictionary = (IDictionary)map;
             object? context = dictionary[target];
-            if (context == null || !ReferenceEquals(context.GetType().GetField("Detour")!.GetValue(context), detour))
+            if (context == null || !ReferenceEquals(GuardRuntimeAdapters.ContextDetour.GetValue(context), detour))
                 return false;
-            var chain = (IList)context.GetType().GetField("Chain")!.GetValue(context)!;
+            var chain = (IList)GuardRuntimeAdapters.ContextChain.GetValue(context)!;
             lock (chain)
                 return chain.Count == 1 && ReferenceEquals(chain[0], hook);
         }
@@ -738,10 +699,8 @@ internal static class RuntimeGuard
     {
         // HarmonyX installs this exact chain-maintenance shim before plugins run.
         // Its actual source/replacement identities, not an owner string, identify it.
-        Type context = typeof(ILHook).GetNestedType("Context", BindingFlags.NonPublic)!;
-        Type fixes = typeof(HostHarmony).Assembly.GetType("HarmonyLib.Internal.RuntimeFixes.StackTraceFixes", true)!;
-        return detour is Detour managed && target == RequiredMethod(context, "Refresh") &&
-            managed.Target == RequiredMethod(fixes, "OnILChainRefresh");
+        return detour is Detour managed && target == GuardRuntimeAdapters.RuntimeChainRefresh &&
+            managed.Target == GuardRuntimeAdapters.RuntimeChainRefreshReplacement;
     }
 
     private static MethodBase? GetDetourTarget(object detour)
@@ -751,7 +710,13 @@ internal static class RuntimeGuard
         lock (Sync)
             if (ObservedDetours.TryGetValue(detour, out MethodBase? observed))
                 return observed;
-        return detour.GetType().GetField("Method")?.GetValue(detour) as MethodBase;
+        return detour switch
+        {
+            Hook hook => hook.Method,
+            Detour managed => managed.Method,
+            ILHook hook => hook.Method,
+            _ => null
+        };
     }
 
     private static MethodBase? ResolveNativeTarget(object detour, MethodBase? declared, IntPtr source)
@@ -861,7 +826,7 @@ internal static class RuntimeGuard
     private static T Read<T>(object instance, string field) where T : class => ReadOptional<T>(instance, field)
         ?? throw new MissingFieldException(instance.GetType().FullName, field);
     private static T? ReadOptional<T>(object instance, string field) where T : class =>
-        instance.GetType().GetField(field, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(instance) as T;
+        GuardRuntimeAdapters.ReadProcessorField(instance, field) as T;
 
     private static MethodInfo RequiredMethod(Type type, string name, Type[]? arguments = null) =>
         (arguments == null ? type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance).Single(m => m.Name == name) :
@@ -869,13 +834,29 @@ internal static class RuntimeGuard
         ?? throw new MissingMethodException(type.FullName, name);
 
     private static string Describe(MethodBase method) => (method.DeclaringType?.FullName ?? "<dynamic>") + "." + method.Name;
-    private static void Push(Operation operation) => (_operations ??= new Stack<Operation>()).Push(operation);
+    private static void Push(Operation operation)
+    {
+        if (ProtectedMethodCatalog.Classify(operation.Target) != ProtectionScope.None)
+        {
+            operation.VerificationTracked = true;
+            Interlocked.Increment(ref _verificationOperations);
+            Interlocked.Increment(ref _operationRevision);
+            EnqueueTargetAudit(operation.Target);
+        }
+        (_operations ??= new Stack<Operation>()).Push(operation);
+    }
     private static void Pop(Operation operation)
     {
         if (_operations?.Count > 0 && ReferenceEquals(_operations.Peek(), operation))
             _operations.Pop();
         else
             Invalidate("Guard operation lease ordering changed.");
+        if (operation.VerificationTracked)
+        {
+            EnqueueTargetAudit(operation.Target);
+            Interlocked.Increment(ref _operationRevision);
+            Interlocked.Decrement(ref _verificationOperations);
+        }
     }
     private static bool HasTrustedLease(MethodBase target, object? detour = null) => _foreignCallbackDepth == 0 && _operations?.Count > 0 &&
         _operations.Peek().Trusted && _operations.Peek().Target == target &&
@@ -941,6 +922,7 @@ internal static class RuntimeGuard
 
     private sealed class Operation
     {
+        internal bool VerificationTracked;
         internal Operation(MethodBase target, bool trusted, bool external, bool harmony)
         { Target = target; Trusted = trusted; External = external; Harmony = harmony; }
         internal MethodBase Target { get; }
@@ -954,6 +936,8 @@ internal static class RuntimeGuard
         internal object? RestrictedDetour { get; set; }
         internal string Origin { get; set; } = "";
         internal bool Reverse { get; set; }
+        internal bool Installation { get; set; }
+        internal object? PatchJob { get; set; }
         internal (MethodInfo Method, HarmonyPatchType Kind, string Owner, int Index)[] BeforePatches { get; set; } = Array.Empty<(MethodInfo, HarmonyPatchType, string, int)>();
     }
 }

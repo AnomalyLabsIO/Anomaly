@@ -52,8 +52,6 @@ public sealed class CatalogOptimizationRegressionTests
         lock (sync)
         {
             var external = (HashSet<MethodBase>)Field("External").GetValue(null)!;
-            var previousSnapshot = Field("_externalSnapshot").GetValue(null);
-            bool previousDirty = (bool)Field("_externalSnapshotDirty").GetValue(null)!;
             bool previousNativeRefresh = (bool)Field("_nativeRefreshRequired").GetValue(null)!;
             try
             {
@@ -66,12 +64,11 @@ public sealed class CatalogOptimizationRegressionTests
             }
             finally
             {
-                // Remove only this synthetic test target and restore the exact
-                // pre-test cache under its real lock. No protected assembly,
-                // permanent gap, trusted tuple or native mapping is changed.
+                // Remove only this synthetic target and its queued memberships.
+                // No protected assembly, trusted tuple or native mapping changes.
                 external.Remove(target);
-                Field("_externalSnapshot").SetValue(null, previousSnapshot);
-                Field("_externalSnapshotDirty").SetValue(null, previousDirty);
+                ((HashSet<MethodBase>)Field("NativeQueued").GetValue(null)!).Remove(target);
+                ((HashSet<MethodBase>)Field("BindingQueued").GetValue(null)!).Remove(target);
                 Field("_nativeRefreshRequired").SetValue(null, previousNativeRefresh);
             }
         }

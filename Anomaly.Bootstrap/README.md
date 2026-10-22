@@ -55,6 +55,61 @@ hostile full-trust code. Highest registration priority cannot precede every
 plugin/UserLib assembly load or constructor. The server receives authenticated
 client-reported evidence; server-side admission policy remains authoritative.
 
+## Verification scheduling
+
+Bootstrap owns the recurring verification schedule. Required guard interceptors,
+stock PatchShield hooks, registered client patch tuples, callback identities, and
+inventory reconciliation are checked once per second. Direct patch-record removal
+and callback-field replacement can bypass operation hooks, so these targeted
+invariant checks remain necessary. The client consumes the shared evidence and
+checks health, active mutations, and admission generations every frame and send.
+
+Scheduled work stops after 1 ms or 32 items per frame, whichever comes first. Each
+patch or detour record counts as an item. This is a cooperative budget: a single
+runtime call or contended lock can overrun it, and timing diagnostics record those
+overruns. No Harmony, MonoMod, catalog, or guard lock survives a frame boundary.
+
+The full Harmony/MonoMod inventory is inspected at startup. Later supported
+operations and catalog registrations select exact protected targets for audit;
+there is no recurring global patch inventory sweep. Up to 16,384 distinct pending
+targets are retained, and overflow reports incomplete coverage. Catalog assembly
+observations, resolved bindings, and native addresses are cached separately from
+security evidence. Settled static classification misses do not rescan assemblies.
+
+Startup and explicit admission checkpoints may synchronously finish required work
+on the main thread. Completed evidence is reused only while the relevant revisions
+and completeness still match. Workers consume completed evidence and fail closed
+when it is unavailable; they do not resolve native targets or run reconciliation.
+This schedule does not make arbitrary private-field or native-memory writes
+interceptable. The finite-catalog limits above still apply.
+
+Set `SLVR_BOOTSTRAP_TIMING=1` to emit timing aggregates every 30 seconds.
+`GuardSlice` measures frame work and `Checkpoint` measures synchronous admission
+calls; totals distinguish completed checks, cache reuse, resolver activity,
+individual inspected records, slice items, and indivisible operation overruns.
+`SLVR_BOOTSTRAP_FRAME_CORRELATION=1` also records bounded QPC windows for slices
+and checkpoints. These opt-in values do not affect guard or admission decisions.
+
+## Mod patch diagnostics
+
+Ordinary mod patches are not automatically deduplicated or removed. Bootstrap
+observes successful supported Harmony operations and queues advisory warnings:
+
+- A duplicate warning means more than one active registration shares the exact
+  target, patch method, patch kind, and Harmony owner. It is emitted once per tuple
+  per process.
+- A reinstall warning means three successful installations of that tuple were
+  observed within five minutes, with removal between activations. It is emitted
+  at most once per tuple per five-minute interval.
+
+Warnings name the Harmony owner and patch assembly. Tracking is bounded to 4,096
+tuples and 128 queued records; at most four warnings are emitted per frame within
+the shared budget, with suppressed diagnostics summarized. Blocked, failed, and
+indeterminate operations do not count as successful installations. These warnings
+do not change audit flags or admission generations and do not block mod operations.
+See [client patch lifetime guidance](../Anomaly.Client.Api/MODDING.md#patch-lifetime)
+for process-owned installation and intentional reinstall handling.
+
 ## Startup patch diagnostics
 
 Set `ANOMALY_BOOTSTRAP_PATCH_TRACE` to an absolute log-file path in the launcher

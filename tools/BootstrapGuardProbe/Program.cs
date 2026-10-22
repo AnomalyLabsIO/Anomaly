@@ -29,7 +29,7 @@ internal static class Program
     private static int RunMain(string[] args)
     {
         if (args.Length != 2)
-            throw new ArgumentException("Usage: Bootstrap.GuardProbe <loader-net6-directory> <strict|allow|preexisting|stocktamper>");
+            throw new ArgumentException("Usage: Bootstrap.GuardProbe <loader-net6-directory> <strict|allow|preexisting|stocktamper|scheduling>");
         string libraries = Path.GetFullPath(args[0]);
         AssemblyLoadContext.Default.Resolving += (_, name) =>
         {
@@ -55,9 +55,15 @@ internal static class Program
         ProtectedMethodCatalog.RegisterInfrastructureTarget(protectedTarget);
         if (mode == "preexisting")
             foreign.Patch(target, prefix: new HarmonyMethod(prefix));
-        try { RuntimeGuard.Install(new HarmonyLib.Harmony("anomaly.guard.probe"), mode == "allow"); }
+        try { RuntimeGuard.Install(new HarmonyLib.Harmony("anomaly.guard.probe"), mode is "allow" or "scheduling"); }
         catch { Console.WriteLine(string.Join("\n", RuntimeGuard.Diagnostics)); throw; }
         Check(RuntimeGuard.Snapshot.Healthy, "guard healthy after install");
+        if (mode == "scheduling")
+        {
+            VerificationSchedulingProbe.Run(Check);
+            Console.WriteLine("PASS scheduling flags=" + RuntimeGuard.Snapshot.Flags + " generation=" + RuntimeGuard.Snapshot.Generation);
+            return 0;
+        }
         if (mode == "preexisting")
         {
             Check((RuntimeGuard.Snapshot.Flags & 1) != 0, "preexisting patch audited");

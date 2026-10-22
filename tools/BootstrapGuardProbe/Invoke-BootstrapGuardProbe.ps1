@@ -2,8 +2,8 @@
 param(
     [Parameter(Mandatory)][string]$LoaderDirectory,
     [Parameter(Mandatory)][string]$EvidenceDirectory,
-    [ValidateSet('strict','allow','preexisting','stocktamper')]
-    [string[]]$Modes = @('strict','allow','preexisting','stocktamper'),
+    [ValidateSet('strict','allow','preexisting','stocktamper','scheduling')]
+    [string[]]$Modes = @('strict','allow','preexisting','stocktamper','scheduling'),
     [string]$Configuration = 'Debug',
     [switch]$SkipBuild,
     [switch]$CheckFailureHandling

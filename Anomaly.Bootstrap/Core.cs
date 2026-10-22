@@ -11,8 +11,11 @@ namespace Anomaly.Bootstrap;
 public sealed class Core : MelonPlugin
 {
     public static StartupState State { get; private set; } = StartupState.NotStarted;
-    private long _nextVerification;
+    private long _nextDiagnostics;
     private string? _lastGuardDiagnostic;
+    private string[] _diagnosticEntries = Array.Empty<string>();
+    private int _diagnosticIndex;
+    private Func<bool>? _emitDiagnostic;
 
     public override void OnEarlyInitializeMelon()
     {
@@ -52,30 +55,32 @@ public sealed class Core : MelonPlugin
     {
         ProtectedMethodCatalog.ResolveNativeTargetsAfterSupportReady();
         RuntimeGuard.Verify();
-        LogGuardDiagnostics();
+        AdmissionInventoryLedger.Checkpoint();
+        while (TryLogGuardDiagnostic()) { }
     }
 
     public override void OnUpdate()
     {
-        if (State != StartupState.Ready || Environment.TickCount64 < _nextVerification)
-            return;
-        _nextVerification = Environment.TickCount64 + 1000;
-        using (GuardTimingDiagnostics.Begin(GuardTimingPhase.CoreResolve))
-            ProtectedMethodCatalog.ResolveNativeTargetsAfterSupportReady();
-        using (GuardTimingDiagnostics.Begin(GuardTimingPhase.CoreVerify))
-            RuntimeGuard.Verify();
-        using (GuardTimingDiagnostics.Begin(GuardTimingPhase.CoreLogDiagnostics))
-            LogGuardDiagnostics();
+        if (State != StartupState.Ready) return;
+        RuntimeGuard.Update(_emitDiagnostic ??= TryLogGuardDiagnostic);
         GuardTimingDiagnostics.ReportIfDue();
     }
 
-    private void LogGuardDiagnostics()
+    private bool TryLogGuardDiagnostic()
     {
-        string[] entries = RuntimeGuard.Diagnostics;
-        int previous = _lastGuardDiagnostic == null ? -1 : Array.IndexOf(entries, _lastGuardDiagnostic);
-        foreach (string entry in entries.Skip(previous + 1))
-            MelonLogger.Warning("Authentication guard: " + entry);
-        if (entries.Length != 0) _lastGuardDiagnostic = entries[^1];
+        if (_diagnosticIndex >= _diagnosticEntries.Length)
+        {
+            if (Environment.TickCount64 < _nextDiagnostics) return false;
+            _nextDiagnostics = Environment.TickCount64 + 1000;
+            _diagnosticEntries = RuntimeGuard.Diagnostics;
+            int previous = _lastGuardDiagnostic == null ? -1 : Array.IndexOf(_diagnosticEntries, _lastGuardDiagnostic);
+            _diagnosticIndex = previous + 1;
+        }
+        if (_diagnosticIndex >= _diagnosticEntries.Length) return false;
+        using var timing = GuardTimingDiagnostics.Begin(GuardTimingPhase.CoreLogDiagnostics);
+        _lastGuardDiagnostic = _diagnosticEntries[_diagnosticIndex++];
+        MelonLogger.Warning("Authentication guard: " + _lastGuardDiagnostic);
+        return true;
     }
 
     public override void OnDeinitializeMelon()

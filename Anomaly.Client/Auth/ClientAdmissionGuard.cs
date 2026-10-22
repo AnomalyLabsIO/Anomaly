@@ -39,12 +39,8 @@ internal static class ClientAdmissionGuard
         ProtectedMethodCatalog.RefreshNativeTargetsIfReady();
         if (Bootstrap.Core.State != StartupState.Ready || !RuntimeGuard.Verify())
             throw new ClientIntegrityException("The Bootstrap authentication guard is unavailable. Restart the game.");
-        try { Core.VerifyMandatoryPatches(); }
-        catch (Exception exception)
-        {
-            RuntimeGuard.Invalidate("Required Anomaly hook verification failed: " + exception.Message);
-            throw new ClientIntegrityException("Required Anomaly authentication hooks are missing. Restart the game.");
-        }
+        // Core registered its exact required patch tuples before auth initialization;
+        // the shared Bootstrap checkpoint verifies those cached descriptors too.
         var guard = RuntimeGuard.Snapshot;
         if (!guard.Healthy)
             throw new ClientIntegrityException("Required Bootstrap protection failed. Restart the game.");
