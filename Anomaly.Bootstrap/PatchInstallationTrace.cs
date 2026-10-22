@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using MelonLoader;
+using MelonLoader.Utils;
 
 namespace Anomaly.Bootstrap;
 
@@ -14,22 +15,23 @@ internal sealed class PatchInstallationTrace : IDisposable
     private readonly Stopwatch _elapsed = Stopwatch.StartNew();
     private bool _failed;
 
-    private PatchInstallationTrace(string path)
+    private PatchInstallationTrace(string path, bool overwrite)
     {
-        _stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read,
+        _stream = new FileStream(path, overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.Write, FileShare.Read,
             4096, FileOptions.WriteThrough);
         _writer = new StreamWriter(_stream, new UTF8Encoding(false), 4096, leaveOpen: true);
     }
 
     internal static PatchInstallationTrace? Open()
     {
-        string? path = Environment.GetEnvironmentVariable("ANOMALY_BOOTSTRAP_PATCH_TRACE");
-        if (string.IsNullOrWhiteSpace(path)) return null;
         try
         {
-            path = Path.GetFullPath(path);
+            string? configuredPath = Environment.GetEnvironmentVariable("ANOMALY_BOOTSTRAP_PATCH_TRACE");
+            string? path = ResolvePath(configuredPath, string.IsNullOrWhiteSpace(configuredPath)
+                ? MelonEnvironment.UserDataDirectory : string.Empty);
+            if (path == null) return null;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var trace = new PatchInstallationTrace(path);
+            var trace = new PatchInstallationTrace(path, overwrite: !string.IsNullOrWhiteSpace(configuredPath));
             trace.Write($"START pid={Environment.ProcessId} runtime={RuntimeInformation.FrameworkDescription} " +
                 $"architecture={RuntimeInformation.ProcessArchitecture} bootstrap={typeof(Core).Module.ModuleVersionId} " +
                 $"loader={typeof(MelonPlugin).Assembly.FullName} harmony={typeof(HarmonyLib.Harmony).Assembly.FullName} " +
@@ -41,6 +43,15 @@ internal sealed class PatchInstallationTrace : IDisposable
             MelonLogger.Warning("Bootstrap patch trace could not open: " + exception.Message);
             return null;
         }
+    }
+
+    internal static string? ResolvePath(string? configuredPath, string userDataDirectory)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredPath)) return Path.GetFullPath(configuredPath);
+        string root = Path.Combine(userDataDirectory, "Anomaly");
+        if (!File.Exists(Path.Combine(root, "bootstrap-patch-trace.enabled"))) return null;
+        return Path.GetFullPath(Path.Combine(root, "BootstrapPatchTraces",
+            $"bootstrap-{DateTime.UtcNow:yyyyMMdd-HHmmss-fffffff}-{Environment.ProcessId}-{Guid.NewGuid():N}.log"));
     }
 
     internal void Begin(int ordinal, MethodBase target, string prefix, string finalizer) =>

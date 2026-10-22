@@ -4,6 +4,7 @@ publish/
 /artifacts/
 /release-output/
 /packages/
+/tools/BootstrapTamperMod/
 
 # IDE and per-user state
 .vs/

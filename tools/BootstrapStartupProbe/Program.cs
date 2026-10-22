@@ -7,8 +7,11 @@ using MelonLoader;
 
 internal static class Program
 {
+    private static int _mainThreadId;
+
     private static int Main(string[] args)
     {
+        _mainThreadId = Environment.CurrentManagedThreadId;
         if (OperatingSystem.IsWindows())
             SetErrorMode(0x0001 | 0x0002 | 0x8000);
         try { return RunMain(args); }
@@ -25,8 +28,8 @@ internal static class Program
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static int RunMain(string[] args)
     {
-        if (args.Length != 4 || args[3] is not ("missing" or "failed"))
-            throw new ArgumentException("Usage: Bootstrap.StartupProbe <loader-net6-directory> <client.dll> <bootstrap.dll> <missing|failed>");
+        if (args.Length != 4 || args[3] is not ("missing" or "failed" or "fatal"))
+            throw new ArgumentException("Usage: Bootstrap.StartupProbe <loader-net6-directory> <client.dll> <bootstrap.dll> <missing|failed|fatal>");
         string loaderDirectory = Path.GetFullPath(args[0]);
         string clientPath = Path.GetFullPath(args[1]);
         string bootstrapPath = Path.GetFullPath(args[2]);
@@ -53,16 +56,20 @@ internal static class Program
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static int Run(string clientPath, string bootstrapPath, string mode)
     {
-        // Logging is the sole native loader boundary reached by this failure path.
-        // Keep the production startup guard and Environment.Exit untouched.
+        // Capture logging and replace only the native display. Keep the production
+        // startup guard, blocking-action coordinator, and Environment.Exit untouched.
         var harmony = new HarmonyLib.Harmony("anomaly.startup.regression");
         harmony.Patch(typeof(MelonLogger).GetMethod(nameof(MelonLogger.Error), new[] { typeof(string) })!,
             prefix: new HarmonyMethod(typeof(Program).GetMethod(nameof(CaptureError), BindingFlags.NonPublic | BindingFlags.Static)!));
 
         Assembly client = AssemblyLoadContext.Default.LoadFromAssemblyPath(clientPath);
+        Type dialog = client.GetType("Anomaly.Client.Internal.Bootstrap.BlockingFailureDialog", throwOnError: true)!;
+        harmony.Patch(dialog.GetMethod("ShowWarning", BindingFlags.NonPublic | BindingFlags.Static)!,
+            prefix: new HarmonyMethod(typeof(Program).GetMethod(nameof(CaptureWarning), BindingFlags.NonPublic | BindingFlags.Static)!));
         Type core = client.GetType("Anomaly.Client.Core", throwOnError: true)!;
         object instance = Activator.CreateInstance(core)!;
         Console.WriteLine("PASS Client assembly loaded and Core constructed before Bootstrap validation");
+        if (mode == "fatal") return RunFatalGuardFailure(harmony, bootstrapPath);
         MethodInfo pullUp = core.GetMethod("PullUpBootstraps", BindingFlags.NonPublic | BindingFlags.Static)!;
         if ((pullUp.MethodImplementationFlags & MethodImplAttributes.NoInlining) == 0)
             throw new InvalidOperationException("The optional-dependency boundary must remain non-inlined.");
@@ -97,9 +104,43 @@ internal static class Program
         throw new InvalidOperationException("Failed startup returned instead of terminating with exit code 78.");
     }
 
+    private static int RunFatalGuardFailure(HarmonyLib.Harmony harmony, string bootstrapPath)
+    {
+        Assembly bootstrap = AssemblyLoadContext.Default.LoadFromAssemblyPath(bootstrapPath);
+        Type core = bootstrap.GetType("Anomaly.Bootstrap.Core", true)!;
+        Type state = bootstrap.GetType("Anomaly.Bootstrap.StartupState", true)!;
+        Type guard = bootstrap.GetType("Anomaly.Bootstrap.RuntimeGuard", true)!;
+        Type dialog = bootstrap.GetType("Anomaly.Bootstrap.BlockingFailureDialog", true)!;
+        harmony.Patch(dialog.GetMethod("ShowWarning", BindingFlags.NonPublic | BindingFlags.Static)!,
+            prefix: new HarmonyMethod(typeof(Program).GetMethod(nameof(CaptureWarning), BindingFlags.NonPublic | BindingFlags.Static)!));
+        core.GetField("<State>k__BackingField", BindingFlags.NonPublic | BindingFlags.Static)!
+            .SetValue(null, Enum.Parse(state, "Ready"));
+
+        const string reason = "Worker guard failure injected by startup probe.";
+        Task.Run(() => guard.GetMethod("Invalidate", BindingFlags.NonPublic | BindingFlags.Static)!
+            .Invoke(null, new object[] { reason })).GetAwaiter().GetResult();
+        if (!Equals(guard.GetProperty("FatalReason", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null), reason) ||
+            !Equals(dialog.GetProperty("IsActive", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null), false))
+            throw new InvalidOperationException("A worker failure must latch its reason without displaying a dialog.");
+        Console.WriteLine("PASS worker guard failure is latched without displaying a warning");
+        Console.WriteLine("PASS invoking real main-thread heartbeat; expected process exit code 78");
+        core.GetMethod("OnUpdate", BindingFlags.Public | BindingFlags.Instance)!.Invoke(Activator.CreateInstance(core), null);
+        throw new InvalidOperationException("The main-thread heartbeat returned instead of closing after the warning.");
+    }
+
     private static bool CaptureError(string txt)
     {
         Console.WriteLine("CLIENT ERROR: " + txt);
+        return false;
+    }
+
+    private static bool CaptureWarning(string reason)
+    {
+        if (Environment.CurrentManagedThreadId != _mainThreadId)
+            throw new InvalidOperationException("A worker thread attempted to display the warning.");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("The startup warning did not explain the failure.");
+        Console.WriteLine("PASS blocking Bootstrap warning requested before exit: " + reason);
         return false;
     }
 }

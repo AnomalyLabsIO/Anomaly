@@ -12,6 +12,7 @@ using Anomaly.Client.Auth;
 using Anomaly.Client.Assets;
 using Anomaly.Client.Commands;
 using Anomaly.Client.Diagnostics;
+using Anomaly.Client.Diagnostics.News;
 using Anomaly.Client.Internal.Bootstrap;
 using Anomaly.Client.Api.Internal.UI;
 using Anomaly.Client.Internal.UI;
@@ -79,22 +80,31 @@ public class Core : MelonMod
 
     public override void OnEarlyInitializeMelon()
     {
+        bool accepted = false;
+        string failure = "Required Anomaly Bootstrap protection is missing, incompatible, or failed to initialize. " +
+            "Restore the Anomaly installation before restarting.";
         try
         {
-            if (PullUpBootstraps())
-                return;
+            accepted = PullUpBootstraps();
         }
         catch (Exception ex)
         {
+            failure += "\r\n\r\n" + ex.Message;
             MelonLogger.Error($"Bootstrap verification failed: {ex}");
         }
-
-        Environment.Exit(78);
+        finally
+        {
+            // This copy has no runtime dependency on the plugin we just rejected.
+            if (!accepted) BlockingFailureDialog.ShowAndExit(failure);
+        }
     }
 
     public override void OnInitializeMelon()
     {
         Instance = this;
+
+        // Loader callbacks plus the marked launch log recover failures that predate us.
+        NewsDiagnosticService.Initialize();
 
         // Initialize localization first so subsequent init can use Tr.Get()
         // and third-party mods loading after us can register their own namespaces.
@@ -281,6 +291,7 @@ public class Core : MelonMod
             AssetBundleManager.Shutdown();
         });
         if (_diagnosticsReady) ShutdownFeature("diagnostics", DiagnosticBootstrap.Shutdown);
+        NewsDiagnosticService.Shutdown();
     }
 
     public override void OnSceneWasLoaded(int buildIndex, string sceneName)

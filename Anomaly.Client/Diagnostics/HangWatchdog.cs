@@ -74,6 +74,11 @@ internal static class HangWatchdog
             if (!_running || generation != Volatile.Read(ref _generation))
                 break;
 
+            // A fatal warning intentionally blocks the main thread until dismissal.
+            // Do not report or dump that wait as a game hang.
+            if (global::Anomaly.Bootstrap.BlockingFailureDialog.IsActive)
+                continue;
+
             long elapsed = Stopwatch.GetTimestamp() - Interlocked.Read(ref _lastHeartbeatTicks);
             double elapsedSeconds = (double)elapsed / Stopwatch.Frequency;
 

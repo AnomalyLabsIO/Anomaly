@@ -4,6 +4,13 @@ This opt-in development MelonMod exercises the real Unity UI, records assertions
 and captures engine screenshots. **Never include the harness or its test profiles
 in release packages.** It runs only when `ANOMALY_UI_SMOKE_DIR` is set.
 
+**Current launch requirement:** every `Run-Smoke.ps1` call must pass
+`-UseModLaunch` and `-GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy'`.
+The runner starts only that installation's `.modlaunch\SCPSL-ModLaunch.exe`.
+Never launch `SCPSL.exe` directly. Older scenario examples below retain their
+historical server/evidence paths; replace their client game path and add
+`-UseModLaunch` before using them.
+
 ## Inputs and isolation
 
 Use PowerShell 7 on Windows, the repository's .NET build prerequisites, and a
@@ -27,11 +34,19 @@ the source installations. The scripts read the source installations and stage
 runtime packages from [`release/package-layout.json`](../../release/package-layout.json);
 they do not install into or update the sources. Static executables, libraries,
 and game assets are hard-linked, so source and destination must support hard
-links on the same volume. Loader files and other writable files are copied.
+links on the same volume. Pass `-CopyStaticAssets` to preparation for a completely
+physical copy, including when sandbox access prevents hard-link creation. Loader files and other writable files are copied.
 Hard links are shared files, not a read-only filesystem boundary: never edit,
 patch, update, or run an installer over linked static files in the smoke copies.
 
-The client starts with fresh private `UserData`, without importing the source
+A launcher-managed seed may have no `version.dll` while it is closed. In that
+case pass `-LoaderProxyPath` with an existing matching MelonLoader proxy.
+Preparation verifies the proxy's major/minor/build version against the seed's
+loader DLL, physically copies it into the private destination, and records its
+source and SHA-256 in `smoke-staging.json`. It excludes hidden launcher/cache
+directories and never installs that proxy into the source game.
+
+Historical private preparation starts with fresh `UserData`, without importing the source
 profile, trust store, mods, or plugins. Preparation and each run write explicit
 hash approvals in the test instance's `UserData/Anomaly/mod-trust.json` for the
 DLLs in its `Mods` directory. Keep that directory limited to the staged Anomaly
@@ -43,7 +58,7 @@ when the game directory and Anomaly `UserData` are isolated. A smoke run can
 update stock files such as `registry.txt` and `iphistory.txt`; use a disposable
 Windows account when stock profile isolation is required.
 
-## Prepare and run the client
+## Build and run through ModLaunch
 
 Run these templates from the repository root. Replace the seed paths
 with your reference layout. Environment properties are used here because
@@ -56,13 +71,10 @@ $env:AnomalyServerRoot = [IO.Path]::GetFullPath('../Server')
 dotnet build Anomaly.slnx -c Release -p:DeployLocal=false
 dotnet build tools/EarlyAccessUiSmoke/EarlyAccessUiSmoke.csproj -c Release -p:DeployLocal=false
 
-./tools/EarlyAccessUiSmoke/Prepare-Game.ps1 `
-    -SourceGameRoot $env:AnomalyClientRoot `
-    -OutputDirectory ./artifacts/early-access/smoke-game-01
-
 ./tools/EarlyAccessUiSmoke/Run-Smoke.ps1 `
-    -GameDirectory ./artifacts/early-access/smoke-game-01 `
-    -EvidenceDirectory ./artifacts/early-access/ui-run-01
+    -GameDirectory $env:AnomalyClientRoot `
+    -EvidenceDirectory ./artifacts/news-ui-smoke/modlaunch-run-01 `
+    -UseModLaunch -NewsOnly
 ```
 
 The solution build includes the runtime, bootstrap, and ordinary starter required
@@ -71,24 +83,41 @@ by preparation. If the reference layout differs, set `AnomalyClientInteropDir`,
 or `AnomalyLabApiDir` as needed before building. Check every
 build succeeds before staging.
 
-By default, `Run-Smoke.ps1` accepts only a game created by `Prepare-Game.ps1` with a matching
-`smoke-staging.json`. It rebuilds the client, starter, and harness with deployment
-disabled, refreshes the isolated runtime and local approvals, then starts that
-test game's `SCPSL.exe` with `-noauth -screen-fullscreen 0 -screen-width 1280
--screen-height 720 -logFile <evidence>/player.log`. It sets the harness environment
-only for the child process and writes `client.pid`. The command returns after
-launch; it does not wait for or certify completion.
+`Run-Smoke.ps1` rebuilds with deployment disabled, backs up each file it will
+temporarily replace, then stages runtime DLLs and the starter/harness directly
+in the authorized game's `Mods`, `Plugins`, and `UserLibs`. ModLaunch preserves
+these user-owned folders; it does not materialize an Anomaly loadout over them.
+The runner merges only the three test mod hashes into the existing trust policy,
+preserving its other fields and approvals. Existing identities are retained.
 
-For the reference client's normal launcher, explicitly pass `-UseModLaunch` and
-the installed game directory. This starts exactly
-`<game>/.modlaunch/SCPSL-ModLaunch.exe`, forwarding the same game arguments and
-writing `launcher.pid`. This mode requests a normal visible launcher window.
-It does not substitute a loader proxy or modify launcher
-code. Back up the installation's `Mods`, `Plugins`, `UserLibs`, `UserData`, and
-overwritten package documents first; restore those files after qualification.
-Wait for the launcher to report that original game files were restored before
-restoring the test artifacts. Local approvals cover only the three mods staged
-by this runner, preserving existing approvals.
+Backups are saved under `artifacts/news-ui-smoke/modlaunch-backup-<evidence-name>`
+(or an explicit `-BackupDirectory` within that directory). The manifest includes
+original runtime/package files, identities and trust files, extracted translations,
+loader/mod preferences, and stock `registry.txt`/`iphistory.txt` preferences.
+Native game and unrelated mod hashes are recorded for restoration verification.
+Backup contents may contain private profiles; keep them local.
+
+The runner starts exactly
+`E:\Steam\steamapps\common\SCP Secret Laboratory - Copy\.modlaunch\SCPSL-ModLaunch.exe`
+with the game arguments and harness environment. The launcher passes that
+environment to its game child. The runner writes `launcher.pid` and returns
+after launch; this alone does not certify completion. It does not install a proxy,
+alter launcher code, or change another loadout.
+
+After the game **and** launcher exit and ModLaunch restores its original native
+files, restore the test deployment:
+
+```powershell
+./tools/EarlyAccessUiSmoke/Restore-ModLaunchSmoke.ps1 `
+    -BackupDirectory ./artifacts/news-ui-smoke/modlaunch-backup-modlaunch-run-01
+```
+
+Restore refuses while either process is running, including a child remaining
+after its launcher exits, or while a session journal/proxy remains. If necessary,
+recover through the same launcher with `--modlaunch-recover-only` after its child
+exits; never replace native files manually. Restore copies original bytes,
+removes only newly added listed test files, verifies every restored hash, and
+writes `restored.json` with native/unrelated-file mismatch results.
 
 `-IntegrityMode` runs a focused authentication guard scenario against the required
 `-LoopbackServer` endpoint: `clean`, `blocked`, `allowed-rejected`,
@@ -104,10 +133,58 @@ server admission decision. Keep the fixture DLL out of release packages.
 The `-DummyVisibility` variant uses the primary display resolution instead of
 1280×720 and confirms that resolution in the running game before gameplay capture.
 
-Use a new evidence directory for every run. Reusing a staged game preserves its
-test profile; the harness skips nickname fixtures when an existing profile no
-longer needs a nickname. Prepare another new game directory to repeat first-run
-and nickname write-failure coverage.
+Use `-NewsOnly` for the focused installed-mods and diagnostics display checks.
+This mode requires `-UseModLaunch` and cannot be combined with connection/hosting
+scenarios:
+
+```powershell
+./tools/EarlyAccessUiSmoke/Run-Smoke.ps1 `
+    -GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy' `
+    -EvidenceDirectory ./artifacts/news-ui-smoke/modlaunch-run-01 `
+    -UseModLaunch -NewsOnly
+```
+
+The News suite captures the actual collected inventory at 1280×720, 1920×1080,
+3440×1440, 1024×768, and 1280×1024. It then switches the process-local
+translation service to Russian, reloads the actual main-menu scene, and repeats
+the matrix with explicit long-name, long-version, many-entry, missing-dependency,
+unattributed-error, and historical-report fixtures. These fixtures do not load
+extra executable mods or manufacture real failure evidence. Both the diagnostics
+service and presenter receive the same detached fixture snapshot through internal
+reflection hooks available to this opt-in harness.
+
+Assertions use four transformed rectangle corners to check screen containment,
+row overlap, text height, sidebar separation, and viewport width. They check
+the first fully collected live overview is already at the top before any test
+scroll assignment, with the current-launch issues heading visible. Native social
+validation requires all ten stock `SocialMediaButton` handlers and their tile
+wrappers inside the owned grid, including nested image bounds within each tile.
+`news-*-hierarchy.json` records actual IL2CPP component types and rectangles for
+diagnosing custom/nested native controls. No social check accepts an empty grid.
+The suite also checks
+scrolling to the final content edge, retained foldouts and scroll position after
+tab navigation and a real window resize, a valid `NewsRaw` response through native
+article `TextProcessor` and `ShowAnnouncement`,
+idempotent installation, and a second actual main-menu scene reload. The reload
+must produce one owned root and retain the native social buttons. Per-resolution
+`news-*-layout.json` accompanies top/bottom screenshots. The harness restores the
+original translation service and clears fixtures on completion or deinitialization.
+It submits the actual Copy Summary button through a synthetic EventSystem event,
+reads the engine clipboard, checks runtime/dependency information and redaction,
+and restores the original clipboard contents. Long diagnostic evidence stays
+behind Details with a fixed-size compact overview; its expansion is checked too.
+Gameplay reconnect coverage remains in the optional loopback scenario, which
+also checks and captures News after returning to the menu.
+
+The runner refuses to refresh the authorized game's binaries while its launcher
+or game child is running. `runtime-inputs.json` records the exact staged hashes and
+source commit plus whether the source checkout was dirty. Require the completion
+receipt and inspect screenshots and logs; a build or successful launch alone
+does not establish visual acceptance.
+
+Use a new evidence and backup directory for every run, and restore before another
+test deployment. An existing profile skips first-run nickname fixtures; this
+qualification does not create a new identity to repeat first-run coverage.
 
 ## Local hosting and automatic admin
 
@@ -260,7 +337,7 @@ The test skips optional content through the actual consent callback.
 
 After inspecting a complete UI fixture run, use `-ConnectionOnly` with
 `-LoopbackServer` to repeat the two connection cycles without replaying all
-three-resolution fixtures. Keep the earlier screenshots as separate evidence.
+five-resolution fixtures. Keep the earlier screenshots as separate evidence.
 
 For a dedicated server rejection, use `-AdmissionExpect '<text>'` with
 `-LoopbackServer`. The isolated client connects, accepts a first-seen trust
@@ -358,8 +435,8 @@ the server PID started for this probe.
 
 ## Evidence and limits
 
-The UI suite captures menu, settings, trust, content, and failure fixtures at
-1280×720, 1920×1080, and 3440×1440, plus applicable first-run and connection-cycle
+The UI suite captures News, menu, settings, trust, content, and failure fixtures at
+1280×720, 1920×1080, 3440×1440, 1024×768, and 1280×1024, plus applicable first-run and connection-cycle
 screens. It records `steps.log`, `assertions.log`, `status.txt`, and either
 `result.txt` or `failure.txt`. A successful process launch or exit code is
 insufficient: require `result.txt`, no `failure.txt`, expected assertions and

@@ -13,9 +13,11 @@ internal static class GuardRuntimeAdapters
     internal static readonly FieldInfo IlHookMap = Field(typeof(ILHook), "_Map");
     internal static readonly Type IlContext = typeof(ILHook).GetNestedType("Context", BindingFlags.NonPublic)!;
     internal static readonly FieldInfo ContextChain = Field(IlContext, "Chain");
+    internal static readonly FieldInfo ContextMethod = Field(IlContext, "Method");
     internal static readonly FieldInfo ContextDetour = Field(IlContext, "Detour");
     internal static readonly FieldInfo TopDetour = Field(typeof(Detour), "_TopDetour");
     internal static readonly FieldInfo HarmonyIlHook = Field(typeof(ManagedMethodPatcher), "ilHook");
+    internal static readonly MethodInfo IlHookApply = Method(typeof(ILHook), nameof(ILHook.Apply), Type.EmptyTypes);
     internal static readonly MethodInfo RuntimeChainRefresh = Method(IlContext, "Refresh", Type.EmptyTypes);
     internal static readonly MethodInfo RuntimeChainRefreshReplacement = Method(
         typeof(HarmonyLib.Harmony).Assembly.GetType("HarmonyLib.Internal.RuntimeFixes.StackTraceFixes", throwOnError: true)!,

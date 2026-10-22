@@ -8,6 +8,7 @@ using Anomaly.Client.Api.Modding;
 using Anomaly.Client.Api.Compatibility;
 using Anomaly.Client.Api.Internal;
 using Anomaly.Shared.Auth;
+using Anomaly.Client.Diagnostics.News;
 using MelonLoader;
 using MelonLoader.Utils;
 using Newtonsoft.Json;
@@ -61,6 +62,19 @@ internal static class ManagedModRuntime
     }
 
     private static readonly List<LoadedModule> Loaded = new();
+    private static readonly object DiagnosticSync = new();
+    private static readonly Dictionary<string, DiagnosticComponent> DiagnosticComponents = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, DiagnosticIssue> DiagnosticIssues = new(StringComparer.OrdinalIgnoreCase);
+
+    internal static DiagnosticComponent[] GetDiagnosticComponents()
+    {
+        lock (DiagnosticSync) return DiagnosticComponents.Values.ToArray();
+    }
+
+    internal static DiagnosticIssue[] GetDiagnosticIssues()
+    {
+        lock (DiagnosticSync) return DiagnosticIssues.Values.ToArray();
+    }
 
     internal static IReadOnlyList<ClientModEntry> GetActiveModEntries() =>
         Loaded.Where(module => !module.Disabled)
@@ -85,6 +99,9 @@ internal static class ManagedModRuntime
 
         if (File.Exists(Path.Combine(_anomalyRoot, "safe-mode.flag")))
         {
+            // Inventory is descriptive: safe mode must never construct or validate modules.
+            foreach (var path in Directory.EnumerateFiles(_moduleRoot, "*.dll", SearchOption.TopDirectoryOnly))
+                RecordDiagnostic(path, ReadJson<ModManifest>(path + ".anomaly.json", MaxManifestBytes), DiagnosticLoadState.Disabled);
             MelonLogger.Warning("Managed modules are disabled because Anomaly safe mode is active.");
             FeatureHealth.Report("anomaly", "managed-mods", FeatureHealthStatus.Disabled, "Safe mode is active.");
             return;
@@ -94,6 +111,8 @@ internal static class ManagedModRuntime
         var resolution = ModDependencyResolver.Resolve(candidates.Select(x => x.Manifest));
         if (!resolution.Success)
         {
+            foreach (var candidate in candidates)
+                RecordDiagnostic(candidate.AssemblyPath, candidate.Manifest, DiagnosticLoadState.Disabled);
             foreach (var error in resolution.Errors) MelonLogger.Error("Managed mod graph: " + error);
             FeatureHealth.Report("anomaly", "managed-mods", FeatureHealthStatus.Failed,
                 "Manifest/dependency validation failed; no managed modules were loaded.");
@@ -149,13 +168,15 @@ internal static class ManagedModRuntime
             var manifestPath = assemblyPath + ".anomaly.json";
             if (!File.Exists(manifestPath))
             {
+                RecordDiagnostic(assemblyPath, null, DiagnosticLoadState.Failed, "No sidecar manifest.");
                 MelonLogger.Error($"Managed mod '{Path.GetFileName(assemblyPath)}' has no sidecar manifest.");
                 continue;
             }
 
+            ModManifest manifest = null;
             try
             {
-                var manifest = ReadJson<ModManifest>(manifestPath, MaxManifestBytes);
+                manifest = ReadJson<ModManifest>(manifestPath, MaxManifestBytes);
                 if (manifest == null) throw new InvalidDataException("Manifest was empty.");
                 if (!GameVersionCompatibility.IsSupported(
                         manifest.SupportedGameVersions,
@@ -173,9 +194,11 @@ internal static class ManagedModRuntime
                     AssemblyPath = Path.GetFullPath(assemblyPath),
                     Manifest = manifest,
                 });
+                RecordDiagnostic(assemblyPath, manifest, DiagnosticLoadState.Present);
             }
             catch (Exception ex)
             {
+                RecordDiagnostic(assemblyPath, manifest, DiagnosticLoadState.Failed, ex.Message);
                 MelonLogger.Error($"Managed mod manifest '{Path.GetFileName(manifestPath)}' rejected: {ex.Message}");
             }
         }
@@ -228,12 +251,15 @@ internal static class ManagedModRuntime
             Loaded.Add(loaded);
             module.Initialize(context);
             module.OnEnable();
+            if (!loaded.Disabled && Loaded.Contains(loaded))
+                RecordDiagnostic(candidate.AssemblyPath, manifest, DiagnosticLoadState.Loaded);
             TryDelete(_markerPath);
             SaveState();
             MelonLogger.Msg($"Managed mod loaded: {manifest.Name} {manifest.Version} ({manifest.Id}).");
         }
         catch (Exception ex)
         {
+            RecordDiagnostic(candidate.AssemblyPath, manifest, DiagnosticLoadState.Failed, ex.Message, DiagnosticIssueKind.InitializationError);
             if (loaded != null) Loaded.Remove(loaded);
             IncrementFailure(manifest.Id);
             LogError($"Managed mod '{manifest.Id}' failed during startup: {ex}");
@@ -268,6 +294,8 @@ internal static class ManagedModRuntime
     {
         if (loaded == null || loaded.Disabled) return;
         loaded.Disabled = true;
+        RecordDiagnostic(loaded.Candidate.AssemblyPath, loaded.Manifest, DiagnosticLoadState.Disabled,
+            exception.Message, DiagnosticIssueKind.ReportedError);
         IncrementFailure(loaded.Manifest.Id);
         LogError($"Managed mod '{loaded.Manifest.Id}' faulted and was disabled: {exception}");
         Teardown(loaded.Manifest.Id, loaded.Module, loaded.Context);
@@ -301,6 +329,21 @@ internal static class ManagedModRuntime
     {
         var marker = ReadJson<StartupMarker>(_markerPath, 64 * 1024);
         if (marker == null || string.IsNullOrWhiteSpace(marker.ModId)) return;
+        lock (DiagnosticSync)
+        {
+            DiagnosticIssues["interrupted:" + marker.ModId] = new DiagnosticIssue
+            {
+                Key = "interrupted:" + marker.ModId,
+                ComponentId = marker.ModId,
+                ComponentName = marker.ModId,
+                Kind = DiagnosticIssueKind.InterruptedActivity,
+                Severity = DiagnosticSeverity.Warning,
+                Summary = "The previous process stopped during activity in this managed module; the cause is unknown.",
+                Source = "module-startup-marker.json",
+                Timestamp = marker.StartedUtc,
+                IsHistorical = true,
+            };
+        }
         IncrementFailure(marker.ModId);
         MelonLogger.Warning($"The previous process stopped while loading managed mod '{marker.ModId}'.");
         TryDelete(_markerPath);
@@ -309,6 +352,40 @@ internal static class ManagedModRuntime
 
     private static int GetFailureCount(string id) =>
         _state.ConsecutiveStartupFailures.TryGetValue(id, out var count) ? count : 0;
+
+    private static void RecordDiagnostic(string path, ModManifest manifest, DiagnosticLoadState status,
+        string detail = null, DiagnosticIssueKind kind = DiagnosticIssueKind.LoadFailure)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string key = NewsDiagnosticIdentity.ComponentKey(DiagnosticComponentKind.ManagedModule, fullPath, manifest?.Id);
+        lock (DiagnosticSync)
+        {
+            DiagnosticComponents[key] = new DiagnosticComponent
+            {
+                Key = key,
+                Path = fullPath,
+                Name = string.IsNullOrWhiteSpace(manifest?.Name) ? Path.GetFileNameWithoutExtension(path) : manifest.Name,
+                Id = manifest?.Id ?? string.Empty,
+                Version = manifest?.Version ?? string.Empty,
+                Kind = DiagnosticComponentKind.ManagedModule,
+                State = status,
+            };
+            if (!string.IsNullOrEmpty(detail))
+                DiagnosticIssues[key] = new DiagnosticIssue
+                {
+                    Key = key,
+                    ComponentKey = key,
+                    ComponentPath = fullPath,
+                    ComponentName = DiagnosticComponents[key].Name,
+                    ComponentId = manifest?.Id ?? string.Empty,
+                    Summary = detail,
+                    Source = "managed-modules",
+                    Kind = kind,
+                    Severity = DiagnosticSeverity.Error,
+                    Timestamp = DateTimeOffset.UtcNow,
+                };
+        }
+    }
 
     private static void IncrementFailure(string id) =>
         _state.ConsecutiveStartupFailures[id] = Math.Min(GetFailureCount(id) + 1, 1000);

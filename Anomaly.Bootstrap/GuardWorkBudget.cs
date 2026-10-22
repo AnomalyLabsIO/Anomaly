@@ -13,7 +13,7 @@ internal sealed class GuardWorkBudget
     internal int Items { get; private set; }
     internal int Overruns { get; private set; }
 
-    internal GuardWorkBudget() : this(Stopwatch.GetTimestamp, Math.Max(1, Stopwatch.Frequency / 1000)) { }
+    internal GuardWorkBudget() : this(Stopwatch.GetTimestamp, Math.Max(1, Stopwatch.Frequency / 4000)) { }
     internal GuardWorkBudget(Func<long> clock, long limit)
     {
         _clock = clock;

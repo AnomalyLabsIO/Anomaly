@@ -28,8 +28,8 @@ internal static class Program
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static int RunMain(string[] args)
     {
-        if (args.Length != 2)
-            throw new ArgumentException("Usage: Bootstrap.GuardProbe <loader-net6-directory> <strict|allow|preexisting|stocktamper|scheduling>");
+        if (args.Length != 2 || args[1] is not ("strict" or "allow" or "preexisting" or "stocktamper" or "scheduling" or "clr-stubs" or "platformtamper" or "ilhook-apply" or "ilhook-tamper" or "ilhook-abandoned"))
+            throw new ArgumentException("Usage: Bootstrap.GuardProbe <loader-net6-directory> <strict|allow|preexisting|stocktamper|scheduling|clr-stubs|platformtamper|ilhook-apply|ilhook-tamper|ilhook-abandoned>");
         string libraries = Path.GetFullPath(args[0]);
         AssemblyLoadContext.Default.Resolving += (_, name) =>
         {
@@ -55,9 +55,24 @@ internal static class Program
         ProtectedMethodCatalog.RegisterInfrastructureTarget(protectedTarget);
         if (mode == "preexisting")
             foreign.Patch(target, prefix: new HarmonyMethod(prefix));
-        try { RuntimeGuard.Install(new HarmonyLib.Harmony("anomaly.guard.probe"), mode is "allow" or "scheduling"); }
+        try { RuntimeGuard.Install(new HarmonyLib.Harmony("anomaly.guard.probe"), mode is "allow" or "scheduling" or "ilhook-apply" or "ilhook-tamper" or "ilhook-abandoned"); }
         catch { Console.WriteLine(string.Join("\n", RuntimeGuard.Diagnostics)); throw; }
         Check(RuntimeGuard.Snapshot.Healthy, "guard healthy after install");
+        if (mode is "ilhook-apply" or "ilhook-tamper" or "ilhook-abandoned")
+        {
+            if (mode == "ilhook-apply") IlHookApplicationProbe.Run(Check);
+            else if (mode == "ilhook-tamper") IlHookApplicationProbe.Tamper(Check);
+            else IlHookApplicationProbe.Abandon(Check);
+            Console.WriteLine("PASS " + mode + " flags=" + RuntimeGuard.Snapshot.Flags + " generation=" + RuntimeGuard.Snapshot.Generation);
+            return 0;
+        }
+        if (mode is "clr-stubs" or "platformtamper")
+        {
+            if (mode == "clr-stubs") ClrEntryStubProbe.Run(Check);
+            else ClrEntryStubProbe.Tamper(Check);
+            Console.WriteLine("PASS " + mode + " flags=" + RuntimeGuard.Snapshot.Flags + " generation=" + RuntimeGuard.Snapshot.Generation);
+            return 0;
+        }
         if (mode == "scheduling")
         {
             VerificationSchedulingProbe.Run(Check);

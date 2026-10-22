@@ -77,6 +77,41 @@ public sealed class GuardAuditTests
     }
 
     [Fact]
+    public void Nonfatal_observations_do_not_supply_a_fatal_reason()
+    {
+        var audit = new GuardAudit(true);
+        audit.Ready();
+        audit.Record(GuardAuditFlags.CoverageIncomplete, "advisory coverage observation");
+        audit.Record(GuardAuditFlags.BlockedAttemptObserved, "patch denied");
+
+        Assert.Null(audit.FatalReason);
+        Assert.True(audit.Snapshot.Healthy);
+    }
+
+    [Fact]
+    public void First_fatal_reason_survives_later_failures_and_ready()
+    {
+        var audit = new GuardAudit(true);
+        audit.Ready();
+        audit.Record(GuardAuditFlags.CoverageIncomplete, "first monitor failure", fatal: true);
+        audit.Record(GuardAuditFlags.InventoryDivergence, "later monitor failure", fatal: true);
+        audit.Ready();
+
+        Assert.Equal("first monitor failure", audit.FatalReason);
+        Assert.False(audit.Snapshot.Healthy);
+    }
+
+    [Fact]
+    public void Fatal_reason_is_bounded_to_the_diagnostic_limit()
+    {
+        var audit = new GuardAudit(false);
+        string reason = new string('x', 2048) + "discarded suffix";
+        audit.Record(GuardAuditFlags.CoverageIncomplete, reason, fatal: true);
+
+        Assert.Equal(new string('x', 2048), audit.FatalReason);
+    }
+
+    [Fact]
     public void Repeated_observations_are_deduplicated_and_diagnostics_are_bounded()
     {
         var audit = new GuardAudit(false);

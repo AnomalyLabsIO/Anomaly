@@ -14,7 +14,7 @@ if (-not $SkipBuild) {
 }
 
 $probeAssembly = Join-Path $PSScriptRoot "bin/$Configuration/net6.0/Anomaly.Bootstrap.StartupProbe.dll"
-foreach ($mode in @('missing', 'failed')) {
+foreach ($mode in @('missing', 'failed', 'fatal')) {
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new('dotnet')
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
@@ -37,14 +37,20 @@ foreach ($mode in @('missing', 'failed')) {
         $errors = $stderr.GetAwaiter().GetResult()
         if ($process.ExitCode -ne 78 -or $errors.Length -ne 0 -or
             -not $output.Contains('PASS Client assembly loaded and Core constructed before Bootstrap validation') -or
-            -not $output.Contains('PASS invoking real early lifecycle; expected process exit code 78')) {
+            -not $output.Contains('PASS blocking Bootstrap warning requested before exit:')) {
             throw "Startup probe '$mode' failed (exit $($process.ExitCode)).`n$output`n$errors"
         }
         if (($mode -eq 'missing' -and -not $output.Contains('PASS absent Bootstrap raises catchable FileNotFoundException')) -or
-            ($mode -eq 'failed' -and -not $output.Contains('PASS failed Bootstrap returns false'))) {
+            ($mode -eq 'failed' -and -not $output.Contains('PASS failed Bootstrap returns false')) -or
+            ($mode -eq 'fatal' -and
+                (-not $output.Contains('PASS worker guard failure is latched without displaying a warning') -or
+                 -not $output.Contains('PASS invoking real main-thread heartbeat; expected process exit code 78') -or
+                 -not $output.Contains('Worker guard failure injected by startup probe.'))) -or
+            ($mode -ne 'fatal' -and
+                -not $output.Contains('PASS invoking real early lifecycle; expected process exit code 78'))) {
             throw "Startup probe '$mode' did not exercise the expected guard boundary.`n$output"
         }
-        Write-Output "PASS $mode Bootstrap: Client assembly constructs, guard rejects, real early lifecycle exits 78."
+        Write-Output "PASS $mode Bootstrap: guard rejects, main thread requests warning, required action exits 78."
     }
     finally {
         $process.Dispose()

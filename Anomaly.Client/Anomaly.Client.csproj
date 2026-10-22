@@ -421,9 +421,18 @@
 		<Compile Include="Diagnostics\DiagnosticCollector.cs" />
 		<Compile Include="Diagnostics\HangWatchdog.cs" />
 		<Compile Include="Diagnostics\NativeMethods.cs" />
+        <Compile Include="Diagnostics\News\NewsDiagnosticModels.cs" />
+        <Compile Include="Diagnostics\News\NewsDiagnosticService.cs" />
+        <Compile Include="Diagnostics\News\NewsLogParser.cs" />
+        <Compile Include="Diagnostics\News\NewsMetadataInventory.cs" />
+        <Compile Include="Diagnostics\News\NewsHistoryReader.cs" />
+        <Compile Include="Internal\UI\News\NewsDiagnosticText.cs" />
+        <Compile Include="Internal\UI\News\NewsDiagnosticsPanel.cs" />
+        <Compile Include="Components\News\NewsDiagnosticsPresenter.cs" />
 		<Compile Include="FileTransfer\ChunkBuffer.cs" />
 		<Compile Include="FileTransfer\FileTransferClient.cs" />
 		<Compile Include="Internal\Bootstrap\ClientRuntime.cs" />
+		<Compile Include="..\Anomaly.Bootstrap\BlockingFailureDialog.cs" Link="Internal\Bootstrap\BlockingFailureDialog.cs" />
 		<Compile Include="Internal\Players\PlayerObservationBridge.cs" />
 		<Compile Include="Internal\Items\ItemStateRuntime.cs" />
 		<Compile Include="Patches\Runtime\ItemStatePatch.cs" />

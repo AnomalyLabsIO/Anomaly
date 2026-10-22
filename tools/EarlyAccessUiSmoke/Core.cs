@@ -60,7 +60,8 @@ public sealed partial class Core : MelonMod
         _localHostingSmoke = Environment.GetEnvironmentVariable("ANOMALY_LOCAL_HOSTING_SMOKE") == "1";
         _dummyVisibilitySmoke = Environment.GetEnvironmentVariable("ANOMALY_DUMMY_VISIBILITY_SMOKE") == "1";
         _dedicatedDummyControlSmoke = Environment.GetEnvironmentVariable("ANOMALY_DEDICATED_DUMMY_SMOKE") == "1";
-        if (_localHostingSmoke || _dedicatedDummyControlSmoke || FacilityCatalogFailureProbe.Enabled)
+        _newsSmokeOnly = Environment.GetEnvironmentVariable("ANOMALY_UI_SMOKE_NEWS_ONLY") == "1";
+        if (_localHostingSmoke || _dedicatedDummyControlSmoke || FacilityCatalogFailureProbe.Enabled || _newsSmokeOnly)
         {
             ClientEvents.CanvasReady += OnCanvasReady;
             ClientEvents.Ready += OnReady;
@@ -91,6 +92,7 @@ public sealed partial class Core : MelonMod
         ReleaseDummyInputs();
         FacilityCatalogFailureProbe.Shutdown();
         ShutdownServerApiSmoke();
+        CleanupNewsFixtures();
     }
 
     private void OnReady(ClientReadyEventArgs _) => _readyEvents++;
@@ -102,6 +104,7 @@ public sealed partial class Core : MelonMod
         _started = true;
         _canvasInstanceId = UiCanvas.Root.GetInstanceID();
         _next = Time.realtimeSinceStartupAsDouble + 8;
+        if (_newsSmokeOnly) { EnqueueNewsSmoke(); return; }
         if (FacilityCatalogFailureProbe.Enabled) { EnqueueFacilityCatalogFailureProbe(); return; }
         if (_localHostingSmoke) { EnqueueLocalHostingSmoke(); return; }
         if (_dedicatedDummyControlSmoke) { EnqueueDedicatedDummyControlSmoke(); return; }
@@ -114,13 +117,13 @@ public sealed partial class Core : MelonMod
             return;
         }
         var sizes = Environment.GetEnvironmentVariable("ANOMALY_UI_SMOKE_CONNECTION_ONLY") == "1"
-            ? Array.Empty<(int, int)>() : new[] { (1280, 720), (1920, 1080), (3440, 1440) };
+            ? Array.Empty<(int, int)>() : NewsSizes;
         foreach (var size in sizes)
         {
             var width = size.Item1;
             var height = size.Item2;
             Add($"resolution-{width}", () => Screen.SetResolution(width, height, false));
-            if (width == 1280)
+            if (width == 1280 && height == 720)
             {
                 Add("first-run", () =>
                 {
@@ -167,6 +170,7 @@ public sealed partial class Core : MelonMod
                     Capture("main-menu");
                 });
             }
+            EnqueueNewsResolution(width, height);
             Add("settings-open", ShowSettings);
             Add("settings", () => Capture("settings"));
             Add("settings-focus", () => EventSystem.current.SetSelectedGameObject(QualityDropdown().gameObject));
@@ -194,7 +198,7 @@ public sealed partial class Core : MelonMod
                 Require(_quality.Value == 1, "Reset restores declared Melon default");
                 Require(!reset.IsInteractable(), "Reset becomes unavailable at the default value");
             });
-            if (width == 1280)
+            if (width == 1280 && height == 720)
             {
                 Add("settings-write-failure", () =>
                 {
@@ -370,6 +374,7 @@ public sealed partial class Core : MelonMod
                         "Hidden modal no longer requests movement capture");
                     Require(InputRegistry.GetBinding("example.hello.greet") != null,
                         "Ordinary mod registration survives returning to the menu");
+                    AssertNewsReturnedMenu(number);
                     AssertCanvasLifetime();
                     ShowSettings();
                 });

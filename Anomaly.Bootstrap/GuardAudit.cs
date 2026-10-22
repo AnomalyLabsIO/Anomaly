@@ -39,6 +39,7 @@ internal sealed class GuardAudit
     private long _generation;
     private bool _healthy;
     private bool _permanentlyFailed;
+    private string? _fatalReason;
     private int _mutations;
     private readonly HashSet<string> _observations = new(StringComparer.Ordinal);
     private readonly Queue<string> _diagnostics = new();
@@ -55,6 +56,7 @@ internal sealed class GuardAudit
     }
 
     internal string[] Diagnostics { get { lock (_sync) return _diagnostics.ToArray(); } }
+    internal string? FatalReason { get { lock (_sync) return _fatalReason; } }
 
     internal void BeginMutation()
     {
@@ -97,6 +99,7 @@ internal sealed class GuardAudit
             _flags |= flags;
             if (fatal)
             {
+                _fatalReason ??= reason;
                 _healthy = false;
                 _permanentlyFailed = true;
             }

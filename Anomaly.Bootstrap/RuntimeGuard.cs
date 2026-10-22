@@ -33,6 +33,7 @@ internal static partial class RuntimeGuard
 
     internal static GuardSnapshot Snapshot => _audit.Snapshot;
     internal static string[] Diagnostics => _audit.Diagnostics;
+    internal static string? FatalReason => _audit.FatalReason;
 
     internal static void ReportCoverageGap(string reason) => _audit.Record(GuardAuditFlags.CoverageIncomplete, reason);
     internal static void ReportInventoryDivergence(string reason) => _audit.Record(GuardAuditFlags.InventoryDivergence, reason);
@@ -57,9 +58,12 @@ internal static partial class RuntimeGuard
                     typeof(Detour).Assembly.GetName().Version != new Version(22, 7, 31, 1))
                     throw new NotSupportedException("Unsupported loader Harmony/MonoMod contract.");
 
+                ClrEntryStubPreserver.Install();
                 ProtectedMethodCatalog.ResolveLoadedAssemblies();
                 ProtectBackendInfrastructure();
                 RecordRequiredStockHooks();
+                InstallHook(harmony, typeof(DetourHelper).GetProperty(nameof(DetourHelper.Native))!.SetMethod!,
+                    nameof(NativePlatformSetterPrefix), nameof(HarmonyFinalizer));
                 InstallHook(harmony, RequiredMethod(typeof(PatchProcessor), "Patch", Type.EmptyTypes), nameof(PatchPrefix), nameof(HarmonyInstallFinalizer));
                 InstallHook(harmony, RequiredMethod(typeof(PatchClassProcessor), "ProcessPatchJob"), nameof(ClassPatchPrefix), nameof(HarmonyFinalizer));
                 foreach (MethodInfo method in typeof(PatchProcessor).GetMethods().Where(m => m.Name == "Unpatch"))
@@ -67,11 +71,17 @@ internal static partial class RuntimeGuard
                 Type functions = typeof(HostHarmony).Assembly.GetType("HarmonyLib.PatchFunctions", throwOnError: true)!;
                 InstallHook(harmony, RequiredMethod(functions, "ReversePatch"), nameof(ReversePrefix), nameof(HarmonyFinalizer));
 
-                // Apply/Free boundaries are required in addition to public callbacks:
-                // Free removes MonoMod bookkeeping even if an OnUndo callback vetoes it.
+                // ILHook application starts at its guarded callback and completes
+                // at the loader's chain-refresh replacement. Keep the other
+                // lifecycle boundaries, including Free after an OnUndo veto.
+                InstallHook(harmony, GuardRuntimeAdapters.RuntimeChainRefreshReplacement,
+                    nameof(IlHookRefreshPrefix), nameof(IlHookRefreshFinalizer));
                 foreach (Type type in new[] { typeof(Hook), typeof(ILHook), typeof(Detour), typeof(NativeDetour) })
                     foreach (string name in new[] { "Apply", "Undo", "Free", "Dispose" })
+                    {
+                        if (type == typeof(ILHook) && name == "Apply") continue;
                         InstallHook(harmony, RequiredMethod(type, name, Type.EmptyTypes), nameof(DetourPrefix), nameof(DetourFinalizer));
+                    }
                 foreach (Type type in new[] { typeof(ILHook), typeof(Detour) })
                     foreach (string name in new[] { "Priority", "ID", "Before", "After" })
                         InstallHook(harmony, type.GetProperty(name)!.SetMethod!, nameof(DetourPrefix), nameof(DetourFinalizer));
@@ -190,6 +200,9 @@ internal static partial class RuntimeGuard
         return callback.Method.Module.Assembly == typeof(PatchShield).Assembly && declaringType?.DeclaringType == typeof(PatchShield) &&
             callback.Method.Name.StartsWith("<Install>b__", StringComparison.Ordinal);
     }
+
+    private static bool NativePlatformSetterPrefix(IDetourNativePlatform __0, MethodBase __originalMethod, ref Operation? __state) =>
+        ClrEntryStubPreserver.IsExpectedPlatform(__0) || Block(__originalMethod, "Replacement of required CLR entry stub preservation");
 
     private static bool PatchPrefix(object __instance, ref Operation? __state)
     {
@@ -887,13 +900,41 @@ internal static partial class RuntimeGuard
     {
         if (!IsGuardedDispatch(__0, out Delegate[] entries))
             return true;
-        __result = entries.Length != 0;
-        foreach (Delegate entry in entries)
+        PendingIlApplication? application = null;
+        if (IsIlHookApplicationDispatch(entries))
         {
-            bool accepted = Callbacks.Any(slot => slot.Guard.Equals(entry)) || IsStockShieldCallback(entry)
-                ? (bool)entry.DynamicInvoke(__1)!
-                : Foreign(() => (bool)entry.DynamicInvoke(__1)!);
-            if (!accepted) { __result = false; break; }
+            if (__1.Length != 3 || __1[0] is not ILHook hook || __1[1] is not MethodBase source || !Equals(source, hook.Method))
+            {
+                Invalidate("ILHook callback source identity changed.");
+                __result = false;
+                return false;
+            }
+            if (!BeginIlHookApplication(hook, out application))
+            {
+                __result = false;
+                return false;
+            }
+        }
+        __result = entries.Length != 0;
+        Exception? failure = null;
+        try
+        {
+            foreach (Delegate entry in entries)
+            {
+                bool accepted = Callbacks.Any(slot => slot.Guard.Equals(entry)) || IsStockShieldCallback(entry)
+                    ? (bool)entry.DynamicInvoke(__1)!
+                    : Foreign(() => (bool)entry.DynamicInvoke(__1)!);
+                if (!accepted) { __result = false; break; }
+            }
+        }
+        catch (Exception exception) { failure = exception; throw; }
+        finally
+        {
+            if (application != null)
+            {
+                if (__result && failure == null) application.CallbackReturned = true;
+                else FinishIlHookCallback(application, failure);
+            }
         }
         return false;
     }

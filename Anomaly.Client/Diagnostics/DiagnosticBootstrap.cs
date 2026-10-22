@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Diagnostics.News;
 using MelonLoader;
 
 namespace Anomaly.Client.Diagnostics;
@@ -26,6 +27,7 @@ public static class DiagnosticBootstrap
             // Check for previous unclean exit
             if (File.Exists(CleanShutdownMarkerPath))
             {
+                NewsDiagnosticService.ObserveCleanShutdownMarker(File.GetLastWriteTimeUtc(CleanShutdownMarkerPath));
                 File.Delete(CleanShutdownMarkerPath);
                 MelonLogger.Msg("Diagnostics: Previous session exited cleanly.");
             }

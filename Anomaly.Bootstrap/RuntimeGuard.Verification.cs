@@ -88,6 +88,11 @@ internal static partial class RuntimeGuard
     private static bool VerifyCheckpoint(bool requireComplete)
     {
         if (!_installed) return false;
+        if (!ClrEntryStubPreserver.IsInstalled)
+        {
+            Invalidate("Required CLR entry stub preservation was replaced.");
+            return false;
+        }
         var completed = Volatile.Read(ref _completion);
         bool current = completed != null && completed.Stamp == CurrentStamp() && !HasPendingWork &&
             (!requireComplete || completed.Complete) && Environment.TickCount64 < completed.Tick + 1000;
@@ -144,6 +149,12 @@ internal static partial class RuntimeGuard
         int warnings = 0;
         try
         {
+            FailAbandonedIlHookApplications();
+            if (!ClrEntryStubPreserver.IsInstalled)
+            {
+                Invalidate("Required CLR entry stub preservation was replaced.");
+                return;
+            }
             while (budget.CanStartItem())
             {
                 if (_pass == null && Environment.TickCount64 >= _nextChecks)

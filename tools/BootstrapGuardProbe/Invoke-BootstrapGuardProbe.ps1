@@ -2,8 +2,8 @@
 param(
     [Parameter(Mandatory)][string]$LoaderDirectory,
     [Parameter(Mandatory)][string]$EvidenceDirectory,
-    [ValidateSet('strict','allow','preexisting','stocktamper','scheduling')]
-    [string[]]$Modes = @('strict','allow','preexisting','stocktamper','scheduling'),
+    [ValidateSet('strict','allow','preexisting','stocktamper','scheduling','clr-stubs','platformtamper','ilhook-apply','ilhook-tamper','ilhook-abandoned')]
+    [string[]]$Modes = @('strict','allow','preexisting','stocktamper','scheduling','clr-stubs','platformtamper','ilhook-apply','ilhook-tamper','ilhook-abandoned'),
     [string]$Configuration = 'Debug',
     [switch]$SkipBuild,
     [switch]$CheckFailureHandling
@@ -27,6 +27,9 @@ foreach ($mode in $probeModes) {
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
     $startInfo.ArgumentList.Add($probe)
+    # The standalone process has no MelonEnvironment.UserDataDirectory. Give
+    # persistent-trace capable Bootstrap builds a real, per-process trace path.
+    $startInfo.Environment['ANOMALY_BOOTSTRAP_PATCH_TRACE'] = Join-Path $evidence "$mode-patches.log"
     if (-not $CheckFailureHandling) {
         $startInfo.ArgumentList.Add($libraries)
         $startInfo.ArgumentList.Add($mode)

@@ -8,6 +8,38 @@ Before the Mods phase, Bootstrap verifies runtime protection readiness. Local
 mods do not require a `mod-trust.json` approval file, and Bootstrap does not
 move mod assemblies into quarantine.
 
+## Blocking failure warnings
+
+Startup rejection and permanent guard failure display a synchronous native
+`user32!MessageBoxW` warning on the loader/game main thread, then terminate with
+exit code 78 after dismissal. OK, Escape, and the close button all complete the
+same exit; inability to create the dialog also exits after logging the error.
+Advisory patch warnings and nonfatal admission evidence keep their existing
+policy. Ordinary loader shutdown does not open a warning.
+
+The dialog uses Unicode text, a warning icon, best-effort foreground activation,
+and topmost visibility. Its owner is a visible window on the calling thread;
+before such a window exists, task modality disables that thread's top-level
+windows. Windows and Wine provide these APIs, so no WinForms/WPF, extra GUI
+package, or Linux dialog utility is needed. Client compiles the same dialog
+source locally so a missing Bootstrap DLL can still produce a warning.
+
+Worker and detour callbacks only latch fatal evidence. The main-thread lifecycle
+consumes it after guard operations release their locks. The modal call prevents
+normal game frames and owner input from progressing while the warning is open;
+background threads and the native window-message loop can still run. It does
+not suspend the whole process. The client hang watchdog ignores this intentional
+wait. No game-thread suspension or process-wide native suspension is attempted.
+
+Automated tests use fake synchronous displays to verify dismissal-before-exit,
+error fallback, and reentrant/duplicate handling. The startup probe intercepts
+only native display and retains real exit code 78. Actual game-frame blocking,
+fullscreen visibility, focus, Unicode, and dismissal on Windows and Proton/Wine
+remain manual acceptance checks.
+
+API references: [Microsoft MessageBoxW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messageboxw)
+and [Wine implementation](https://github.com/wine-mirror/wine/blob/master/dlls/user32/msgbox.c).
+
 `AdmissionInventoryLedger` records a process-lifetime mod inventory. It subscribes
 to assembly loading before enumerating existing assemblies and reads genuine
 MelonInfo/MelonID custom attribute metadata without constructing the mod or its
@@ -55,6 +87,39 @@ hostile full-trust code. Highest registration priority cannot precede every
 plugin/UserLib assembly load or constructor. The server receives authenticated
 client-reported evidence; server-side admission policy remains authoritative.
 
+## CLR entry stub preservation
+
+Before installing guard hooks, Bootstrap wraps the loader's native detour
+platform on Windows x64 .NET 6. CLR fixup entry stubs use a five-byte branch
+followed by identifying metadata. MonoMod 22.7.31's six-byte indirect branch
+overwrites that metadata and can crash a later JIT virtual-method lookup.
+The adapter matches the precode's method descriptor to an already-pinned managed
+method, and requires its address to match either the CLR function pointer or the
+entrypoint independently resolved by the loader for that same method. This admits
+real CLR precode chains while rejecting copied headers, including copies with
+genuine method descriptor metadata. It then prepares the pinned method and
+redirects the detour onto its confirmed compiled
+implementation. The entire CLR precode remains intact, and newly JIT-compiled
+callers still reach the patched body. Unsupported or unconfirmed descriptor
+layouts are rejected before any native write. Other native entrypoints retain
+the loader's detour selection and operations.
+
+The existing Harmony, MonoMod, callback and native-source protection remains
+required. An additional required hook blocks replacement of the native platform;
+checkpoints and frame updates also fail closed if its backing field is replaced.
+The adapter changes the native detour source; authorization and admission policy
+remain required.
+
+`ILHook.Apply` is not patched by Bootstrap. Its guarded `OnDetour` dispatch
+starts the same authorization, ownership and mutation transaction before any
+subscriber executes. The loader's `OnILChainRefresh` boundary completes the
+transaction after IL generation and native application. Subscriber vetoes and
+exceptions close the transaction immediately; refresh failures retain incomplete
+evidence. Missing callback protection rejects refresh before native writes.
+An application that throws before reaching refresh keeps admission closed and
+fails the guard at the next main-thread update. The other detour Apply hooks,
+Undo/Free/Dispose boundaries, ordering checks and re-JIT monitoring remain required.
+
 ## Verification scheduling
 
 Bootstrap owns the recurring verification schedule. Required guard interceptors,
@@ -64,7 +129,7 @@ and callback-field replacement can bypass operation hooks, so these targeted
 invariant checks remain necessary. The client consumes the shared evidence and
 checks health, active mutations, and admission generations every frame and send.
 
-Scheduled work stops after 1 ms or 32 items per frame, whichever comes first. Each
+Scheduled work stops after 0.25 ms or 32 items per frame, whichever comes first. Each
 patch or detour record counts as an item. This is a cooperative budget: a single
 runtime call or contended lock can overrun it, and timing diagnostics record those
 overruns. No Harmony, MonoMod, catalog, or guard lock survives a frame boundary.
@@ -118,7 +183,13 @@ full target signature, module identity, and metadata token before entering Harmo
 then records completion after Harmony returns. Entries are flushed to disk so a
 native startup crash can leave the last attempted target. The file is replaced
 on each process start; use a separate path for each reproduction attempt.
-Tracing is disabled when the variable is unset and does not change guard policy.
+For persistent tracing in one installation, create
+`UserData/Anomaly/bootstrap-patch-trace.enabled` (its contents are ignored).
+When no environment override is set, each startup then writes a separate UTC/PID
+log under `UserData/Anomaly/BootstrapPatchTraces/`. These logs are retained across
+later launches, including incomplete traces from a native crash. Remove the
+marker to disable persistent tracing. The explicit environment path retains its
+existing replace-on-start behavior. Tracing does not change guard policy.
 
 ## Validation
 

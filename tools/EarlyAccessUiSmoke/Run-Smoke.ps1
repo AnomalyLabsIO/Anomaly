@@ -12,20 +12,21 @@ param(
     [string] $ServerApiMode = 'full',
     [switch] $LocalHosting,
     [switch] $DummyVisibility,
-    [switch] $DedicatedDummyControl
+    [switch] $DedicatedDummyControl,
+    [switch] $NewsOnly,
+    [string] $BackupDirectory = ''
 )
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $game = [IO.Path]::GetFullPath($GameDirectory)
 $evidence = [IO.Path]::GetFullPath($EvidenceDirectory)
-$stagingPath = Join-Path $game 'smoke-staging.json'
-if ($UseModLaunch) {
-    if (!(Test-Path -LiteralPath (Join-Path $game '.modlaunch/SCPSL-ModLaunch.exe'))) { throw 'The installed ModLaunch launcher is required.' }
-} else {
-    if (!(Test-Path -LiteralPath $stagingPath)) { throw 'Only a prepared game or an explicitly selected ModLaunch installation may be used.' }
-    $staging = Get-Content -Raw -LiteralPath $stagingPath | ConvertFrom-Json
-    if (![string]::Equals($staging.destination, $game, [StringComparison]::OrdinalIgnoreCase)) { throw 'The staging destination does not match.' }
+if (!$UseModLaunch) { throw 'Always select -UseModLaunch; direct SCPSL.exe launches are forbidden for this qualification.' }
+if (![string]::Equals($game,'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy',[StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Use the explicitly authorized SCP Secret Laboratory - Copy installation and its .modlaunch launcher.'
 }
+if (!(Test-Path -LiteralPath (Join-Path $game '.modlaunch/SCPSL-ModLaunch.exe'))) { throw 'The installed ModLaunch launcher is required.' }
+. (Join-Path $PSScriptRoot 'ModLaunchBackup.ps1')
+Assert-SmokeGameIdle $game
 if (Test-Path -LiteralPath $evidence) { throw 'Use a new evidence directory for each run.' }
 if ($LoopbackServer) {
     $uri = [Uri]('udp://' + $LoopbackServer)
@@ -49,6 +50,9 @@ if ($DedicatedDummyControl -and !$LoopbackServer) { throw 'DedicatedDummyControl
 if ($DedicatedDummyControl -and ($ConnectionOnly -or $ServerApi -or $LocalHosting -or $DummyVisibility)) {
     throw 'DedicatedDummyControl runs its own scenario and cannot be combined with other smoke modes.'
 }
+if ($NewsOnly -and ($LoopbackServer -or $ConnectionOnly -or $AdmissionExpect -or $IntegrityMode -or $ServerApi -or $LocalHosting -or $DummyVisibility -or $DedicatedDummyControl)) {
+    throw 'NewsOnly runs its own UI scenario and cannot be combined with connection or hosting fixtures.'
+}
 $screenWidth = 1280
 $screenHeight = 720
 if ($DummyVisibility -or $DedicatedDummyControl) {
@@ -63,6 +67,15 @@ foreach ($project in @('Anomaly.Client/Anomaly.Client.csproj','samples/HelloAnom
     if ($LASTEXITCODE -ne 0) { throw "Smoke build failed: $project" }
 }
 $layout = Get-Content -Raw -LiteralPath (Join-Path $repository 'release/package-layout.json') | ConvertFrom-Json
+$backupPaths = @((($layout.packages | Where-Object packageId -eq 'anomaly-client').entries).path) +
+    @('Mods/HelloAnomalyMod.dll','Mods/Anomaly.EarlyAccessUiSmoke.dll','UserData/Anomaly/mod-trust.json',
+      'UserData/Anomaly/user.json','UserData/Anomaly/server-trust.json','UserData/Anomaly/content-consent.json',
+      'UserData/Loader.cfg','UserData/MelonPreferences.cfg')
+$backupPaths += @(Get-ChildItem -LiteralPath (Join-Path $repository 'Anomaly.Client/Resources/i18n') -File -Filter '*.yaml' |
+    ForEach-Object { 'UserData/Anomaly/i18n/anomaly/' + $_.Name })
+if (!$BackupDirectory) { $BackupDirectory = Join-Path $repository ('artifacts/news-ui-smoke/modlaunch-backup-' + [IO.Path]::GetFileName($evidence)) }
+$backupRoot = New-ModLaunchSmokeBackup $repository $game $BackupDirectory $backupPaths
+Write-Output "Reversible test backup: $backupRoot. Restore with tools/EarlyAccessUiSmoke/Restore-ModLaunchSmoke.ps1 after both launcher and child exit and ModLaunch restores its session."
 foreach ($entry in ($layout.packages | Where-Object packageId -eq 'anomaly-client').entries) {
     $target = Join-Path $game $entry.path
     New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
@@ -75,14 +88,17 @@ foreach ($mod in @('samples/HelloAnomalyMod/bin/Release/net6.0/HelloAnomalyMod.d
 # never implicitly approve unrelated mods in an explicitly selected installation.
 $policyPath = Join-Path $game 'UserData/Anomaly/mod-trust.json'
 $previousApprovals = @()
+$policy = [PSCustomObject]@{schemaVersion=1;mode='enforce';approvedSha256=@()}
 if (Test-Path -LiteralPath $policyPath) {
-    $previousApprovals = @((Get-Content -Raw -LiteralPath $policyPath | ConvertFrom-Json).approvedSha256)
+    $policy = Get-Content -Raw -LiteralPath $policyPath | ConvertFrom-Json
+    $previousApprovals = @($policy.approvedSha256)
 }
 $approved = @($previousApprovals) + @('Anomaly.Client.dll','HelloAnomalyMod.dll','Anomaly.EarlyAccessUiSmoke.dll' | ForEach-Object {
     (Get-FileHash -LiteralPath (Join-Path $game ('Mods/' + $_)) -Algorithm SHA256).Hash.ToLowerInvariant()
 })
 $approved = @($approved | Where-Object { $_ } | Sort-Object -Unique)
-@{ schemaVersion=1; mode='enforce'; approvedSha256=$approved } | ConvertTo-Json |
+$policy | Add-Member -NotePropertyName approvedSha256 -NotePropertyValue $approved -Force
+$policy | ConvertTo-Json -Depth 8 |
     Set-Content -LiteralPath $policyPath
 New-Item -ItemType Directory -Path $evidence | Out-Null
 $gitDir = Join-Path $repository '.git'
@@ -91,24 +107,31 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the smoke source commit.' }
 $sourceStatus = @(& git --git-dir=$gitDir --work-tree=$repository status --porcelain=v1 --untracked-files=all)
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the smoke source worktree.' }
 $inputPaths = @(($layout.packages | Where-Object packageId -eq 'anomaly-client').entries.path) +
-    @('Mods/HelloAnomalyMod.dll','Mods/Anomaly.EarlyAccessUiSmoke.dll','MelonLoader/net6/MelonLoader.dll','SCPSL.exe')
+    @('Mods/HelloAnomalyMod.dll','Mods/Anomaly.EarlyAccessUiSmoke.dll','MelonLoader/net6/MelonLoader.dll',
+      'SCPSL.exe','GameAssembly.dll','UnityPlayer.dll','version.dll','SCPSL_Data/il2cpp_data/Metadata/global-metadata.dat')
+$inputPaths += '.modlaunch/SCPSL-ModLaunch.exe'
 $inputs = @($inputPaths | Sort-Object -Unique | ForEach-Object {
-    $file = Get-Item -LiteralPath (Join-Path $game $_)
-    [ordered]@{ path=$_; size=$file.Length; sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+    $inputPath = Join-Path $game $_
+    if (Test-Path -LiteralPath $inputPath -PathType Leaf) {
+        $file = Get-Item -LiteralPath $inputPath
+        [ordered]@{ path=$_; exists=$true; size=$file.Length; sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+    } else { [ordered]@{path=$_;exists=$false;size=0;sha256=$null} }
 })
-[ordered]@{ sourceCommit=$sourceCommit; sourceWorktreeClean=($sourceStatus.Count -eq 0); startedUtc=[DateTimeOffset]::UtcNow.ToString('O'); inputs=$inputs } |
+[ordered]@{ sourceCommit=$sourceCommit; sourceWorktreeClean=($sourceStatus.Count -eq 0); beforeLaunch=$true;
+    backupDirectory=$backupRoot; startedUtc=[DateTimeOffset]::UtcNow.ToString('O'); inputs=$inputs } |
     ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $evidence 'runtime-inputs.json')
-$launchPath = if ($UseModLaunch) { Join-Path $game '.modlaunch/SCPSL-ModLaunch.exe' } else { Join-Path $game 'SCPSL.exe' }
+$launchPath = Join-Path $game '.modlaunch/SCPSL-ModLaunch.exe'
 $startInfo = [Diagnostics.ProcessStartInfo]::new($launchPath)
 $startInfo.WorkingDirectory = $game
 $startInfo.UseShellExecute = $false
-$startInfo.WindowStyle = if ($UseModLaunch) { [Diagnostics.ProcessWindowStyle]::Normal } else { [Diagnostics.ProcessWindowStyle]::Hidden }
+$startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Normal
 $startInfo.Environment['ANOMALY_UI_SMOKE_DIR'] = $evidence
 $startInfo.Environment.Remove('ANOMALY_INTEGRITY_SMOKE_MODE') | Out-Null
 if ($IntegrityMode) { $startInfo.Environment['ANOMALY_INTEGRITY_SMOKE_MODE'] = $IntegrityMode }
-foreach ($name in @('ANOMALY_SMOKE_SERVER','ANOMALY_UI_SMOKE_CONNECTION_ONLY','ANOMALY_MOD_ADMISSION_EXPECT','ANOMALY_SERVER_API_SMOKE','ANOMALY_SERVER_API_SMOKE_MODE','ANOMALY_LOCAL_HOSTING_SMOKE','ANOMALY_DUMMY_VISIBILITY_SMOKE','ANOMALY_DEDICATED_DUMMY_SMOKE','ANOMALY_DUMMY_SCREEN_WIDTH','ANOMALY_DUMMY_SCREEN_HEIGHT')) {
+foreach ($name in @('ANOMALY_SMOKE_SERVER','ANOMALY_UI_SMOKE_CONNECTION_ONLY','ANOMALY_MOD_ADMISSION_EXPECT','ANOMALY_SERVER_API_SMOKE','ANOMALY_SERVER_API_SMOKE_MODE','ANOMALY_LOCAL_HOSTING_SMOKE','ANOMALY_DUMMY_VISIBILITY_SMOKE','ANOMALY_DEDICATED_DUMMY_SMOKE','ANOMALY_DUMMY_SCREEN_WIDTH','ANOMALY_DUMMY_SCREEN_HEIGHT','ANOMALY_UI_SMOKE_NEWS_ONLY')) {
     $startInfo.Environment.Remove($name) | Out-Null
 }
+if ($NewsOnly) { $startInfo.Environment['ANOMALY_UI_SMOKE_NEWS_ONLY'] = '1' }
 if ($LoopbackServer) { $startInfo.Environment['ANOMALY_SMOKE_SERVER'] = $LoopbackServer }
 if ($ConnectionOnly) { $startInfo.Environment['ANOMALY_UI_SMOKE_CONNECTION_ONLY'] = '1' }
 if ($AdmissionExpect) { $startInfo.Environment['ANOMALY_MOD_ADMISSION_EXPECT'] = $AdmissionExpect }
@@ -147,6 +170,6 @@ foreach ($argument in @('-noauth','-screen-fullscreen','0','-screen-width',[stri
     $startInfo.ArgumentList.Add($argument)
 }
 $process = [Diagnostics.Process]::Start($startInfo)
-$pidFile = if ($UseModLaunch) { 'launcher.pid' } else { 'client.pid' }
+$pidFile = 'launcher.pid'
 $process.Id | Set-Content -LiteralPath (Join-Path $evidence $pidFile)
 Write-Output "Started smoke entry point $launchPath, PID $($process.Id). Evidence: $evidence"

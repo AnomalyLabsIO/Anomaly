@@ -53,8 +53,18 @@ public sealed class Core : MelonPlugin
 
     public override void OnApplicationStarted()
     {
-        ProtectedMethodCatalog.ResolveNativeTargetsAfterSupportReady();
-        RuntimeGuard.Verify();
+        if (State != StartupState.Ready) return;
+        try
+        {
+            ProtectedMethodCatalog.ResolveNativeTargetsAfterSupportReady();
+            RuntimeGuard.Verify();
+        }
+        catch (Exception ex)
+        {
+            Fail("Bootstrap protection failed when the game started.", ex);
+            return;
+        }
+        if (HandleGuardFailure()) return;
         AdmissionInventoryLedger.Checkpoint();
         while (TryLogGuardDiagnostic()) { }
     }
@@ -62,8 +72,20 @@ public sealed class Core : MelonPlugin
     public override void OnUpdate()
     {
         if (State != StartupState.Ready) return;
+        if (HandleGuardFailure()) return;
         RuntimeGuard.Update(_emitDiagnostic ??= TryLogGuardDiagnostic);
+        if (HandleGuardFailure()) return;
         GuardTimingDiagnostics.ReportIfDue();
+    }
+
+    private static bool HandleGuardFailure()
+    {
+        // Worker/detour callbacks only latch evidence. The main thread presents
+        // the warning after verification releases its runtime and catalog locks.
+        string? reason = RuntimeGuard.FatalReason;
+        if (reason == null) return false;
+        Fail("Required Bootstrap protection failed. " + reason);
+        return true;
     }
 
     private bool TryLogGuardDiagnostic()
@@ -89,12 +111,22 @@ public sealed class Core : MelonPlugin
         RuntimeGuard.Invalidate("Bootstrap was unregistered or the loader shut down.");
     }
 
-    private static void Fail(string message, Exception ex)
+    private static void Fail(string message, Exception? ex = null)
     {
-        State = StartupState.Failed;
-        RuntimeGuard.Invalidate(message);
-        MelonLogger.Error(message + " " + ex);
-        Environment.Exit(78);
+        string warning = ex == null ? message : message + "\r\n\r\n" + ex.Message;
+        string? cause = RuntimeGuard.FatalReason;
+        if (cause != null && !warning.Contains(cause, StringComparison.Ordinal))
+            warning += "\r\n\r\n" + cause;
+        try
+        {
+            State = StartupState.Failed;
+            RuntimeGuard.Invalidate(message);
+            MelonLogger.Error(ex == null ? message : message + " " + ex);
+        }
+        finally
+        {
+            BlockingFailureDialog.ShowAndExit(warning);
+        }
     }
 }
 
