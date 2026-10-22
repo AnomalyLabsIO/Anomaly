@@ -276,9 +276,6 @@ namespace Anomaly.Shared.Networking
             RegisterBuiltIn("anomaly:combat-pose:control", () => new PlayerCombatPoseControlMessage());
             RegisterBuiltIn("anomaly:combat-pose:sample", () => new PlayerCombatPoseSampleMessage());
 
-            RegisterBuiltIn("anomaly:player:setfavoritecolor", () => new SetFavoriteColorMessage());
-            RegisterBuiltIn("anomaly:player:colorchanged", () => new PlayerColorChangedMessage());
-
             RegisterBuiltIn("anomaly:content:catalog", () => new ContentCatalogMessage());
             RegisterBuiltIn("anomaly:content:decision", () => new ContentCatalogDecisionMessage());
             RegisterBuiltIn("anomaly:content:catalogack", () => new ContentCatalogAckMessage());

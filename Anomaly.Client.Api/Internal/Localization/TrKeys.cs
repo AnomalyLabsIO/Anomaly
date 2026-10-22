@@ -206,8 +206,6 @@ internal static class TrKeys
     public const string Settings_SaveError = "anomaly.settings.save_error";
     public const string Settings_StorageInspectionFailed = "anomaly.settings.storage_inspection_failed";
     public const string Settings_LocaleOverride = "anomaly.settings.locale_override";
-    public const string Settings_ClassDColor = "anomaly.settings.class_dcolor";
-    public const string Settings_ClassDColorDescription = "anomaly.settings.class_dcolor_description";
 
     // Credits
     public const string Credits_ModdingSupport = "anomaly.credits.modding_support";

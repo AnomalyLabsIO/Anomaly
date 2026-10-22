@@ -146,9 +146,6 @@
 "anomaly.settings.save_error": "Changes are active but not saved. Fix the error in the log, then select Retry save."
 "anomaly.settings.storage_inspection_failed": "Changes are active, but preference storage could not be inspected safely. See the log and restart."
 "anomaly.settings.locale_override": "Locale override"
-"anomaly.settings.class_dcolor": "Class D favorite color"
-# {0} = color syntax (#RRGGBB), {1} = no-tint value (#FFFFFF)
-"anomaly.settings.class_dcolor_description": "Preferred Class D jumpsuit tint as {0}. {1} disables tinting."
 
 # ===== Credits =====
 "anomaly.credits.modding_support": "Modding Support"

@@ -10,7 +10,6 @@ using Anomaly.Client.Content;
 using Anomaly.Client.Internal.Audio;
 using Anomaly.Client.Internal.Map;
 using Anomaly.Client.Internal.Networking;
-using Anomaly.Client.Internal.PlayerCustomization;
 using Anomaly.Client.Internal.Round;
 using Anomaly.Client.Patches.Audio;
 using Anomaly.Client.Patches.Auth;
@@ -27,7 +26,6 @@ public static class NetworkManagerRegisterClientMessages
     private static bool _cleanupInstalled;
     private static bool _registryReady;
     private static bool _silentRoleReady;
-    private static bool _playerColorReady;
     private static bool _fileCacheReady;
     private static bool _fileTransferReady;
     private static bool _contentReady;
@@ -56,7 +54,6 @@ public static class NetworkManagerRegisterClientMessages
                 AnomalyMessageRegistry.RegisterDefaults();
             });
             ready &= TryInitialize("silent-role", ref _silentRoleReady, SilentRoleChangeHandler.Register);
-            ready &= TryInitialize("player-color", ref _playerColorReady, PlayerColorTracker.Init);
             ready &= TryInitialize("file-cache", ref _fileCacheReady, FileCache.Init);
             ready &= TryInitialize("file-transfer", ref _fileTransferReady, FileTransferClient.Init);
             ready &= TryInitialize("content", ref _contentReady, ContentCatalogClient.Init);

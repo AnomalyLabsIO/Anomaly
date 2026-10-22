@@ -459,7 +459,6 @@
         <Compile Include="Internal\UI\AnomalyUiStyle.cs" />
 		<Compile Include="Internal\Networking\SilentRoleChangeHandler.cs" />
 		<Compile Include="Internal\Networking\EnrollmentIdentityReceiver.cs" />
-		<Compile Include="Internal\PlayerCustomization\PlayerColorTracker.cs" />
 		<Compile Include="Internal\Round\RoundStateReceiver.cs" />
 		<Compile Include="Internal\SilentRoleChange.cs" />
 		<Compile Include="Internal\Stats\HealthStateTracker.cs" />
@@ -528,7 +527,6 @@
 
 	<ItemGroup>
 	  <EmbeddedResource Include="Resources\i18n\*.yaml" />
-	  <EmbeddedResource Include="Resources\PlayerCustomization\*.rgba32" />
 	</ItemGroup>
 	
 	<!--

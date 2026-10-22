@@ -385,18 +385,9 @@ The server accepts input from potentially hostile clients; the client trusts a p
 - **Location:** `Anomaly.Server/Patches/PlayerAuthenticationManagerPatch.cs:303-371, 420-424` (`RequiresEncryption` covers only RemoteAdmin/AdminChat).
 - **Correction (Review 2, per R1-C3):** This is **server-side only.** The original wording ("mirrored on the client receive path") was wrong. The client receive path (`Anomaly.Client/Patches/Auth/PlayerAuthenticationManagerPatch.cs:238-247`) drops unsecured messages from a remote server unless it is the local host (`NetworkServer.active`). The client is **not** vulnerable; only the server non-local path is.
 
-**Reasoning.** The server non-local receive path dispatches channel 0xFE to `AnomalyMessaging.OnReceived` even at `SecurityLevel.Unsecured`, because `RequiresEncryption` doesn't include the Anomaly channel. The 4-byte "hash" in the envelope is a message-type FNV-1a id, not a MAC, so unsecured 0xFE has zero integrity/authenticity beyond LiteNetLib headers — an off-path UDP injector who guesses endpoint+sequence could forge file-requests/color-sets attributed to a player. (Replay protection itself is well done.)
+**Reasoning.** The server non-local receive path dispatches channel 0xFE to `AnomalyMessaging.OnReceived` even at `SecurityLevel.Unsecured`, because `RequiresEncryption` doesn't include the Anomaly channel. The 4-byte "hash" in the envelope is a message-type FNV-1a id, not a MAC, so unsecured 0xFE has zero integrity/authenticity beyond LiteNetLib headers — an off-path UDP injector who guesses endpoint+sequence could forge file requests attributed to a player. (Replay protection itself is well done.)
 
 **Fix.** Add `0xFE` to `RequiresEncryption` (free hardening) — reject `Unsecured` Anomaly messages from non-local connections.
-
-### S6 — `SetFavoriteColorMessage` has no rate limit (client-controlled amplification)
-
-- **Severity:** SECURITY (MEDIUM) · **Confidence:** high
-- **Location:** `Anomaly.Server/Features/PlayerColorBridge.cs:40-69`.
-
-**Reasoning.** Each client message triggers a `SendToAll` broadcast (N AES-GCM encrypts + sends). A client at line rate amplifies ×N to all clients. Replay counters don't help — the client controls its own counter.
-
-**Fix.** Rate-limit per-hub color changes (e.g. min interval / token bucket).
 
 ### S7 — Identity/key handling (design notes for the README and a small fix)
 
@@ -486,7 +477,7 @@ Places where the rewrite diverged from vanilla and lost something, cross-referen
 - Corrupt `user.json` isn't regenerated (only empty/"pending" is healed) → every connect fails in `AuthWrite` (`AuthHandler.cs:45-59`).
 - `RejectAuth` lacks the null/try-catch guard `AuthWrite` has; an empty-payload rejection NREs out of the prefix (`AuthHandler.cs:153-216`).
 - `_connections` keyed by IP without port → two instances on one host collide; an aborted post-handshake connect leaves a dead single-use handshake that forces one guaranteed failed attempt on the next connect (`AuthHandler.cs:71`).
-- Plugin reload double-subscribes: `Plugin.Enable`'s anonymous handlers are never removed in `Disable`; `PlayerColorBridge.Init` lacks the `_initialized` guard its siblings have (`Plugin.cs:67-84`, `PlayerColorBridge.cs:21`).
+- Plugin reload double-subscribes: `Plugin.Enable`'s anonymous handlers are never removed in `Disable` (`Plugin.cs:67-84`).
 - `FireSessionCompleted` / `RaiseClientReady` wrap the whole multicast in one try/catch — one throwing subscriber starves the rest (`FileTransferSession.cs:191`, `AnomalyMessaging.cs:28`).
 
 ### Nits
@@ -554,7 +545,7 @@ Phased by what gates a release vs. what can follow.
 20. **S2** — wire the `_sending` in-flight guard; cap per-session bytes/requests; track all coroutines.
 21. **S3** — client: accept only requested+manifested hashes; enforce declared sizes; cap buffers; `long` in `Reassemble`.
 22. **S4** — sign the full handshake transcript (both session publics + identity); bump protocol version now.
-23. **S5/S6** — add `0xFE` to `RequiresEncryption`; rate-limit color changes.
+23. **S5** — add `0xFE` to `RequiresEncryption`.
 24. **S7** — clear `CurrentKey` on disconnect; consider DPAPI for `user.json`; document ban-evasion.
 
 ## Phase 3 — Feature completion & polish (post-release acceptable)
@@ -641,7 +632,7 @@ Phased by what gates a release vs. what can follow.
 - **H7/H8 confirmed:** `Plugin.Disable` calls global `Harmony.UnpatchAll()` at `Anomaly.Server/Plugin.cs:104-110`. `AuthCrypto.CreateIdentity` copies a variable-length `BigInteger.ToByteArrayUnsigned()` into a 32-byte field at `Anomaly.Shared/Auth/AuthCrypto.cs:38-48`; use fixed-width left padding.
 - **H9-H13 confirmed:** Delegate conversion is not cached for `CharacterModels` attach/detach at `Anomaly.Client.Api/Features/CharacterModels.cs:241-245` and `:282-285`; lifecycle network patches lack `PatchInvocationGuard` at `Anomaly.Client/Patches/Network/CustomNetworkManagerPatch.cs:10-36`; raw input/message events bypass `EventInvoker` at `Anomaly.Client.Api/Input/InputRegistry.cs:41-46`, `:133-134` and `Anomaly.Client.Api/Networking/AnomalyMessaging.cs:116-124`; debounced persistence uses the shared scheduler at `Anomaly.Client.Api/Internal/Persistence/MelonPreferencesPersistenceStore.cs:93-97` and disconnect clears the scheduler at `Anomaly.Client/Internal/Bootstrap/ClientRuntime.cs:135-158`.
 - **S1 confirmed against vanilla export:** Anomaly performs phase-1 server auth work before any vanilla-style challenge/IP limiter at `Anomaly.Server/Patches/ProcessConnectionRequestPatch.cs:164-231`. Vanilla runs challenge/IP rate limiting before later auth flow at `%USERPROFILE%/Documents/SCPSLExport/AssetRipper_export_Server/ExportedProjectServer/Assets/Scripts/Assembly-CSharp/CustomLiteNetLib4MirrorTransport.cs:223-339` and `:667-691`.
-- **S2/S3/S6/S7 confirmed:** Server file requests can start overlapping sends because `_sending` is set but never checked at `Anomaly.Server/FileTransfer/FileTransferSession.cs:93-139`; the client accepts chunks for any hash and buffers by attacker/server-controlled hash at `Anomaly.Client/FileTransfer/FileTransferClient.cs:119-144`; `ChunkBuffer.Reassemble` sums sizes into `int` at `Anomaly.Client/FileTransfer/ChunkBuffer.cs:41-47`; color changes broadcast every accepted client request at `Anomaly.Server/Features/PlayerColorBridge.cs:40-63`; `CurrentKey` is set at `Anomaly.Client/Auth/AuthHandler.cs:138` and only nulled in password-cancel at `:273-277`, not normal disconnect at `:313-340`.
+- **S2/S3/S7 confirmed:** Server file requests can start overlapping sends because `_sending` is set but never checked at `Anomaly.Server/FileTransfer/FileTransferSession.cs:93-139`; the client accepts chunks for any hash and buffers by attacker/server-controlled hash at `Anomaly.Client/FileTransfer/FileTransferClient.cs:119-144`; `ChunkBuffer.Reassemble` sums sizes into `int` at `Anomaly.Client/FileTransfer/ChunkBuffer.cs:41-47`; `CurrentKey` is set at `Anomaly.Client/Auth/AuthHandler.cs:138` and only nulled in password-cancel at `:273-277`, not normal disconnect at `:313-340`.
 - **S4 confirmed mechanically:** The login signature covers only client nonce and server challenge at `Anomaly.Shared/Auth/ClientAuthSession.cs:40-49`; server validation reconstructs the same 32-byte buffer and verifies it at `Anomaly.Shared/Auth/ServerAuthSession.cs:37-60`. Neither side signs the X25519 public keys or `identityPublic`.
 
 ## Additional Findings
@@ -731,7 +722,7 @@ All confirmed against source; promote into the tracked backlog alongside the mai
 
 ## Confirmations
 
-All of Review 1's confirmed items (B1, B3, B4, B5b, B6/B7, H1/H2, H7/H8, H9–H13, S1–S4, S6, S7) match the main report. B1 remains broken in the current tree (`Scp079GeneratorPatch.cs:7` unchanged — no class-level container). OpenCode's `ilspycmd` check of HarmonyX `PatchClassProcessor` (`allowUnannotatedType: false`) independently confirms the B1 reasoning.
+All of Review 1's confirmed items (B1, B3, B4, B5b, B6/B7, H1/H2, H7/H8, H9–H13, S1–S4, S7) match the main report. B1 remains broken in the current tree (`Scp079GeneratorPatch.cs:7` unchanged — no class-level container). OpenCode's `ilspycmd` check of HarmonyX `PatchClassProcessor` (`allowUnannotatedType: false`) independently confirms the B1 reasoning.
 
 ## Net effect on the release gate
 

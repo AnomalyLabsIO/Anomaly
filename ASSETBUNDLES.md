@@ -39,8 +39,6 @@ Keep original images and audio unchanged. Import copies into the external author
 
 `Paths.SkinsPath`, `Paths.OverridesPath` and `Paths.AudioOverridesPath` remain inert source-location helpers for migration tools. Runtime code no longer creates or reads those legacy folders. Use `Paths.AssetBundlesPath` for completed local packs.
 
-The optional embedded Class D neutral map uses a fixed bounded `.rgba32` resource. Run `tools/Convert-NeutralMap.ps1` on an already-neutralized source PNG, choosing a separate output. The converter preserves alpha and bottom-up Unity pixel order. A missing resource retains the existing tint-only behavior. This image is still not redistributed with the source tree.
-
 ## Companion-mod migration
 
 This is a coordinated breaking protocol update from 5 to 6. Client, server, Shared and companion mods must be rebuilt from the same development SDK. Managed assembly versions remain `1.0.0.0` under the existing pre-release policy. There is no compatibility path for the former raw-file protocol.

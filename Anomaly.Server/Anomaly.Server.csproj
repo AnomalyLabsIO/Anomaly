@@ -223,8 +223,6 @@
         <Compile Include="Api\Assets\AssetOverrides.cs" />
         <Compile Include="Api\Assets\AssetRegistry.cs" />
         <Compile Include="Api\Features\Announcer.cs" />
-        <Compile Include="Features\PlayerColorState.cs" />
-        <Compile Include="Features\PlayerColorBridge.cs" />
         <Compile Include="Api\Features\ClientCapabilities.cs" />
         <Compile Include="Api\Features\PlayerMotion.cs" />
         <Compile Include="Internal\Motion\FpcMotionHandoff.cs" />

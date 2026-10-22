@@ -7,7 +7,6 @@ using Anomaly.Server.Api.Assets;
 using Anomaly.Server.Api.Features;
 using Anomaly.Server.Auth;
 using Anomaly.Server.Content;
-using Anomaly.Server.Features;
 using Anomaly.Server.FileTransfer;
 using Anomaly.Server.Lifecycle;
 using Anomaly.Server.Internal.Map;
@@ -183,7 +182,6 @@ public class Plugin : Plugin<Config>
             {
                 ClientCapabilities.Init();
                 Poses.PlayerPoseRuntime.Init();
-                PlayerColorBridge.Init();
                 ContentCatalogBridge.Init();
             },
             [ServerInitializationStage.AssetsAndContent] = () =>
@@ -401,7 +399,6 @@ public class Plugin : Plugin<Config>
         RunCleanup(context, "server asset manager", ServerAssetManager.Reset);
         RunCleanup(context, "content catalog bridge", ContentCatalogBridge.Disable);
         RunCleanup(context, "content registry", ContentRegistry.Reset);
-        RunCleanup(context, "player color bridge", PlayerColorBridge.Disable);
         RunCleanup(context, "client capabilities", ClientCapabilities.Disable);
         RunCleanup(context, "player poses", Poses.PlayerPoseRuntime.Disable);
         RunCleanup(context, "player motion", PlayerMotion.ResetAll);

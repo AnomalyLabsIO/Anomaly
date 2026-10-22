@@ -141,9 +141,6 @@
 "anomaly.settings.save_error": "Изменения применены, но не сохранены. Исправьте указанную в журнале ошибку и повторите сохранение."
 "anomaly.settings.storage_inspection_failed": "Изменения применены, но безопасно проверить хранилище настроек не удалось. Изучите журнал и перезапустите игру."
 "anomaly.settings.locale_override": "Переопределение языка"
-"anomaly.settings.class_dcolor": "Любимый цвет класса D"
-# {0} = color syntax (#RRGGBB), {1} = no-tint value (#FFFFFF)
-"anomaly.settings.class_dcolor_description": "Предпочитаемый цвет комбинезона класса D в формате {0}. Значение {1} отключает окрашивание."
 
 # ===== Credits =====
 "anomaly.credits.modding_support": "Поддержка моддинга"

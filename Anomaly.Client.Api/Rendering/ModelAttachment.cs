@@ -13,9 +13,8 @@ namespace Anomaly.Client.Api.Rendering;
 /// <remarks>
 /// <para>
 /// Mirrors <see cref="MaterialTint"/>'s style: stateless static helpers that
-/// do one thing per call. For a parallel example of consumer-owned lifecycle
-/// see <c>Anomaly.Client.Internal.PlayerCustomization.PlayerColorTracker</c>,
-/// which listens to role changes and re-applies its tint.
+/// do one thing per call. Consumers own lifecycle subscriptions and must
+/// reapply their visual state when the player's model changes.
 /// </para>
 /// <para>
 /// Re-attachment on role change: the old <see cref="Il2CppPlayerRoles.FirstPersonControl.Thirdperson.CharacterModel"/>

@@ -5,15 +5,14 @@ namespace Anomaly.Client.Api.Rendering;
 
 /// <summary>
 /// Reusable HDRP_Lit base-color tinting via <see cref="MaterialPropertyBlock"/>.
-/// The same primitive used by the Class D jumpsuit color customization, exposed
-/// publicly so other features (sub-role differentiation, item state indicators,
-/// faction flair, etc.) can apply consistent per-renderer tints without
+/// Features such as sub-role differentiation, item state indicators, and
+/// faction flair can apply consistent per-renderer tints without
 /// touching shared materials or instantiating per-renderer material copies.
 /// </summary>
 /// <remarks>
 /// <para>
 /// HDRP_Lit samples <c>_BaseColorMap * _BaseColor</c>. With a heavily colored
-/// base map (e.g. the orange Class D jumpsuit) the multiply alone cannot
+/// base map (e.g. an orange texture) the multiply alone cannot
 /// produce cool colors — picking blue against an orange map gives black. For
 /// faithful arbitrary-color reproduction the caller must also supply a
 /// luminance-preserving but chroma-flattened version of the base map; the
@@ -66,7 +65,7 @@ public static class MaterialTint
     /// Multiplies <paramref name="color"/> into the renderer's <c>_BaseColor</c>
     /// and overrides <c>_BaseColorMap</c> with <paramref name="neutralBaseMap"/>.
     /// Use when the underlying material's base texture has a strong color cast
-    /// (e.g. the orange Class D jumpsuit) and you want any chosen color to land
+    /// (e.g. an orange texture) and you want any chosen color to land
     /// faithfully across the full hue range. The caller is responsible for
     /// supplying a luminance-preserving, chroma-flattened version of the
     /// material's original base map.

@@ -130,8 +130,6 @@
         <Compile Include="Networking\Messages\FileTransferCompleteMessage.cs" />
         <Compile Include="Networking\Messages\SilentRoleChangeMessage.cs" />
         <Compile Include="Networking\Messages\RoundStateMessage.cs" />
-        <Compile Include="Networking\Messages\SetFavoriteColorMessage.cs" />
-        <Compile Include="Networking\Messages\PlayerColorChangedMessage.cs" />
         <Compile Include="Assets\TextureOverridePolicy.cs" />
         <Compile Include="Properties\AssemblyInfo.cs"/>
         <EmbeddedResource Include="Assets\CassieProfile.tsv">
