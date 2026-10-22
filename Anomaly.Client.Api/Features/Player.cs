@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using Anomaly.Client.Api.Internal.Wrappers;
+using Anomaly.Client.Api.Scripting;
 using Il2Cpp;
 using Il2CppHints;
 using Il2CppInteractables;
@@ -20,6 +21,7 @@ using UnityEngine;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class Player
 {
     internal Player(ReferenceHub hub)
@@ -39,12 +41,15 @@ public class Player
     public ReferenceHub ReferenceHub { get; }
 
     /// <summary>Whether the underlying player object has been destroyed.</summary>
+    [ScriptVisible]
     public bool IsDestroyed => ReferenceHub == null || ReferenceHub.gameObject == null;
 
     /// <summary>The replicated player ID, or -1 after the player object is destroyed.</summary>
+    [ScriptVisible]
     public int PlayerId => IsDestroyed ? -1 : ReferenceHub.PlayerId;
 
     /// <summary>The nickname known to this client, or an empty string when unavailable.</summary>
+    [ScriptVisible]
     public string Nickname => !IsDestroyed && NicknameSync != null ? NicknameSync.MyNick ?? string.Empty : string.Empty;
 
     /// <summary>The game's display name, including a server-provided custom name when present.</summary>

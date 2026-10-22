@@ -47,9 +47,6 @@
           <HintPath>$(PkgLib_Harmony)\lib\net48\0Harmony.dll</HintPath>
           <Private>true</Private>
         </Reference>
-        <Reference Include="Assembly-CSharp">
-          <HintPath>..\..\..\SCPSL\Talky\packages\ExMod.Exiled.9.14.2\lib\net48\Assembly-CSharp-Publicized.dll</HintPath>
-        </Reference>
         <Reference Include="Assembly-CSharp-firstpass">
           <HintPath>$(AnomalyServerReferenceDir)\Assembly-CSharp-firstpass.dll</HintPath>
         </Reference>
@@ -61,9 +58,6 @@
         </Reference>
         <Reference Include="DnsClient">
           <HintPath>$(AnomalyServerReferenceDir)\DnsClient.dll</HintPath>
-        </Reference>
-        <Reference Include="LabApi">
-          <HintPath>$(AnomalyLabApiDir)\LabApi.dll</HintPath>
         </Reference>
         <Reference Include="Mirror">
           <HintPath>$(AnomalyServerReferenceDir)\Mirror.dll</HintPath>
@@ -163,6 +157,7 @@
         </Reference>
     </ItemGroup>
     <ItemGroup>
+      <PackageReference Include="ExMod.Exiled" Version="9.15.2" />
       <PackageReference Include="Lib.Harmony" Version="2.2.2"
                         GeneratePathProperty="true" ExcludeAssets="compile;runtime" />
     </ItemGroup>

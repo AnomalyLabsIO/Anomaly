@@ -1,10 +1,12 @@
-﻿using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Handlers;
 
 public static class ClientEvents
 {
     public static event AnomalyEventHandler<SceneLoadedEventArgs> SceneLoaded;
+    [ScriptEvent]
     public static event AnomalyEventHandler<ClientConnectedEventArgs> Connected;
 
     /// <summary>
@@ -25,6 +27,7 @@ public static class ClientEvents
     /// <see cref="Anomaly.Client.Api.Features.Client.EnrollmentId"/>; neither is
     /// guaranteed to be available here. Events are not replayed to late subscribers.
     /// </remarks>
+    [ScriptEvent]
     public static event AnomalyEventHandler<ClientReadyEventArgs> Ready;
     public static event AnomalyEventHandler<CanvasReadyEventArgs> CanvasReady;
 

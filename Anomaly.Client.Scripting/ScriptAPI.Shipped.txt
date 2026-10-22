@@ -1,0 +1,16 @@
+type ClientConnectedEventArgs -> Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs
+  property ServerIp: System.String readonly
+  property ServerPort: System.UInt16 readonly
+type ClientReadyEventArgs -> Anomaly.Client.Api.Events.Args.ClientReadyEventArgs
+  property SceneName: System.String readonly
+type Player -> Anomaly.Client.Api.Features.Player
+  property IsDestroyed: System.Boolean readonly
+  property Nickname: System.String readonly
+  property PlayerId: System.Int32 readonly
+global Events: event-registry
+event Events.Client.Connected(ev:Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs) -> Anomaly.Client.Api.Events.Handlers.ClientEvents.Connected
+  method Add(callback:function): System.String
+  method Remove(callbackOrToken:function|string): System.Boolean
+event Events.Client.Ready(ev:Anomaly.Client.Api.Events.Args.ClientReadyEventArgs) -> Anomaly.Client.Api.Events.Handlers.ClientEvents.Ready
+  method Add(callback:function): System.String
+  method Remove(callbackOrToken:function|string): System.Boolean

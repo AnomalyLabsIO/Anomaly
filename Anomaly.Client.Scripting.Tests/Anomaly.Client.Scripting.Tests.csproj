@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\Anomaly.Client.Scripting\ScriptAPI.Shipped.txt" Link="ScriptAPI.Shipped.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Anomaly.Client.Scripting\ScriptAPI.json" Link="ScriptAPI.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Anomaly.Client.Scripting\Anomaly.Client.Api.d.lua" Link="Anomaly.Client.Api.d.lua" CopyToOutputDirectory="PreserveNewest" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+    <PackageReference Include="xunit" Version="2.7.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7" />
+    <ProjectReference Include="..\Anomaly.Client.Scripting\Anomaly.Client.Scripting.csproj" AdditionalProperties="DeployLocal=false" />
+    <ProjectReference Include="..\tools\ScriptingCpuProbe\ScriptingCpuProbe.csproj" ReferenceOutputAssembly="false" />
+    <Reference Include="MelonLoader" HintPath="$(AnomalyClientMelonLibDir)\MelonLoader.dll" Private="true" />
+  </ItemGroup>
+  <Target Name="CopyCpuProbe" AfterTargets="Build">
+    <ItemGroup>
+      <CpuProbeFiles Include="..\tools\ScriptingCpuProbe\bin\$(Configuration)\net6.0\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CpuProbeFiles)" DestinationFolder="$(OutDir)CpuProbe" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

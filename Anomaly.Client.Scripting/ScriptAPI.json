@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "globals": [
+    {
+      "name": "Events",
+      "kind": "event-registry"
+    }
+  ],
+  "types": [
+    {
+      "name": "ClientConnectedEventArgs",
+      "clrType": "Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs",
+      "documentationId": "T:Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs",
+      "documentation": null,
+      "members": [
+        {
+          "kind": "Property",
+          "name": "ServerIp",
+          "clrName": "ServerIp",
+          "returnType": "System.String",
+          "allowWrite": false,
+          "parameters": [],
+          "documentationId": "P:Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs.ServerIp",
+          "documentation": null
+        },
+        {
+          "kind": "Property",
+          "name": "ServerPort",
+          "clrName": "ServerPort",
+          "returnType": "System.UInt16",
+          "allowWrite": false,
+          "parameters": [],
+          "documentationId": "P:Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs.ServerPort",
+          "documentation": null
+        }
+      ]
+    },
+    {
+      "name": "ClientReadyEventArgs",
+      "clrType": "Anomaly.Client.Api.Events.Args.ClientReadyEventArgs",
+      "documentationId": "T:Anomaly.Client.Api.Events.Args.ClientReadyEventArgs",
+      "documentation": null,
+      "members": [
+        {
+          "kind": "Property",
+          "name": "SceneName",
+          "clrName": "SceneName",
+          "returnType": "System.String",
+          "allowWrite": false,
+          "parameters": [],
+          "documentationId": "P:Anomaly.Client.Api.Events.Args.ClientReadyEventArgs.SceneName",
+          "documentation": null
+        }
+      ]
+    },
+    {
+      "name": "Player",
+      "clrType": "Anomaly.Client.Api.Features.Player",
+      "documentationId": "T:Anomaly.Client.Api.Features.Player",
+      "documentation": null,
+      "members": [
+        {
+          "kind": "Property",
+          "name": "IsDestroyed",
+          "clrName": "IsDestroyed",
+          "returnType": "System.Boolean",
+          "allowWrite": false,
+          "parameters": [],
+          "documentationId": "P:Anomaly.Client.Api.Features.Player.IsDestroyed",
+          "documentation": "Whether the underlying player object has been destroyed."
+        },
+        {
+          "kind": "Property",
+          "name": "Nickname",
+          "clrName": "Nickname",
+          "returnType": "System.String",
+          "allowWrite": false,
+          "parameters": [],
+          "documentationId": "P:Anomaly.Client.Api.Features.Player.Nickname",
+          "documentation": "The nickname known to this client, or an empty string when unavailable."
+        },
+        {
+          "kind": "Property",
+          "name": "PlayerId",
+          "clrName": "PlayerId",
+          "returnType": "System.Int32",
+          "allowWrite": false,
+          "parameters": [],
+          "documentationId": "P:Anomaly.Client.Api.Features.Player.PlayerId",
+          "documentation": "The replicated player ID, or -1 after the player object is destroyed."
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "category": "Client",
+      "name": "Connected",
+      "path": "Events.Client.Connected",
+      "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ClientEvents",
+      "clrEventName": "Connected",
+      "parameters": [
+        {
+          "name": "ev",
+          "clrType": "Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs"
+        }
+      ],
+      "add": {
+        "parameters": [
+          {
+            "name": "callback",
+            "clrType": "function"
+          }
+        ],
+        "returnType": "System.String"
+      },
+      "remove": {
+        "parameters": [
+          {
+            "name": "callbackOrToken",
+            "clrType": "function|string"
+          }
+        ],
+        "returnType": "System.Boolean"
+      },
+      "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ClientEvents.Connected",
+      "documentation": null
+    },
+    {
+      "category": "Client",
+      "name": "Ready",
+      "path": "Events.Client.Ready",
+      "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ClientEvents",
+      "clrEventName": "Ready",
+      "parameters": [
+        {
+          "name": "ev",
+          "clrType": "Anomaly.Client.Api.Events.Args.ClientReadyEventArgs"
+        }
+      ],
+      "add": {
+        "parameters": [
+          {
+            "name": "callback",
+            "clrType": "function"
+          }
+        ],
+        "returnType": "System.String"
+      },
+      "remove": {
+        "parameters": [
+          {
+            "name": "callbackOrToken",
+            "clrType": "function|string"
+          }
+        ],
+        "returnType": "System.Boolean"
+      },
+      "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ClientEvents.Ready",
+      "documentation": "Reports the client\u0027s scene-ready lifecycle callback. This can precede the local player hub, populated world collections, and server enrollment disclosure."
+    }
+  ]
+}

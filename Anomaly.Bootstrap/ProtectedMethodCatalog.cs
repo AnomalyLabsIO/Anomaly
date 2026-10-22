@@ -21,7 +21,7 @@ internal static class ProtectedMethodCatalog
     private const string Writer = "Il2CppLiteNetLib.Utils.NetDataWriter";
     private const string Packet = "Il2CppLiteNetLib.NetPacket";
     private static readonly object Sync = new();
-    private static readonly string[] CoreNames = { "Anomaly.Bootstrap", "Anomaly.Client", "Anomaly.Client.Api", "Anomaly.Shared" };
+    private static readonly string[] CoreNames = { "Anomaly.Bootstrap", "Anomaly.Client", "Anomaly.Client.Api", "Anomaly.Client.Scripting", "Anomaly.MoonSharp.Interpreter", "Anomaly.Shared" };
     private static readonly HashSet<string> CoreAssemblyNames = new(CoreNames, StringComparer.Ordinal);
     private static readonly Dictionary<string, Assembly> PinnedAssemblies = new(StringComparer.Ordinal);
     private static readonly HashSet<Assembly> CoreAssemblies = new(ReferenceEqualityComparer.Instance);

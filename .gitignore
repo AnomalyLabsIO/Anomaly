@@ -4,6 +4,7 @@ publish/
 /artifacts/
 /release-output/
 /packages/
+/third_party/
 /tools/BootstrapTamperMod/
 
 # IDE and per-user state
