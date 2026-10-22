@@ -18,7 +18,8 @@ namespace Anomaly.Client.Patches.Menu;
 
 /// <summary>
 /// Brands the stock <c>NewMainMenu</c> scene: personalized welcome line,
-/// version (MODDED) suffix, custom logo, authenticated-user auth status,
+/// TMP version label with a superscript (MODDED) suffix, custom logo,
+/// authenticated-user auth status,
 /// reparents the auth-status spinner into the cross-scene connection-info
 /// popup, and swaps the server-browser loading panel to host the nicer
 /// ConnectPopup body. Subscribes to <see cref="ClientEvents.CanvasReady"/>
@@ -27,6 +28,7 @@ namespace Anomaly.Client.Patches.Menu;
 internal static class MainMenuCustomizer
 {
     private const string WelcomePath = "News/Welcome";
+    private const string VersionLabelName = "Anomaly.Version";
     private const string ServerBrowserLoadingPath = "Servers/ServerBrowser/Loading";
     private const string ConnectPopupRootPath = "ConnectPopup/root";
 
@@ -108,6 +110,8 @@ internal static class MainMenuCustomizer
 
     private static void TryApplyVersion(Il2Cpp.NewMainMenu menu)
     {
+        Text source = null;
+        TextMeshProUGUI label = null;
         try
         {
             if (menu == null) return;
@@ -115,24 +119,97 @@ internal static class MainMenuCustomizer
             // NewMainMenu.Version is the inspector-serialized reference to the version
             // label. Direct field access is safer than path lookup because the scene
             // has 6 active Canvas components and FindObjectOfType picks one at random.
-            var label = menu.Version;
-            if (label == null)
+            source = menu.Version;
+            if (source == null)
             {
                 MelonLogger.Warning("MainMenuCustomizer: NewMainMenu.Version field is null.");
                 return;
             }
 
             string suffix = Tr.Get(TrKeys.Version_ModSuffix);
-            string current = label.text ?? string.Empty;
-            if (current.EndsWith(suffix, StringComparison.Ordinal)) return;
+            string current = source.text ?? string.Empty;
+            if (!string.IsNullOrEmpty(suffix) && current.EndsWith(suffix, StringComparison.Ordinal))
+                current = current.Substring(0, current.Length - suffix.Length);
 
-            label.text = current + suffix;
+            // Keep the game's serialized Text reference valid, with a plain-text
+            // fallback. A child TMP graphic replaces its rendering without putting
+            // two Graphic components on the same GameObject.
+            source.text = current + suffix;
+            var existing = source.transform.Find(VersionLabelName);
+            label = existing?.GetComponent<TextMeshProUGUI>();
+            var template = menu.transform.Find(WelcomePath)?.GetComponent<TMP_Text>();
+            var font = template?.font ?? AnomalyUiStyle.ResolveFont();
+            if (font == null)
+            {
+                source.enabled = true;
+                if (label != null) label.enabled = false;
+                MelonLogger.Warning("MainMenuCustomizer: no TMP font available for the version label.");
+                return;
+            }
+
+            if (label == null)
+            {
+                var go = AnomalyUiStyle.MakeUi(VersionLabelName);
+                go.transform.SetParent(source.transform, worldPositionStays: false);
+                label = go.AddComponent<TextMeshProUGUI>();
+            }
+
+            var rect = label.rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            rect.pivot = source.rectTransform.pivot;
+
+            label.font = font;
+            label.fontSharedMaterial = template != null && template.font == font
+                ? template.fontSharedMaterial
+                : font.material;
+            label.fontSize = source.fontSize;
+            label.fontStyle = source.fontStyle switch
+            {
+                FontStyle.Bold => FontStyles.Bold,
+                FontStyle.Italic => FontStyles.Italic,
+                FontStyle.BoldAndItalic => FontStyles.Bold | FontStyles.Italic,
+                _ => FontStyles.Normal,
+            };
+            label.alignment = VersionAlignment(source.alignment);
+            label.color = source.color;
+            label.enableAutoSizing = source.resizeTextForBestFit;
+            label.fontSizeMin = source.resizeTextMinSize;
+            label.fontSizeMax = source.resizeTextMaxSize;
+            label.enableWordWrapping = false;
+            label.overflowMode = TextOverflowModes.Overflow;
+            label.richText = true;
+            label.raycastTarget = false;
+            label.maskable = source.maskable;
+
+            string accent = ColorUtility.ToHtmlStringRGB(AnomalyUiStyle.Accent);
+            label.text = current + $" <sup><b><color=#{accent}>{suffix.TrimStart()}</color></b></sup>";
+            label.enabled = true;
+            source.enabled = false;
         }
         catch (Exception ex)
         {
+            if (label != null) label.enabled = false;
+            if (source != null) source.enabled = true;
             MelonLogger.Warning($"MainMenuCustomizer: version failed: {ex.Message}");
         }
     }
+
+    private static TextAlignmentOptions VersionAlignment(TextAnchor alignment) => alignment switch
+    {
+        TextAnchor.UpperLeft => TextAlignmentOptions.TopLeft,
+        TextAnchor.UpperCenter => TextAlignmentOptions.Top,
+        TextAnchor.UpperRight => TextAlignmentOptions.TopRight,
+        TextAnchor.MiddleLeft => TextAlignmentOptions.Left,
+        TextAnchor.MiddleCenter => TextAlignmentOptions.Center,
+        TextAnchor.MiddleRight => TextAlignmentOptions.Right,
+        TextAnchor.LowerLeft => TextAlignmentOptions.BottomLeft,
+        TextAnchor.LowerCenter => TextAlignmentOptions.Bottom,
+        TextAnchor.LowerRight => TextAlignmentOptions.BottomRight,
+        _ => TextAlignmentOptions.BottomRight,
+    };
 
     private static void TryApplyLogo()
     {
