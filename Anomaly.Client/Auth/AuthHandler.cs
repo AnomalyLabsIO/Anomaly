@@ -278,6 +278,7 @@ public static class AuthHandler
                 writer.PutBytesWithLength(clientHandshake.Encode());
                 EnsureConnectDataFits(writer);
                 _phase2Sent = false;
+                AdmissionSends.Current.PrepareWriter(writer.Pointer.ToInt64());
             }
             else
             {
@@ -314,6 +315,7 @@ public static class AuthHandler
                 // GetConnectData twice per connect and the duplicate must
                 // still see the entry so it dedups instead of re-entering
                 // phase-1. OnDisconnected clears the entry after phase-2.
+                AdmissionSends.Current.PrepareWriter(writer.Pointer.ToInt64());
                 _phase2Sent = true;
             }
         }
@@ -375,6 +377,26 @@ public static class AuthHandler
         }
     }
 
+    // The game calls GetConnectData before ConnectClient. Without a prepared
+    // Anomaly handshake, a removed auth prefix must not send vanilla data.
+    internal static bool ValidateConnectionStart(NetDataWriter writer)
+    {
+        var scope = AdmissionSends.Current;
+        if (scope.Failure != null) return false;
+        try { Core.EnsureOfflineAuthenticationMode(); }
+        catch (ClientIntegrityException exception)
+        {
+            scope.Fail(exception.Message);
+            return false;
+        }
+        if (writer == null || !scope.IsPreparedWriter(writer.Pointer.ToInt64(), Il2CppMirror.NetworkServer.active))
+        {
+            scope.Fail("Connection data was not prepared by Anomaly authentication.");
+            return false;
+        }
+        return ValidateAuthenticationSend();
+    }
+
     internal static void EnterLocalHostScope()
     {
         // Only the existing in-process host branch calls this. Remote loopback
@@ -398,6 +420,7 @@ public static class AuthHandler
     {
         CancelAuthentication(null, clearAllConnections: true);
         AdmissionSends.BeginScope();
+        AdmissionSends.Current.PermitLocalHost();
     }
 
     internal static void UpdateIntegrityMonitoring()
@@ -953,6 +976,7 @@ public static class AuthHandler
     private static void ClearCurrentKeys()
     {
         AdmissionSends.Current.ClearAdmission();
+        AdmissionSends.Current.RevokePreparedWriter();
         CurrentServerFingerprint = null;
         AnomalyMessaging.ClearTransportSession();
     }

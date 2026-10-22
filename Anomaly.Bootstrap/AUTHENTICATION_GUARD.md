@@ -97,6 +97,18 @@ when it is unavailable. Per-frame and per-send checks retain immediate health,
 mutation-barrier, native-coverage, and admission-generation validation. Inventory
 registry reconciliation uses Bootstrap's shared recurring schedule.
 
+The client also checks its live `CustomNetworkManager.Modded` state before a
+connection and on each main-thread frame. The current game's
+`CentralAuthManager.NoAuthStartupArg` is a `"-noauth"` constant; the client checks
+its expected value, and a reflected setter did not change it in the tested
+interop build. `GetConnectData` must prepare the same native writer that reaches
+the required `ConnectClient` prefix. A remote connection with an unprepared
+writer is denied before it can send vanilla connection data. The in-process
+local-host branch has a separate allowance valid only while its server is active.
+This check complements the
+recurring required-patch audit; it does not make simultaneous full-trust changes
+to the hook and its verifier impossible.
+
 Ordinary Harmony duplicate/reinstall warnings are advisory. They neither create
 security evidence nor block valid operations. A duplicate is an exact target,
 patch method, kind, and owner appearing more than once; a reinstall warning

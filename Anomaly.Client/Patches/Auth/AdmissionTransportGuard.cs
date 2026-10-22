@@ -34,5 +34,5 @@ internal static class AdmissionTransportGuard
 internal static class ClientConnectAdmissionGuard
 {
     [HarmonyPrefix, HarmonyPriority(int.MaxValue)]
-    internal static bool Prefix() => AuthHandler.ValidateAuthenticationSend();
+    internal static bool Prefix(NetDataWriter __0) => AuthHandler.ValidateConnectionStart(__0);
 }

@@ -78,6 +78,25 @@ public class Core : MelonMod
         Instance._clientRuntimeReady &&
         Instance._capabilitiesReady && ClientRuntime.IsInitialized;
 
+    // Game-owned static fields can change without a Harmony or MonoMod event.
+    internal static void EnsureOfflineAuthenticationMode()
+    {
+        bool intact;
+        try
+        {
+            intact = Instance?._offlineAuthReady == true && CustomNetworkManager.Modded &&
+                string.Equals(CentralAuthManager.NoAuthStartupArg, "-noauth", StringComparison.Ordinal);
+        }
+        catch (Exception exception)
+        {
+            Bootstrap.RuntimeGuard.Invalidate("Required modded authentication state could not be read: " + exception.GetType().Name);
+            throw new ClientIntegrityException("Required modded authentication state could not be verified.");
+        }
+        if (intact) return;
+        Bootstrap.RuntimeGuard.Invalidate("Required modded authentication state changed.");
+        throw new ClientIntegrityException("Required modded authentication state changed. Restart the game.");
+    }
+
     public override void OnEarlyInitializeMelon()
     {
         bool accepted = false;
@@ -264,6 +283,12 @@ public class Core : MelonMod
         if (Bootstrap.Core.State != Bootstrap.StartupState.Ready || !Bootstrap.RuntimeGuard.HeartbeatFresh)
         {
             BlockingFailureDialog.ShowAndExit("Required Bootstrap protection stopped advancing. Restart the game.");
+            return;
+        }
+        try { EnsureOfflineAuthenticationMode(); }
+        catch (ClientIntegrityException exception)
+        {
+            BlockingFailureDialog.ShowAndExit(exception.Message);
             return;
         }
         AuthHandler.UpdateIntegrityMonitoring();

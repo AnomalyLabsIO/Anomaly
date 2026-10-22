@@ -79,4 +79,24 @@ public sealed class AdmissionSendGateTests
         scope.ClearAdmission();
         Assert.Throws<InvalidOperationException>(() => scope.Bind(new object()));
     }
+
+    [Fact]
+    public void ConnectionWriterMustBePreparedInTheCurrentScope()
+    {
+        var gate = new AdmissionSendGate<object>();
+        var first = gate.Current;
+        Assert.False(first.IsPreparedWriter(123));
+        Assert.Throws<ArgumentOutOfRangeException>(() => first.PrepareWriter(0));
+        first.PrepareWriter(123);
+        Assert.True(first.IsPreparedWriter(123));
+        Assert.False(first.IsPreparedWriter(456));
+
+        gate.BeginScope();
+        Assert.False(gate.Current.IsPreparedWriter(123));
+        gate.Current.PermitLocalHost();
+        Assert.False(gate.Current.IsPreparedWriter(456));
+        Assert.True(gate.Current.IsPreparedWriter(456, localHostActive: true));
+        gate.Current.RevokePreparedWriter();
+        Assert.False(gate.Current.IsPreparedWriter(456));
+    }
 }

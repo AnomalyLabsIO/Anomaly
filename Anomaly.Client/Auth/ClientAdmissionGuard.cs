@@ -39,6 +39,7 @@ internal static class ClientAdmissionGuard
         ProtectedMethodCatalog.RefreshNativeTargetsIfReady();
         if (Bootstrap.Core.State != StartupState.Ready || !RuntimeGuard.Verify())
             throw new ClientIntegrityException("The Bootstrap authentication guard is unavailable. Restart the game.");
+        Core.EnsureOfflineAuthenticationMode();
         // Core registered its exact required patch tuples before auth initialization;
         // the shared Bootstrap checkpoint verifies those cached descriptors too.
         var guard = RuntimeGuard.Snapshot;

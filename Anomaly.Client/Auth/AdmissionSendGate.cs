@@ -13,9 +13,25 @@ internal sealed class AdmissionSendScope<T> where T : class
     private string _failure;
     private int _failureHandled;
     private int _bound;
+    private long _preparedWriter;
 
     internal T Admission => Volatile.Read(ref _admission);
     internal string Failure => Volatile.Read(ref _failure);
+    internal bool IsPreparedWriter(long pointer, bool localHostActive = false)
+    {
+        long prepared = Volatile.Read(ref _preparedWriter);
+        return pointer != 0 && (prepared == pointer || (prepared == -1 && localHostActive));
+    }
+
+    // GetConnectData and ConnectClient must use the same native writer. A local
+    // in-process host has an explicit allowance only while that host is active.
+    internal void PrepareWriter(long pointer)
+    {
+        if (pointer == 0 || pointer == -1) throw new ArgumentOutOfRangeException(nameof(pointer));
+        Volatile.Write(ref _preparedWriter, pointer);
+    }
+    internal void PermitLocalHost() => Volatile.Write(ref _preparedWriter, -1);
+    internal void RevokePreparedWriter() => Volatile.Write(ref _preparedWriter, 0);
 
     internal void Bind(T admission)
     {
