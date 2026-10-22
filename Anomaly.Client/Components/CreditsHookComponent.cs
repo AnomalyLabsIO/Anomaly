@@ -1,3 +1,5 @@
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Il2CppInterop.Runtime.Attributes;
 using Il2CppTMPro;
 using MelonLoader;
@@ -83,12 +85,13 @@ public class CreditsHookComponent : MonoBehaviour
         if (_anomalyCreditsAdded)
             return;
 
-        if (!_categoryInfos.ContainsKey("Modding Support") && !CreateCreditsCategory("Modding Support"))
+        string category = Tr.Get(TrKeys.Credits_ModdingSupport);
+        if (!_categoryInfos.ContainsKey(category) && !CreateCreditsCategory(category))
             return;
-        CreateCreditsEntry("TayTay", "Anomaly - Creator", "Modding Support", CreditColors.CrabPink);
-        CreateCreditsEntry("Dimenzio", "Axon - Creator, Maintainer", "Modding Support", CreditColors.CrabPink);
-        CreateCreditsEntry("Tili", "Axon - Developer", "Modding Support", CreditColors.DevBlue);
-        CreateCreditsEntry("Helight", "Axon - Helper", "Modding Support", CreditColors.Yellow);
+        CreateCreditsEntry("TayTay", Tr.Get(TrKeys.Credits_Creator, "Anomaly"), category, CreditColors.CrabPink);
+        CreateCreditsEntry("Dimenzio", Tr.Get(TrKeys.Credits_CreatorMaintainer, "Axon"), category, CreditColors.CrabPink);
+        CreateCreditsEntry("Tili", Tr.Get(TrKeys.Credits_Developer, "Axon"), category, CreditColors.DevBlue);
+        CreateCreditsEntry("Helight", Tr.Get(TrKeys.Credits_Helper, "Axon"), category, CreditColors.Yellow);
         _anomalyCreditsAdded = true;
     }
 

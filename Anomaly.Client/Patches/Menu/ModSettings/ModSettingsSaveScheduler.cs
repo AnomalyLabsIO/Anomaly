@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Scheduling;
 using Anomaly.Client.Api.UI.ModSettings.Internal;
 using MelonLoader;
@@ -70,7 +72,7 @@ internal static class ModSettingsSaveScheduler
             object file = typeof(MelonPreferences_Category).GetField("File", FileFlags)?.GetValue(category)
                 ?? typeof(MelonPreferences).GetField("DefaultFile", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null);
             if (file == null)
-                return "Changes are active, but preference storage is unavailable. See the log.";
+                return Tr.Get(TrKeys.Settings_StorageUnavailable);
             Type type = file.GetType();
             object currentWatcher = type.GetField("FileWatcher", FileFlags)?.GetValue(file);
             watcherSync = currentWatcher?.GetType().GetField("SyncLock", FileFlags)?.GetValue(currentWatcher) ?? file;
@@ -80,14 +82,14 @@ internal static class ModSettingsSaveScheduler
             var errorProperty = type.GetProperty("WasError", FileFlags);
             var shouldSaveField = type.GetField("ShouldSave", FileFlags);
             if (errorProperty?.PropertyType != typeof(bool) || !errorProperty.CanWrite || shouldSaveField == null)
-                return "Changes are active, but this loader's save status could not be verified.";
+                return Tr.Get(TrKeys.Settings_SaveUnverified);
             if (shouldSaveField.GetValue(file) is false)
-                return "Changes are active for this session; this mod disabled preference-file saving.";
+                return Tr.Get(TrKeys.Settings_SaveDisabled);
 
             bool wasError = (bool)errorProperty.GetValue(file);
             bool ownedFailure = _writeFailures.TryGetValue(file, out bool restoreWatcher);
             if (wasError && !ownedFailure)
-                return "Changes are not saved. Repair the existing preference-file load error in the log, then restart.";
+                return Tr.Get(TrKeys.Settings_LoadError);
 
             bool recovering = wasError && ownedFailure;
             bool wasWatching = recovering ? restoreWatcher : HasActiveWatcher(file);
@@ -128,7 +130,7 @@ internal static class ModSettingsSaveScheduler
             if ((bool)errorProperty.GetValue(file))
             {
                 canRetry = true;
-                return "Changes are active but not saved. Fix the write error in the log, then select Retry save.";
+                return Tr.Get(TrKeys.Settings_WriteError);
             }
 
             return null;
@@ -139,8 +141,8 @@ internal static class ModSettingsSaveScheduler
             if (!_errors.ContainsKey(category))
                 MelonLogger.Error($"ModSettings save failed for '{category.Identifier}': {exception}");
             return canRetry
-                ? "Changes are active but not saved. Fix the error in the log, then select Retry save."
-                : "Changes are active, but preference storage could not be inspected safely. See the log and restart.";
+                ? Tr.Get(TrKeys.Settings_SaveError)
+                : Tr.Get(TrKeys.Settings_StorageInspectionFailed);
         }
         finally
         {

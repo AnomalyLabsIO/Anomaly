@@ -6,7 +6,7 @@
 # Placeholders use .NET string.Format positional syntax: {0}, {1}, {2}, ...
 #
 # When a key takes placeholders, document them with a comment on the line above so translators
-# know what each slot contains and don't reorder them silently.
+# know what each slot contains. Placeholders may be reordered, but their indexes keep the same meaning.
 
 # ===== Authentication / connection overlays =====
 "anomaly.overlay.authenticating": "Authenticating, Please Wait..."
@@ -23,7 +23,7 @@
 "anomaly.prompt.skip_content": "Skip content"
 "anomaly.prompt.save_error": "Could not save. Check that Anomaly's UserData folder is writable, then try again. Your input is still here."
 "anomaly.prompt.nickname_title": "Choose your Anomaly nickname"
-"anomaly.prompt.nickname_details": "This name is sent to servers. Anomaly will not use your Windows username. Enter 1–32 visible characters."
+"anomaly.prompt.nickname_details": "This will be your in-game name when connecting to servers. Enter 1–32 visible characters."
 "anomaly.prompt.nickname_invalid": "Enter 1–32 visible characters. Control characters are not allowed."
 "anomaly.prompt.keyboard_hint": "Tab: next control · Page Up/Down: scroll details · Esc: cancel"
 
@@ -59,3 +59,196 @@
 # ===== Misc =====
 # Appended to the version string when running modded; leading space is intentional.
 "anomaly.version_modded_suffix": " (MODDED)"
+
+# ===== Mods settings feedback and preferences =====
+"anomaly.settings.reset": "Reset"
+"anomaly.settings.retry_save": "Retry save"
+"anomaly.settings.disabled": "Disabled"
+"anomaly.settings.enabled": "Enabled"
+"anomaly.settings.empty_value": "(empty)"
+# {0} = current value, {1} = default value (literal values)
+"anomaly.settings.value_summary": "Current: {0}   ·   Default: {1}"
+"anomaly.settings.invalid_value": "This value is outside the mod's allowed values. The setting was not changed."
+"anomaly.settings.apply_failed": "The mod could not apply this value. See the log."
+"anomaly.settings.reset_failed": "The mod could not reset this setting. See the log."
+"anomaly.settings.select_valid_value": "Select a valid value…"
+"anomaly.settings.unavailable_choice": "The stored value is not an available choice. Select a value or Reset to change it."
+"anomaly.settings.outside_slider_range": "The stored value is outside this slider's range. Choose a value or Reset to change it."
+# {0} = .NET type name
+"anomaly.settings.invalid_type": "Enter a valid {0} value. The setting was not changed."
+# {0} = minimum, {1} = maximum (literal input values)
+"anomaly.settings.invalid_range": "Enter a value between {0} and {1}. The setting was not changed."
+"anomaly.settings.storage_unavailable": "Changes are active, but preference storage is unavailable. See the log."
+"anomaly.settings.save_unverified": "Changes are active, but this loader's save status could not be verified."
+"anomaly.settings.save_disabled": "Changes are active for this session; this mod disabled preference-file saving."
+"anomaly.settings.load_error": "Changes are not saved. Repair the existing preference-file load error in the log, then restart."
+"anomaly.settings.write_error": "Changes are active but not saved. Fix the write error in the log, then select Retry save."
+"anomaly.settings.save_error": "Changes are active but not saved. Fix the error in the log, then select Retry save."
+"anomaly.settings.storage_inspection_failed": "Changes are active, but preference storage could not be inspected safely. See the log and restart."
+"anomaly.settings.locale_override": "Locale override"
+"anomaly.settings.class_dcolor": "Class D favorite color"
+# {0} = color syntax (#RRGGBB), {1} = no-tint value (#FFFFFF)
+"anomaly.settings.class_dcolor_description": "Preferred Class D jumpsuit tint as {0}. {1} disables tinting."
+
+# ===== Credits =====
+"anomaly.credits.modding_support": "Modding Support"
+# {0} = project name
+"anomaly.credits.creator": "{0} - Creator"
+# {0} = project name
+"anomaly.credits.creator_maintainer": "{0} - Creator, Maintainer"
+# {0} = project name
+"anomaly.credits.developer": "{0} - Developer"
+# {0} = project name
+"anomaly.credits.helper": "{0} - Helper"
+
+# ===== File transfer consent =====
+"anomaly.overlay.file_transfer.awaiting_consent": "Waiting for server-content approval"
+
+# ===== Built-in console commands =====
+"anomaly.commands.name_description": "Prints the local player's nickname."
+"anomaly.commands.not_connected": "(not connected)"
+"anomaly.commands.no_nickname": "(no nickname set)"
+"anomaly.commands.who_am_idescription": "Shows and copies this server's local Anomaly enrollment id."
+"anomaly.commands.no_enrollment": "No authenticated server enrollment is active."
+# {0} = enrollment ID; clipboard receives only the literal ID
+"anomaly.commands.enrollment_copied": "{0} (copied to clipboard)"
+# {0} = --copy switch
+"anomaly.commands.status_description": "Shows sanitized Anomaly diagnostics. Use {0} to copy them."
+# {0} = literal command syntax
+"anomaly.commands.usage": "Usage: {0}"
+"anomaly.commands.status_copied": "Sanitized status copied to clipboard."
+# {0} = exception type
+"anomaly.commands.status_unavailable": "Status unavailable ({0}). Check the local MelonLoader log."
+"anomaly.commands.identity_description": "Rotate the client identity while preserving signed enrollment lineage."
+# {0} = literal command syntax, {1} = profile filename
+"anomaly.commands.identity_usage": "Usage: {0} — disconnect first. The previous key signs a bounded public lineage proof; losing {1} instead creates a fresh enrollment."
+# {0} = failure detail
+"anomaly.commands.identity_failed": "Client identity rotation failed: {0}"
+"anomaly.commands.identity_rotated": "Client identity rotated and saved atomically. Future connections present the old-key-signed lineage so servers retain the existing local enrollment."
+"anomaly.commands.mod_faulted": "The owning mod faulted and has been disabled for this session."
+# {0} = exception type
+"anomaly.commands.error": "Command failed ({0}). Check the local MelonLoader log for details."
+
+# ===== Connection failure notice =====
+"anomaly.connection.failure_title": "Connection could not be completed"
+# {0} = translated reason, {1} = translated next step, {2} = literal diagnostic code, {3} = command
+"anomaly.connection.failure_details": "{0}\n\n{1}\n\nDiagnostic code: {2}\nRun {3} in the game console for diagnostic locations."
+
+# ===== Authentication and mod admission =====
+"anomaly.auth.features_unavailable": "Required Anomaly features are unavailable."
+# {0} = status command
+"anomaly.auth.features_action": "Restart with a matching Anomaly release and check {0} for the failed feature."
+"anomaly.auth.network_not_ready": "Anomaly networking is not ready."
+"anomaly.auth.network_action": "Wait for initialization to finish, then reconnect. If this repeats, restart the game."
+"anomaly.auth.receiver_unavailable": "The authenticated message receiver is unavailable."
+# {0} = status command
+"anomaly.auth.receiver_action": "Restart with a matching Anomaly release and check {0} for the failed networking feature."
+"anomaly.auth.profile_unavailable": "The local identity profile could not be opened."
+"anomaly.auth.profile_action": "Check the game log for the profile error, repair the reported file or permissions, then restart. Your existing profile was left unchanged."
+"anomaly.auth.mod_inventory_unavailable": "The client mod inventory could not be sent."
+"anomaly.auth.mod_inventory_invalid": "The loaded client mod list is invalid or too large. Check the game log for the affected mod."
+# {0} = connection data bytes, {1} = maximum bytes
+"anomaly.auth.mod_inventory_too_large": "The connection data is {0} bytes; the safe limit is {1} bytes. Check the game log for oversized client mod metadata or identity history."
+"anomaly.auth.prepare_failed": "Authentication could not be prepared."
+"anomaly.auth.prepare_action": "Check the game log and use a matching client/server release before reconnecting."
+"anomaly.auth.integrity_failed": "Authentication integrity requirements were not met."
+"anomaly.auth.integrity_action": "A new connection is required; the previous handshake was discarded. Check the game log for the integrity failure."
+# {0} = literal transport reason
+"anomaly.auth.connection_ended": "The server connection ended: {0}."
+"anomaly.auth.no_response_action": "Check that the server is available and uses a matching Anomaly release, then reconnect."
+"anomaly.auth.retry_invalid": "The server retry response was invalid."
+"anomaly.auth.retry_action": "Reconnect once. If this repeats, ask the server operator to check its Anomaly release and logs."
+"anomaly.auth.rejected": "The server rejected the connection."
+"anomaly.auth.rejected_action": "Check the server's connection requirements and password, then reconnect. The game log contains the server rejection."
+"anomaly.auth.session_mismatch": "The server reply did not match this connection attempt."
+"anomaly.auth.session_action": "Reconnect to start a fresh authentication attempt."
+"anomaly.auth.version_mismatch": "The client and server use different Anomaly protocol versions."
+"anomaly.auth.version_action": "Install the matching Anomaly release requested by the server operator."
+"anomaly.auth.handshake_invalid": "The server identity response could not be verified."
+"anomaly.auth.handshake_action": "Ask the server operator to check its release and identity configuration before retrying."
+"anomaly.auth.key_changed": "The remembered server identity has changed."
+"anomaly.auth.key_changed_action": "Verify the new fingerprint with the operator using another trusted channel. Anomaly has kept the existing trusted key and blocked this connection."
+"anomaly.auth.trust_store_unavailable": "The local server trust store could not be opened."
+"anomaly.auth.trust_store_action": "Check the game log for the file error and repair it before reconnecting. Existing trusted keys have not been replaced."
+"anomaly.auth.trust_title": "Trust this Anomaly server key?"
+# {0} = server endpoint, {1} = literal key fingerprint
+"anomaly.auth.trust_details": "Server: {0}\n\nIdentity fingerprint:\n{1}\n\nCheck this fingerprint with the server operator before trusting it. This key will be remembered for future connections."
+"anomaly.auth.trust_save_failed": "The server trust decision could not be saved."
+"anomaly.auth.trust_save_action": "Check that Anomaly's UserData folder is writable, then reconnect and review the fingerprint again."
+"anomaly.auth.custom_rejected_action": "Ask the server operator for its connection requirements."
+"anomaly.auth.integrity_rejected": "The server does not accept the reported authentication modifications."
+# {0} = literal audit flags
+"anomaly.auth.integrity_rejected_action": "Reported audit: {0}. Remove the affected modifications and restart the game, or ask the server owner whether they accept clients with this risk."
+"anomaly.auth.mod_requirements": "The server's client mod requirements were not met."
+"anomaly.auth.mod_response_action": "The mod requirements could not be read. Use a matching Anomaly release or ask the server operator for details."
+# {0} = server-authored message, kept verbatim after display sanitization
+"anomaly.auth.custom_reason": "The server rejected the connection.\nServer message: {0}"
+"anomaly.auth.review_requirements": "Review the server's connection requirements before reconnecting."
+# {0} = mod ID, {1} = required version
+"anomaly.auth.mod_missing": "Missing client mod ‘{0}’ (required: {1})"
+# {0} = mod ID, {1} = required version, {2} = installed version
+"anomaly.auth.mod_wrong_version": "Incorrect mod version: ‘{0}’ — required {1}, present {2}"
+# {0} = mod ID
+"anomaly.auth.mod_blocked": "Blocked client mod: ‘{0}’"
+# {0} = mod ID
+"anomaly.auth.mod_unexpected": "Additional client mod not allowed: ‘{0}’"
+# {0} = translated issue, {1} = installed version
+"anomaly.auth.mod_present": "{0} (present: {1})"
+# {0} = omitted issue count
+"anomaly.auth.mod_issues_omitted": "{0} more mod issue(s) were omitted."
+"anomaly.auth.mod_requirements_action": "Update your client mods to meet the server's requirements, then reconnect."
+"anomaly.auth.password_failed": "The password response could not be prepared."
+"anomaly.auth.password_action": "Reconnect and try again. If this repeats, check the game log for the password proof error."
+# {0} = initialization state
+"anomaly.auth.rotation_profile_unavailable": "The client identity profile is not ready ({0}). Check the game log for the profile error."
+"anomaly.auth.rotation_disconnect": "Disconnect from the server before rotating the client identity."
+# {0} = exception type
+"anomaly.auth.rotation_error": "Could not save the new identity ({0}). Check the game log before trying again."
+# {0} = literal transport reason
+"anomaly.auth.no_response": "The server did not respond ({0})."
+"anomaly.auth.server_availability_action": "Check the server address and that the server is running, then reconnect. If it is reachable, check that client and server use matching Anomaly releases."
+"anomaly.auth.reconnect_failed": "The authenticated reconnect could not be started."
+"anomaly.auth.reconnect_action": "Return to the server browser and connect again."
+
+# ===== Server content consent and failures =====
+"anomaly.content.approval_title": "Approve this server's custom content?"
+# {0} = fingerprint, {1} = item count, {2} = file count, {3} = download MiB, {4} = download bytes
+"anomaly.content.approval_details": "Server fingerprint:\n{0}\n\nItems: {1:N0}\nFiles: {2:N0}\nDownload: {3:N2} MiB ({4:N0} bytes)\n\nApproval is saved for this exact server and content version. Skipping may prevent joining servers that require this content."
+"anomaly.content.validation_failed": "The server's custom content could not be validated."
+"anomaly.content.activation_failed": "The approved custom content could not be activated."
+"anomaly.content.failure_action": "Check the game log for the content error, then reconnect. If this repeats, ask the server operator to check the catalog and files."
+
+# ===== Sanitized status report =====
+"anomaly.status.title": "Anomaly early access status"
+# {0} = core version, {1} = API version, {2} = game version
+"anomaly.status.versions": "Anomaly: {0}; API: {1}; game: {2}"
+# {0} = translated profile state
+"anomaly.status.profile": "Profile: {0}"
+"anomaly.status.profile_unavailable": "unavailable (see local log; files preserved)"
+"anomaly.status.profile_ready": "ready"
+"anomaly.status.profile_incomplete": "setup incomplete"
+# {0} = translated connection state
+"anomaly.status.connection": "Connection: {0}"
+"anomaly.status.connection_ready": "ready"
+"anomaly.status.connection_preparing": "connected, preparing"
+"anomaly.status.disconnected": "disconnected"
+"anomaly.status.features_healthy": "Features: healthy"
+# {0} = feature count
+"anomaly.status.features_attention": "Features needing attention: {0}"
+# {0} = sanitized owner ID, {1} = feature ID, {2} = literal health status
+"anomaly.status.feature_detail": "  {0}:{1} — {2}; inspect this feature in the local log."
+"anomaly.status.features_omitted": "  Additional feature records omitted."
+# {0} = literal relative log path
+"anomaly.status.log": "Log: {0}"
+# {0} = literal relative crash-report path
+"anomaly.status.crash_reports": "Crash reports: {0}"
+"anomaly.status.footer": "Paths above are relative to this game instance. No report is uploaded."
+
+# ===== Additional built-in labels =====
+"anomaly.settings.security": "Anomaly security"
+"anomaly.settings.allow_auth_modifications": "Allow external authentication modifications"
+"anomaly.settings.allow_auth_modifications_description": "Allow modifications to external authentication dependencies and report them to the server. Requires restart; Anomaly code and monitoring remain protected."
+"anomaly.menu.default_username": "Player"
+"anomaly.news.early_access": "early access"
+# {0} = integer percentage
+"anomaly.overlay.file_transfer.percent": "{0}%"

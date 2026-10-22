@@ -4,6 +4,7 @@ using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Api.Internal.Localization;
 using Anomaly.Client.Api.Localization;
+using Anomaly.Client.Api.UI.ModSettings;
 using Anomaly.Client.Api.UI.ModSettings.Internal;
 using Anomaly.Client.Components.ModSettings;
 using Il2CppInterop.Runtime;
@@ -58,6 +59,18 @@ internal static class ModSettingsTabInstaller
     {
         if (_bootstrapped) return;
         _bootstrapped = true;
+
+        // Bootstrap creates these preferences before the client API/localization is
+        // loaded. Localize their in-game presentation without adding an early dependency.
+        ModSettingsRegistry.SetCategory("AnomalyBootstrap", new ModSettingCategoryMetadata
+        {
+            DisplayName = Tr.Get(TrKeys.Settings_Security),
+        });
+        ModSettingsRegistry.SetEntry("AnomalyBootstrap", "AllowExternalAuthenticationModifications", new ModSettingMetadata
+        {
+            DisplayName = Tr.Get(TrKeys.Settings_AllowAuthModifications),
+            Description = Tr.Get(TrKeys.Settings_AllowAuthModificationsDescription),
+        });
 
         ClientEvents.SceneLoaded += OnSceneLoaded;
         ModSettingsRegistry.OnChanged += OnRegistryChanged;

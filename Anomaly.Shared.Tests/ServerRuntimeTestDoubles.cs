@@ -421,17 +421,6 @@ namespace Anomaly.Client.Api.Localization
     }
 }
 
-namespace Anomaly.Client.Api.Internal.Localization
-{
-    internal static class TrKeys
-    {
-        public const string FileTransfer_Connecting = "file-transfer-connecting";
-        public const string FileTransfer_LoadingLevel = "file-transfer-loading";
-        public const string Prompt_AllowContent = "allow-content";
-        public const string Prompt_SkipContent = "skip-content";
-    }
-}
-
 namespace Anomaly.Client.Api.Networking
 {
     internal static class AnomalyMessaging

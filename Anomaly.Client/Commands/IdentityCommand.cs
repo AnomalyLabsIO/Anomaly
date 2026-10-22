@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Commands;
 using Anomaly.Client.Auth;
 
@@ -14,26 +16,24 @@ internal sealed class IdentityCommand : ICommand
 
     public IReadOnlyList<string> Aliases => NoAliases;
 
-    public string Description => "Rotate the client identity while preserving signed enrollment lineage.";
+    public string Description => Tr.Get(TrKeys.Commands_IdentityDescription);
 
     public void Execute(CommandContext context)
     {
         if (!string.Equals(context.ArgOr(0), "confirm", StringComparison.Ordinal))
         {
             context.Reply(
-                "Usage: anomaly.rotate_identity confirm — disconnect first. "
-                + "The previous key signs a bounded public lineage proof; losing user.json instead creates a fresh enrollment.");
+                Tr.Get(TrKeys.Commands_IdentityUsage, "anomaly.rotate_identity confirm", "user.json"));
             return;
         }
 
         if (!AuthHandler.TryRotateClientIdentity(out var error))
         {
-            context.Reply("Client identity rotation failed: " + error);
+            context.Reply(Tr.Get(TrKeys.Commands_IdentityFailed, error));
             return;
         }
 
         context.Reply(
-            "Client identity rotated and saved atomically. Future connections present the old-key-signed lineage "
-            + "so servers retain the existing local enrollment.");
+            Tr.Get(TrKeys.Commands_IdentityRotated));
     }
 }

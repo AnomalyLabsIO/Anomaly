@@ -19,7 +19,7 @@
 "anomaly.prompt.skip_content": "Пропустить контент"
 "anomaly.prompt.save_error": "Не удалось сохранить. Проверьте права записи в папку UserData Anomaly и попробуйте снова. Введённый текст сохранён в этом окне."
 "anomaly.prompt.nickname_title": "Выберите никнейм Anomaly"
-"anomaly.prompt.nickname_details": "Это имя передаётся серверам. Anomaly не использует имя пользователя Windows. Введите от 1 до 32 видимых символов."
+"anomaly.prompt.nickname_details": "Это будет ваше имя в игре при подключении к серверам. Введите от 1 до 32 видимых символов."
 "anomaly.prompt.nickname_invalid": "Введите от 1 до 32 видимых символов. Управляющие символы не допускаются."
 "anomaly.prompt.keyboard_hint": "Tab: следующий элемент · Page Up/Down: прокрутка · Esc: отмена"
 
@@ -54,3 +54,196 @@
 
 # ===== Misc =====
 "anomaly.version_modded_suffix": " (MODDED)"
+
+# ===== Mods settings feedback and preferences =====
+"anomaly.settings.reset": "Сбросить"
+"anomaly.settings.retry_save": "Повторить сохранение"
+"anomaly.settings.disabled": "Выключено"
+"anomaly.settings.enabled": "Включено"
+"anomaly.settings.empty_value": "(пусто)"
+# {0} = current value, {1} = default value (literal values)
+"anomaly.settings.value_summary": "Текущее: {0}   ·   По умолчанию: {1}"
+"anomaly.settings.invalid_value": "Это значение не разрешено модом. Настройка не изменена."
+"anomaly.settings.apply_failed": "Мод не смог применить это значение. См. журнал."
+"anomaly.settings.reset_failed": "Мод не смог сбросить эту настройку. См. журнал."
+"anomaly.settings.select_valid_value": "Выберите допустимое значение…"
+"anomaly.settings.unavailable_choice": "Сохранённое значение отсутствует среди доступных вариантов. Выберите значение или сбросьте настройку."
+"anomaly.settings.outside_slider_range": "Сохранённое значение выходит за пределы ползунка. Выберите значение или сбросьте настройку."
+# {0} = .NET type name
+"anomaly.settings.invalid_type": "Введите допустимое значение типа {0}. Настройка не изменена."
+# {0} = minimum, {1} = maximum (literal input values)
+"anomaly.settings.invalid_range": "Введите значение от {0} до {1}. Настройка не изменена."
+"anomaly.settings.storage_unavailable": "Изменения применены, но хранилище настроек недоступно. См. журнал."
+"anomaly.settings.save_unverified": "Изменения применены, но статус сохранения в этом загрузчике проверить не удалось."
+"anomaly.settings.save_disabled": "Изменения действуют в этом сеансе; мод отключил сохранение файла настроек."
+"anomaly.settings.load_error": "Изменения не сохранены. Исправьте указанную в журнале ошибку загрузки файла настроек и перезапустите игру."
+"anomaly.settings.write_error": "Изменения применены, но не сохранены. Исправьте указанную в журнале ошибку записи и повторите сохранение."
+"anomaly.settings.save_error": "Изменения применены, но не сохранены. Исправьте указанную в журнале ошибку и повторите сохранение."
+"anomaly.settings.storage_inspection_failed": "Изменения применены, но безопасно проверить хранилище настроек не удалось. Изучите журнал и перезапустите игру."
+"anomaly.settings.locale_override": "Переопределение языка"
+"anomaly.settings.class_dcolor": "Любимый цвет класса D"
+# {0} = color syntax (#RRGGBB), {1} = no-tint value (#FFFFFF)
+"anomaly.settings.class_dcolor_description": "Предпочитаемый цвет комбинезона класса D в формате {0}. Значение {1} отключает окрашивание."
+
+# ===== Credits =====
+"anomaly.credits.modding_support": "Поддержка моддинга"
+# {0} = project name
+"anomaly.credits.creator": "{0} — создатель"
+# {0} = project name
+"anomaly.credits.creator_maintainer": "{0} — создатель, сопровождение"
+# {0} = project name
+"anomaly.credits.developer": "{0} — разработчик"
+# {0} = project name
+"anomaly.credits.helper": "{0} — помощь"
+
+# ===== File transfer consent =====
+"anomaly.overlay.file_transfer.awaiting_consent": "Ожидание разрешения на контент сервера"
+
+# ===== Built-in console commands =====
+"anomaly.commands.name_description": "Показывает никнейм локального игрока."
+"anomaly.commands.not_connected": "(нет подключения)"
+"anomaly.commands.no_nickname": "(никнейм не задан)"
+"anomaly.commands.who_am_idescription": "Показывает и копирует локальный идентификатор регистрации Anomaly на этом сервере."
+"anomaly.commands.no_enrollment": "Нет активной подтверждённой регистрации на сервере."
+# {0} = enrollment ID; clipboard receives only the literal ID
+"anomaly.commands.enrollment_copied": "{0} (скопировано в буфер обмена)"
+# {0} = --copy switch
+"anomaly.commands.status_description": "Показывает диагностику Anomaly без личных данных. Для копирования используйте {0}."
+# {0} = literal command syntax
+"anomaly.commands.usage": "Использование: {0}"
+"anomaly.commands.status_copied": "Статус без личных данных скопирован в буфер обмена."
+# {0} = exception type
+"anomaly.commands.status_unavailable": "Статус недоступен ({0}). Проверьте локальный журнал MelonLoader."
+"anomaly.commands.identity_description": "Меняет ключ клиента, сохраняя подписанную историю регистрации."
+# {0} = literal command syntax, {1} = profile filename
+"anomaly.commands.identity_usage": "Использование: {0} — сначала отключитесь от сервера. Предыдущий ключ подписывает ограниченное публичное доказательство преемственности; потеря {1} создаёт новую регистрацию."
+# {0} = failure detail
+"anomaly.commands.identity_failed": "Не удалось сменить ключ клиента: {0}"
+"anomaly.commands.identity_rotated": "Ключ клиента изменён и сохранён атомарно. При следующих подключениях будет передана история, подписанная прежним ключом, чтобы серверы сохранили текущую локальную регистрацию."
+"anomaly.commands.mod_faulted": "Мод, которому принадлежит команда, завершился с ошибкой и отключён до конца сеанса."
+# {0} = exception type
+"anomaly.commands.error": "Ошибка команды ({0}). Подробности см. в локальном журнале MelonLoader."
+
+# ===== Connection failure notice =====
+"anomaly.connection.failure_title": "Не удалось завершить подключение"
+# {0} = translated reason, {1} = translated next step, {2} = literal diagnostic code, {3} = command
+"anomaly.connection.failure_details": "{0}\n\n{1}\n\nКод диагностики: {2}\nВведите {3} в игровой консоли, чтобы найти диагностические файлы."
+
+# ===== Authentication and mod admission =====
+"anomaly.auth.features_unavailable": "Необходимые функции Anomaly недоступны."
+# {0} = status command
+"anomaly.auth.features_action": "Перезапустите игру с совместимой версией Anomaly и проверьте неисправную функцию через {0}."
+"anomaly.auth.network_not_ready": "Сетевые функции Anomaly ещё не готовы."
+"anomaly.auth.network_action": "Дождитесь завершения инициализации и подключитесь снова. Если ошибка повторится, перезапустите игру."
+"anomaly.auth.receiver_unavailable": "Приёмник аутентифицированных сообщений недоступен."
+# {0} = status command
+"anomaly.auth.receiver_action": "Перезапустите игру с совместимой версией Anomaly и проверьте неисправную сетевую функцию через {0}."
+"anomaly.auth.profile_unavailable": "Не удалось открыть локальный профиль идентификации."
+"anomaly.auth.profile_action": "Найдите ошибку профиля в журнале игры, исправьте указанный файл или права доступа и перезапустите игру. Существующий профиль не изменён."
+"anomaly.auth.mod_inventory_unavailable": "Не удалось отправить список модов клиента."
+"anomaly.auth.mod_inventory_invalid": "Список загруженных модов клиента некорректен или слишком велик. Найдите проблемный мод в журнале игры."
+# {0} = connection data bytes, {1} = maximum bytes
+"anomaly.auth.mod_inventory_too_large": "Размер данных подключения — {0} байт; безопасный предел — {1} байт. Проверьте журнал игры: метаданные модов клиента или история ключей слишком велики."
+"anomaly.auth.prepare_failed": "Не удалось подготовить аутентификацию."
+"anomaly.auth.prepare_action": "Проверьте журнал игры и совместимость версий клиента и сервера перед повторным подключением."
+"anomaly.auth.integrity_failed": "Требования целостности аутентификации не выполнены."
+"anomaly.auth.integrity_action": "Требуется новое подключение; предыдущее согласование ключей отменено. Подробности нарушения целостности см. в журнале игры."
+# {0} = literal transport reason
+"anomaly.auth.connection_ended": "Подключение к серверу завершено: {0}."
+"anomaly.auth.no_response_action": "Убедитесь, что сервер доступен и использует совместимую версию Anomaly, затем подключитесь снова."
+"anomaly.auth.retry_invalid": "Некорректный ответ сервера на повторный запрос."
+"anomaly.auth.retry_action": "Попробуйте подключиться ещё раз. Если ошибка повторится, попросите оператора сервера проверить версию Anomaly и журналы."
+"anomaly.auth.rejected": "Сервер отклонил подключение."
+"anomaly.auth.rejected_action": "Проверьте требования сервера и пароль, затем подключитесь снова. Причина отказа сервера записана в журнале игры."
+"anomaly.auth.session_mismatch": "Ответ сервера не соответствует этой попытке подключения."
+"anomaly.auth.session_action": "Подключитесь снова, чтобы начать новую попытку аутентификации."
+"anomaly.auth.version_mismatch": "Клиент и сервер используют разные версии протокола Anomaly."
+"anomaly.auth.version_action": "Установите совместимую версию Anomaly, указанную оператором сервера."
+"anomaly.auth.handshake_invalid": "Не удалось проверить ответ с идентификационными данными сервера."
+"anomaly.auth.handshake_action": "Перед повторной попыткой попросите оператора сервера проверить версию и настройки идентификации."
+"anomaly.auth.key_changed": "Сохранённый ключ сервера изменился."
+"anomaly.auth.key_changed_action": "Проверьте новый отпечаток ключа у оператора по другому доверенному каналу. Anomaly сохранила прежний доверенный ключ и заблокировала подключение."
+"anomaly.auth.trust_store_unavailable": "Не удалось открыть локальное хранилище доверенных серверов."
+"anomaly.auth.trust_store_action": "Найдите ошибку файла в журнале игры и исправьте её перед повторным подключением. Существующие доверенные ключи не заменены."
+"anomaly.auth.trust_title": "Доверять этому ключу сервера Anomaly?"
+# {0} = server endpoint, {1} = literal key fingerprint
+"anomaly.auth.trust_details": "Сервер: {0}\n\nОтпечаток ключа:\n{1}\n\nПрежде чем доверять ключу, проверьте этот отпечаток у оператора сервера. Ключ будет сохранён для будущих подключений."
+"anomaly.auth.trust_save_failed": "Не удалось сохранить решение о доверии серверу."
+"anomaly.auth.trust_save_action": "Убедитесь, что папка UserData Anomaly доступна для записи, затем подключитесь снова и ещё раз проверьте отпечаток ключа."
+"anomaly.auth.custom_rejected_action": "Уточните требования к подключению у оператора сервера."
+"anomaly.auth.integrity_rejected": "Сервер не принимает обнаруженные изменения аутентификации."
+# {0} = literal audit flags
+"anomaly.auth.integrity_rejected_action": "Результат проверки: {0}. Удалите указанные модификации и перезапустите игру или уточните у владельца сервера, допускает ли он клиентов с таким риском."
+"anomaly.auth.mod_requirements": "Моды клиента не соответствуют требованиям сервера."
+"anomaly.auth.mod_response_action": "Не удалось прочитать требования к модам. Используйте совместимую версию Anomaly или уточните подробности у оператора сервера."
+# {0} = server-authored message, kept verbatim after display sanitization
+"anomaly.auth.custom_reason": "Сервер отклонил подключение.\nСообщение сервера: {0}"
+"anomaly.auth.review_requirements": "Проверьте требования сервера перед повторным подключением."
+# {0} = mod ID, {1} = required version
+"anomaly.auth.mod_missing": "Отсутствует мод клиента «{0}» (требуется: {1})"
+# {0} = mod ID, {1} = required version, {2} = installed version
+"anomaly.auth.mod_wrong_version": "Неверная версия мода «{0}»: требуется {1}, установлена {2}"
+# {0} = mod ID
+"anomaly.auth.mod_blocked": "Заблокированный мод клиента: «{0}»"
+# {0} = mod ID
+"anomaly.auth.mod_unexpected": "Дополнительный мод клиента не разрешён: «{0}»"
+# {0} = translated issue, {1} = installed version
+"anomaly.auth.mod_present": "{0} (установлена версия: {1})"
+# {0} = omitted issue count
+"anomaly.auth.mod_issues_omitted": "Дополнительных проблем с модами не показано: {0}."
+"anomaly.auth.mod_requirements_action": "Приведите моды клиента в соответствие с требованиями сервера, затем подключитесь снова."
+"anomaly.auth.password_failed": "Не удалось подготовить ответ для проверки пароля."
+"anomaly.auth.password_action": "Подключитесь и попробуйте снова. Если ошибка повторится, найдите ошибку подтверждения пароля в журнале игры."
+# {0} = initialization state
+"anomaly.auth.rotation_profile_unavailable": "Профиль идентификации клиента не готов ({0}). Подробности ошибки профиля см. в журнале игры."
+"anomaly.auth.rotation_disconnect": "Отключитесь от сервера перед сменой ключа клиента."
+# {0} = exception type
+"anomaly.auth.rotation_error": "Не удалось сохранить новый ключ ({0}). Перед повторной попыткой проверьте журнал игры."
+# {0} = literal transport reason
+"anomaly.auth.no_response": "Сервер не ответил ({0})."
+"anomaly.auth.server_availability_action": "Проверьте адрес сервера и убедитесь, что он запущен, затем подключитесь снова. Если сервер доступен, проверьте совместимость версий Anomaly на клиенте и сервере."
+"anomaly.auth.reconnect_failed": "Не удалось начать повторное аутентифицированное подключение."
+"anomaly.auth.reconnect_action": "Вернитесь к списку серверов и подключитесь снова."
+
+# ===== Server content consent and failures =====
+"anomaly.content.approval_title": "Разрешить пользовательский контент этого сервера?"
+# {0} = fingerprint, {1} = item count, {2} = file count, {3} = download MiB, {4} = download bytes
+"anomaly.content.approval_details": "Отпечаток ключа сервера:\n{0}\n\nПредметов: {1:N0}\nФайлов: {2:N0}\nЗагрузка: {3:N2} МиБ ({4:N0} байт)\n\nРазрешение сохраняется для этого сервера и этой версии контента. Отказ может помешать подключению к серверам, которым необходим этот контент."
+"anomaly.content.validation_failed": "Не удалось проверить пользовательский контент сервера."
+"anomaly.content.activation_failed": "Не удалось активировать разрешённый пользовательский контент."
+"anomaly.content.failure_action": "Найдите ошибку контента в журнале игры, затем подключитесь снова. Если ошибка повторится, попросите оператора сервера проверить каталог и файлы."
+
+# ===== Sanitized status report =====
+"anomaly.status.title": "Статус Anomaly: ранний доступ"
+# {0} = core version, {1} = API version, {2} = game version
+"anomaly.status.versions": "Anomaly: {0}; API: {1}; игра: {2}"
+# {0} = translated profile state
+"anomaly.status.profile": "Профиль: {0}"
+"anomaly.status.profile_unavailable": "недоступен (см. локальный журнал; файлы сохранены)"
+"anomaly.status.profile_ready": "готов"
+"anomaly.status.profile_incomplete": "настройка не завершена"
+# {0} = translated connection state
+"anomaly.status.connection": "Подключение: {0}"
+"anomaly.status.connection_ready": "готово"
+"anomaly.status.connection_preparing": "подключено, идёт подготовка"
+"anomaly.status.disconnected": "отключено"
+"anomaly.status.features_healthy": "Функции: исправны"
+# {0} = feature count
+"anomaly.status.features_attention": "Функций, требующих внимания: {0}"
+# {0} = sanitized owner ID, {1} = feature ID, {2} = literal health status
+"anomaly.status.feature_detail": "  {0}:{1} — {2}; проверьте эту функцию в локальном журнале."
+"anomaly.status.features_omitted": "  Дополнительные записи о функциях не показаны."
+# {0} = literal relative log path
+"anomaly.status.log": "Журнал: {0}"
+# {0} = literal relative crash-report path
+"anomaly.status.crash_reports": "Отчёты о сбоях: {0}"
+"anomaly.status.footer": "Пути выше указаны относительно этого экземпляра игры. Отчёт никуда не отправляется."
+
+# ===== Additional built-in labels =====
+"anomaly.settings.security": "Безопасность Anomaly"
+"anomaly.settings.allow_auth_modifications": "Разрешить внешние изменения аутентификации"
+"anomaly.settings.allow_auth_modifications_description": "Разрешает изменения внешних зависимостей аутентификации и сообщает о них серверу. Требуется перезапуск; код Anomaly и контроль целостности остаются защищены."
+"anomaly.menu.default_username": "Игрок"
+"anomaly.news.early_access": "ранний доступ"
+# {0} = integer percentage
+"anomaly.overlay.file_transfer.percent": "{0}%"

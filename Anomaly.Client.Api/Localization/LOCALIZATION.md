@@ -31,7 +31,7 @@ Put per-locale YAML files in your own directory under Anomaly's i18n tree. The r
 
 Each YAML file is a flat key-value mapping. Keys are your full namespaced identifiers (quote them — the dots would otherwise look like nested keys to YAML). Values are double-quoted strings; `\n`, `\t`, and `\"` work the same as JSON. Placeholders use `.NET` `string.Format` positional syntax (`{0}`, `{1}`).
 
-Comments (`#`) are first-class — use them to document what each placeholder means so translators don't reorder slots silently.
+Use comments (`#`) to document what each placeholder means. Translators can reorder or repeat placeholders to fit their language, while preserving each argument's index and meaning.
 
 `en.yaml`:
 ```yaml
@@ -80,6 +80,25 @@ var anomalyKey = Tr.Get("anomaly.overlay.authenticating");
 ```
 
 Missing keys return the key itself and log a warning via `MelonLogger`. Don't panic — just add the key to your `en.yaml` and restart.
+
+### Variables and error codes
+
+Placeholders are zero-based: `{0}` is the first argument and `{1}` is the second. For a single name use `"Hello {0}"`; `"Hello {1}"` requires two supplied arguments. Arguments are inserted after the template is translated. String arguments are not looked up as translation keys or parsed as templates, so names, IDs, fingerprints, filenames, commands, and error codes remain unchanged, even when they contain braces.
+
+```yaml
+# {0} = player name, {1} = diagnostic code
+"mymod.connection_error": "Hello {0}, the connection failed ({1}). Please reconnect."
+```
+
+```csharp
+string message = Tr.Get("mymod.connection_error", playerName, "AUTH-42");
+```
+
+A translation may move `{1}` before `{0}` without changing the values passed by the caller. Do not build sentences by joining English fragments or interpolate values into the key. If an argument is itself UI wording (such as a status label), translate it explicitly with `Tr.Get` first. Server-authored messages and third-party mod data remain literal; translate the surrounding explanation.
+
+Standard composite formatting also supports `{0:N2}` for numbers, `{0,12}` for alignment, and `{{` / `}}` for literal braces. Numbers and dates use `CultureInfo.CurrentCulture`, which may differ from the game's selected language. Pass a preformatted string when a machine-readable value must keep an invariant representation. A null argument array is treated as empty; a null argument value formats as an empty string. Invalid formats log the key and locale (not argument contents) and try the canonical English template. If that cannot be formatted either, the original selected template is returned so a translation mistake does not crash the UI.
+
+For mod settings metadata, pass translated strings into `DisplayName`, `Description`, and `Group`. `Choices` and enum names can represent stored values, so the client does not automatically translate them. Keep invariant stored values separate from localized descriptions.
 
 ---
 
@@ -145,4 +164,4 @@ Translators should preserve tags verbatim. If a tag is malformed, TMP will rende
 - **Missing-key warnings in the MelonLoader log**: add the missing key to your `en.yaml`. The system falls back to English if a translated file lacks a specific key, but a missing English source is an error.
 - **Key shows the raw identifier instead of text**: your registration failed. Check the MelonLoader log for `[Anomaly i18n]` errors.
 - **Wrong locale active**: confirm SCPSL's in-game language setting (`Settings → Language`). For testing, override via the MelonPreferences entry `anomaly` → `locale` (set to a locale code like `fr` or `pt_BR`).
-- **Placeholders show as `{0}` literally**: mismatch between `Tr.Get(...)` argument count and the template. Fix the call or the translation.
+- **Placeholders show as `{0}` literally**: neither the selected template nor its English fallback could be formatted with the supplied arguments. Fix the argument count, placeholder indexes, or unmatched braces; check the `[Anomaly i18n]` warning for the key.

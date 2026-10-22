@@ -1,3 +1,5 @@
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.UI.ModSettings.Internal;
 using Anomaly.Client.Internal.UI;
 using Anomaly.Client.Patches.Menu.ModSettings;
@@ -60,7 +62,7 @@ public sealed class ModSettingsRowState : MonoBehaviour
         {
             if (_entry.Validator != null && !_entry.Validator.IsValid(value))
             {
-                SetValidation("This value is outside the mod's allowed values. The setting was not changed.");
+                SetValidation(Tr.Get(TrKeys.Settings_InvalidValue));
                 return false;
             }
             _validation = null;
@@ -74,7 +76,7 @@ public sealed class ModSettingsRowState : MonoBehaviour
         }
         catch (Exception exception)
         {
-            SetValidation("The mod could not apply this value. See the log.");
+            SetValidation(Tr.Get(TrKeys.Settings_ApplyFailed));
             MelonLogger.Warning($"ModSettings write failed for '{_entry.Identifier}': {exception}");
             return false;
         }
@@ -92,7 +94,7 @@ public sealed class ModSettingsRowState : MonoBehaviour
         }
         catch (Exception exception)
         {
-            SetValidation("The mod could not reset this setting. See the log.");
+            SetValidation(Tr.Get(TrKeys.Settings_ResetFailed));
             MelonLogger.Warning($"ModSettings reset failed for '{_entry.Identifier}': {exception}");
         }
     }
@@ -112,8 +114,9 @@ public sealed class ModSettingsRowState : MonoBehaviour
         if (_entry == null || _value == null) return;
         string defaultValue = _entry.GetDefaultValueAsString();
         string currentValue = ModSettingValue.Format(_entry.BoxedValue);
-        _value.text = "Current: " + (string.IsNullOrEmpty(currentValue) ? "(empty)" : currentValue)
-            + "   ·   Default: " + (string.IsNullOrEmpty(defaultValue) ? "(empty)" : defaultValue);
+        _value.text = Tr.Get(TrKeys.Settings_ValueSummary,
+            string.IsNullOrEmpty(currentValue) ? Tr.Get(TrKeys.Settings_EmptyValue) : currentValue,
+            string.IsNullOrEmpty(defaultValue) ? Tr.Get(TrKeys.Settings_EmptyValue) : defaultValue);
         _reset.interactable = !string.Equals(_entry.GetValueAsString(), _entry.GetDefaultValueAsString(), StringComparison.Ordinal);
         string message = _validation;
         string saveError = ModSettingsSaveScheduler.GetError(_entry.Category);

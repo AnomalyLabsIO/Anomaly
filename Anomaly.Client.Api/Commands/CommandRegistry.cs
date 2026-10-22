@@ -4,6 +4,8 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Internal;
 using MelonLoader;
 
@@ -144,7 +146,7 @@ public static class CommandRegistry
         catch (Exception ex)
         {
             MelonLogger.Error($"CommandRegistry: '{entry.CanonicalName}' threw: {ex}");
-            ctx.Reply($"Error: {ex.Message}");
+            ctx.Reply(Tr.Get(TrKeys.Commands_Error, ex.GetType().Name));
         }
         return true;
     }

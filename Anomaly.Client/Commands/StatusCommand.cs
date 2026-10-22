@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Commands;
 using Anomaly.Client.Api.Internal.Diagnostics;
 using Anomaly.Client.Api.Modding;
@@ -13,14 +15,14 @@ internal sealed class StatusCommand : ICommand
 {
     public string Name => "status";
     public IReadOnlyList<string> Aliases => Array.Empty<string>();
-    public string Description => "Shows sanitized Anomaly diagnostics. Use --copy to copy them.";
+    public string Description => Tr.Get(TrKeys.Commands_StatusDescription, "--copy");
 
     public void Execute(CommandContext context)
     {
         bool copy = context.Args.Count == 1 && context.Args[0] == "--copy";
         if (context.Args.Count != 0 && !copy)
         {
-            context.Reply("Usage: anomaly.status [--copy]");
+            context.Reply(Tr.Get(TrKeys.Commands_Usage, "anomaly.status [--copy]"));
             return;
         }
         try
@@ -36,12 +38,12 @@ internal sealed class StatusCommand : ICommand
             if (copy)
             {
                 GUIUtility.systemCopyBuffer = report;
-                context.Reply("Sanitized status copied to clipboard.");
+                context.Reply(Tr.Get(TrKeys.Commands_StatusCopied));
             }
         }
         catch (Exception ex)
         {
-            context.Reply("Status unavailable (" + ex.GetType().Name + "). Check the local MelonLoader log.");
+            context.Reply(Tr.Get(TrKeys.Commands_StatusUnavailable, ex.GetType().Name));
         }
     }
 }

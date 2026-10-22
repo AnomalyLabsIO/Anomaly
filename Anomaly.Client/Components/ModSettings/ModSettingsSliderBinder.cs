@@ -1,4 +1,6 @@
 using System;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.UI.ModSettings;
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.Attributes;
@@ -135,7 +137,7 @@ public sealed class ModSettingsSliderBinder : MonoBehaviour
     {
         double value = Convert.ToDouble(_entry.BoxedValue);
         _row?.SetValidation(double.IsNaN(value) || double.IsInfinity(value) || value < _min || value > _max
-            ? "The stored value is outside this slider's range. Choose a value or Reset to change it."
+            ? Tr.Get(TrKeys.Settings_OutsideSliderRange)
             : null);
     }
 }

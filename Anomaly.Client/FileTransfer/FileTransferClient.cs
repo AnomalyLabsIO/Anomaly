@@ -191,7 +191,7 @@ public static class FileTransferClient
         {
             InvokeBestEffort(FileTransferOverlay.Show, "consent overlay");
             InvokeBestEffort(
-                () => FileTransferOverlay.SetStatus("Waiting for server-content approval"),
+                () => FileTransferOverlay.SetStatus(Tr.Get(TrKeys.FileTransfer_AwaitingConsent)),
                 "consent overlay status");
         }
     }

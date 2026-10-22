@@ -64,7 +64,7 @@ public class FileTransferOverlayComponent : MonoBehaviour
     public void UpdateProgress(string fileName, int fileIndex, int totalFiles, float percent)
     {
         _pendingStatus = Tr.Get(TrKeys.FileTransfer_Downloading, fileName, fileIndex, totalFiles);
-        _pendingPercent = $"{Mathf.RoundToInt(percent * 100f)}%";
+        _pendingPercent = Tr.Get(TrKeys.FileTransfer_Percent, Mathf.RoundToInt(percent * 100f));
         _pendingFill = Mathf.Clamp01(percent);
         _pendingShowProgress = true;
         _dirty = true;
@@ -154,7 +154,7 @@ public class FileTransferOverlayComponent : MonoBehaviour
         _percentText.fontSize = 16f;
         _percentText.color = Color.white;
         _percentText.alignment = TextAlignmentOptions.Center;
-        _percentText.text = "0%";
+        _percentText.text = Tr.Get(TrKeys.FileTransfer_Percent, 0);
     }
 
     private static GameObject CreateUIElement(string name, Transform parent)

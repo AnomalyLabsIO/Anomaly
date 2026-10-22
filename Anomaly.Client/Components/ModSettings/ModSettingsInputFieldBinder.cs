@@ -1,4 +1,6 @@
 using System;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.UI.ModSettings;
 using Anomaly.Client.Api.UI.ModSettings.Internal;
 using Il2CppInterop.Runtime;
@@ -73,7 +75,7 @@ public sealed class ModSettingsInputFieldBinder : MonoBehaviour
         {
             if (!ModSettingValue.TryParse(_entryType, text, out object typed))
             {
-                _row?.SetValidation("Enter a valid " + _entryType.Name + " value. The setting was not changed.");
+                _row?.SetValidation(Tr.Get(TrKeys.Settings_InvalidType, _entryType.Name));
                 return;
             }
 
@@ -81,8 +83,8 @@ public sealed class ModSettingsInputFieldBinder : MonoBehaviour
                 && _metadata.MaxValue is double maximum
                 && (Convert.ToDouble(typed) < minimum || Convert.ToDouble(typed) > maximum))
             {
-                _row?.SetValidation("Enter a value between " + ModSettingValue.Format(minimum)
-                    + " and " + ModSettingValue.Format(maximum) + ". The setting was not changed.");
+                _row?.SetValidation(Tr.Get(TrKeys.Settings_InvalidRange,
+                    ModSettingValue.Format(minimum), ModSettingValue.Format(maximum)));
                 return;
             }
 

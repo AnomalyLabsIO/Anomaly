@@ -1,3 +1,5 @@
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Features;
 using Il2Cpp;
 using Il2CppInterop.Runtime.Attributes;
@@ -220,9 +222,8 @@ public static class ConnectionInfoOverlay
         EndOverride();
         // Authentication teardown only hides its own prompt. This terminal notice
         // survives subsequent disconnect notifications until dismissed or replaced.
-        PasswordPrompt.ShowNotice(FailurePromptOwner, "Connection could not be completed",
-            reason + "\n\n" + action + "\n\nDiagnostic code: " + code
-                + "\nRun anomaly.status in the game console for diagnostic locations.", EndOverride);
+        PasswordPrompt.ShowNotice(FailurePromptOwner, Tr.Get(TrKeys.Connection_FailureTitle),
+            Tr.Get(TrKeys.Connection_FailureDetails, reason, action, code, "anomaly.status"), EndOverride);
     }
 
     private static void SetSpinnerActive(bool active)

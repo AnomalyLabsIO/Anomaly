@@ -14,6 +14,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\Anomaly.Client\Resources\i18n\*.yaml"
+                      Link="Resources\i18n\%(Filename)%(Extension)"
+                      LogicalName="Anomaly.Client.Resources.i18n.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Anomaly.Client.Api\Anomaly.Client.Api.csproj" AdditionalProperties="DeployLocal=false" />
     <Compile Include="..\Anomaly.Client\Internal\Modding\ModContext.cs" Link="Runtime\ModContext.cs" />
     <Compile Include="..\Anomaly.Client\Internal\Hosting\LocalHostGrantCoordinator.cs" Link="Runtime\LocalHostGrantCoordinator.cs" />

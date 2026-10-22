@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Commands;
 using Anomaly.Client.Api.Config;
 using Anomaly.Client.Api.Events;
@@ -209,7 +211,7 @@ internal sealed class ModContext : IModContext, IDisposable
         public void Execute(CommandContext context)
         {
             if (!_owner.InvokeOwned(() => _inner.Execute(context)))
-                context.Reply("The owning mod faulted and has been disabled for this session.");
+                context.Reply(Tr.Get(TrKeys.Commands_ModFaulted));
         }
     }
 }

@@ -6,6 +6,78 @@ namespace Anomaly.Client.Api.Tests;
 public sealed class LocalizationServiceTests
 {
     [Fact]
+    public void Formatting_reorders_and_repeats_arguments_without_translating_or_reparsing_them()
+    {
+        using var temp = new TemporaryDirectory();
+        string modDirectory = temp.CreateDirectory("formatted-mod");
+        temp.WriteYaml(modDirectory, "en", "example.message: 'Hello {0}; code {1}'\nexample.code: translated code\n");
+        temp.WriteYaml(modDirectory, "fr", "example.message: 'Code {1}: bonjour {0}; {1}'\nexample.second: 'Bonjour {1}'\n");
+        var service = CreateService(temp.RootPath, "fr");
+        Assert.True(service.RegisterMod("example", modDirectory));
+
+        Assert.Equal("Code example.code: bonjour Player {1}; example.code",
+            service.Get("example.message", "Player {1}", "example.code"));
+        // Composite formatting is zero-based: {1} selects the second argument.
+        Assert.Equal("Bonjour Player", service.Get("example.second", "unused", "Player"));
+    }
+
+    [Fact]
+    public void Formatting_supports_escaped_braces_alignment_and_numeric_format_strings()
+    {
+        using var temp = new TemporaryDirectory();
+        string modDirectory = temp.CreateDirectory("format-specifiers");
+        temp.WriteYaml(modDirectory, "en", "example.message: '{{code}} {0:000} [{1,6}]'\n");
+        var service = CreateService(temp.RootPath, "en");
+        Assert.True(service.RegisterMod("example", modDirectory));
+
+        Assert.Equal("{code} 007 [  E-42]", service.Get("example.message", 7, "E-42"));
+    }
+
+    [Fact]
+    public void Missing_active_translation_formats_english_fallback_with_original_arguments()
+    {
+        using var temp = new TemporaryDirectory();
+        string modDirectory = temp.CreateDirectory("fallback-format");
+        temp.WriteYaml(modDirectory, "en", "example.message: 'Could not connect ({0})'\n");
+        var service = CreateService(temp.RootPath, "fr");
+        Assert.True(service.RegisterMod("example", modDirectory));
+
+        Assert.Equal("Could not connect (AUTH-42)", service.Get("example.message", "AUTH-42"));
+    }
+
+    [Theory]
+    [InlineData("Erreur {1}")]
+    [InlineData("Erreur {0")]
+    public void Invalid_translated_format_falls_back_to_english_and_keeps_error_code(string translated)
+    {
+        using var temp = new TemporaryDirectory();
+        string modDirectory = temp.CreateDirectory("broken-format");
+        temp.WriteYaml(modDirectory, "en", "example.message: 'Could not connect ({0})'\n");
+        temp.WriteYaml(modDirectory, "fr", "example.message: '" + translated + "'\n");
+        var service = CreateService(temp.RootPath, "fr");
+        Assert.True(service.RegisterMod("example", modDirectory));
+
+        Assert.Equal("Could not connect (AUTH-42)", service.Get("example.message", "AUTH-42"));
+    }
+
+    [Fact]
+    public void Null_and_insufficient_arguments_do_not_crash_the_caller()
+    {
+        using var temp = new TemporaryDirectory();
+        string modDirectory = temp.CreateDirectory("argument-edges");
+        temp.WriteYaml(modDirectory, "en", "example.plain: Ready\nexample.message: 'Hello {0}'\nexample.broken: 'Hello {'\n");
+        var service = CreateService(temp.RootPath, "en");
+        Assert.True(service.RegisterMod("example", modDirectory));
+
+        Assert.Equal("Ready", service.Get("example.plain", (object[])null!));
+        Assert.Equal("Hello ", service.Get("example.message", (object)null!));
+        Assert.Equal("Hello {0}", service.Get("example.message", Array.Empty<object>()));
+        Assert.Equal("Hello {", service.Get("example.broken", "Player"));
+        Assert.Equal("example.missing", service.Get("example.missing", "AUTH-42"));
+        Assert.Equal(string.Empty, service.Get(null!, "AUTH-42"));
+    }
+
+    [Fact]
     public void RegisterMod_valid_catalog_commits_active_and_fallback()
     {
         using var temp = new TemporaryDirectory();

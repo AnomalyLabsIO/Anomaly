@@ -244,12 +244,12 @@ internal static class ModSettingsRenderer
         if (row == null) return;
         var rowState = row.AddComponent<ModSettingsRowState>();
         BuildWidget(controls, entry, meta);
-        var reset = BuildSubButton(controls, "Reset", "Reset");
+        var reset = BuildSubButton(controls, "Reset", Tr.Get(TrKeys.Settings_Reset));
         var resetLayout = reset.go.GetComponent<LayoutElement>();
         resetLayout.minWidth = 112f;
         resetLayout.preferredWidth = 112f;
         resetLayout.flexibleWidth = 0f;
-        var retry = BuildSubButton(row.transform, "RetrySave", "Retry save");
+        var retry = BuildSubButton(row.transform, "RetrySave", Tr.Get(TrKeys.Settings_RetrySave));
         rowState.Initialize(entry, value, feedback, reset.btn, retry.btn);
         row.SetActive(true);
     }
@@ -487,8 +487,8 @@ internal static class ModSettingsRenderer
         hlg.childForceExpandHeight = true;
         hlg.spacing = 2f;
 
-        var (falseGo, falseImg, falseBtn) = BuildSubButton(container.transform, "FalseBtn", "Disabled");
-        var (trueGo, trueImg, trueBtn) = BuildSubButton(container.transform, "TrueBtn", "Enabled");
+        var (falseGo, falseImg, falseBtn) = BuildSubButton(container.transform, "FalseBtn", Tr.Get(TrKeys.Settings_Disabled));
+        var (trueGo, trueImg, trueBtn) = BuildSubButton(container.transform, "TrueBtn", Tr.Get(TrKeys.Settings_Enabled));
 
         var binder = container.AddComponent<ModSettingsToggleBinder>();
         binder.Initialize(entry, trueImage: trueImg, falseImage: falseImg);

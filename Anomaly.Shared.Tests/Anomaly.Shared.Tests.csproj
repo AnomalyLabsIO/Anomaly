@@ -20,6 +20,7 @@
     <Compile Include="..\Anomaly.Client\FileTransfer\ChunkBuffer.cs" Link="ClientFileTransfer\ChunkBuffer.cs" />
     <Compile Include="..\Anomaly.Client\FileTransfer\FileTransferClient.cs" Link="ClientFileTransfer\FileTransferClient.cs" />
     <Compile Include="..\Anomaly.Client\Content\ContentCatalogClient.cs" Link="ClientContent\ContentCatalogClient.cs" />
+    <Compile Include="..\Anomaly.Client.Api\Internal\Localization\TrKeys.cs" Link="ClientRuntime\TrKeys.cs" />
     <Compile Include="..\Anomaly.Client.Api\Internal\TransactionalInitializer.cs" Link="ClientRuntime\TransactionalInitializer.cs" />
     <Compile Include="..\Anomaly.Client\Auth\PlayerAuth.cs" Link="ClientAuth\PlayerAuth.cs" />
     <Compile Include="..\Anomaly.Client\Auth\AdmissionSendGate.cs" Link="ClientAuth\AdmissionSendGate.cs" />

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.UI.ModSettings;
 using Anomaly.Client.Api.UI.ModSettings.Internal;
 using Il2CppInterop.Runtime;
@@ -123,13 +125,13 @@ public sealed class ModSettingsDropdownBinder : MonoBehaviour
         _invalidPlaceholder = index < 0;
         _dropdown.ClearOptions();
         var list = new Il2CppSystem.Collections.Generic.List<string>();
-        if (_invalidPlaceholder) list.Add("Select a valid value…");
+        if (_invalidPlaceholder) list.Add(Tr.Get(TrKeys.Settings_SelectValidValue));
         foreach (string option in _options) list.Add(option);
         _dropdown.AddOptions(list);
         _dropdown.SetValueWithoutNotify(_invalidPlaceholder ? 0 : index);
         _dropdown.RefreshShownValue();
         if (_invalidPlaceholder)
-            _row?.SetValidation("The stored value is not an available choice. Select a value or Reset to change it.");
+            _row?.SetValidation(Tr.Get(TrKeys.Settings_UnavailableChoice));
         else if (clearValidation)
             _row?.SetValidation(null);
     }

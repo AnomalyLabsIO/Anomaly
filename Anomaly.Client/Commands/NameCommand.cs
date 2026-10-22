@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Commands;
 using Anomaly.Client.Api.Features;
 
@@ -17,18 +19,18 @@ internal sealed class NameCommand : ICommand
 
     public IReadOnlyList<string> Aliases => _aliases;
 
-    public string Description => "Prints the local player's nickname.";
+    public string Description => Tr.Get(TrKeys.Commands_NameDescription);
 
     public void Execute(CommandContext context)
     {
         var hub = LocalPlayer.Instance?.ReferenceHub;
         if (hub == null)
         {
-            context.Reply("(not connected)");
+            context.Reply(Tr.Get(TrKeys.Commands_NotConnected));
             return;
         }
 
         string nick = hub.nicknameSync?.MyNick;
-        context.Reply(string.IsNullOrEmpty(nick) ? "(no nickname set)" : nick);
+        context.Reply(string.IsNullOrEmpty(nick) ? Tr.Get(TrKeys.Commands_NoNickname) : nick);
     }
 }

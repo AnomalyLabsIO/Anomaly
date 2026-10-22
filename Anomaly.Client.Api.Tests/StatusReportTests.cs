@@ -4,8 +4,12 @@ using Xunit;
 
 namespace Anomaly.Client.Api.Tests;
 
-public sealed class StatusReportTests
+public sealed class StatusReportTests : IClassFixture<LocalizationCatalogFixture>
 {
+    private readonly LocalizationCatalogFixture _catalogs;
+
+    public StatusReportTests(LocalizationCatalogFixture catalogs) => _catalogs = catalogs;
+
     [Fact]
     public void Shareable_report_omits_arbitrary_health_text_and_identifiers()
     {
@@ -26,7 +30,7 @@ public sealed class StatusReportTests
         var record = new FeatureHealthRecord("example", "private.server", FeatureHealthStatus.Failed, "", "", "", "");
         Assert.DoesNotContain("private.server", Format(false, false, new[] { record }));
         var report = StatusReport.Format(new Version(1, 0), new Version(1, 0), new Version(14, 2, 7),
-            false, false, false, false, Array.Empty<FeatureHealthRecord>());
+            false, false, false, false, Array.Empty<FeatureHealthRecord>(), _catalogs.English.Get);
         Assert.Contains("setup incomplete", report);
     }
 
@@ -52,7 +56,21 @@ public sealed class StatusReportTests
         Assert.Equal(64, report.Split('\n').Count(line => line.StartsWith("  example:")));
     }
 
-    private static string Format(bool connected, bool ready, IEnumerable<FeatureHealthRecord> records) =>
+    [Fact]
+    public void Localized_report_preserves_diagnostic_identifiers_and_relative_paths()
+    {
+        var record = new FeatureHealthRecord("anomaly", "authentication", FeatureHealthStatus.Failed,
+            "private detail", "", "", "");
+        string report = StatusReport.Format(new Version(1, 0), new Version(1, 0), new Version(14, 2, 7),
+            true, false, false, false, new[] { record }, _catalogs.Russian.Get);
+        Assert.Contains("Профиль: готов", report);
+        Assert.Contains("Подключение: отключено", report);
+        Assert.Contains("anomaly:authentication — Failed", report);
+        Assert.Contains("<game>/MelonLoader/Latest.log", report);
+        Assert.DoesNotContain("private detail", report);
+    }
+
+    private string Format(bool connected, bool ready, IEnumerable<FeatureHealthRecord> records) =>
         StatusReport.Format(new Version(1, 0), new Version(1, 0), new Version(14, 2, 7),
-            true, false, connected, ready, records);
+            true, false, connected, ready, records, _catalogs.English.Get);
 }

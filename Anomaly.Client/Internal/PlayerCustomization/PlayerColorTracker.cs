@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Assets;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
@@ -317,8 +319,8 @@ internal static class PlayerColorTracker
             ?? _preferences.CreateEntry(
                 FavoriteColorEntryId,
                 DefaultColorHex,
-                "Class D favorite color",
-                "Preferred Class D jumpsuit tint as #RRGGBB. #FFFFFF disables tinting.");
+                Tr.Get(TrKeys.Settings_ClassDColor),
+                Tr.Get(TrKeys.Settings_ClassDColorDescription, "#RRGGBB", "#FFFFFF"));
     }
 
     private static Texture2D LoadEmbeddedNeutralBaseMap()

@@ -22,7 +22,7 @@ public class NewsLoaderStartPatch
             // Present local guidance through the existing article label while leaving
             // subsequent stock news loading and navigation intact.
             if (__instance == null || __instance.ArticleText == null) return;
-            string version = typeof(Core).Assembly.GetName().Version?.ToString(3) ?? "early access";
+            string version = typeof(Core).Assembly.GetName().Version?.ToString(3) ?? Tr.Get(TrKeys.News_EarlyAccess);
             __instance.ArticleText.text = Tr.Get(TrKeys.News_Anomaly_Title) + "\n"
                 + Tr.Get(TrKeys.News_Anomaly_Date, version) + "\n\n"
                 + Tr.Get(TrKeys.News_Anomaly_Body);

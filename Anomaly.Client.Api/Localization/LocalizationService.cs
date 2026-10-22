@@ -58,12 +58,14 @@ internal class LocalizationService
         _resourceAssembly = resourceAssembly ?? throw new ArgumentNullException(nameof(resourceAssembly));
         _anomalyI18nDir = Path.Combine(userDataDir, "i18n", "anomaly");
         _localeOverride = string.IsNullOrWhiteSpace(activeLocale)
-            ? GetOrCreateStringPreference("anomaly", "locale", string.Empty, "Locale override")
+            ? GetOrCreateStringPreference("anomaly", "locale", string.Empty, TrKeys.Settings_LocaleOverride)
             : null;
 
         EnsureAnomalyExtracted();
         ActiveLocale = string.IsNullOrWhiteSpace(activeLocale) ? ResolveLocale() : activeLocale;
         LoadAnomalyTranslations();
+        if (_localeOverride != null)
+            _localeOverride.DisplayName = Get(TrKeys.Settings_LocaleOverride);
     }
 
     /// <summary>
@@ -85,12 +87,21 @@ internal class LocalizationService
     public string Get(string key, params object[] args)
     {
         var template = Get(key);
+        args ??= Array.Empty<object>();
         try
         {
             return string.Format(CultureInfo.CurrentCulture, template, args);
         }
         catch (FormatException)
         {
+            // A broken locale must not hide literal arguments such as error codes
+            // when the canonical English template can still display them.
+            LogWarning($"[Anomaly i18n] Invalid format or arguments for key '{key}' in locale '{ActiveLocale}'.");
+            if (!string.IsNullOrEmpty(key) && _fallback.TryGetValue(key, out var fallback) && fallback != template)
+            {
+                try { return string.Format(CultureInfo.CurrentCulture, fallback, args); }
+                catch (FormatException) { }
+            }
             return template;
         }
     }

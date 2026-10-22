@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using Anomaly.Client.Api.Internal.Localization;
+using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Commands;
 using ApiClient = Anomaly.Client.Api.Features.Client;
 using UnityEngine;
@@ -11,17 +13,17 @@ internal sealed class WhoAmICommand : ICommand
 
     public string Name => "whoami";
     public IReadOnlyList<string> Aliases => CommandAliases;
-    public string Description => "Shows and copies this server's local Anomaly enrollment id.";
+    public string Description => Tr.Get(TrKeys.Commands_WhoAmIDescription);
 
     public void Execute(CommandContext context)
     {
         if (string.IsNullOrWhiteSpace(ApiClient.EnrollmentId))
         {
-            context.Reply("No authenticated server enrollment is active.");
+            context.Reply(Tr.Get(TrKeys.Commands_NoEnrollment));
             return;
         }
 
         GUIUtility.systemCopyBuffer = ApiClient.EnrollmentId;
-        context.Reply(ApiClient.EnrollmentId + " (copied to clipboard)");
+        context.Reply(Tr.Get(TrKeys.Commands_EnrollmentCopied, ApiClient.EnrollmentId));
     }
 }

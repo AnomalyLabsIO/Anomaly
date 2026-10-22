@@ -51,7 +51,13 @@ public static class Tr
         return _service == null ? (key ?? string.Empty) : _service.Get(key);
     }
 
-    /// <summary>Look up a translation key and format with positional arguments ({0}, {1}, ...).</summary>
+    /// <summary>
+    /// Look up a translation key and format with zero-based positional arguments ({0}, {1}, ...).
+    /// Arguments are values, not translation keys; strings are inserted unchanged and are not
+    /// parsed again. Translate any localized argument explicitly before passing it here.
+    /// An invalid translated format uses the English template when it can be formatted;
+    /// otherwise the selected template is returned without throwing a format exception.
+    /// </summary>
     public static string Get(string key, params object[] args)
     {
         return _service == null ? (key ?? string.Empty) : _service.Get(key, args);

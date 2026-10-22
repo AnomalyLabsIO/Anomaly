@@ -29,7 +29,6 @@ internal static class MainMenuCustomizer
     private const string WelcomePath = "News/Welcome";
     private const string ServerBrowserLoadingPath = "Servers/ServerBrowser/Loading";
     private const string ConnectPopupRootPath = "ConnectPopup/root";
-    private const string DefaultUsername = "Player";
 
     private static bool _hooked;
     private static int _connectPopupMenuId;
@@ -95,7 +94,7 @@ internal static class MainMenuCustomizer
 
             string username = AuthHandler.PlayerAuth.Username;
             if (string.IsNullOrEmpty(username))
-                username = DefaultUsername;
+                username = Tr.Get(TrKeys.Menu_DefaultUsername);
 
             label.text = Tr.Get(TrKeys.Menu_Welcome, username);
             label.richText = false;
