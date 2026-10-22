@@ -78,6 +78,7 @@ internal static partial class RuntimeGuard
             if (list.Contains(patch)) return;
             list.Add(patch);
             ++_requiredRevision;
+            RefreshRequiredBaselineLocked();
         }
     }
 
@@ -105,6 +106,7 @@ internal static partial class RuntimeGuard
     private static bool VerifyCheckpoint(bool requireComplete)
     {
         if (!_installed) return false;
+        if (!CheckStructuralInvariants()) return false;
         if (DeadlineBeyondCadence(Volatile.Read(ref _nextChecks), Environment.TickCount64))
         {
             Invalidate("Guard verification deadline was delayed beyond its allowed cadence.");
@@ -172,6 +174,7 @@ internal static partial class RuntimeGuard
         int warnings = 0;
         try
         {
+            if (!CheckStructuralInvariants()) return;
             FailAbandonedIlHookApplications();
             if (DeadlineBeyondCadence(Volatile.Read(ref _nextChecks), Environment.TickCount64))
             {
@@ -309,12 +312,12 @@ internal static partial class RuntimeGuard
         internal readonly WorkStamp Stamp;
         private readonly (MethodBase Target, RequiredPatch[] Required)[] _targets;
         private readonly List<(MethodBase Target, Patch[][] Arrays)> _fingerprints = new();
-        private readonly Delegate?[] _callbacks = new Delegate?[Callbacks.Count];
+        private readonly Delegate?[] _callbacks = new Delegate?[RequiredCallbackCount];
         private int _target, _callback;
         private PatchCursor? _cursor;
         private bool[]? _seen;
         private ProtectionScope _scope;
-        internal bool Done => _target == _targets.Length && _callback == Callbacks.Count;
+        internal bool Done => _target == _targets.Length && _callback == RequiredCallbackCount;
         internal VerificationPass(WorkStamp stamp)
         {
             Stamp = stamp;
@@ -350,7 +353,7 @@ internal static partial class RuntimeGuard
                 }
                 return;
             }
-            if (_callback == Callbacks.Count) return;
+            if (_callback == RequiredCallbackCount) return;
             var slot = Callbacks[_callback];
             GuardTimingDiagnostics.CountTotal(GuardTimingTotal.CallbackChecks);
             Delegate? value = (Delegate?)slot.Field.GetValue(null);

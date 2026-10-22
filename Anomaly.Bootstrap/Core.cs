@@ -28,8 +28,12 @@ public sealed class Core : MelonPlugin
             var category = MelonPreferences.CreateCategory("AnomalyBootstrap", "Anomaly security");
             bool allowExternal = category.CreateEntry("AllowExternalAuthenticationModifications", false,
                 description: "Allow modifications to external authentication dependencies and report them to the server. Requires restart; Anomaly code and monitoring remain protected.").Value;
+            BlockingFailureDialog.ConfigurePrompt(category.CreateEntry("ShowProtectionFailurePrompt", true,
+                description: "Display a blocking warning when protection fails. The game still logs the failure and closes when disabled. Requires restart.").Value);
+            bool nativeIntegrity = category.CreateEntry("EnableNativeCodeIntegrityPrototype", false,
+                description: "Experimentally check selected Bootstrap executable entry bytes using the Win64 native companion. Requires restart.").Value;
             category.SaveToFile(printmsg: false);
-            RuntimeGuard.Install(HarmonyInstance, allowExternal);
+            RuntimeGuard.Install(HarmonyInstance, allowExternal, nativeIntegrity);
             AdmissionInventoryLedger.Install();
         }
         catch (Exception ex)

@@ -88,6 +88,20 @@ public sealed class BlockingFailureDialogTests
     }
 
     [Fact]
+    public void Hidden_prompt_still_completes_the_failure_action()
+    {
+        int displays = 0;
+        int actions = 0;
+        var failure = new BlockingFailureAction(_ => displays++, () => actions++, _ => { });
+
+        failure.Run("Bootstrap warning", showPrompt: false);
+
+        Assert.Equal(0, displays);
+        Assert.Equal(1, actions);
+        Assert.True(failure.IsActive);
+    }
+
+    [Fact]
     public void Reentrant_and_later_calls_display_and_complete_only_once()
     {
         int displays = 0;

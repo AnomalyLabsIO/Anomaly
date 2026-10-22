@@ -71,6 +71,16 @@ internal static class ModSettingsTabInstaller
             DisplayName = Tr.Get(TrKeys.Settings_AllowAuthModifications),
             Description = Tr.Get(TrKeys.Settings_AllowAuthModificationsDescription),
         });
+        ModSettingsRegistry.SetEntry("AnomalyBootstrap", "ShowProtectionFailurePrompt", new ModSettingMetadata
+        {
+            DisplayName = "Show protection failure prompt",
+            Description = "Show a blocking warning before closing the game on a protection failure. Requires restart.",
+        });
+        ModSettingsRegistry.SetEntry("AnomalyBootstrap", "EnableNativeCodeIntegrityPrototype", new ModSettingMetadata
+        {
+            DisplayName = "Enable native code integrity prototype",
+            Description = "Check selected Bootstrap executable entries using the Win64 native companion. Requires restart.",
+        });
 
         ClientEvents.SceneLoaded += OnSceneLoaded;
         ModSettingsRegistry.OnChanged += OnRegistryChanged;

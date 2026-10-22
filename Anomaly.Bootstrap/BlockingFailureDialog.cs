@@ -22,12 +22,22 @@ internal static class BlockingFailureDialog
     private static readonly BlockingFailureAction Failure = new(ShowWarning,
         () => Environment.Exit(78),
         exception => MelonLogger.Error("Could not display the Bootstrap warning; closing the game: " + exception));
+    private static int _showPrompt = 1;
 
     internal static bool IsActive => Failure.IsActive;
+    internal static void ConfigurePrompt(bool showPrompt) => Volatile.Write(ref _showPrompt, showPrompt ? 1 : 0);
 
     // Call only from an early loader/main-thread lifecycle boundary after guard
     // operations unwind. The modal loop blocks frame progression, not all threads.
-    internal static void ShowAndExit(string reason) => Failure.Run(reason);
+    internal static void ShowAndExit(string reason)
+    {
+        if (Volatile.Read(ref _showPrompt) == 0)
+        {
+            try { MelonLogger.Error("Anomaly protection failure; closing the game: " + reason); }
+            catch { /* A logger failure must not prevent the terminal action. */ }
+        }
+        Failure.Run(reason, Volatile.Read(ref _showPrompt) != 0);
+    }
 
     private static void ShowWarning(string reason)
     {
@@ -110,14 +120,14 @@ internal sealed class BlockingFailureAction
 
     internal bool IsActive => Volatile.Read(ref _active) != 0;
 
-    internal void Run(string message)
+    internal void Run(string message, bool showPrompt = true)
     {
         // MessageBox pumps window messages. Reentrant callbacks and repeated
         // failures must not open another warning or complete the action early.
         if (Interlocked.CompareExchange(ref _active, 1, 0) != 0) return;
         try
         {
-            _showWarning(message);
+            if (showPrompt) _showWarning(message);
         }
         catch (Exception exception)
         {

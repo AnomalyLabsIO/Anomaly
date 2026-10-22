@@ -14,6 +14,10 @@ Startup rejection and permanent guard failure display a synchronous native
 `user32!MessageBoxW` warning on the loader/game main thread, then terminate with
 exit code 78 after dismissal. OK, Escape, and the close button all complete the
 same exit; inability to create the dialog also exits after logging the error.
+The `Anomaly security` preference `ShowProtectionFailurePrompt` defaults to
+`true`. Set it to `false` for unattended testing: Bootstrap and Client still log
+the failure and exit with code 78 without opening a window. The setting takes
+effect on the next launch and does not change protection policy.
 Advisory patch warnings and nonfatal admission evidence keep their existing
 policy. Ordinary loader shutdown does not open a warning.
 
@@ -76,8 +80,12 @@ unsupported delegate `BeginInvoke`/`EndInvoke` stubs have no callable native ent
 in this map; their managed protection is unchanged. Concrete required signatures
 remain mandatory. Unknown raw addresses,
 private detour implementations, arbitrary native memory writes, and reflection
-field writes are outside this finite interception catalog. Registry reconciliation
-can observe some data changes but is not a general field-write interceptor.
+field writes are outside this finite interception catalog. A separate structural
+check compares the audit object and the required hook, callback, patch, and trust
+inventories against registration-time snapshots. This catches direct edits to
+those selected collections; it does not intercept arbitrary field writes.
+Registry reconciliation can observe some data changes but is not a general
+field-write interceptor.
 Full coverage requires a completed support-ready native mapping pass; newly
 added catalog targets make that state stale until the main thread refreshes it.
 Admission can refresh an already initialized map before checking coverage.
@@ -86,6 +94,23 @@ This is in-process defensive monitoring, not remote attestation or a sandbox for
 hostile full-trust code. Highest registration priority cannot precede every
 plugin/UserLib assembly load or constructor. The server receives authenticated
 client-reported evidence; server-side admission policy remains authoritative.
+
+## Win64 native integrity prototype
+
+`EnableNativeCodeIntegrityPrototype` in `Anomaly security` defaults to `false`.
+When enabled, Bootstrap loads `UserData/Anomaly/Native/Anomaly.Bootstrap.Native.dll`
+and checks the executable entry bytes and page protection of one dedicated
+Bootstrap canary. A missing or failed native DLL is a protection failure. Build
+the Win64 DLL with `pwsh Anomaly.Bootstrap.Native/Build-Native.ps1`; ordinary
+`dotnet build` does not build or deploy it. The setting requires a restart.
+
+This prototype proves that a native observer catches a direct executable-memory
+write independently of Harmony/MonoMod records. It does **not** yet scan real
+guard methods: a clean game startup changed the CLR entry returned for
+`RuntimeGuard.VerifyCheckpoint`, including after a first verification call, so
+a simple byte baseline produced false positives. Monitoring real JIT bodies
+requires code-version-aware CLR profiling or another validated address source.
+The native baseline and DLL remain writable by full-trust code in this process.
 
 ## CLR entry stub preservation
 

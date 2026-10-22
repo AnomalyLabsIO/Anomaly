@@ -76,7 +76,7 @@ public sealed class CatalogIncrementalWorkTests
         lock (CatalogSync)
         {
             var target = Method(nameof(RegisteredTarget));
-            var patch = Method(nameof(Patch));
+            var patch = typeof(RuntimeGuard).GetMethod("PatchPrefix", PrivateStatic)!;
             long revision = ProtectedMethodCatalog.Revision;
             var external = (HashSet<MethodBase>)Field("External").GetValue(null)!;
             int count = external.Count;
@@ -100,6 +100,34 @@ public sealed class CatalogIncrementalWorkTests
             Assert.Equal(trust + 1, ProtectedMethodCatalog.TrustRevision);
             Assert.True(ProtectedMethodCatalog.IsTrustedPatch(target, patch, HarmonyPatchType.Prefix));
             Assert.False(ProtectedMethodCatalog.IsTrustedPatch(target, patch, HarmonyPatchType.Postfix));
+            Assert.Throws<InvalidOperationException>(() =>
+                ProtectedMethodCatalog.RegisterTrustedPatch(target, Method(nameof(Patch)), HarmonyPatchType.Prefix));
+            Assert.True(ProtectedMethodCatalog.TrustedInventoryUnchanged());
+        }
+    }
+
+    [Fact]
+    public void MirroredForeignTrustEntryIsRejected()
+    {
+        lock (CatalogSync)
+        {
+            var target = Method(nameof(OrdinaryTarget));
+            var patch = Method(nameof(Patch));
+            var entry = (target, patch, HarmonyPatchType.Prefix);
+            var trusted = (HashSet<(MethodBase Target, MethodInfo Patch, HarmonyPatchType Kind)>)Field("Trusted").GetValue(null)!;
+            var expected = (HashSet<(MethodBase Target, MethodInfo Patch, HarmonyPatchType Kind)>)Field("ExpectedTrusted").GetValue(null)!;
+            Assert.True(trusted.Add(entry));
+            Assert.True(expected.Add(entry));
+            try
+            {
+                Assert.False(ProtectedMethodCatalog.IsTrustedPatch(target, patch, HarmonyPatchType.Prefix));
+                Assert.False(ProtectedMethodCatalog.TrustedInventoryUnchanged());
+            }
+            finally
+            {
+                trusted.Remove(entry);
+                expected.Remove(entry);
+            }
         }
     }
 

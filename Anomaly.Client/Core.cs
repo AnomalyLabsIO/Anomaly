@@ -85,6 +85,9 @@ public class Core : MelonMod
             "Restore the Anomaly installation before restarting.";
         try
         {
+            var security = MelonPreferences.CreateCategory("AnomalyBootstrap", "Anomaly security");
+            BlockingFailureDialog.ConfigurePrompt((security.GetEntry<bool>("ShowProtectionFailurePrompt")
+                ?? security.CreateEntry("ShowProtectionFailurePrompt", true)).Value);
             accepted = PullUpBootstraps();
         }
         catch (Exception ex)

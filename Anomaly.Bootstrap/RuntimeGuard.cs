@@ -42,7 +42,7 @@ internal static partial class RuntimeGuard
         "Deferred native modification resolved to protected source: " + Describe(target),
         fatal: ProtectedMethodCatalog.Classify(target) is ProtectionScope.Core or ProtectionScope.Infrastructure, occurrence: true);
 
-    internal static void Install(HostHarmony harmony, bool allowExternal)
+    internal static void Install(HostHarmony harmony, bool allowExternal, bool enableNativeCodeIntegrity = false)
     {
         lock (InstallationSync)
         {
@@ -99,13 +99,13 @@ internal static partial class RuntimeGuard
                 AddCallback(typeof(ILHook), "OnDetour", new Func<ILHook, MethodBase, MonoMod.Cil.ILContext.Manipulator, bool>(ObserveILHook));
                 AddCallback(typeof(Detour), "OnDetour", new Func<Detour, MethodBase, MethodBase, bool>(ObserveDetour));
                 AddCallback(typeof(NativeDetour), "OnDetour", new Func<NativeDetour, MethodBase, IntPtr, IntPtr, bool>(ObserveNative));
-                AddCallback(typeof(Hook), "OnUndo", new Func<Hook, bool>(_ => true));
-                AddCallback(typeof(ILHook), "OnUndo", new Func<ILHook, bool>(_ => true));
-                AddCallback(typeof(Detour), "OnUndo", new Func<Detour, bool>(_ => true));
-                AddCallback(typeof(NativeDetour), "OnUndo", new Func<NativeDetour, bool>(_ => true));
-                AddCallback(typeof(Hook), "OnGenerateTrampoline", new Func<Hook, MethodBase, MethodBase>((_, _) => null!));
-                AddCallback(typeof(Detour), "OnGenerateTrampoline", new Func<Detour, MethodBase, MethodBase>((_, _) => null!));
-                AddCallback(typeof(NativeDetour), "OnGenerateTrampoline", new Func<NativeDetour, MethodBase, MethodBase>((_, _) => null!));
+                AddCallback(typeof(Hook), "OnUndo", new Func<Hook, bool>(AllowHookUndo));
+                AddCallback(typeof(ILHook), "OnUndo", new Func<ILHook, bool>(AllowIlHookUndo));
+                AddCallback(typeof(Detour), "OnUndo", new Func<Detour, bool>(AllowDetourUndo));
+                AddCallback(typeof(NativeDetour), "OnUndo", new Func<NativeDetour, bool>(AllowNativeDetourUndo));
+                AddCallback(typeof(Hook), "OnGenerateTrampoline", new Func<Hook, MethodBase, MethodBase>(KeepHookTrampoline));
+                AddCallback(typeof(Detour), "OnGenerateTrampoline", new Func<Detour, MethodBase, MethodBase>(KeepDetourTrampoline));
+                AddCallback(typeof(NativeDetour), "OnGenerateTrampoline", new Func<NativeDetour, MethodBase, MethodBase>(KeepNativeDetourTrampoline));
                 // Intercept dispatch instead of replacing subscribers: ordinary +=
                 // and -= retain their normal delegate-identity semantics.
                 InstallHook(harmony, RequiredMethod(typeof(MonoMod.Utils.Extensions), "InvokeWhileTrue"), nameof(CallbackTruePrefix), nameof(HarmonyFinalizer));
@@ -113,10 +113,12 @@ internal static partial class RuntimeGuard
                 _installed = true;
                 _audit.Ready();
                 InitializeVerification();
+                CaptureStructuralBaseline();
                 AuditPreexisting();
                 RunCanary(harmony);
                 if (!Verify(requireComplete: false))
                     throw new InvalidOperationException("Bootstrap guard installation verification failed.");
+                if (enableNativeCodeIntegrity) NativeCodeIntegrity.Install();
                 trace?.Write($"INSTALL_COMPLETE patches={Hooks.Count}");
             }
             catch (Exception ex)
@@ -185,6 +187,14 @@ internal static partial class RuntimeGuard
         field.SetValue(null, Delegate.Combine(guard, previous));
         Callbacks.Add((field, guard, previous?.GetInvocationList() ?? Array.Empty<Delegate>()));
     }
+
+    private static bool AllowHookUndo(Hook _) => true;
+    private static bool AllowIlHookUndo(ILHook _) => true;
+    private static bool AllowDetourUndo(Detour _) => true;
+    private static bool AllowNativeDetourUndo(NativeDetour _) => true;
+    private static MethodBase KeepHookTrampoline(Hook _, MethodBase __) => null!;
+    private static MethodBase KeepDetourTrampoline(Detour _, MethodBase __) => null!;
+    private static MethodBase KeepNativeDetourTrampoline(NativeDetour _, MethodBase __) => null!;
 
     private static void RecordRequiredStockHooks()
     {

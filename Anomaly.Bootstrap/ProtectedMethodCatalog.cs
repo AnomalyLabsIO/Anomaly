@@ -28,6 +28,7 @@ internal static class ProtectedMethodCatalog
     private static readonly HashSet<MethodBase> External = new();
     private static readonly HashSet<MethodBase> Infrastructure = new();
     private static readonly HashSet<(MethodBase Target, MethodInfo Patch, HarmonyPatchType Kind)> Trusted = new();
+    private static readonly HashSet<(MethodBase Target, MethodInfo Patch, HarmonyPatchType Kind)> ExpectedTrusted = new();
     private static readonly Dictionary<IntPtr, MethodBase> NativeTargets = new();
     private static readonly HashSet<MethodBase> NativeResolved = new();
     private static readonly HashSet<MethodBase> Il2CppNativeResolved = new();
@@ -472,13 +473,35 @@ internal static class ProtectedMethodCatalog
     internal static void RegisterTrustedPatch(MethodBase target, MethodInfo patch, HarmonyPatchType kind)
     {
         lock (Sync)
-            if (Trusted.Add((target, patch, kind))) _trustRevision++;
+        {
+            if (!TrustedPatchSourceAllowed(patch))
+                throw new InvalidOperationException("A trusted patch must come from the pinned Bootstrap, Client, or loader assembly.");
+            if (Trusted.Add((target, patch, kind)))
+            {
+                ExpectedTrusted.Add((target, patch, kind));
+                _trustRevision++;
+            }
+        }
+    }
+
+    internal static bool TrustedInventoryUnchanged()
+    {
+        lock (Sync) return Trusted.SetEquals(ExpectedTrusted) && Trusted.All(entry => TrustedPatchSourceAllowed(entry.Patch));
+    }
+
+    private static bool TrustedPatchSourceAllowed(MethodInfo patch)
+    {
+        Assembly source = patch.Module.Assembly;
+        return ReferenceEquals(source, typeof(RuntimeGuard).Assembly) ||
+            ReferenceEquals(source, typeof(PatchShield).Assembly) ||
+            (PinnedAssemblies.TryGetValue("Anomaly.Client", out Assembly? client) && ReferenceEquals(source, client));
     }
 
     internal static bool IsTrustedPatch(MethodBase target, MethodInfo patch, HarmonyPatchType kind)
     {
         lock (Sync)
         {
+            if (!TrustedPatchSourceAllowed(patch)) return false;
             if (Trusted.Contains((target, patch, kind))) return true;
             // Only a newly registered candidate can need a synchronous binding
             // before its first patch. Ordinary trust misses never resolve again.
