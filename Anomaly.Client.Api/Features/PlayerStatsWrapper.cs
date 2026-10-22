@@ -3,6 +3,11 @@ using Il2CppPlayerStatsSystem;
 
 namespace Anomaly.Client.Api.Features;
 
+/// <summary>
+/// Access to locally held stat modules. Raw scalar properties may contain initial or
+/// stale values for players outside the local synchronization scope; use
+/// <see cref="TryGetValue{T}"/> when the distinction matters.
+/// </summary>
 public class PlayerStatsWrapper
 {
     private static readonly Dictionary<PlayerStats, PlayerStatsWrapper> _wrappers = new();
@@ -13,6 +18,8 @@ public class PlayerStatsWrapper
     }
 
     public PlayerStats Base { get; }
+
+    public bool IsDestroyed => Base == null || Base._hub == null;
 
     public Player Player => Player.Get(Base._hub);
 
@@ -45,13 +52,25 @@ public class PlayerStatsWrapper
     public float MaxArtificialHealth => TryGet<AhpStat>(out AhpStat ahpStat) ? ahpStat.MaxValue : 0f;
 
     /// <summary>
-    /// Current stamina (0..MaxStamina). Available on both local and remote
-    /// players because <see cref="StaminaStat"/> is replicated.
+    /// Last locally held stamina (0..MaxStamina). Stock synchronization sends
+    /// health, stamina, Hume shield and AHP to the owner and non-alive viewers,
+    /// not arbitrary alive observers. Values may be unavailable or stale.
+    /// Use <see cref="TryGetValue{T}"/> for a policy-checked read.
     /// </summary>
     public float Stamina => TryGet<StaminaStat>(out StaminaStat staminaStat) ? staminaStat.CurValue : 0f;
 
     /// <inheritdoc cref="Stamina"/>
     public float MaxStamina => TryGet<StaminaStat>(out StaminaStat staminaStat) ? staminaStat.MaxValue : 0f;
+
+    /// <summary>
+    /// Reads a stat only when its local synchronization policy permits observation.
+    /// This does not guarantee that a new network sample has arrived.
+    /// </summary>
+    public bool TryGetValue<T>(out float value) where T : StatBase
+    {
+        value = 0f;
+        return TryGet<T>(out T module) && PlayerStat.Get(module).TryGetValue(out value);
+    }
 
     public bool TryGet<T>(out T module) where T : StatBase
     {

@@ -19,7 +19,11 @@ public class BreakableDoor : Door
     /// <summary>The underlying <see cref="BreakableDoorBase"/>.</summary>
     public BreakableDoorBase BreakableBase { get; }
 
-    /// <summary>Current door HP.</summary>
+    public new static IReadOnlyCollection<BreakableDoor> List => Door.List.OfType<BreakableDoor>().ToArray();
+    public static BreakableDoor Get(BreakableDoorBase value) => Door.Get(value) as BreakableDoor;
+    public static bool TryGet(BreakableDoorBase value, out BreakableDoor door) => (door = Get(value)) != null;
+
+    /// <summary>Locally-held door HP. The game does not replicate damage HP, so remote clients cannot treat this as authoritative.</summary>
     public float Health => BreakableBase != null ? BreakableBase.RemainingHealth : 0f;
 
     /// <summary>Maximum door HP (the value <see cref="Health"/> regenerates / starts at).</summary>
@@ -35,6 +39,6 @@ public class BreakableDoor : Door
     public DoorDamageType IgnoredDamageSources =>
         BreakableBase != null ? BreakableBase.IgnoredDamageSources : DoorDamageType.None;
 
-    /// <summary>True if the door has been broken (health depleted).</summary>
-    public bool IsBroken => Health <= 0f;
+    /// <summary>The replicated broken state, independent of unavailable server health.</summary>
+    public bool IsBroken => BreakableBase != null && BreakableBase.Network_destroyed;
 }

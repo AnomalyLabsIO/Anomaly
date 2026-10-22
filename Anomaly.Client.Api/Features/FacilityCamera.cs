@@ -34,6 +34,14 @@ public class FacilityCamera
     /// <summary>The underlying <see cref="Scp079Camera"/>.</summary>
     public Scp079Camera Base { get; }
 
+    public bool IsDestroyed => Base == null;
+
+    public static bool TryGet(Scp079Camera value, out FacilityCamera wrapper)
+    {
+        wrapper = Get(value);
+        return wrapper != null;
+    }
+
     /// <summary>True if this is the room's "main" camera (the one SCP-079 enters by default for the room).</summary>
     public bool IsMain => Base != null && Base.IsMain;
 

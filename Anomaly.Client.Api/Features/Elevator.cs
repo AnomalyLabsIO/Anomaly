@@ -29,6 +29,14 @@ public class Elevator
     /// <summary>The underlying <see cref="ElevatorChamber"/> NetworkBehaviour.</summary>
     public ElevatorChamber Base { get; }
 
+    public bool IsDestroyed => Base == null;
+
+    public static bool TryGet(ElevatorChamber value, out Elevator wrapper)
+    {
+        wrapper = Get(value);
+        return wrapper != null;
+    }
+
     /// <summary>True if the chamber is in <see cref="ElevatorChamber.ElevatorSequence.Ready"/> phase.</summary>
     public bool IsReady => Base != null && Base.IsReady;
 

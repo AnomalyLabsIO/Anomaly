@@ -13,6 +13,9 @@ using Anomaly.Client.Internal.Round;
 using Anomaly.Client.Api.Internal.Input;
 using Anomaly.Client.Api.Internal.Scheduling;
 using Anomaly.Client.Internal.Stats;
+using Anomaly.Client.Internal.Players;
+using Anomaly.Client.Internal.Items;
+using Anomaly.Client.Internal.Map;
 using Anomaly.Client.Api.Internal.Wrappers;
 using Anomaly.Client.Patches.Menu.ModSettings;
 using Il2CppAdminToys;
@@ -20,6 +23,7 @@ using Il2CppCassie;
 using Il2CppCustomPlayerEffects;
 using Il2Cpp;
 using Il2CppInteractables.Interobjects;
+using Il2CppInteractables;
 using Il2CppInventorySystem;
 using Il2CppInventorySystem.Items;
 using Il2CppInventorySystem.Items.Firearms.ShotEvents;
@@ -79,6 +83,8 @@ internal static class ClientRuntime
             new Action<Scp079Camera>(HandleCameraStateChanged));
         var roomRemoved = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<RoomIdentifier>>(
             new Action<RoomIdentifier>(HandleRoomRemoved));
+        var interacted = DelegateSupport.ConvertDelegate<Il2CppSystem.Action<InteractableCollider>>(
+            new Action<InteractableCollider>(HandleInteracted));
 
         Initializer.Initialize(
             RequiredHook("ShotEventManager.OnShot",
@@ -123,7 +129,13 @@ internal static class ClientRuntime
             RequiredHook("RoomIdentifier.OnRemoved",
                 () => RoomIdentifier.OnRemoved += roomRemoved,
                 () => RoomIdentifier.OnRemoved -= roomRemoved),
-            new InitializationStep(PlayerRegistry.Resync, PlayerRegistry.Clear));
+            RequiredHook("InteractionCoordinator.OnClientInteracted",
+                () => InteractionCoordinator.OnClientInteracted += interacted,
+                () => InteractionCoordinator.OnClientInteracted -= interacted),
+            new InitializationStep(PlayerRegistry.Resync, PlayerRegistry.Clear),
+            new InitializationStep(PlayerObservationBridge.Initialize, PlayerObservationBridge.Shutdown),
+            new InitializationStep(ItemStateRuntime.Initialize, ItemStateRuntime.Shutdown),
+            new InitializationStep(FacilityEventsRuntime.Init, FacilityEventsRuntime.Shutdown));
     }
 
     internal static void Shutdown()
@@ -219,6 +231,7 @@ internal static class ClientRuntime
         {
             ClientApi.IsClientReady = true;
             PlayerRegistry.Resync();
+            FacilityEventsRuntime.Resync();
             HealthStateTracker.Update();
             ClientEvents.OnReady(new ClientReadyEventArgs(ClientApi.CurrentSceneName));
         }, nameof(HandleClientReady));
@@ -242,6 +255,7 @@ internal static class ClientRuntime
             }
 
             PlayerRegistry.Resync();
+            FacilityEventsRuntime.Resync();
             ClientEvents.OnSceneLoaded(new SceneLoadedEventArgs(scene, sceneMode));
 
             if (sceneMode == LoadSceneMode.Single)
@@ -265,6 +279,8 @@ internal static class ClientRuntime
         VirtualInputs.TickProviders();
         EffectStateTracker.Update();
         HealthStateTracker.Update();
+        FacilityEventsRuntime.Tick();
+        ItemStateRuntime.Tick();
     }
 
     internal static void HandlePlayerAdded(ReferenceHub hub)
@@ -534,6 +550,15 @@ internal static class ClientRuntime
         RunSafely(() => Room.Unregister(roomIdentifier), nameof(HandleRoomRemoved));
     }
 
+    private static void HandleInteracted(InteractableCollider collider)
+    {
+        RunSafely(() =>
+        {
+            if (LocalPlayer.Instance is { } player && collider != null)
+                PlayerEvents.OnInteracted(new PlayerInteractedEventArgs(player, collider));
+        }, nameof(HandleInteracted));
+    }
+
     private static void FlushPendingWrites()
     {
         ModSettingsSaveScheduler.Flush();
@@ -542,6 +567,9 @@ internal static class ClientRuntime
 
     private static void ClearRuntimeCaches()
     {
+        PlayerObservationBridge.Reset();
+        ItemStateRuntime.ResetSession();
+        FacilityEventsRuntime.Clear();
         EffectStateTracker.Clear();
         HealthStateTracker.Clear();
         PlayerRegistry.Clear();

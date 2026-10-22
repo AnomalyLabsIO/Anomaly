@@ -2,7 +2,7 @@ using Anomaly.Client.Api.Features;
 
 namespace Anomaly.Client.Api.Events.Args;
 
-public class PlayerEventArgs : EventArgs
+public class PlayerEventArgs : EventArgs, IPlayerEvent
 {
     public PlayerEventArgs(Player player)
     {

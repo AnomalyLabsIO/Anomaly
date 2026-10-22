@@ -415,6 +415,11 @@
 		<Compile Include="FileTransfer\ChunkBuffer.cs" />
 		<Compile Include="FileTransfer\FileTransferClient.cs" />
 		<Compile Include="Internal\Bootstrap\ClientRuntime.cs" />
+		<Compile Include="Internal\Players\PlayerObservationBridge.cs" />
+		<Compile Include="Internal\Items\ItemStateRuntime.cs" />
+		<Compile Include="Patches\Runtime\ItemStatePatch.cs" />
+		<Compile Include="Internal\Map\FacilityEventsRuntime.cs" />
+		<Compile Include="Patches\Runtime\LockerStatePatch.cs" />
 		<Compile Include="Internal\Hosting\LocalHostGrantCoordinator.cs" />
 		<Compile Include="Internal\Hosting\LocalHostingRuntime.cs" />
 		<Compile Include="Internal\Audio\AnnouncerVocabularyReceiver.cs" />

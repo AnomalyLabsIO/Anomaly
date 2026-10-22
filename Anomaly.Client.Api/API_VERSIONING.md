@@ -22,6 +22,14 @@ Public API compatibility is covered by the `Anomaly.Client.Api.Tests` contract t
 
 ## Migrating development mods
 
+The client game API expansion preserves existing names and scalar getters and
+adds LabAPI-style conveniences and observation events. `Scp330Item` now derives
+from `UsableItem` (which derives from `Item`), adding common use/cooldown access.
+Player/item/door/hazard event interfaces are additive. Event cancellation now
+enforces its documented persistent veto between subscribers. Stat notifications
+respect local visibility and silently rebase across role/viewer changes. Review
+[GAME_API.md](GAME_API.md) before relying on remote state or nullable observations.
+
 - `InputRegistry.Register` now returns `IDisposable`. Keep the handle and dispose
   it during mod deinitialization, after unsubscribing input handlers. Disposal is
   silent, removes only that registration, and preserves the user's saved binding.

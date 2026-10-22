@@ -46,10 +46,25 @@ public class Projectile : Pickup
             return projectile;
         }
 
-        projectile = new Projectile(projectileBase);
+        projectile = CreateWrapper(projectileBase);
         _projectiles[projectileBase] = projectile;
         RefreshSerialIndex(projectile);
         return projectile;
+    }
+
+    private static Projectile CreateWrapper(ThrownProjectile value)
+    {
+        if (value.TryCast<Il2CppInventorySystem.Items.ThrowableProjectiles.Scp018Projectile>() is { } ball)
+            return new Scp018Projectile(ball);
+        if (value.TryCast<Il2CppInventorySystem.Items.ThrowableProjectiles.Scp2176Projectile>() is { } light)
+            return new Scp2176Projectile(light);
+        if (value.TryCast<FlashbangGrenade>() is { } flashbang)
+            return new FlashbangProjectile(flashbang);
+        if (value.TryCast<ExplosionGrenade>() is { } explosive)
+            return new ExplosiveGrenadeProjectile(explosive);
+        if (value.TryCast<TimeGrenade>() is { } timed)
+            return new TimedGrenadeProjectile(timed);
+        return new Projectile(value);
     }
 
     /// <summary>
@@ -61,7 +76,7 @@ public class Projectile : Pickup
         if (serial == 0)
             return null;
         _serialCache.TryGetValue(serial, out Projectile p);
-        return p;
+        return p != null && !p.IsDestroyed ? p : null;
     }
 
     /// <inheritdoc cref="Get(ushort)"/>
@@ -72,7 +87,8 @@ public class Projectile : Pickup
             projectile = null;
             return false;
         }
-        return _serialCache.TryGetValue(serial, out projectile);
+        projectile = Get(serial);
+        return projectile != null;
     }
 
     internal override void OnRemove()

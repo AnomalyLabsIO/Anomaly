@@ -14,6 +14,9 @@ public class LocalPlayer : Player
 
     public static LocalPlayer Instance => PlayerRegistry.GetLocal();
 
+    /// <summary>The player currently watched by the local spectator camera, or null.</summary>
+    public Player CurrentlySpectating => Spectating.CurrentPlayer;
+
     public HintDisplay Hints => ReferenceHub.hints;
     public AspectRatioSync AspectRatioSync => ReferenceHub.aspectRatioSync;
     public GameConsoleTransmission GameConsoleTransmission => ReferenceHub.gameConsoleTransmission;

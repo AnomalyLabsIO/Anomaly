@@ -30,6 +30,14 @@ public class Ragdoll
     /// <summary>The underlying <see cref="BasicRagdoll"/>.</summary>
     public BasicRagdoll Base { get; }
 
+    public bool IsDestroyed => Base == null;
+
+    public static bool TryGet(BasicRagdoll value, out Ragdoll wrapper)
+    {
+        wrapper = Get(value);
+        return wrapper != null;
+    }
+
     /// <summary>The role the dead player was when the ragdoll was created.</summary>
     public RoleTypeId RoleType => Base != null ? Base.NetworkInfo.RoleType : RoleTypeId.None;
 

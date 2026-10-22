@@ -31,6 +31,9 @@ public class Locker
     /// <summary>The underlying <see cref="Il2CppMapGeneration.Distributors.Locker"/>.</summary>
     public Il2CppMapGeneration.Distributors.Locker Base { get; }
 
+    public bool IsDestroyed => Base == null;
+    public Transform Transform => IsDestroyed ? null : Base.transform;
+
     /// <summary>Bitmask of currently-opened chambers (bit N set ⇒ chamber N is open).</summary>
     public ushort OpenedChambersMask => Base != null ? Base.NetworkOpenedChambers : (ushort)0;
 
@@ -106,7 +109,16 @@ public class Locker
         return wrapper;
     }
 
+    public static bool TryGet(Il2CppMapGeneration.Distributors.Locker value, out Locker locker) => (locker = Get(value)) != null;
+    public static IEnumerable<Locker> Get(Room room) => room == null ? Enumerable.Empty<Locker>() : List.Where(value => value.Room == room);
+
     internal static void ClearAll() => _lockers.Clear();
+
+    internal static void RemoveDestroyed()
+    {
+        foreach (var value in _lockers.Keys.Where(value => value == null).ToArray())
+            _lockers.Remove(value);
+    }
 
     public override string ToString() => $"Locker(ChamberCount={Chambers.Count}, OpenedMask=0x{OpenedChambersMask:X4})";
 }
@@ -126,6 +138,8 @@ public sealed class LockerChamberWrapper
 
     /// <summary>The underlying <see cref="LockerChamber"/> MonoBehaviour.</summary>
     public LockerChamber Base { get; }
+
+    public bool IsDestroyed => Base == null;
 
     /// <summary>Zero-based index of this chamber within its locker's <see cref="Locker.Chambers"/>.</summary>
     public byte Index { get; }

@@ -28,6 +28,8 @@ internal static class EventInvoker
         if (eventHandler == null)
             return;
 
+        ICancellableEvent cancellable = args as ICancellableEvent;
+        bool cancelled = cancellable != null && !cancellable.IsAllowed;
         foreach (AnomalyEventHandler<TEventArgs> subscriber in eventHandler.GetInvocationList())
         {
             try
@@ -45,6 +47,15 @@ internal static class EventInvoker
                 {
                     // Metadata/unit-test hosts may not have a usable loader
                     // logger. Logging must never suppress later subscribers.
+                }
+            }
+            finally
+            {
+                if (cancellable != null)
+                {
+                    cancelled |= !cancellable.IsAllowed;
+                    if (cancelled)
+                        cancellable.IsAllowed = false;
                 }
             }
         }

@@ -18,6 +18,10 @@ public class ElevatorDoor : Door
     /// <summary>The underlying <see cref="ElevatorDoorBase"/>.</summary>
     public ElevatorDoorBase ElevatorBase { get; }
 
+    public new static IReadOnlyCollection<ElevatorDoor> List => Door.List.OfType<ElevatorDoor>().ToArray();
+    public static ElevatorDoor Get(ElevatorDoorBase value) => Door.Get(value) as ElevatorDoor;
+    public static bool TryGet(ElevatorDoorBase value, out ElevatorDoor door) => (door = Get(value)) != null;
+
     /// <summary>The elevator group this door belongs to (LCZ / HCZ / Nuke / etc), or null if base is destroyed.</summary>
     public ElevatorGroup? Group => ElevatorBase?.Group;
 

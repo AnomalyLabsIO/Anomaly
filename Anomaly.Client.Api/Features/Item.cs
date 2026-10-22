@@ -12,12 +12,22 @@ public class Item
 {
     private static readonly Dictionary<ItemBase, Item> _items = new();
     private static readonly SerialOwnershipIndex<Item> _serialCache = new();
-    private static readonly Dictionary<System.Type, System.Func<ItemBase, Item>> _subtypeFactories = new()
+    // Native instances commonly arrive through a managed ItemBase proxy. CLR GetType()
+    // does not reliably describe their native subclass, so test native casts in order.
+    private static readonly System.Func<ItemBase, Item>[] _subtypeFactories =
     {
-        { typeof(Il2CppInventorySystem.Items.Firearms.Firearm), b => new FirearmItem((Il2CppInventorySystem.Items.Firearms.Firearm)b) },
-        { typeof(Il2CppInventorySystem.Items.Keycards.KeycardItem), b => new KeycardItem((Il2CppInventorySystem.Items.Keycards.KeycardItem)b) },
-        { typeof(Il2CppInventorySystem.Items.ThrowableProjectiles.ThrowableItem), b => new ThrowableItem((Il2CppInventorySystem.Items.ThrowableProjectiles.ThrowableItem)b) },
-        { typeof(Il2CppInventorySystem.Items.Usables.Scp330.Scp330Bag), b => new Scp330Item((Il2CppInventorySystem.Items.Usables.Scp330.Scp330Bag)b) },
+        b => CreateSubtype<Il2CppInventorySystem.Items.Firearms.Firearm>(b, value => new FirearmItem(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Keycards.KeycardItem>(b, value => new KeycardItem(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.ThrowableProjectiles.ThrowableItem>(b, value => new ThrowableItem(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Usables.Scp330.Scp330Bag>(b, value => new Scp330Item(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Usables.Scp1344.Scp1344Item>(b, value => new Scp1344Item(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Usables.Scp1576.Scp1576Item>(b, value => new Scp1576Item(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Usables.Consumable>(b, value => new ConsumableItem(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Usables.UsableItem>(b, value => new UsableItem(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Radio.RadioItem>(b, value => new RadioItem(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Armor.BodyArmor>(b, value => new BodyArmorItem(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.ToggleableLights.ToggleableLightItemBase>(b, value => new LightItem(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.MicroHID.MicroHIDItem>(b, value => new MicroHIDItem(value)),
     };
 
     protected Item(ItemBase itemBase)
@@ -26,6 +36,8 @@ public class Item
     }
 
     public ItemBase Base { get; }
+
+    public bool IsDestroyed => Base == null;
 
     public ItemIdentifier Identifier => Base.ItemId;
 
@@ -48,6 +60,9 @@ public class Item
     public ushort Serial => Base.ItemSerial;
 
     public Player Owner => Player.Get(Base.Owner);
+
+    /// <summary>The current owner, or null if the item has been destroyed.</summary>
+    public Player CurrentOwner => IsDestroyed ? null : Owner;
 
     public bool IsEquipped => Base.IsEquipped;
 
@@ -104,18 +119,19 @@ public class Item
 
     private static Item CreateForType(ItemBase itemBase)
     {
-        // Walk the type hierarchy looking for a registered subtype factory.
-        // Allows derived game types (e.g. RevolverFirearm extends Firearm) to
-        // fall back to the FirearmItem wrapper if no specific revolver wrapper
-        // is registered.
-        System.Type t = itemBase.GetType();
-        while (t != null && t != typeof(ItemBase))
+        foreach (var factory in _subtypeFactories)
         {
-            if (_subtypeFactories.TryGetValue(t, out var factory))
-                return factory(itemBase);
-            t = t.BaseType;
+            Item item = factory(itemBase);
+            if (item != null)
+                return item;
         }
         return new Item(itemBase);
+    }
+
+    private static Item CreateSubtype<T>(ItemBase itemBase, System.Func<T, Item> factory) where T : ItemBase
+    {
+        T typed = itemBase.TryCast<T>();
+        return typed != null ? factory(typed) : null;
     }
 
     public static ReadOnlyCollection<Item> Get(IEnumerable<ItemBase> itemBases)
@@ -146,9 +162,7 @@ public class Item
     /// </summary>
     public static Item Get(ushort serial)
     {
-        if (serial == 0)
-            return null;
-        _serialCache.TryGet(serial, out Item item);
+        TryGet(serial, out Item item);
         return item;
     }
 
@@ -160,7 +174,19 @@ public class Item
             item = null;
             return false;
         }
-        return _serialCache.TryGet(serial, out item);
+        if (!_serialCache.TryGet(serial, out item))
+            return false;
+        if (!item.IsDestroyed)
+            return true;
+        _serialCache.RemoveIfOwned(serial, item);
+        item = null;
+        return false;
+    }
+
+    public static bool TryGet(ItemBase itemBase, out Item item)
+    {
+        item = Get(itemBase);
+        return item != null;
     }
 
     /// <summary>

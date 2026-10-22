@@ -28,6 +28,11 @@ public static class ClientEvents
     public static event AnomalyEventHandler<ClientReadyEventArgs> Ready;
     public static event AnomalyEventHandler<CanvasReadyEventArgs> CanvasReady;
 
+    /// <summary>Enrollment was disclosed or cleared. This does not replace transport or scene readiness.</summary>
+    public static event AnomalyEventHandler<EnrollmentChangedEventArgs> EnrollmentChanged;
+
+    internal static void OnEnrollmentChanged(EnrollmentChangedEventArgs args) => EventInvoker.Invoke(EnrollmentChanged, args);
+
     internal static void OnSceneLoaded(SceneLoadedEventArgs args) => EventInvoker.Invoke(SceneLoaded, args);
 
     internal static void OnConnected(ClientConnectedEventArgs args) => EventInvoker.Invoke(Connected, args);

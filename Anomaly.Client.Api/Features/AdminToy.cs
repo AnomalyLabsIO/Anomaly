@@ -15,6 +15,17 @@ public class AdminToy
 
     public AdminToyBase Base { get; }
 
+    public bool IsDestroyed => Base == null;
+
+    public T As<T>() where T : AdminToy => this as T;
+    public bool Is<T>() where T : AdminToy => this is T;
+
+    public static bool TryGet(AdminToyBase toyBase, out AdminToy toy)
+    {
+        toy = Get(toyBase);
+        return toy != null;
+    }
+
     public string CommandName => Base.CommandName;
 
     public Vector3 Position => Base.Position;
@@ -62,17 +73,28 @@ public class AdminToy
 
     private static AdminToy CreateWrapper(AdminToyBase toyBase)
     {
-        if (toyBase is PrimitiveObjectToy primitiveObjectToy)
+        if (toyBase.TryCast<PrimitiveObjectToy>() is { } primitiveObjectToy)
             return new PrimitiveAdminToy(primitiveObjectToy);
 
-        if (toyBase is LightSourceToy lightSourceToy)
+        if (toyBase.TryCast<LightSourceToy>() is { } lightSourceToy)
             return new LightAdminToy(lightSourceToy);
 
-        if (toyBase is SpeakerToy speakerToy)
+        if (toyBase.TryCast<SpeakerToy>() is { } speakerToy)
             return new SpeakerAdminToy(speakerToy);
 
-        if (toyBase is ShootingTarget shootingTarget)
+        if (toyBase.TryCast<ShootingTarget>() is { } shootingTarget)
             return new ShootingTargetAdminToy(shootingTarget);
+
+        if (toyBase.TryCast<TextToy>() is { } text)
+            return new TextAdminToy(text);
+        if (toyBase.TryCast<InvisibleInteractableToy>() is { } interactable)
+            return new InteractableAdminToy(interactable);
+        if (toyBase.TryCast<Scp079CameraToy>() is { } camera)
+            return new CameraAdminToy(camera);
+        if (toyBase.TryCast<WaypointToy>() is { } waypoint)
+            return new WaypointAdminToy(waypoint);
+        if (toyBase.TryCast<CapybaraToy>() is { } capybara)
+            return new CapybaraAdminToy(capybara);
 
         return new AdminToy(toyBase);
     }

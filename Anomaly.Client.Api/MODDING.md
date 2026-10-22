@@ -10,6 +10,9 @@ command, input binding, preference, events, scheduling, and explicit cleanup.
 Managed modules implementing `IAnomalyMod` remain an advanced alternative for
 framework-owned initialization, cleanup, dependency ordering, and fault attribution.
 
+See [Client game API](GAME_API.md) for the LabAPI member mapping, typed item and
+facility wrappers, observation events, and client data-availability rules.
+
 This early access SDK intentionally resets the development API baseline while
 retaining version `1.0.0`. Rebuild earlier development mods; see
 [API_VERSIONING.md](API_VERSIONING.md) for the migration list.

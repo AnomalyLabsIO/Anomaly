@@ -30,6 +30,9 @@ public class Generator
     /// <summary>The underlying <see cref="Scp079Generator"/> NetworkBehaviour.</summary>
     public Scp079Generator Base { get; }
 
+    public bool IsDestroyed => Base == null;
+    public Transform Transform => IsDestroyed ? null : Base.transform;
+
     /// <summary>True if the door panel is open (lever / interior accessible).</summary>
     public bool IsOpen => Base.IsOpen;
 
@@ -104,7 +107,15 @@ public class Generator
         return wrapper;
     }
 
+    public static bool TryGet(Scp079Generator value, out Generator generator) => (generator = Get(value)) != null;
+
     internal static void ClearAll() => _generators.Clear();
+
+    internal static void RemoveDestroyed()
+    {
+        foreach (Scp079Generator value in _generators.Keys.Where(value => value == null).ToArray())
+            _generators.Remove(value);
+    }
 
     private static bool HasFlag(Scp079Generator g, Scp079Generator.GeneratorFlags flag)
     {

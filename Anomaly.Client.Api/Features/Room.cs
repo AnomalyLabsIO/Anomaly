@@ -15,6 +15,30 @@ public class Room
 
     public RoomIdentifier Base { get; }
 
+    public bool IsDestroyed => Base == null;
+
+    public GameObject GameObject => IsDestroyed ? null : Base.gameObject;
+
+    public ReadOnlyCollection<Door> Doors => Door.Get(this).ToList().AsReadOnly();
+
+    /// <summary>Players whose locally-known position resolves to this room.</summary>
+    public ReadOnlyCollection<Player> Players => Player.PlayerList.Where(player => Get(player) == this).ToList().AsReadOnly();
+
+    public ReadOnlyCollection<FacilityCamera> Cameras => FacilityCamera.GetForRoom(Base);
+
+    public ReadOnlyCollection<LightsController> Lights
+    {
+        get
+        {
+            List<LightsController> result = new();
+            if (!IsDestroyed && Base.LightControllers != null)
+                foreach (var controller in Base.LightControllers)
+                    if (LightsController.Get(controller) is { } lights)
+                        result.Add(lights);
+            return result.AsReadOnly();
+        }
+    }
+
     public string Name => Base.Name.ToString();
 
     public RoomName RoomName => Base.Name;
@@ -85,6 +109,14 @@ public class Room
 
         return Get(player.Position);
     }
+
+    public static bool TryGet(RoomIdentifier roomIdentifier, out Room room) => (room = Get(roomIdentifier)) != null;
+    public static bool TryGet(Player player, out Room room) => (room = Get(player)) != null;
+    public static bool TryGet(Vector3 position, out Room room) => (room = Get(position)) != null;
+
+    public static IEnumerable<Room> Get(RoomName name) => List.Where(room => room.RoomName == name);
+    public static IEnumerable<Room> Get(FacilityZone zone) => List.Where(room => room.Zone == zone);
+    public static IEnumerable<Room> Get(RoomShape shape) => List.Where(room => room.Shape == shape);
 
     public static Room Get(Vector3 position)
     {

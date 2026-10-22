@@ -1,21 +1,13 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Il2CppInteractables.Interobjects.DoorUtils;
+using UnityEngine;
 
 namespace Anomaly.Client.Api.Features;
 
 public class Door
 {
     private static readonly Dictionary<DoorVariant, Door> _doors = new();
-    private static readonly Dictionary<System.Type, System.Func<DoorVariant, Door>> _subtypeFactories = new()
-    {
-        { typeof(Il2CppInteractables.Interobjects.BreakableDoor),
-            v => new BreakableDoor((Il2CppInteractables.Interobjects.BreakableDoor)v) },
-        { typeof(Il2CppInteractables.Interobjects.CheckpointDoor),
-            v => new CheckpointDoor((Il2CppInteractables.Interobjects.CheckpointDoor)v) },
-        { typeof(Il2CppInteractables.Interobjects.ElevatorDoor),
-            v => new ElevatorDoor((Il2CppInteractables.Interobjects.ElevatorDoor)v) },
-    };
 
     protected Door(DoorVariant doorVariant)
     {
@@ -23,6 +15,11 @@ public class Door
     }
 
     public DoorVariant Base { get; }
+
+    public bool IsDestroyed => Base == null;
+    public GameObject GameObject => IsDestroyed ? null : Base.gameObject;
+    public Transform Transform => IsDestroyed ? null : Base.transform;
+    public Vector3 Position => IsDestroyed ? Vector3.zero : Base.transform.position;
 
     public string Name => Base.DoorName;
 
@@ -92,6 +89,15 @@ public class Door
         return door;
     }
 
+    public static bool TryGet(DoorVariant doorVariant, out Door door) => (door = Get(doorVariant)) != null;
+
+    /// <summary>Finds an observed door by its game identifier.</summary>
+    public static Door Get(byte id) => List.FirstOrDefault(door => door.Id == id);
+
+    public static bool TryGet(byte id, out Door door) => (door = Get(id)) != null;
+
+    public static IEnumerable<Door> Get(Room room) => room == null ? Enumerable.Empty<Door>() : List.Where(door => door.Rooms.Contains(room));
+
     /// <summary>Convenience downcast. Returns <c>null</c> if this wrapper isn't a <typeparamref name="T"/>.</summary>
     public T As<T>() where T : Door => this as T;
 
@@ -100,14 +106,20 @@ public class Door
 
     private static Door CreateForType(DoorVariant doorVariant)
     {
-        System.Type t = doorVariant.GetType();
-        while (t != null && t != typeof(DoorVariant))
-        {
-            if (_subtypeFactories.TryGetValue(t, out var factory))
-                return factory(doorVariant);
-            t = t.BaseType;
-        }
+        // IL2CPP may hand us a base managed proxy for a derived native object.
+        if (doorVariant.TryCast<Il2CppInteractables.Interobjects.CheckpointDoor>() is { } checkpoint)
+            return new CheckpointDoor(checkpoint);
+        if (doorVariant.TryCast<Il2CppInteractables.Interobjects.ElevatorDoor>() is { } elevator)
+            return new ElevatorDoor(elevator);
+        if (doorVariant.TryCast<Il2CppInteractables.Interobjects.BreakableDoor>() is { } breakable)
+            return new BreakableDoor(breakable);
         return new Door(doorVariant);
+    }
+
+    internal static bool Unregister(DoorVariant value, out Door door)
+    {
+        door = null;
+        return !ReferenceEquals(value, null) && _doors.Remove(value, out door);
     }
 
     internal static void ClearAll() => _doors.Clear();

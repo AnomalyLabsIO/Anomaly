@@ -29,6 +29,14 @@ public class Tesla
     /// <summary>The underlying <see cref="TeslaGate"/> NetworkBehaviour.</summary>
     public TeslaGate Base { get; }
 
+    public bool IsDestroyed => Base == null;
+
+    public static bool TryGet(TeslaGate value, out Tesla wrapper)
+    {
+        wrapper = Get(value);
+        return wrapper != null;
+    }
+
     /// <summary>True while the tesla is in its shock animation.</summary>
     public bool InProgress => Base != null && Base.InProgress;
 

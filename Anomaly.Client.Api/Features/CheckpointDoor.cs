@@ -21,6 +21,10 @@ public class CheckpointDoor : Door
     /// <summary>The underlying <see cref="CheckpointDoorBase"/>.</summary>
     public CheckpointDoorBase CheckpointBase { get; }
 
+    public new static IReadOnlyCollection<CheckpointDoor> List => Door.List.OfType<CheckpointDoor>().ToArray();
+    public static CheckpointDoor Get(CheckpointDoorBase value) => Door.Get(value) as CheckpointDoor;
+    public static bool TryGet(CheckpointDoorBase value, out CheckpointDoor door) => (door = Get(value)) != null;
+
     /// <summary>The current sequence phase (Idle / Open / Closing / etc).</summary>
     public CheckpointDoorBase.SequenceState CurrentSequence =>
         CheckpointBase != null ? CheckpointBase.CurSequence : CheckpointDoorBase.SequenceState.Idle;

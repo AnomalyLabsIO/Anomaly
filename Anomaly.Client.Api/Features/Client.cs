@@ -14,6 +14,7 @@ namespace Anomaly.Client.Api.Features;
 public static class Client
 {
     private static NewMainMenu _mainMenu;
+    private static string _enrollmentId;
 
     public static NewMainMenu MainMenu
     {
@@ -64,7 +65,18 @@ public static class Client
     /// <c>null</c> while disconnected/before the server publishes it.
     /// It may still be <c>null</c> when <see cref="IsClientReady"/> becomes true.
     /// </summary>
-    public static string EnrollmentId { get; internal set; }
+    public static string EnrollmentId
+    {
+        get => _enrollmentId;
+        internal set
+        {
+            if (string.Equals(_enrollmentId, value, StringComparison.Ordinal))
+                return;
+            string previous = _enrollmentId;
+            _enrollmentId = value;
+            Events.Handlers.ClientEvents.OnEnrollmentChanged(new Events.Args.EnrollmentChangedEventArgs(previous, value));
+        }
+    }
 
     public static void QuitGame() => Application.Quit();
 

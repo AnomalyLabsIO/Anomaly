@@ -10,6 +10,11 @@ public static class PlayerEvents
     /// <summary>Fires when the local player presses the interact key, before the raycast/RPC run. Cancellable.</summary>
     public static event AnomalyEventHandler<PlayerInteractingEventArgs> Interacting;
 
+    /// <summary>A resolved local interaction; carries typed targets but does not imply server acceptance.</summary>
+    public static event AnomalyEventHandler<PlayerInteractedEventArgs> Interacted;
+
+    internal static void OnInteracted(PlayerInteractedEventArgs args) => EventInvoker.Invoke(Interacted, args);
+
     /// <summary>Fires when the local player transitions into the sprinting movement state. Cancellable.</summary>
     public static event AnomalyEventHandler<PlayerSprintingEventArgs> Sprinting;
 

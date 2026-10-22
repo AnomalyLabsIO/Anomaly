@@ -63,6 +63,38 @@ public class FirearmItem : Item
     }
 
     /// <summary>
+    /// Reads the state known to this client. Magazine values require received sync data;
+    /// ADS is local prediction or received remote state. Reload/unload is exposed only
+    /// for the owning client. Unsupported or unavailable fields remain null.
+    /// </summary>
+    public FirearmState GetState()
+    {
+        if (IsDestroyed)
+            return default;
+
+        MagazineModule magazine = Magazine;
+        bool hasMagazineData = magazine != null && MagazineModule.SyncData.ContainsKey(Serial);
+        bool? aiming = null;
+        if (TryGetModule<LinearAdsModule>(out var ads) &&
+            (IsLocalPlayerItem || LinearAdsModule.SyncData.ContainsKey(Serial)))
+            aiming = ads.AdsTarget;
+
+        bool? reloading = null;
+        bool? unloading = null;
+        if (IsLocalPlayerItem && FirearmBase.TryGetModule<IReloaderModule>(out var reloader))
+        {
+            reloading = reloader.IsReloading;
+            unloading = reloader.IsUnloading;
+        }
+
+        return new FirearmState(
+            hasMagazineData ? magazine.AmmoStored : null,
+            magazine != null ? magazine.AmmoMax : null,
+            hasMagazineData ? magazine.MagazineInserted : null,
+            aiming, reloading, unloading);
+    }
+
+    /// <summary>
     /// Returns the typed module of <typeparamref name="T"/> if present, mirroring
     /// the engine's <c>ModularAutosyncItem.TryGetModule&lt;T&gt;</c> method.
     /// Use for any module not directly exposed by this wrapper.

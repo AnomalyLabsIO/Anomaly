@@ -14,7 +14,7 @@ namespace Anomaly.Client.Api.Features;
 /// server-side wrapper. The underlying IL2CPP type is <see cref="Scp330Bag"/>.
 /// Maximum candies per bag is <see cref="Scp330Bag.MaxCandies"/> (6).
 /// </remarks>
-public class Scp330Item : Item
+public class Scp330Item : UsableItem
 {
     internal Scp330Item(Scp330Bag bagBase) : base(bagBase)
     {

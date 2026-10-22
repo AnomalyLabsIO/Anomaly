@@ -12,19 +12,19 @@ public class Pickup
 {
     private static readonly Dictionary<ItemPickupBase, Pickup> _pickups = new();
     private static readonly SerialOwnershipIndex<Pickup> _serialCache = new();
-    private static readonly Dictionary<System.Type, System.Func<ItemPickupBase, Pickup>> _subtypeFactories = new()
+    private static readonly System.Func<ItemPickupBase, Pickup>[] _subtypeFactories =
     {
         // ThrownProjectile keeps its own cache — route through Projectile.Get so both stay in sync.
-        { typeof(Il2CppInventorySystem.Items.ThrowableProjectiles.ThrownProjectile),
-            b => Projectile.Get((Il2CppInventorySystem.Items.ThrowableProjectiles.ThrownProjectile)b) },
-        { typeof(Il2CppInventorySystem.Items.Firearms.FirearmPickup),
-            b => new FirearmPickup((Il2CppInventorySystem.Items.Firearms.FirearmPickup)b) },
-        { typeof(Il2CppInventorySystem.Items.Keycards.KeycardPickup),
-            b => new KeycardPickup((Il2CppInventorySystem.Items.Keycards.KeycardPickup)b) },
-        { typeof(Il2CppInventorySystem.Items.ThrowableProjectiles.TimedGrenadePickup),
-            b => new TimedGrenadePickup((Il2CppInventorySystem.Items.ThrowableProjectiles.TimedGrenadePickup)b) },
-        { typeof(Il2CppInventorySystem.Items.Usables.Scp330.Scp330Pickup),
-            b => new Scp330Pickup((Il2CppInventorySystem.Items.Usables.Scp330.Scp330Pickup)b) },
+        b => CreateSubtype<Il2CppInventorySystem.Items.ThrowableProjectiles.ThrownProjectile>(b, Projectile.Get),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Firearms.FirearmPickup>(b, value => new FirearmPickup(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Keycards.KeycardPickup>(b, value => new KeycardPickup(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.ThrowableProjectiles.TimedGrenadePickup>(b, value => new TimedGrenadePickup(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Usables.Scp330.Scp330Pickup>(b, value => new Scp330Pickup(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Usables.Scp244.Scp244DeployablePickup>(b, value => new Scp244Pickup(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Usables.Scp1576.Scp1576Pickup>(b, value => new Scp1576Pickup(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Firearms.Ammo.AmmoPickup>(b, value => new AmmoPickup(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Radio.RadioPickup>(b, value => new RadioPickup(value)),
+        b => CreateSubtype<Il2CppInventorySystem.Items.Armor.BodyArmorPickup>(b, value => new BodyArmorPickup(value)),
     };
 
     private Transform _visualRoot;
@@ -35,6 +35,8 @@ public class Pickup
     }
 
     public ItemPickupBase Base { get; }
+
+    public bool IsDestroyed => Base == null;
 
     public ushort Serial => Base.Info.Serial;
 
@@ -172,15 +174,20 @@ public class Pickup
 
     private static Pickup CreateForType(ItemPickupBase pickupBase)
     {
-        // Walk the type hierarchy looking for a registered factory.
-        System.Type t = pickupBase.GetType();
-        while (t != null && t != typeof(ItemPickupBase))
+        // TryCast uses the native type even when the caller holds a managed base proxy.
+        foreach (var factory in _subtypeFactories)
         {
-            if (_subtypeFactories.TryGetValue(t, out var factory))
-                return factory(pickupBase);
-            t = t.BaseType;
+            Pickup pickup = factory(pickupBase);
+            if (pickup != null)
+                return pickup;
         }
         return new Pickup(pickupBase);
+    }
+
+    private static Pickup CreateSubtype<T>(ItemPickupBase pickupBase, System.Func<T, Pickup> factory) where T : ItemPickupBase
+    {
+        T typed = pickupBase.TryCast<T>();
+        return typed != null ? factory(typed) : null;
     }
 
     /// <summary>
@@ -192,9 +199,7 @@ public class Pickup
     /// </summary>
     public static Pickup Get(ushort serial)
     {
-        if (serial == 0)
-            return null;
-        _serialCache.TryGet(serial, out Pickup pickup);
+        TryGet(serial, out Pickup pickup);
         return pickup;
     }
 
@@ -206,7 +211,19 @@ public class Pickup
             pickup = null;
             return false;
         }
-        return _serialCache.TryGet(serial, out pickup);
+        if (!_serialCache.TryGet(serial, out pickup))
+            return false;
+        if (!pickup.IsDestroyed)
+            return true;
+        _serialCache.RemoveIfOwned(serial, pickup);
+        pickup = null;
+        return false;
+    }
+
+    public static bool TryGet(ItemPickupBase pickupBase, out Pickup pickup)
+    {
+        pickup = Get(pickupBase);
+        return pickup != null;
     }
 
     /// <summary>

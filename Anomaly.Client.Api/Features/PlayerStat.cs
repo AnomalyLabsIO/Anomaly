@@ -1,5 +1,7 @@
 ﻿using Il2CppPlayerStatsSystem;
 
+using Anomaly.Client.Api.Internal;
+
 namespace Anomaly.Client.Api.Features;
 
 public class PlayerStat
@@ -12,6 +14,46 @@ public class PlayerStat
     }
 
     public StatBase Base { get; }
+
+    public bool IsDestroyed => Base == null || Base.Hub == null;
+
+    /// <summary>
+    /// Whether this stat's local synchronization policy permits observation by the
+    /// current local player. This is not a receipt or freshness guarantee. Server
+    /// plugins can customize synchronization; raw values remain the last local values.
+    /// </summary>
+    public bool IsObservable
+    {
+        get
+        {
+            try
+            {
+                LocalPlayer viewer = LocalPlayer.Instance;
+                if (IsDestroyed || viewer?.CurrentRole == null)
+                    return false;
+                SyncedStatBase synced = Base.TryCast<SyncedStatBase>();
+                if (synced == null)
+                    return Base.Hub == viewer.ReferenceHub;
+                return StatVisibility.CanObserve(true, Base.Hub == viewer.ReferenceHub,
+                    viewer.Role.IsAlive, (int)synced.Mode);
+            }
+            catch { return false; }
+        }
+    }
+
+    /// <summary>Reads the last local value only when the local policy permits observation.</summary>
+    public bool TryGetValue(out float value)
+    {
+        value = 0f;
+        if (!IsObservable)
+            return false;
+        try
+        {
+            value = Value;
+            return float.IsFinite(value);
+        }
+        catch { return false; }
+    }
 
     public Player Player => Player.Get(Base.Hub);
 
