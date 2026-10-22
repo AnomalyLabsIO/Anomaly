@@ -49,4 +49,10 @@ public class Config
     /// <summary>Mod IDs that are denied even if a server plugin requires them.</summary>
     public List<string> BlockedClientModIds { get; set; } = new List<string>();
 
+    /// <summary>
+    /// Accepts authenticated clients reporting external authentication-path modifications or monitoring gaps.
+    /// This does not bypass required, blocked or additional-mod rules. Client claims are not attestation.
+    /// </summary>
+    public bool AllowRiskyClientModifications { get; set; } = false;
+
 }

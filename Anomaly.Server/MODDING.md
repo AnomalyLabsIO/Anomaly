@@ -89,7 +89,9 @@ Ordinary MelonMods report their `MelonID` when declared, otherwise their
 `MelonInfo` display name. Managed modules report their manifest ID. ID matching
 ignores case, while the displayed name retains the client's spelling. The client sends the full reported list encrypted
 during login. Its inventory has strict size limits; an inventory that cannot
-fit is rejected locally instead of silently truncated.
+fit is rejected locally instead of silently truncated. The admission list retains
+every observed MelonMod and loaded managed module until process restart, including
+failed or disabled modules. Plugins and ordinary UserLibs are not admission entries.
 
 Server owners can set `BlockAnyAdditionalClientMods` or list exact IDs in
 `BlockedClientModIds` in Anomaly.Server config. Both default to off/empty.
@@ -99,6 +101,15 @@ Anomaly.Server after changing owner config. Companion registrations take effect
 for future connections as plugins register or dispose them. Multiple admission
 failures are summarized in the client's rejection notice, with the full list
 in server logs.
+
+`AllowRiskyClientModifications` defaults to false. It rejects authenticated clients
+reporting external authentication-path changes, incomplete monitoring, or inventory
+divergence. Set it to true only when accepting those client-reported risks; required,
+blocked, and additional-mod rules still apply. A blocked modification attempt or a
+client's opt-in alone does not trigger this rejection. The audit is signed with the
+inventory, but remains a client claim rather than attestation. Only the in-process
+host shortcut bypasses dedicated-server admission; loopback and LAN clients do not.
+Changes to risk or admission inventory after login require a fresh connection.
 
 Texture overrides replace the selected material's base-color texture. The client
 uses the shader's declared main texture, then `_BaseColorMap`, `_BaseMap`, or
@@ -251,7 +262,7 @@ protocol; a namespace edit alone does not make old binaries compatible. These
 are migration instructions, not a claim that the separate Portals repository
 has been migrated or qualified.
 
-The application protocol is v7. Update client and server together; old peers are
+The application protocol is v8. Update client and server together; old peers are
 rejected during the handshake. The authenticated facility snapshot is required
 before client procedural generation; it is independent of content consent.
 

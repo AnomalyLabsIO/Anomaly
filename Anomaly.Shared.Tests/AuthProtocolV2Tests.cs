@@ -731,6 +731,7 @@ public sealed class AuthProtocolV2Tests
 
     private static void BindDefaultContext(ClientAuthSession client)
     {
+        client.BindAdmission(ClientModInventory.Empty, new ClientIntegrityAudit(ClientIntegrityAuditFlags.None, false));
         client.BindConnectionContext(
             14,
             2,

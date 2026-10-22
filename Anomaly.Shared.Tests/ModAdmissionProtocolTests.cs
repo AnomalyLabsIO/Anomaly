@@ -58,11 +58,11 @@ public sealed class ModAdmissionProtocolTests
     {
         var client = ClientAuthSession.Generate(AuthCrypto.CreateIdentity());
         client.BindConnectionContext(14, 2, 7, false, 0, "example.test:7777");
-        client.BindModInventory(new ClientModInventory(new[]
+        client.BindAdmission(new ClientModInventory(new[]
         {
             new ClientModEntry("partner.mod", "1.1"),
             new ClientModEntry(ClientModInventory.CoreId, "1.0.0"),
-        }));
+        }), CleanAudit());
         var clientHandshake = client.CreateHandshake();
         var server = ServerAuthSession.Generate(AuthCrypto.CreateIdentity());
         var challenge = passwordRequired
@@ -81,7 +81,7 @@ public sealed class ModAdmissionProtocolTests
         var second = client.CreateLoginAttempt(serverHandshake, identifier, challenge, "Test Player", proof);
         Assert.Equal(first.Encode(), second.Encode());
         Assert.InRange(first.Encode().Length, ClientLoginAttempt.MinSize, ClientLoginAttempt.MaxSize);
-        Assert.Throws<InvalidOperationException>(() => client.BindModInventory(ClientModInventory.Empty));
+        Assert.Throws<InvalidOperationException>(() => client.BindAdmission(ClientModInventory.Empty, CleanAudit()));
         Assert.Throws<InvalidOperationException>(() => client.CreateLoginAttempt(
             serverHandshake, identifier, challenge, "Changed Name", proof));
 
@@ -97,7 +97,7 @@ public sealed class ModAdmissionProtocolTests
     {
         var client = ClientAuthSession.Generate(AuthCrypto.CreateIdentity());
         client.BindConnectionContext(14, 2, 7, false, 0, "example.test:7777");
-        client.BindModInventory(new ClientModInventory(new[] { new ClientModEntry("partner.mod", "1.0") }));
+        client.BindAdmission(new ClientModInventory(new[] { new ClientModEntry("partner.mod", "1.0") }), CleanAudit());
         var clientHandshake = client.CreateHandshake();
         var server = ServerAuthSession.Generate(AuthCrypto.CreateIdentity());
         var challenge = PasswordChallenge.NotRequired();
@@ -110,7 +110,7 @@ public sealed class ModAdmissionProtocolTests
         {
             var aad = AuthTranscript.HashLogin(clientHandshake, serverHandshake, identifier, challenge, displayName);
             var plain = AuthCrypto.AesDecrypt(keys.LoginKey, clientHandshake.nonce, attempt.signature, aad);
-            plain[plain.Length - 1] = (byte)'1'; // valid canonical inventory, different version
+            plain[plain.Length - ClientIntegrityAudit.EncodedSize - 1] = (byte)'1'; // valid inventory, different version
             attempt.signature = AuthCrypto.AesEncrypt(keys.LoginKey, clientHandshake.nonce, plain, aad);
         }
 
@@ -118,12 +118,14 @@ public sealed class ModAdmissionProtocolTests
             displayName, attempt, out var proof, out var inventory));
         Assert.Null(proof);
         Assert.Null(inventory);
-        Assert.False(ClientLoginAttempt.TryDecodePlainPayload(new byte[72], out _, out _, out _));
+        Assert.False(ClientLoginAttempt.TryDecodePlainPayload(new byte[72], out _, out _, out _, out _));
         var legacy = new byte[72];
         Encoding.ASCII.GetBytes("ANLP").CopyTo(legacy, 0);
         legacy[4] = 1;
-        Assert.False(ClientLoginAttempt.TryDecodePlainPayload(legacy, out _, out _, out _));
+        Assert.False(ClientLoginAttempt.TryDecodePlainPayload(legacy, out _, out _, out _, out _));
     }
+
+    private static ClientIntegrityAudit CleanAudit() => new ClientIntegrityAudit(ClientIntegrityAuditFlags.None, false);
 
     [Fact]
     public void BoundedJsonRoundTripIncludesTypedIssuesAndOmissionCount()

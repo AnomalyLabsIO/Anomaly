@@ -27,6 +27,7 @@ public static class NetDataWriterPut
     {
         if (NetworkServer.active)
         {
+            AuthHandler.EnterLocalHostScope();
             MelonLogger.Msg("GetConnectData intercepted - local hosted server, skipping Anomaly auth");
             return true;
         }

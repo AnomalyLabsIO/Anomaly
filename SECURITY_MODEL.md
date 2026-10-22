@@ -8,6 +8,31 @@
 - Anomaly game-version declarations are fail-closed compatibility gates. The launcher enforces the official-core `SupportedGameVersion` declaration before installation/materialization, and the managed-module runtime enforces manifest `SupportedGameVersions` before assembly load. Public v1 uses `14.2.7^` (`>=14.2.7 && <14.3.0`) and does not use MelonLoader's `MelonGameVersion` attribute.
 - The server remains authoritative for admission and game state. Client integrity signals are evidence, never proof.
 
+## Authentication-path modification monitoring
+
+Bootstrap installs its guard at minimum plugin callback priority, before ordinary
+Mods load. UserLibs and plugin constructors may have already executed, so it also
+inspects supported preexisting patch/detour state. The guard retains stock
+PatchShield and protects Anomaly.Shared without making Shared depend on the loader.
+Its finite, versioned catalog covers supported Harmony/MonoMod operations and
+authentication dependencies; it is not a sandbox or remote attestation. Direct
+native writes, other hook engines, and reflection mutation between observations
+can evade an in-process monitor. The launcher trust boundary remains necessary.
+
+Protocol 8 includes a mandatory six-byte integrity claim in the signed transcript
+and encrypted login payload. The server default rejects reported external Harmony
+or detour changes, incomplete coverage, and inventory divergence. The server option
+`AllowRiskyClientModifications` accepts that reported risk without bypassing other
+admission rules. Successfully blocked attempts and the client's external-change
+opt-in alone do not trigger rejection. Unsupported claims always fail parsing.
+
+Observed risk and loaded-code inventory survive disconnect, unpatching, disabling,
+and unregistering. Admission freezes both inventory and audit; a later relevant
+change stops sends and requires a fresh handshake. Changed plaintext must never be
+encrypted with an earlier handshake's AES-GCM key/nonce. No additional file-hash
+approval is introduced by this runtime monitor. See
+[the guard contract](Anomaly.Bootstrap/AUTHENTICATION_GUARD.md).
+
 ## Identity and enrollment
 
 Public v1 uses one client identity key per game instance and server-local enrollment records. Servers expose opaque local enrollment ids to moderation/plugin APIs rather than a key-derived global id. Reusing one client public key still allows colluding servers to correlate users, and open enrollment still allows identity-ban evasion after key replacement; these are accepted residual risks and must be disclosed in UI.

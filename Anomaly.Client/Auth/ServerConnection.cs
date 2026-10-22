@@ -17,7 +17,7 @@ public class ServerConnection
     public byte[] PasswordProof { get; set; }
     public byte[] RetryCookie { get; set; }
     public string ServerFingerprint { get; set; }
-    internal bool ModInventoryBound { get; set; }
+    internal ClientAdmissionSnapshot Admission { get; set; }
 }
 
 internal enum ServerTrustState

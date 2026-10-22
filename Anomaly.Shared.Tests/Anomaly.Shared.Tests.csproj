@@ -22,6 +22,7 @@
     <Compile Include="..\Anomaly.Client\Content\ContentCatalogClient.cs" Link="ClientContent\ContentCatalogClient.cs" />
     <Compile Include="..\Anomaly.Client.Api\Internal\TransactionalInitializer.cs" Link="ClientRuntime\TransactionalInitializer.cs" />
     <Compile Include="..\Anomaly.Client\Auth\PlayerAuth.cs" Link="ClientAuth\PlayerAuth.cs" />
+    <Compile Include="..\Anomaly.Client\Auth\AdmissionSendGate.cs" Link="ClientAuth\AdmissionSendGate.cs" />
     <Compile Include="..\Anomaly.Client\Auth\PlayerAuthProfileStore.cs" Link="ClientAuth\PlayerAuthProfileStore.cs" />
     <Compile Include="..\Anomaly.Server\Auth\AuthHandler.cs" Link="ServerAuth\AuthHandler.cs" />
     <Compile Include="..\Anomaly.Server\Auth\AcceptedClientIdentityJournal.cs" Link="ServerAuth\AcceptedClientIdentityJournal.cs" />

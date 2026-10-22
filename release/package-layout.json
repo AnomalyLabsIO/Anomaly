@@ -28,6 +28,9 @@
           "System.Net.NetworkInformation",
           "System.Numerics",
           "System.ObjectModel",
+          "System.Reflection.Emit",
+          "System.Reflection.Emit.ILGeneration",
+          "System.Reflection.Primitives",
           "System.Runtime",
           "System.Runtime.InteropServices",
           "System.Runtime.InteropServices.RuntimeInformation",
@@ -39,17 +42,22 @@
           "System.Text.Json",
           "System.Text.RegularExpressions",
           "System.Threading",
-          "System.Threading.Thread"
+          "System.Threading.Thread",
+          "System.Xml"
         ],
         "hostProvidedAssemblies": [
           { "name": "Assembly-CSharp", "provider": "SCP:SL 14.2.7 client interop" },
           { "name": "Il2CppCommandSystem.Core", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
           { "name": "Il2CppInterop.Runtime", "provider": "MelonLoader 0.7.3", "assemblyVersion": "1.5.1.0" },
           { "name": "Il2CppMirror", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
+          { "name": "Il2CppPooling", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
           { "name": "Il2Cppmscorlib", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
+          { "name": "Il2CppSystem", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
           { "name": "Il2CppSystem.Core", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
           { "name": "MelonLoader", "provider": "MelonLoader 0.7.3", "assemblyVersion": "0.7.3.0" },
           { "name": "0Harmony", "provider": "MelonLoader 0.7.3", "assemblyVersion": "2.10.2.0" },
+          { "name": "MonoMod.RuntimeDetour", "provider": "MelonLoader 0.7.3", "assemblyVersion": "22.7.31.1" },
+          { "name": "MonoMod.Utils", "provider": "MelonLoader 0.7.3", "assemblyVersion": "22.7.31.1" },
           { "name": "Newtonsoft.Json", "provider": "MelonLoader 0.7.3", "assemblyVersion": "13.0.0.0", "fileVersion": "13.0.4.30916" },
           { "name": "Unity.TextMeshPro", "provider": "SCP:SL 14.2.7 client interop" },
           { "name": "UnityEngine.AnimationModule", "provider": "SCP:SL 14.2.7 client interop" },
@@ -96,7 +104,8 @@
           "System",
           "System.Core",
           "System.Numerics",
-          "System.Runtime.Serialization"
+          "System.Runtime.Serialization",
+          "System.Xml"
         ],
         "hostProvidedAssemblies": [
           { "name": "Assembly-CSharp", "provider": "SCP:SL 14.2.7 dedicated server" },

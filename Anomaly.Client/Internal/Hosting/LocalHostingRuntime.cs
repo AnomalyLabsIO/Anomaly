@@ -36,6 +36,7 @@ internal static class LocalHostingRuntime
             startAttempted = true;
             // This is the stock Create Anyway action. Passing false to
             // StartNondedicated only changes the warning, and never starts a host.
+            Anomaly.Client.Auth.AuthHandler.PrepareForLocalHostStart();
             manager.CreateMatch();
             return false;
         }

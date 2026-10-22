@@ -211,6 +211,7 @@ internal static class ProcessConnectionRequestPatch
             Connection authenticatedConnection = null;
             string authenticatedServerIdentifier = null;
             ClientModInventory authenticatedInventory = null;
+            ClientIntegrityAudit authenticatedAudit = null;
 
             switch (requestType)
             {
@@ -436,7 +437,8 @@ internal static class ProcessConnectionRequestPatch
                             name,
                             attempt,
                             out var passwordProof,
-                            out var modInventory))
+                            out var modInventory,
+                            out var integrityAudit))
                     {
                         OffThreadLogger.Warn($"Login attempt validation failed for {ip}. Signature mismatch.");
                         RequestWriter.Reset();
@@ -464,6 +466,7 @@ internal static class ProcessConnectionRequestPatch
                     authenticatedConnection = connection;
                     authenticatedServerIdentifier = serverIdentifier;
                     authenticatedInventory = modInventory;
+                    authenticatedAudit = integrityAudit;
 
                     OffThreadLogger.Debug($"Verified {name}({userId}) - " + ip);
                     break;
@@ -476,6 +479,28 @@ internal static class ProcessConnectionRequestPatch
                     return false;
             }
             #endregion
+
+            // This is a verified client claim, not attestation. No endpoint-based exemptions:
+            // a separate loopback or LAN client follows the same admission policy as a remote one.
+            if (authenticatedAudit == null)
+                throw new InvalidOperationException("Validated authentication did not supply an integrity audit.");
+            OffThreadLogger.Debug(
+                $"Verified client integrity audit for {ip}: catalog={ClientIntegrityAudit.CatalogVersion}, " +
+                $"flags={(ushort)authenticatedAudit.Flags}, externalOptIn={authenticatedAudit.AllowExternalAuthenticationModifications}.");
+            if (!ClientModAdmissionPolicy.AllowsIntegrity(authenticatedAudit))
+            {
+                OffThreadLogger.Warn(
+                    $"Rejected client integrity policy for {userId} ({ip}): flags={authenticatedAudit.Flags}.");
+                RequestWriter.Reset();
+                RequestWriter.Put((byte)RejectionReason.Custom);
+                RequestWriter.Put(ClientIntegrityResponseCodec.Encode(authenticatedAudit.Flags));
+                request.RejectForce(RequestWriter);
+                CustomLiteNetLib4MirrorTransport.ResetIdleMode();
+                return false;
+            }
+            if (authenticatedAudit.IsRisky)
+                OffThreadLogger.Warn(
+                    $"Allowed reported client integrity risk for {userId} ({ip}): flags={authenticatedAudit.Flags}.");
 
             var modIssues = ClientModAdmissionPolicy.Evaluate(authenticatedInventory);
             if (modIssues.Count != 0)

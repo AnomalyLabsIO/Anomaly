@@ -52,6 +52,8 @@ public static class AuthHandler
     private static Dictionary<string, ServerConnection> _connections = new();
     private static readonly ConnectionAttemptGate AttemptGate = new();
     private static readonly TransportDisconnectGate TransportDisconnects = new();
+    private static readonly AdmissionSendGate<ClientAdmissionSnapshot> AdmissionSends = new();
+    private static long _nextIntegrityReconciliation;
     private static PlayerAuthProfileStore _profileStore;
     
     public static bool UsingAnomalyAuth { get; internal set; }
@@ -67,6 +69,7 @@ public static class AuthHandler
         AttemptGate.Invalidate();
         PatchInvocationGuard.BeginAuthenticationScope();
         _connections.Clear();
+        AdmissionSends.BeginScope();
         _phase2Sent = false;
         UsingAnomalyAuth = false;
         InitializationState = AuthInitializationState.Uninitialized;
@@ -119,6 +122,7 @@ public static class AuthHandler
         string connectionKey = null;
         try
         {
+            ClientAdmissionGuard.EnsureAvailable();
             if (!Core.RequiredConnectionFeaturesReady)
             {
                 MelonLogger.Error(
@@ -168,6 +172,8 @@ public static class AuthHandler
                 writer.Pointer.ToInt64());
             if (disposition == ConnectionWriterDisposition.Duplicate)
             {
+                if (!ValidateAuthenticationSend())
+                    throw new ClientIntegrityException(AdmissionSends.Current.Failure);
                 try { MelonLogger.Warning("AuthWrite called again for the same native writer — ignoring duplicate GetConnectData call"); }
                 catch { }
                 return;
@@ -179,6 +185,9 @@ public static class AuthHandler
             // revoke stale handshakes, prompt callbacks, catalog state, and keys.
             if (disposition == ConnectionWriterDisposition.NewUserAttempt)
                 BeginUserConnectionScope();
+
+            if (!ValidateAuthenticationSend())
+                throw new ClientIntegrityException(AdmissionSends.Current.Failure);
 
             if (string.IsNullOrWhiteSpace(PlayerAuth.Username))
             {
@@ -201,15 +210,18 @@ public static class AuthHandler
                 }
             }
 
-            if (isSecondTime && !connection.ModInventoryBound)
+            if (isSecondTime && connection.Admission == null)
             {
                 try
                 {
                     // Capture once for this signed login. Invalid or oversized
                     // metadata must stop the attempt instead of silently omitting mods.
-                    connection.Session.BindModInventory(ClientModInventoryCollector.Capture());
-                    connection.ModInventoryBound = true;
+                    var admission = ClientModInventoryCollector.Capture();
+                    connection.Session.BindAdmission(admission.Inventory, admission.Audit);
+                    connection.Admission = admission;
+                    AdmissionSends.Current.Bind(admission);
                 }
+                catch (ClientIntegrityException) { throw; }
                 catch (Exception ex)
                 {
                     throw new ClientModInventoryPreparationException(
@@ -270,6 +282,7 @@ public static class AuthHandler
             }
             else
             {
+                ClientAdmissionGuard.EnsureCurrent(connection.Admission, reconcile: true);
                 if (connection.PasswordChallenge?.Required == true && connection.PasswordProof == null)
                     MelonLogger.Warning("Server requires a password but no password proof is available; phase-2 auth will be rejected.");
 
@@ -279,10 +292,13 @@ public static class AuthHandler
                     connection.PasswordChallenge,
                     PlayerAuth.Username,
                     connection.PasswordProof);
-                writer.PutBytesWithLength(attempt.Encode());
+                var encodedAttempt = attempt.Encode();
+                ClientAdmissionGuard.EnsureCurrent(connection.Admission);
+                writer.PutBytesWithLength(encodedAttempt);
                 writer.Put(connection.ServerIdentifier, 0);
                 writer.Put(PlayerAuth.Username, 0);
                 EnsureConnectDataFits(writer);
+                ClientAdmissionGuard.EnsureCurrent(connection.Admission);
 
                 using (var keys = connection.Session.DeriveSessionKeys(
                            connection.Handshake,
@@ -302,8 +318,14 @@ public static class AuthHandler
                 _phase2Sent = true;
             }
         }
+        catch (ClientIntegrityException e)
+        {
+            try { writer?.Reset(); } catch { }
+            FailIntegrity(e.Message);
+        }
         catch (ClientModInventoryPreparationException e)
         {
+            try { writer?.Reset(); } catch { }
             CancelAuthentication(connectionKey, clearAllConnections: true);
             AnomalyMessaging.FailClosedTransport("Connection data preparation failed: " + e.GetType().Name + ".");
             ShowAuthenticationFailure("The client mod inventory could not be sent.",
@@ -312,6 +334,7 @@ public static class AuthHandler
         }
         catch(Exception e)
         {
+            try { writer?.Reset(); } catch { }
             CancelAuthentication(connectionKey, clearAllConnections: true);
             AnomalyMessaging.FailClosedTransport(
                 "Connection authentication failed: " + e.GetType().Name + ".");
@@ -328,6 +351,97 @@ public static class AuthHandler
             }
             catch { }
         }
+    }
+
+    // Called at the last managed transport boundaries, including retransmission.
+    // This path may run off-thread: latch the failure and let OnUpdate perform UI
+    // and transport teardown. Every later send is denied until that teardown.
+    internal static bool ValidateAuthenticationSend()
+    {
+        var scope = AdmissionSends.Current;
+        if (scope.Failure != null)
+            return false;
+        var admission = scope.Admission;
+        if (admission == null)
+            return AdmissionSends.IsCurrent(scope);
+        try
+        {
+            ClientAdmissionGuard.EnsureCurrent(admission);
+            return scope.Failure == null && AdmissionSends.IsCurrent(scope);
+        }
+        catch (Exception exception)
+        {
+            scope.Fail("Authentication integrity changed: " + exception.Message);
+            return false;
+        }
+    }
+
+    internal static void EnterLocalHostScope()
+    {
+        // Only the existing in-process host branch calls this. Remote loopback
+        // connections still use the signed admission path and cannot opt out.
+        if (!Il2CppMirror.NetworkServer.active)
+            return;
+        ResetForLocalHost();
+    }
+
+    internal static void PrepareForLocalHostStart()
+    {
+        // StartHost uses Mirror's in-process connection pair and may never invoke
+        // GetConnectData. Clear the previous remote scope at the real host entry.
+        if (ServerStatic.IsDedicated || Il2CppMirror.NetworkServer.active || Il2CppMirror.NetworkClient.active ||
+            Il2CppMirror.NetworkManager.singleton?.mode != Il2CppMirror.NetworkManagerMode.Offline)
+            throw new InvalidOperationException("A local host may only start from the inactive local client.");
+        ResetForLocalHost();
+    }
+
+    private static void ResetForLocalHost()
+    {
+        CancelAuthentication(null, clearAllConnections: true);
+        AdmissionSends.BeginScope();
+    }
+
+    internal static void UpdateIntegrityMonitoring()
+    {
+        var scope = AdmissionSends.Current;
+        var admission = scope.Admission;
+        if (admission != null)
+        {
+            try
+            {
+                long now = Environment.TickCount64;
+                bool reconcile = now >= _nextIntegrityReconciliation;
+                if (reconcile) _nextIntegrityReconciliation = now + 1000;
+                ClientAdmissionGuard.EnsureCurrent(admission, reconcile);
+            }
+            catch (Exception exception)
+            {
+                scope.Fail("Authentication integrity changed: " + exception.Message);
+            }
+        }
+        HandleIntegrityFailure(scope);
+    }
+
+    private static void FailIntegrity(string reason)
+    {
+        var scope = AdmissionSends.Current;
+        scope.Fail(reason);
+        HandleIntegrityFailure(scope);
+    }
+
+    private static void HandleIntegrityFailure(AdmissionSendScope<ClientAdmissionSnapshot> scope)
+    {
+        // Connection transitions and teardown both run on the main thread.
+        // A late worker can only leave a failure in the scope it captured.
+        if (!AdmissionSends.TryBeginFailureHandling(scope, out string reason))
+            return;
+        CancelAuthentication(null, clearAllConnections: true);
+        AnomalyMessaging.FailClosedTransport(reason);
+        try { Il2CppMirror.NetworkManager.singleton?.StopClient(); }
+        catch (Exception exception) { SafeLogError("Could not stop the invalidated transport: " + exception); }
+        ShowAuthenticationFailure("Authentication integrity requirements were not met.",
+            reason + " A new connection is required; the previous handshake was discarded.", "AUTH-INTEGRITY");
+        SafeLogError(reason);
     }
 
     private static void EnsureConnectDataFits(NetDataWriter writer)
@@ -560,6 +674,14 @@ public static class AuthHandler
             MelonLogger.Warning("Could not read the server's custom rejection: " + ex.Message);
             FailAuthentication(connectionKey, "The server rejected the connection.",
                 "Ask the server operator for its connection requirements.", "AUTH-CUSTOM-REJECT");
+            return;
+        }
+
+        if (ClientIntegrityResponseCodec.TryDecode(reason, out var integrity))
+        {
+            FailAuthentication(connectionKey, "The server does not accept the reported authentication modifications.",
+                "Reported audit: " + integrity.Flags + ". Remove the affected modifications and restart the game, " +
+                "or ask the server owner whether they accept clients with this risk.", "AUTH-INTEGRITY");
             return;
         }
 
@@ -800,6 +922,7 @@ public static class AuthHandler
 
     private static void BeginUserConnectionScope()
     {
+        AdmissionSends.BeginScope();
         PatchInvocationGuard.BeginAuthenticationScope();
         _connections.Clear();
         CurrentServerFingerprint = null;
@@ -838,6 +961,8 @@ public static class AuthHandler
 
     private static void ClearCurrentKeys()
     {
+        AdmissionSends.Current.ClearAdmission();
+        _nextIntegrityReconciliation = 0;
         CurrentServerFingerprint = null;
         AnomalyMessaging.ClearTransportSession();
     }

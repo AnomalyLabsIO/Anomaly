@@ -71,13 +71,35 @@ by preparation. If the reference layout differs, set `AnomalyClientInteropDir`,
 or `AnomalyLabApiDir` as needed before building. Check every
 build succeeds before staging.
 
-`Run-Smoke.ps1` accepts only a game created by `Prepare-Game.ps1` with a matching
+By default, `Run-Smoke.ps1` accepts only a game created by `Prepare-Game.ps1` with a matching
 `smoke-staging.json`. It rebuilds the client, starter, and harness with deployment
 disabled, refreshes the isolated runtime and local approvals, then starts that
 test game's `SCPSL.exe` with `-noauth -screen-fullscreen 0 -screen-width 1280
 -screen-height 720 -logFile <evidence>/player.log`. It sets the harness environment
 only for the child process and writes `client.pid`. The command returns after
 launch; it does not wait for or certify completion.
+
+For the reference client's normal launcher, explicitly pass `-UseModLaunch` and
+the installed game directory. This starts exactly
+`<game>/.modlaunch/SCPSL-ModLaunch.exe`, forwarding the same game arguments and
+writing `launcher.pid`. This mode requests a normal visible launcher window.
+It does not substitute a loader proxy or modify launcher
+code. Back up the installation's `Mods`, `Plugins`, `UserLibs`, `UserData`, and
+overwritten package documents first; restore those files after qualification.
+Wait for the launcher to report that original game files were restored before
+restoring the test artifacts. Local approvals cover only the three mods staged
+by this runner, preserving existing approvals.
+
+`-IntegrityMode` runs a focused authentication guard scenario against the required
+`-LoopbackServer` endpoint: `clean`, `blocked`, `allowed-rejected`,
+`allowed-accepted`, `gap-rejected`, `gap-accepted`, or `late`. Configure the client
+external-modification preference and server risk policy before each fresh process.
+The `late` scenario starts clean, applies a harmless external patch after admission,
+checks disconnection, and checks a fresh nonce on the subsequent connection.
+Inspect `result.txt` or `failure.txt`, `integrity.log`, and
+`integrity-diagnostics.txt`. For rejection scenarios, also verify the isolated
+server's integrity-policy log: a client-side refusal alone does not establish the
+server admission decision. Keep the fixture DLL out of release packages.
 
 The `-DummyVisibility` variant uses the primary display resolution instead of
 1280×720 and confirms that resolution in the running game before gameplay capture.

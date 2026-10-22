@@ -184,18 +184,31 @@ Server companions are LabAPI plugins that reference `Anomaly.Server.dll` and
 lifecycle. Existing development companions must rebuild against this pre-release
 baseline even though managed versions remain `1.0.0`.
 
-Client and server use application protocol v7. Update both together; older
+Client and server use application protocol v8. Update both together; older
 protocol peers are rejected during authentication. Facility generation receives
 one authenticated immutable snapshot before the client generates its map.
 Optional content consent has no reading deadline; its transfer inactivity
 timeout starts only after the player approves.
 
-During login, the client sends the dedicated server an encrypted list of active
-MelonMods, Anomaly-managed modules, and Anomaly.Client itself, including IDs and
-versions. Server plugins can require a companion client mod; server owners can
+During login, the client sends the dedicated server a signed, encrypted lifetime
+inventory of observed MelonMods, loaded Anomaly-managed modules, and Anomaly.Client
+itself, including IDs and versions. Unregistering or disabling code does not remove
+it until the game restarts. Server plugins can require a companion client mod; server owners can
 block specific or all additional reported mods. A denied connection explains
 missing, incompatible, or blocked mods in the client. The in-process `host`
 shortcut does not use this dedicated-server admission policy.
+
+Bootstrap protects supported authentication methods and reports observed
+modifications in the signed login. External modifications are blocked by default.
+The MelonPreferences setting
+`Anomaly.Bootstrap.AllowExternalAuthenticationModifications` permits external
+changes with an audit and takes effect after restarting the game. It does not
+disable Anomaly protection or MelonLoader's PatchShield. Servers reject risky or
+incomplete reports unless `AllowRiskyClientModifications` is enabled; blocked
+attempts and the client option alone are not risky. New risk or a changed inventory
+after login requires a new connection. See
+[authentication guard coverage](Anomaly.Bootstrap/AUTHENTICATION_GUARD.md) for the
+supported boundaries and limits of this client-reported evidence.
 
 ## Trust, quarantine, and local data
 

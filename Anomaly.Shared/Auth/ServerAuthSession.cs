@@ -64,8 +64,24 @@ public class ServerAuthSession
         out byte[] passwordProof,
         out ClientModInventory inventory)
     {
+        return Validate(clientHandshake, serverHandshake, serverIdentifier, passwordChallenge,
+            displayName, attempt, out passwordProof, out inventory, out _);
+    }
+
+    public bool Validate(
+        ClientHandshake clientHandshake,
+        ServerHandshake serverHandshake,
+        string serverIdentifier,
+        PasswordChallenge passwordChallenge,
+        string displayName,
+        ClientLoginAttempt attempt,
+        out byte[] passwordProof,
+        out ClientModInventory inventory,
+        out ClientIntegrityAudit audit)
+    {
         passwordProof = null;
         inventory = null;
+        audit = null;
         if (attempt?.signature == null || attempt.signature.Length < ClientLoginAttempt.MinSize
             || attempt.signature.Length > ClientLoginAttempt.MaxSize)
             return false;
@@ -101,31 +117,33 @@ public class ServerAuthSession
 
         try
         {
-            if (!ClientLoginAttempt.TryDecodePlainPayload(payload, out var signature, out passwordProof, out inventory))
-            {
-                passwordProof = null;
-                inventory = null;
+            if (!ClientLoginAttempt.TryDecodePlainPayload(payload, out var signature,
+                    out var decodedProof, out var decodedInventory, out var decodedAudit))
                 return false;
-            }
 
-            var transcript = AuthTranscript.BuildLoginWithModInventory(
+            var transcript = AuthTranscript.BuildLoginWithAdmission(
                 clientHandshake,
                 serverHandshake,
                 serverIdentifier,
                 passwordChallenge,
                 displayName,
-                inventory.Encode());
+                decodedInventory.Encode(),
+                decodedAudit.Encode());
             var identityPublic = AuthCrypto.ReadPublic(clientHandshake.identityPublic);
             if (AuthCrypto.VerifyData(transcript, signature, identityPublic))
+            {
+                passwordProof = decodedProof;
+                inventory = decodedInventory;
+                audit = decodedAudit;
                 return true;
-            passwordProof = null;
-            inventory = null;
+            }
             return false;
         }
         catch
         {
             passwordProof = null;
             inventory = null;
+            audit = null;
             return false;
         }
         finally

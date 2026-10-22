@@ -18,8 +18,9 @@ public class ClientAuthSession
     private byte _gameBackwardRevision;
     private string _connectionContext;
     private ClientIdentityRotationChain _identityRotationChain;
-    private ClientModInventory _modInventory = ClientModInventory.Empty;
-    private bool _modInventoryBound;
+    private readonly object _loginSync = new object();
+    private ClientModInventory _modInventory;
+    private ClientIntegrityAudit _integrityAudit;
     private byte[] _cachedLoginHash;
     private byte[] _cachedPasswordProof;
     private byte[] _cachedEncryptedLogin;
@@ -75,14 +76,21 @@ public class ClientAuthSession
         _identityRotationChain = rotationChain.Clone();
     }
 
-    public void BindModInventory(ClientModInventory inventory)
+    public void BindAdmission(ClientModInventory inventory, ClientIntegrityAudit audit)
     {
         if (inventory == null)
             throw new ArgumentNullException(nameof(inventory));
-        if (_modInventoryBound || _cachedEncryptedLogin != null)
-            throw new InvalidOperationException("Client mod inventory is already bound or the login attempt has been created.");
-        _modInventory = ClientModInventory.Decode(inventory.Encode());
-        _modInventoryBound = true;
+        if (audit == null)
+            throw new ArgumentNullException(nameof(audit));
+        var frozenInventory = ClientModInventory.Decode(inventory.Encode());
+        var frozenAudit = ClientIntegrityAudit.Decode(audit.Encode());
+        lock (_loginSync)
+        {
+            if (_modInventory != null || _cachedEncryptedLogin != null)
+                throw new InvalidOperationException("Client admission is already bound. Changed claims require a fresh authentication session.");
+            _modInventory = frozenInventory;
+            _integrityAudit = frozenAudit;
+        }
     }
 
     public ClientHandshake CreateHandshake(byte[] retryCookie = null)
@@ -130,6 +138,19 @@ public class ClientAuthSession
         string displayName,
         byte[] passwordProof)
     {
+        lock (_loginSync)
+            return CreateLoginAttemptCore(handshake, serverIdentifier, passwordChallenge, displayName, passwordProof);
+    }
+
+    private ClientLoginAttempt CreateLoginAttemptCore(
+        ServerHandshake handshake,
+        string serverIdentifier,
+        PasswordChallenge passwordChallenge,
+        string displayName,
+        byte[] passwordProof)
+    {
+        if (_modInventory == null || _integrityAudit == null)
+            throw new InvalidOperationException("Client inventory and integrity audit must be bound before creating a login attempt.");
         var clientHandshake = CreateHandshake();
         var loginTranscriptHash = AuthTranscript.HashLogin(
             clientHandshake,
@@ -148,10 +169,11 @@ public class ClientAuthSession
             }
 
             var encodedInventory = _modInventory.Encode();
-            var transcript = AuthTranscript.BuildLoginWithModInventory(
-                clientHandshake, handshake, serverIdentifier, passwordChallenge, displayName, encodedInventory);
+            var encodedAudit = _integrityAudit.Encode();
+            var transcript = AuthTranscript.BuildLoginWithAdmission(
+                clientHandshake, handshake, serverIdentifier, passwordChallenge, displayName, encodedInventory, encodedAudit);
             var signature = AuthCrypto.SignData(transcript, _identityKeyPair);
-            var payload = ClientLoginAttempt.EncodePlainPayload(signature, passwordProof, encodedInventory);
+            var payload = ClientLoginAttempt.EncodePlainPayload(signature, passwordProof, encodedInventory, encodedAudit);
             using (var keys = DeriveSessionKeys(handshake, serverIdentifier, passwordChallenge))
             {
                 try

@@ -205,7 +205,10 @@ internal static class ManagedModRuntime
         LoadedModule loaded = null;
         try
         {
+            using var admission = Anomaly.Bootstrap.AdmissionInventoryLedger.ReserveModule(
+                manifest.Id, manifest.Version, candidate.AssemblyPath);
             var assembly = Assembly.LoadFrom(candidate.AssemblyPath);
+            admission.Complete(assembly);
             var moduleTypes = assembly.GetTypes()
                 .Where(type => typeof(IAnomalyMod).IsAssignableFrom(type) &&
                                !type.IsAbstract && !type.IsInterface)

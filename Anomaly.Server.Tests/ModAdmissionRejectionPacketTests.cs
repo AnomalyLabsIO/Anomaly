@@ -47,6 +47,21 @@ public sealed class ModAdmissionRejectionPacketTests
     private static string AssertFitsCustomRejection(IReadOnlyList<ModAdmissionIssue> issues)
     {
         string response = ModAdmissionResponseCodec.EncodeBounded(issues);
+        AssertFitsCustomRejection(response);
+        return response;
+    }
+
+    [Fact]
+    public void IntegrityRejectionFitsTargetGameDisconnectPacket()
+    {
+        string response = ClientIntegrityResponseCodec.Encode(ClientIntegrityAudit.KnownFlags);
+        AssertFitsCustomRejection(response);
+        Assert.True(ClientIntegrityResponseCodec.TryDecode(response, out var decoded));
+        Assert.Equal(ClientIntegrityAudit.KnownFlags, decoded.Flags);
+    }
+
+    private static void AssertFitsCustomRejection(string response)
+    {
         var gameAssemblyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assembly-CSharp.dll");
         var gameAssembly = Assembly.LoadFrom(gameAssemblyPath);
         var rejectionType = gameAssembly.GetType("RejectionReason", throwOnError: true);
@@ -67,7 +82,6 @@ public sealed class ModAdmissionRejectionPacketTests
         Assert.Equal(CustomRejectionReason, data[0]);
         Assert.True(length + DisconnectHeaderBytes < MinimumPacketMtu,
             $"Custom rejection was {length + DisconnectHeaderBytes} bytes, at or above {MinimumPacketMtu}.");
-        return response;
     }
 
     private static MethodInfo FindPutOverload(Type writerType, params Type[] parameterTypes)

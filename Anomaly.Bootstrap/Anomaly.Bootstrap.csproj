@@ -16,6 +16,18 @@
       <HintPath>$(AnomalyClientMelonLibDir)\MelonLoader.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(AnomalyClientMelonLibDir)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MonoMod.RuntimeDetour">
+      <HintPath>$(AnomalyClientMelonLibDir)\MonoMod.RuntimeDetour.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MonoMod.Utils">
+      <HintPath>$(AnomalyClientMelonLibDir)\MonoMod.Utils.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="CopyBootstrapToLocalClient" AfterTargets="Build" Condition="'$(DeployLocal)' == 'true'">

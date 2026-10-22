@@ -32,10 +32,10 @@ namespace Anomaly.Shared.Networking
     public static class AnomalyProtocol
     {
         /// <summary>
-        /// v7: includes a signed client mod inventory in the encrypted login. Older versions are intentionally
+        /// v8: binds lifetime mod inventory and mandatory integrity audit in the encrypted signed login. Older versions are intentionally
         /// rejected; there is no silent downgrade path.
         /// </summary>
-        public const byte CurrentVersion = 7;
+        public const byte CurrentVersion = 8;
     }
 
     /// <summary>

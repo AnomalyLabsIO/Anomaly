@@ -19,6 +19,10 @@ using Anomaly.Client.Internal.Motion;
 using Anomaly.Client.Internal.Modding;
 using Anomaly.Client.Patches.Menu;
 using Anomaly.Client.Patches.Menu.ModSettings;
+using Anomaly.Client.Patches.Auth;
+using Anomaly.Client.Patches.Runtime;
+using Anomaly.Client.Patches.Network;
+using Anomaly.Client.Patches.Content;
 using HarmonyLib;
 using Il2Cpp;
 using Il2CppCentralAuth;
@@ -114,54 +118,89 @@ public class Core : MelonMod
         LoggerInstance.Msg($"Initialized (locale: {Tr.ActiveLocale}).");
     }
 
-    private static void VerifyMandatoryPatches()
+    internal static void VerifyMandatoryPatches()
     {
         string owner = Instance?.HarmonyInstance?.Id;
         if (string.IsNullOrWhiteSpace(owner))
             throw new InvalidOperationException("MelonLoader did not create Anomaly's Harmony owner.");
 
-        RequireOwnedPatch(owner, typeof(Il2CppMapGeneration.SeedSynchronizer), "ClientReceiveSeed",
+        RequireOwnedPatch(owner, typeof(AuthenticatedFacilitySeedPatch), "Prefix", false,
+            typeof(Il2CppMapGeneration.SeedSynchronizer), "ClientReceiveSeed",
             typeof(Il2CppMapGeneration.SeedSynchronizer.SeedMessage));
-        RequireOwnedPatch(owner, typeof(Il2CppMapGeneration.SeedSynchronizer), "Awake");
-        RequireOwnedPatch(owner, typeof(Il2CppMapGeneration.SeedSynchronizer), "OnDestroy");
-        RequireOwnedPatch(owner, typeof(Il2CppMapGeneration.SeedSynchronizer), "GenerateLevel", typeof(bool));
-        RequireOwnedPatch(owner, typeof(Il2CppMapGeneration.AtlasZoneGenerator), "Generate", typeof(Il2CppSystem.Random));
-        RequireOwnedPatch(owner, typeof(NetworkClient), nameof(NetworkClient.Ready));
-        RequireOwnedPatch(owner, typeof(NetworkClient), nameof(NetworkClient.AddPlayer));
+        RequireOwnedPatch(owner, typeof(FacilitySceneReadyPatch), "Postfix", true,
+            typeof(Il2CppMapGeneration.SeedSynchronizer), "Awake");
+        RequireOwnedPatch(owner, typeof(FacilitySceneDestroyedPatch), "Postfix", true,
+            typeof(Il2CppMapGeneration.SeedSynchronizer), "OnDestroy");
+        RequireOwnedPatch(owner, typeof(FacilityGenerateLevelGuardPatch), "Prefix", false,
+            typeof(Il2CppMapGeneration.SeedSynchronizer), "GenerateLevel", typeof(bool));
+        RequireOwnedPatch(owner, typeof(FacilityGenerateLevelGuardPatch), "Postfix", true,
+            typeof(Il2CppMapGeneration.SeedSynchronizer), "GenerateLevel", typeof(bool));
+        RequireOwnedPatch(owner, typeof(AtlasZoneGeneratorPatch), "Prefix", false,
+            typeof(Il2CppMapGeneration.AtlasZoneGenerator), "Generate", typeof(Il2CppSystem.Random));
+        RequireOwnedPatch(owner, typeof(FacilityReadyGatePatch), "Prefix", false,
+            typeof(NetworkClient), nameof(NetworkClient.Ready));
+        RequireOwnedPatch(owner, typeof(FacilityAddPlayerGatePatch), "Prefix", false,
+            typeof(NetworkClient), nameof(NetworkClient.AddPlayer));
 
-        RequireOwnedPatch(owner, typeof(CustomLiteNetLib4MirrorTransport),
+        RequireOwnedPatch(owner, typeof(NetDataWriterPut), nameof(NetDataWriterPut.OnPrefix1), false,
+            typeof(CustomLiteNetLib4MirrorTransport),
             nameof(CustomLiteNetLib4MirrorTransport.GetConnectData), typeof(NetDataWriter));
-        RequireOwnedPatch(owner, typeof(CustomLiteNetLib4MirrorTransport),
+        RequireOwnedPatch(owner, typeof(NetDataWriterPut), nameof(NetDataWriterPut.ConnectionRefused), false,
+            typeof(CustomLiteNetLib4MirrorTransport),
             nameof(CustomLiteNetLib4MirrorTransport.OnConncetionRefused), typeof(DisconnectInfo));
-        RequireOwnedPatch(owner, typeof(EncryptedChannelManager),
+        RequireOwnedPatch(owner, typeof(PlayerAuthenticationManagerPatch), nameof(PlayerAuthenticationManagerPatch.OnReceivePackedMessage), false,
+            typeof(EncryptedChannelManager),
             nameof(EncryptedChannelManager.ClientReceivePackedMessage),
             typeof(EncryptedChannelManager.EncryptedMessageOutside));
-        RequireOwnedPatch(owner, typeof(EncryptedChannelManager),
+        RequireOwnedPatch(owner, typeof(PlayerAuthenticationManagerPatch), nameof(PlayerAuthenticationManagerPatch.OnPack), false,
+            typeof(EncryptedChannelManager),
             nameof(EncryptedChannelManager.TrySendMessageToServer),
             typeof(string), typeof(EncryptedChannelManager.EncryptedChannel));
-        RequireOwnedPatch(owner, typeof(NetworkManager), nameof(NetworkManager.RegisterClientMessages));
-        RequireOwnedPatch(owner, typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientConnect));
-        RequireOwnedPatch(owner, typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientDisconnect));
-        RequireOwnedPatch(owner, typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientSceneChanged));
-        RequireOwnedPatch(owner, typeof(ItemTranslationReader), nameof(ItemTranslationReader.GetTranslation),
+        RequireOwnedPatch(owner, typeof(Patches.Mirror.NetworkManagerRegisterClientMessages), "OnRegister", true,
+            typeof(NetworkManager), nameof(NetworkManager.RegisterClientMessages));
+        RequireOwnedPatch(owner, typeof(CustomNetworkManagerPatch), nameof(CustomNetworkManagerPatch.OnClientConnectPostfix), true,
+            typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientConnect));
+        RequireOwnedPatch(owner, typeof(CustomNetworkManagerPatch), nameof(CustomNetworkManagerPatch.OnClientDisconnectPostfix), true,
+            typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientDisconnect));
+        RequireOwnedPatch(owner, typeof(NetDataWriterPut), nameof(NetDataWriterPut.OnClientDisconnect), false,
+            typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientDisconnect));
+        RequireOwnedPatch(owner, typeof(CustomNetworkManagerPatch), nameof(CustomNetworkManagerPatch.OnClientSceneChangedPostfix), true,
+            typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnClientSceneChanged));
+        RequireOwnedPatch(owner, typeof(ItemTranslationReaderPatch), "Prefix", false,
+            typeof(ItemTranslationReader), nameof(ItemTranslationReader.GetTranslation),
             typeof(ItemType));
-        RequireOwnedPatch(owner, typeof(HintDisplay), nameof(HintDisplay.ShowLocal), typeof(HintMessage));
+        RequireOwnedPatch(owner, typeof(HintDisplayPatch), nameof(HintDisplayPatch.ShowLocalPrefix), false,
+            typeof(HintDisplay), nameof(HintDisplay.ShowLocal), typeof(HintMessage));
+        RequireOwnedPatch(owner, typeof(ClientConnectAdmissionGuard), "Prefix", false,
+            typeof(LiteNetLib4MirrorClient), nameof(LiteNetLib4MirrorClient.ConnectClient), typeof(NetDataWriter));
+        foreach (var target in AdmissionTransportGuard.TargetMethods())
+            RequireExactPatch(owner, target, AccessTools.DeclaredMethod(typeof(AdmissionTransportGuard), "Prefix"), false);
     }
 
-    private static void RequireOwnedPatch(string owner, Type targetType, string methodName, params Type[] arguments)
+    private static void RequireOwnedPatch(string owner, Type patchType, string patchMethod, bool postfix,
+        Type targetType, string methodName, params Type[] arguments)
     {
         var target = AccessTools.Method(targetType, methodName, arguments);
         if (target == null)
             throw new MissingMethodException(targetType.FullName, methodName);
 
+        RequireExactPatch(owner, target, AccessTools.DeclaredMethod(patchType, patchMethod), postfix);
+    }
+
+    private static void RequireExactPatch(string owner, System.Reflection.MethodBase target,
+        System.Reflection.MethodInfo expected, bool postfix)
+    {
         HarmonyLib.Patches patchInfo = HarmonyLib.Harmony.GetPatchInfo(target);
-        if (patchInfo == null || !patchInfo.Owners.Contains(owner))
+        var patches = postfix ? patchInfo?.Postfixes : patchInfo?.Prefixes;
+        if (expected == null || patches == null ||
+            !patches.Any(patch => patch.owner == owner && patch.PatchMethod == expected))
             throw new InvalidOperationException(
-                $"Mandatory Anomaly patch is missing: {targetType.FullName}.{methodName}.");
+                $"Mandatory Anomaly patch is missing: {target.DeclaringType?.FullName}.{target.Name} -> {expected?.Name}.");
     }
 
     public override void OnUpdate()
     {
+        AuthHandler.UpdateIntegrityMonitoring();
         UpdateFeature("asset-bundles", AssetBundleManager.Update, failClosed: true);
         if (_clientRuntimeReady)
             _clientRuntimeReady = UpdateFeature("runtime-hooks", ClientRuntime.Update, failClosed: true);
@@ -252,21 +291,18 @@ public class Core : MelonMod
         System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static bool PullUpBootstraps()
     {
-        if(Bootstrap.Core.State!= Bootstrap.StartupState.Ready)
+        if (Bootstrap.Core.State != Bootstrap.StartupState.Ready ||
+            !Bootstrap.RuntimeGuard.Verify(requireComplete: false))
         {
             MelonLogger.Error("Anomaly bootstrap failed to initialize. Aborting.");
             return false;
         }
-        foreach (var melonbase in MelonBase.RegisteredMelons)
+        var bootstrap = MelonBase.RegisteredMelons.OfType<Bootstrap.Core>().SingleOrDefault();
+        if (bootstrap != null && ReferenceEquals(bootstrap.GetType().Assembly, typeof(Bootstrap.Core).Assembly) &&
+            bootstrap.MelonAssembly.Assembly.IsDefined(typeof(PatchShield), inherit: false))
         {
-            if(melonbase is Bootstrap.Core)
-            {
-                if (melonbase.MelonAssembly.Assembly.IsDefined(typeof(MelonLoader.PatchShield), inherit: false))
-                {
-                    MelonLogger.Msg("Anomaly bootstrap is loaded and passed.");
-                    return true;
-                }
-            }
+            MelonLogger.Msg("Anomaly Bootstrap is loaded and its required guard is active.");
+            return true;
         }
         MelonLogger.Error("Anomaly bootstrap was not loaded. Aborting.");
         return false;

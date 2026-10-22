@@ -15,21 +15,23 @@ internal static class ClientModAdmissionPolicy
     private sealed class OwnerPolicy
     {
         internal static readonly OwnerPolicy Empty = new OwnerPolicy(
-            false, new HashSet<string>(StringComparer.OrdinalIgnoreCase), new Version(0, 0, 0, 0), "0.0.0");
+            false, new HashSet<string>(StringComparer.OrdinalIgnoreCase), new Version(0, 0, 0, 0), "0.0.0", false);
 
         internal OwnerPolicy(bool blockAnyAdditional, HashSet<string> blockedIds,
-            Version coreVersion, string coreVersionText)
+            Version coreVersion, string coreVersionText, bool allowRiskyClientModifications)
         {
             BlockAnyAdditional = blockAnyAdditional;
             BlockedIds = blockedIds;
             CoreVersion = coreVersion;
             CoreVersionText = coreVersionText;
+            AllowRiskyClientModifications = allowRiskyClientModifications;
         }
 
         internal bool BlockAnyAdditional { get; }
         internal HashSet<string> BlockedIds { get; }
         internal Version CoreVersion { get; }
         internal string CoreVersionText { get; }
+        internal bool AllowRiskyClientModifications { get; }
     }
 
     private static OwnerPolicy _ownerPolicy = OwnerPolicy.Empty;
@@ -62,7 +64,7 @@ internal static class ClientModAdmissionPolicy
             Math.Max(0, coreVersion.Revision));
         Volatile.Write(ref _ownerPolicy,
             new OwnerPolicy(config.BlockAnyAdditionalClientMods, blockedIds,
-                normalizedCoreVersion, coreVersionText));
+                normalizedCoreVersion, coreVersionText, config.AllowRiskyClientModifications));
         lock (WarningSync)
             WarnedConflicts.Clear();
         WarnIfBlocked(ClientModInventory.CoreId);
@@ -92,6 +94,13 @@ internal static class ClientModAdmissionPolicy
         OffThreadLogger.Warn(
             $"Client mod policy conflict: '{id}' is required by {requiredBy} and explicitly blocked. " +
             "The explicit block takes precedence.");
+    }
+
+    internal static bool AllowsIntegrity(ClientIntegrityAudit audit)
+    {
+        if (audit == null)
+            return false;
+        return !audit.IsRisky || Volatile.Read(ref _ownerPolicy).AllowRiskyClientModifications;
     }
 
     internal static IReadOnlyList<ModAdmissionIssue> Evaluate(ClientModInventory inventory)

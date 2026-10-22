@@ -9,7 +9,7 @@ public class ClientLoginAttempt
     public byte[] signature; // ECDSA DER + AES-GCM tag. Typical ~96 bytes; bounds below give ample headroom.
 
     private static readonly byte[] ExtendedPayloadMagic = Encoding.ASCII.GetBytes("ANLP");
-    private const byte ExtendedPayloadVersion = 2;
+    private const byte ExtendedPayloadVersion = 3;
     private const int MaxSignatureBytes = 128;
 
     /// <summary>Lower bound: ECDSA DER signatures can't legitimately be shorter than this.</summary>
@@ -37,7 +37,7 @@ public class ClientLoginAttempt
         return attempt;
     }
 
-    internal static byte[] EncodePlainPayload(byte[] signature, byte[] passwordProof, byte[] encodedInventory)
+    internal static byte[] EncodePlainPayload(byte[] signature, byte[] passwordProof, byte[] encodedInventory, byte[] encodedAudit)
     {
         if (signature == null)
             throw new ArgumentNullException(nameof(signature));
@@ -52,6 +52,7 @@ public class ClientLoginAttempt
             throw new ArgumentException($"Password proof must be {PasswordAuth.ProofSize} bytes.", nameof(passwordProof));
         // Decode also verifies canonical order and the aggregate encoded size.
         ClientModInventory.Decode(encodedInventory);
+        ClientIntegrityAudit.Decode(encodedAudit);
 
         using (var ms = new MemoryStream())
         using (var writer = new BinaryWriter(ms))
@@ -65,6 +66,7 @@ public class ClientLoginAttempt
                 writer.Write(passwordProof);
             writer.Write((ushort)encodedInventory.Length);
             writer.Write(encodedInventory);
+            writer.Write(encodedAudit);
             writer.Flush();
             if (ms.Length + 16 > MaxSize) // AES-GCM tag
                 throw new ArgumentException($"Encrypted login attempt cannot exceed {MaxSize} bytes.");
@@ -76,11 +78,13 @@ public class ClientLoginAttempt
         byte[] payload,
         out byte[] signature,
         out byte[] passwordProof,
-        out ClientModInventory inventory)
+        out ClientModInventory inventory,
+        out ClientIntegrityAudit audit)
     {
         signature = null;
         passwordProof = null;
         inventory = null;
+        audit = null;
 
         if (payload == null || payload.Length < MinSize || payload.Length + 16 > MaxSize)
             return false;
@@ -102,8 +106,8 @@ public class ClientLoginAttempt
                 if (signatureLength < MinSize || signatureLength > MaxSignatureBytes)
                     return false;
 
-                signature = reader.ReadBytes(signatureLength);
-                if (signature.Length != signatureLength)
+                var decodedSignature = reader.ReadBytes(signatureLength);
+                if (decodedSignature.Length != signatureLength)
                     return false;
 
                 var proofLength = reader.ReadByte();
@@ -113,7 +117,6 @@ public class ClientLoginAttempt
                 var proof = reader.ReadBytes(proofLength);
                 if (proof.Length != proofLength)
                     return false;
-                passwordProof = proofLength == 0 ? null : proof;
 
                 var inventoryLength = reader.ReadUInt16();
                 if (inventoryLength < 1 || inventoryLength > ClientModInventory.MaxEncodedBytes)
@@ -121,9 +124,15 @@ public class ClientLoginAttempt
                 var inventoryBytes = reader.ReadBytes(inventoryLength);
                 if (inventoryBytes.Length != inventoryLength)
                     return false;
-                inventory = ClientModInventory.Decode(inventoryBytes);
-
-                return ms.Position == ms.Length;
+                var decodedInventory = ClientModInventory.Decode(inventoryBytes);
+                var decodedAudit = ClientIntegrityAudit.Decode(reader.ReadBytes(ClientIntegrityAudit.EncodedSize));
+                if (ms.Position != ms.Length)
+                    return false;
+                signature = decodedSignature;
+                passwordProof = proofLength == 0 ? null : proof;
+                inventory = decodedInventory;
+                audit = decodedAudit;
+                return true;
             }
         }
         catch
@@ -131,6 +140,7 @@ public class ClientLoginAttempt
             signature = null;
             passwordProof = null;
             inventory = null;
+            audit = null;
             return false;
         }
     }

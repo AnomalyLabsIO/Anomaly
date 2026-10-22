@@ -195,6 +195,57 @@ public sealed class ClientModAdmissionPolicyTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void IntegrityPolicyRejectsRiskByDefaultButNotOptInOrBlockedAttempts(bool optIn)
+    {
+        ClientModAdmissionPolicy.Configure(new Config(), new Version(1, 2, 3));
+        try
+        {
+            Assert.False(ClientModAdmissionPolicy.AllowsIntegrity(null));
+            Assert.True(ClientModAdmissionPolicy.AllowsIntegrity(new ClientIntegrityAudit(ClientIntegrityAuditFlags.None, optIn)));
+            Assert.True(ClientModAdmissionPolicy.AllowsIntegrity(new ClientIntegrityAudit(ClientIntegrityAuditFlags.BlockedAttemptObserved, optIn)));
+            foreach (var flag in new[] { ClientIntegrityAuditFlags.ExternalHarmonyModification,
+                         ClientIntegrityAuditFlags.ExternalDetourModification, ClientIntegrityAuditFlags.CoverageIncomplete,
+                         ClientIntegrityAuditFlags.InventoryDivergence })
+                Assert.False(ClientModAdmissionPolicy.AllowsIntegrity(new ClientIntegrityAudit(flag, optIn)));
+        }
+        finally
+        {
+            ClientModAdmissionPolicy.Reset();
+        }
+    }
+
+    [Fact]
+    public void AllowingIntegrityRiskDoesNotWeakenExistingModRules()
+    {
+        ClientModAdmissionPolicy.Configure(new Config
+        {
+            AllowRiskyClientModifications = true,
+            BlockAnyAdditionalClientMods = true,
+            BlockedClientModIds = new List<string> { "blocked.mod" },
+        }, new Version(1, 2, 3));
+        using (ClientModRequirements.Register("required.mod", "1.0"))
+        {
+            try
+            {
+                Assert.True(ClientModAdmissionPolicy.AllowsIntegrity(new ClientIntegrityAudit(ClientIntegrityAudit.KnownFlags, true)));
+                Assert.False(ClientModAdmissionPolicy.AllowsIntegrity(null));
+                var issues = ClientModAdmissionPolicy.Evaluate(Inventory(
+                    ("anomaly.client", "1.2.2"), ("blocked.mod", "1.0"), ("extra.mod", "1.0")));
+                Assert.Contains(issues, issue => issue.Code == "wrong_version" && issue.Id == "anomaly.client");
+                Assert.Contains(issues, issue => issue.Code == "missing" && issue.Id == "required.mod");
+                Assert.Contains(issues, issue => issue.Code == "blocked" && issue.Id == "blocked.mod");
+                Assert.Contains(issues, issue => issue.Code == "unexpected" && issue.Id == "extra.mod");
+            }
+            finally
+            {
+                ClientModAdmissionPolicy.Reset();
+            }
+        }
+    }
+
     private static ClientModInventory Inventory(params (string Id, string Version)[] entries) =>
         new ClientModInventory(entries.Select(entry => new ClientModEntry(entry.Id, entry.Version)));
 

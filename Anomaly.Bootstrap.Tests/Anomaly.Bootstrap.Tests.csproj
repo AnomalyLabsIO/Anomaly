@@ -13,5 +13,12 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Anomaly.Bootstrap\Anomaly.Bootstrap.csproj" AdditionalProperties="DeployLocal=false" />
+    <Reference Include="MelonLoader" HintPath="$(AnomalyClientMelonLibDir)\MelonLoader.dll" Private="true" />
+    <Reference Include="0Harmony" HintPath="$(AnomalyClientMelonLibDir)\0Harmony.dll" Private="true" />
+    <Reference Include="MonoMod.RuntimeDetour" HintPath="$(AnomalyClientMelonLibDir)\MonoMod.RuntimeDetour.dll" Private="true" />
+    <Reference Include="MonoMod.Utils" HintPath="$(AnomalyClientMelonLibDir)\MonoMod.Utils.dll" Private="true" />
+    <Reference Include="Mono.Cecil" HintPath="$(AnomalyClientMelonLibDir)\Mono.Cecil.dll" Private="true" />
+    <AssemblyMetadata Include="AnomalyClientInteropDir" Value="$(AnomalyClientInteropDir)" />
+    <AssemblyMetadata Include="AnomalyServerReferenceDir" Value="$(AnomalyServerReferenceDir)" />
   </ItemGroup>
 </Project>

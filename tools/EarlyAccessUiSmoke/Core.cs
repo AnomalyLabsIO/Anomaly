@@ -106,6 +106,8 @@ public sealed partial class Core : MelonMod
         if (_localHostingSmoke) { EnqueueLocalHostingSmoke(); return; }
         if (_dedicatedDummyControlSmoke) { EnqueueDedicatedDummyControlSmoke(); return; }
         if (_serverApiSmoke) { EnqueueServerApiSmoke(); return; }
+        string integrityMode = Environment.GetEnvironmentVariable("ANOMALY_INTEGRITY_SMOKE_MODE");
+        if (!string.IsNullOrEmpty(integrityMode)) { EnqueueIntegrityProbe(integrityMode); return; }
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANOMALY_MOD_ADMISSION_EXPECT")))
         {
             EnqueueAdmissionProbe();

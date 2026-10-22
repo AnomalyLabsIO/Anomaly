@@ -64,6 +64,8 @@
         <Compile Include="Auth\ClientIdentityRotationRecord.cs" />
         <Compile Include="Auth\ClientHandshake.cs" />
         <Compile Include="Auth\ClientLoginAttempt.cs" />
+        <Compile Include="Auth\ClientIntegrityAudit.cs" />
+        <Compile Include="Auth\ClientIntegrityResponseCodec.cs" />
         <Compile Include="Auth\ClientModInventory.cs" />
         <Compile Include="Auth\ModAdmissionResponseCodec.cs" />
         <Compile Include="Auth\PasswordAuth.cs" />

@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Anomaly.Shared.Auth;
 
-/// <summary>A client claim about one active mod. This is authenticated as a login claim, not attestation.</summary>
+/// <summary>A client claim about a mod loaded during this process lifetime, not remote attestation.</summary>
 public sealed class ClientModEntry
 {
     public string Id { get; }
