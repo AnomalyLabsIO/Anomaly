@@ -184,16 +184,18 @@ internal static class MainMenuCustomizer
             label.raycastTarget = false;
             label.maskable = source.maskable;
 
-            string accent = ColorUtility.ToHtmlStringRGB(AnomalyUiStyle.Accent);
-            label.text = current + $" <sup><b><color=#{accent}>{suffix.TrimStart()}</color></b></sup>";
+            // ColorUtility.ToHtmlStringRGB is a throwing unstripped stub in the
+            // supported IL2CPP interop assembly. Use the Anomaly accent directly.
+            label.text = current + $" <sup><b><color=#D5660D>{suffix.TrimStart()}</color></b></sup>";
             label.enabled = true;
             source.enabled = false;
+            MelonLogger.Msg("MainMenuCustomizer: TMP version label applied; legacy Text disabled.");
         }
         catch (Exception ex)
         {
             if (label != null) label.enabled = false;
             if (source != null) source.enabled = true;
-            MelonLogger.Warning($"MainMenuCustomizer: version failed: {ex.Message}");
+            MelonLogger.Warning($"MainMenuCustomizer: version failed: {ex}");
         }
     }
 
