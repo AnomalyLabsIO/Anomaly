@@ -19,7 +19,7 @@ namespace Anomaly.Client.Patches.Menu;
 /// <summary>
 /// Brands the stock <c>NewMainMenu</c> scene: personalized welcome line,
 /// TMP version label with a superscript (MODDED) suffix, custom logo,
-/// authenticated-user auth status,
+/// authenticated-user auth status, and the stock Create Server button,
 /// reparents the auth-status spinner into the cross-scene connection-info
 /// popup, and swaps the server-browser loading panel to host the nicer
 /// ConnectPopup body. Subscribes to <see cref="ClientEvents.CanvasReady"/>
@@ -76,8 +76,28 @@ internal static class MainMenuCustomizer
         TryApplyVersion(menu);
         TryApplyLogo();
         TryApplyAuthStatus(menu);
+        TryApplyLocalHosting(menu);
         TryRelocateAuthSpinner();
         TryRelocateConnectPopup(menu);
+    }
+
+    private static void TryApplyLocalHosting(Il2Cpp.NewMainMenu menu)
+    {
+        try
+        {
+            if (menu == null) return;
+
+            // tcs toggles this flag; NewMainMenu.Update uses it to select the
+            // stock buttons. The Create Server action reaches the same
+            // StartNondedicated confirmation bypass as the host command.
+            Il2CppGameCore.Console.DisplayCreateServer = true;
+            menu._rentServerButton?.SetActive(false);
+            menu._createServerButton?.SetActive(true);
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Warning($"MainMenuCustomizer: local hosting button failed: {ex}");
+        }
     }
 
     private static void TryApplyWelcome(Il2Cpp.NewMainMenu menu)
