@@ -422,6 +422,7 @@
 		<Compile Include="Diagnostics\HangWatchdog.cs" />
 		<Compile Include="Diagnostics\NativeMethods.cs" />
         <Compile Include="Diagnostics\News\NewsDiagnosticModels.cs" />
+        <Compile Include="Diagnostics\News\NewsDiagnosticPolicy.cs" />
         <Compile Include="Diagnostics\News\NewsDiagnosticService.cs" />
         <Compile Include="Diagnostics\News\NewsLogParser.cs" />
         <Compile Include="Diagnostics\News\NewsMetadataInventory.cs" />

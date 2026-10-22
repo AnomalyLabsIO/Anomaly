@@ -24,6 +24,7 @@
     <Compile Include="..\Anomaly.Client\Internal\Modding\ModContext.cs" Link="Runtime\ModContext.cs" />
     <Compile Include="..\Anomaly.Client\Internal\Hosting\LocalHostGrantCoordinator.cs" Link="Runtime\LocalHostGrantCoordinator.cs" />
     <Compile Include="..\Anomaly.Client\Diagnostics\News\NewsDiagnosticModels.cs" Link="Runtime\News\NewsDiagnosticModels.cs" />
+    <Compile Include="..\Anomaly.Client\Diagnostics\News\NewsDiagnosticPolicy.cs" Link="Runtime\News\NewsDiagnosticPolicy.cs" />
     <Compile Include="..\Anomaly.Client\Diagnostics\News\NewsLogParser.cs" Link="Runtime\News\NewsLogParser.cs" />
     <Compile Include="..\Anomaly.Client\Diagnostics\News\NewsMetadataInventory.cs" Link="Runtime\News\NewsMetadataInventory.cs" />
     <Compile Include="..\Anomaly.Client\Diagnostics\News\NewsHistoryReader.cs" Link="Runtime\News\NewsHistoryReader.cs" />

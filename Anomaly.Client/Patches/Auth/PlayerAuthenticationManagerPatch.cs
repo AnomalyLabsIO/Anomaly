@@ -10,6 +10,7 @@ using Anomaly.Client.Api.Modding;
 using Anomaly.Shared.Auth;
 using Anomaly.Shared.Networking;
 using HarmonyLib;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2Cpp;
 using Il2CppCentralAuth;
 using Il2CppGameCore;
@@ -564,7 +565,7 @@ public static class PlayerAuthenticationManagerPatch
 }
 
 /// <summary>
-/// Optional compatibility patch for game versions that expose a managed byte[]
+/// Optional compatibility patch for game versions that expose an IL2CPP byte-array
 /// encrypted-channel send overload. Keeping this target in its own Harmony class
 /// prevents an absent upstream overload from aborting the required string-send and
 /// receive patches in <see cref="PlayerAuthenticationManagerPatch"/>.
@@ -601,28 +602,33 @@ internal static class OptionalByteArrayClientSendPatch
         FeatureHealth.Report(
             "anomaly",
             FeatureId,
-            FeatureHealthStatus.Degraded,
+            FeatureHealthStatus.Disabled,
             detail,
             ExpectedTarget,
             string.Empty,
             "Use the string encrypted-send API on this game build; update the hook only after verifying a new upstream signature.");
-        MelonLogger.Warning("Harmony degraded: " + detail);
+        MelonLogger.Msg("Optional compatibility hook: " + detail);
         return false;
     }
 
     [HarmonyTargetMethod]
     public static System.Reflection.MethodBase TargetMethod() => ResolveTarget();
 
-    private static System.Reflection.MethodBase ResolveTarget() => AccessTools.Method(
-        typeof(EncryptedChannelManager),
+    // IL2CPP exposes native byte[] as Il2CppStructArray<byte>, not managed byte[].
+    // Probe silently so a genuinely absent optional overload is not a startup warning.
+    private static System.Reflection.MethodBase ResolveTarget() => typeof(EncryptedChannelManager).GetMethod(
         nameof(EncryptedChannelManager.TrySendMessageToServer),
-        new[] { typeof(byte[]), typeof(EncryptedChannelManager.EncryptedChannel) });
+        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static,
+        binder: null,
+        types: new[] { typeof(Il2CppStructArray<byte>), typeof(EncryptedChannelManager.EncryptedChannel) },
+        modifiers: null);
 
     [HarmonyPrefix]
     public static bool OnPackBytes(
         EncryptedChannelManager __instance,
         out bool __result,
-        byte[] content,
+        Il2CppStructArray<byte> content,
         EncryptedChannelManager.EncryptedChannel channel)
     {
         __result = false;
@@ -634,8 +640,11 @@ internal static class OptionalByteArrayClientSendPatch
             return false;
         }
 
+        // Pack into managed storage, as in the string-send path. An IL2CPP copy
+        // must not be mistaken for the managed buffer consumed by our transport.
+        byte[] bytes = content.ToArray();
         int frame = UnityEngine.Time.frameCount;
-        long fingerprint = ComputeSendFingerprint(content, channel);
+        long fingerprint = ComputeSendFingerprint(bytes, channel);
         if (frame == _lastSendFrame && fingerprint == _lastSendFingerprint)
         {
             __result = true;
@@ -647,10 +656,10 @@ internal static class OptionalByteArrayClientSendPatch
         if (!PlayerAuthenticationManagerPatch.TryAdvanceTransportCounter(__instance))
             return false;
 
-        var data = new byte[content.Length + 5];
+        var data = new byte[bytes.Length + 5];
         data[0] = (byte)channel;
         BitConverter.GetBytes(__instance._txCounter).CopyTo(data, 1);
-        Array.Copy(content, 0, data, 5, content.Length);
+        Array.Copy(bytes, 0, data, 5, bytes.Length);
         return PlayerAuthenticationManagerPatch.SendPackedClientData(data, out __result);
     }
 

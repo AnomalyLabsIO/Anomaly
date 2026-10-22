@@ -107,6 +107,9 @@ internal static class NewsLogParser
             return Array.Empty<DiagnosticIssue>();
         string bounded = message.Length <= MaximumMessageCharacters ? message : message.Substring(0, MaximumMessageCharacters);
         string firstLine = bounded.Split('\n')[0].TrimEnd('\r');
+        if (severity == DiagnosticSeverity.Warning && message.Length <= MaximumMessageCharacters &&
+            NewsDiagnosticPolicy.IsExpectedWarning(section, bounded.TrimEnd()))
+            return Array.Empty<DiagnosticIssue>();
         if (severity == DiagnosticSeverity.Warning &&
             (firstLine.StartsWith("Diagnostics:", StringComparison.Ordinal) ||
              firstLine.StartsWith("Diagnostic artifact written locally:", StringComparison.Ordinal)))

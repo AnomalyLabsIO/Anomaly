@@ -4,6 +4,7 @@ using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Text.Json;
+using Anomaly.Client.Api.Modding;
 using Anomaly.Client.Diagnostics.News;
 using Xunit;
 
@@ -136,6 +137,61 @@ public sealed class NewsDiagnosticsTests
     {
         Assert.Empty(NewsLogParser.ParseMessage(DiagnosticSeverity.Warning, "Anomaly", message,
             Array.Empty<DiagnosticComponent>(), "log"));
+    }
+
+    public static IEnumerable<object[]> ExpectedStartupWarnings()
+    {
+        yield return new object[] { "Il2CppInterop", "Class::Init signatures have been exhausted, using a substitute!" };
+        yield return new object[] { "Il2CppInterop", "Failed to init IL2CPP patch backend for void Il2CppPlayerRoles.RoleSyncInfo::.ctor(Il2CppMirror.NetworkReader reader), using normal patch handlers: Derived classes must provide an implementation." };
+        yield return new object[] { "", "AccessTools.Method: Could not find method for type Il2Cpp.EncryptedChannelManager and name TrySendMessageToServer and parameters (byte[], Il2Cpp.EncryptedChannelManager+EncryptedChannel)" };
+        yield return new object[] { "Anomaly", "Harmony degraded: Optional EncryptedChannelManager.TrySendMessageToServer(byte[], EncryptedChannel) was not present; byte-array encrypted sends are disabled while string sends remain active." };
+    }
+
+    [Theory]
+    [MemberData(nameof(ExpectedStartupWarnings))]
+    public void Exact_compatibility_warnings_are_filtered_from_callbacks_current_logs_and_history(string section, string message)
+    {
+        var components = Array.Empty<DiagnosticComponent>();
+        Assert.Empty(NewsLogParser.ParseMessage(DiagnosticSeverity.Warning, section, message, components, "loader-callback"));
+        string log = "[10:54:51.952] [WARNING] " + (section.Length == 0 ? "" : "[" + section + "] ") + message + "\r\n\r\n";
+        Assert.Empty(NewsLogParser.Parse(log, components, "Latest.log"));
+        Assert.Empty(NewsLogParser.Parse(log, components, "previous.log", historical: true));
+
+        // Never hide an error, an additional diagnostic in the same block, or a
+        // similar message from another component.
+        Assert.Single(NewsLogParser.ParseMessage(DiagnosticSeverity.Error, section, message, components, "log"));
+        Assert.Single(NewsLogParser.ParseMessage(DiagnosticSeverity.Warning, section, message + "\nSystem.Exception: startup failed", components, "log"));
+        Assert.Single(NewsLogParser.ParseMessage(DiagnosticSeverity.Warning, "OtherMod", message, components, "log"));
+    }
+
+    [Theory]
+    [InlineData("AccessTools.Method: Could not find method for type Il2Cpp.EncryptedChannelManager and name TrySendMessageToServer and parameters (string, Il2Cpp.EncryptedChannelManager+EncryptedChannel)")]
+    [InlineData("Failed to init IL2CPP patch backend for void Il2CppPlayerRoles.RoleSyncInfo::.ctor(Il2CppMirror.NetworkReader reader), using normal patch handlers: Unexpected backend failure.")]
+    [InlineData("Class::Init signatures have been exhausted, no substitute found!")]
+    [InlineData("Required Bootstrap protection failed. Native executable entry or page protection changed: target")]
+    public void Other_missing_hooks_backend_failures_and_protection_errors_remain_visible(string message)
+    {
+        Assert.Single(NewsLogParser.ParseMessage(DiagnosticSeverity.Warning, "Il2CppInterop", message,
+            Array.Empty<DiagnosticComponent>(), "log"));
+    }
+
+    [Fact]
+    public void Only_the_expected_disabled_optional_byte_send_capability_is_not_a_health_issue()
+    {
+        FeatureHealthRecord Record(string owner = "anomaly", string feature = "encrypted-channel-byte-send",
+            FeatureHealthStatus status = FeatureHealthStatus.Disabled,
+            string target = NewsDiagnosticPolicy.OptionalByteSendTarget, string resolved = "") =>
+            new(owner, feature, status, "optional compatibility", target, resolved, "use string sends");
+
+        Assert.False(NewsDiagnosticPolicy.IsActionableFeature(Record()));
+        Assert.False(NewsDiagnosticPolicy.IsActionableFeature(Record(status: FeatureHealthStatus.Healthy)));
+        Assert.True(NewsDiagnosticPolicy.IsActionableFeature(Record(status: FeatureHealthStatus.Degraded)));
+        Assert.True(NewsDiagnosticPolicy.IsActionableFeature(Record(status: FeatureHealthStatus.Failed)));
+        Assert.True(NewsDiagnosticPolicy.IsActionableFeature(Record(status: FeatureHealthStatus.Unknown)));
+        Assert.True(NewsDiagnosticPolicy.IsActionableFeature(Record(owner: "another.mod")));
+        Assert.True(NewsDiagnosticPolicy.IsActionableFeature(Record(feature: "required-string-send")));
+        Assert.True(NewsDiagnosticPolicy.IsActionableFeature(Record(target: "unexpected signature")));
+        Assert.True(NewsDiagnosticPolicy.IsActionableFeature(Record(resolved: "installed target")));
     }
 
     [Fact]

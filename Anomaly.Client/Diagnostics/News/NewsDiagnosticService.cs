@@ -177,7 +177,7 @@ internal static class NewsDiagnosticService
             issues.AddRange(ObservedIssues.Values);
             var moduleIssues = ManagedModRuntime.GetDiagnosticIssues();
             issues.AddRange(moduleIssues.Where(issue => !issue.IsHistorical));
-            foreach (var feature in FeatureHealth.Snapshot().Values.Where(feature => feature.Status != FeatureHealthStatus.Healthy))
+            foreach (var feature in FeatureHealth.Snapshot().Values.Where(NewsDiagnosticPolicy.IsActionableFeature))
             {
                 var owner = NewsDiagnosticIdentity.Match(unique, id: feature.OwnerId);
                 if (feature.OwnerId == "anomaly") owner = unique.FirstOrDefault(component => component.Id == "anomaly.client");
