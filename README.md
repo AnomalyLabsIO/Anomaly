@@ -22,9 +22,14 @@ See [API versioning and migration](Anomaly.Client.Api/API_VERSIONING.md).
 The current target is:
 
 - Anomaly core `1.0.0` and launcher `1.1.1`
-- MelonLoader `0.7.2`
+- MelonLoader `0.7.3`
 - Windows and Proton
 - SCP:SL `14.2.7^`, exactly `>=14.2.7 && <14.3.0`
+
+Source builds take both loader libraries and generated game interop from the
+MelonLoader 0.7.3 installation selected in `Directory.Build.props`. Override
+`AnomalyClientRoot` (or `AnomalyGameRoot`) to use another matching installation.
+See the [0.7.3 dependency and capability review](MELONLOADER_0.7.3_UPGRADE.md).
 
 Anomaly uses its own `SupportedGameVersion("14.2.7^")` metadata. The launcher
 enforces that declaration before installing or materializing the official core,

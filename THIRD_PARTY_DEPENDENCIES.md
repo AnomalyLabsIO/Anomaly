@@ -7,10 +7,11 @@ dependencies; release engineering must archive those assets with each build.
 
 | Dependency | Pinned version | Scope | License | Upstream |
 |---|---:|---|---|---|
-| MelonLoader | 0.7.2 production / 0.7.3 candidate | Client runtime/bootstrap | Apache-2.0 | https://github.com/LavaGang/MelonLoader |
-| HarmonyX | 2.10.2 | Client patching; provided by MelonLoader 0.7.2 | MIT | https://github.com/BepInEx/HarmonyX |
+| MelonLoader | 0.7.3 | Client runtime/bootstrap | Apache-2.0 | https://github.com/LavaGang/MelonLoader |
+| Il2CppInterop | 1.5.1-ci.845 (`f03c8f4ae507d47ea814f3d11d1ec6b0391c1576`; assembly 1.5.1.0) | Client generated interop/runtime; provided by MelonLoader 0.7.3 | LGPL-3.0 | https://github.com/BepInEx/Il2CppInterop |
+| HarmonyX | 2.10.2 | Client patching; provided by MelonLoader 0.7.3 | MIT | https://github.com/BepInEx/HarmonyX |
 | Lib.Harmony | 2.2.2 (assembly 2.2.2.0) | Server patching; packaged server `0Harmony.dll` | MIT | https://github.com/pardeike/Harmony |
-| Newtonsoft.Json | 13.0.4 | Client/API serialization; provided by MelonLoader 0.7.2 | MIT | https://github.com/JamesNK/Newtonsoft.Json |
+| Newtonsoft.Json | 13.0.4 | Client/API serialization; provided by MelonLoader 0.7.3 | MIT | https://github.com/JamesNK/Newtonsoft.Json |
 | AssetsTools.NET | 3.0.4 | Client bounded AssetBundle metadata inspection; core parser only | MIT | https://github.com/nesrak1/AssetsTools.NET |
 | NVorbis | 0.10.5 | Developer asset-catalog tool only; not shipped in the client | MIT | https://github.com/NVorbis/NVorbis |
 | YamlDotNet | 11.0.1 | Client localization | MIT | https://github.com/aaubry/YamlDotNet |

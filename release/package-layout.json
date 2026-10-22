@@ -6,7 +6,7 @@
       "target": "client-runtime",
       "archiveName": "anomaly-client-{version}.zip",
       "runtimeClosure": {
-        "runtimeFramework": ".NET 6 runtime bundled with MelonLoader 0.7.2",
+        "runtimeFramework": ".NET 6 runtime used by MelonLoader 0.7.3",
         "referenceProjects": [
           "Anomaly.Bootstrap",
           "Anomaly.Client",
@@ -44,13 +44,13 @@
         "hostProvidedAssemblies": [
           { "name": "Assembly-CSharp", "provider": "SCP:SL 14.2.7 client interop" },
           { "name": "Il2CppCommandSystem.Core", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
-          { "name": "Il2CppInterop.Runtime", "provider": "MelonLoader 0.7.2" },
+          { "name": "Il2CppInterop.Runtime", "provider": "MelonLoader 0.7.3", "assemblyVersion": "1.5.1.0" },
           { "name": "Il2CppMirror", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
           { "name": "Il2Cppmscorlib", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
           { "name": "Il2CppSystem.Core", "provider": "MelonLoader-generated SCP:SL 14.2.7 interop" },
-          { "name": "MelonLoader", "provider": "MelonLoader 0.7.2" },
-          { "name": "0Harmony", "provider": "MelonLoader 0.7.2", "assemblyVersion": "2.10.2.0" },
-          { "name": "Newtonsoft.Json", "provider": "MelonLoader 0.7.2", "assemblyVersion": "13.0.0.0", "fileVersion": "13.0.4.30916" },
+          { "name": "MelonLoader", "provider": "MelonLoader 0.7.3", "assemblyVersion": "0.7.3.0" },
+          { "name": "0Harmony", "provider": "MelonLoader 0.7.3", "assemblyVersion": "2.10.2.0" },
+          { "name": "Newtonsoft.Json", "provider": "MelonLoader 0.7.3", "assemblyVersion": "13.0.0.0", "fileVersion": "13.0.4.30916" },
           { "name": "Unity.TextMeshPro", "provider": "SCP:SL 14.2.7 client interop" },
           { "name": "UnityEngine.AnimationModule", "provider": "SCP:SL 14.2.7 client interop" },
           { "name": "UnityEngine.AudioModule", "provider": "SCP:SL 14.2.7 client interop" },

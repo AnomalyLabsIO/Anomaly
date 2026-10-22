@@ -45,7 +45,7 @@
     {
       "id": "scpsl-14.2.7-client-interop",
       "packaged": false,
-      "provider": "MelonLoader 0.7.2 generated interop for SCP:SL 14.2.7",
+      "provider": "MelonLoader 0.7.3 generated interop for SCP:SL 14.2.7",
       "description": "Game, Unity, Il2CppInterop, and MelonLoader compile references remain operator/developer supplied and are not redistributed in the SDK."
     }
   ]

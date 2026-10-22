@@ -43,11 +43,11 @@ API, secret, or two-build reproducibility gate; use
 `release/package-layout.json` is the reviewed closure policy. Packaged DLLs are
 verified from their PE assembly metadata. Framework exclusions are exact names
 provided by the declared .NET runtime. Host exclusions are exact names tied to
-MelonLoader 0.7.2 or the SCP:SL 14.2.7 client/server and must be observed in the
+MelonLoader 0.7.3 or the SCP:SL 14.2.7 client/server and must be observed in the
 resolved MSBuild inputs. The client archive carries Bouncy Castle; the server
 uses the SCP:SL 14.2.7 game's Managed copy, whose assembly version is pinned
 in the closure declaration. The server carries Lib.Harmony 2.2.2. The client
-uses MelonLoader 0.7.2's HarmonyX 2.10.2 and Newtonsoft.Json 13.0.4 instead
+uses MelonLoader 0.7.3's HarmonyX 2.10.2 and Newtonsoft.Json 13.0.4 instead
 of redistributing competing copies. The SCP:SL, Unity, IL2CPP interop,
 MelonLoader, LabAPI, and
 CLR/framework assemblies remain host-provided and are not redistributed.

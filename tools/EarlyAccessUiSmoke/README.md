@@ -8,7 +8,7 @@ in release packages.** It runs only when `ANOMALY_UI_SMOKE_DIR` is set.
 
 Use PowerShell 7 on Windows, the repository's .NET build prerequisites, and a
 graphics-capable game session. The seed client must be the supported SCP:SL
-14.2.7/MelonLoader 0.7.2 installation, started once to generate its IL2CPP
+14.2.7/MelonLoader 0.7.3 installation, started once to generate its IL2CPP
 references. `Prepare-Game.ps1` requires `SCPSL.exe`, `GameAssembly.dll`,
 `version.dll`, `MelonLoader/net6/MelonLoader.dll`, and
 `MelonLoader/Il2CppAssemblies/Assembly-CSharp.dll` under that seed root.
@@ -45,12 +45,12 @@ Windows account when stock profile isolation is required.
 
 ## Prepare and run the client
 
-Run these templates from the repository root. Replace the relative seed paths
+Run these templates from the repository root. Replace the seed paths
 with your reference layout. Environment properties are used here because
 `Run-Smoke.ps1` invokes its own builds and does not accept extra MSBuild arguments.
 
 ```powershell
-$env:AnomalyClientRoot = [IO.Path]::GetFullPath('../Client')
+$env:AnomalyClientRoot = 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy'
 $env:AnomalyServerRoot = [IO.Path]::GetFullPath('../Server')
 
 dotnet build Anomaly.slnx -c Release -p:DeployLocal=false
