@@ -258,6 +258,11 @@ public class Core : MelonMod
 
     public override void OnUpdate()
     {
+        if (Bootstrap.Core.State != Bootstrap.StartupState.Ready || !Bootstrap.RuntimeGuard.HeartbeatFresh)
+        {
+            BlockingFailureDialog.ShowAndExit("Required Bootstrap protection stopped advancing. Restart the game.");
+            return;
+        }
         AuthHandler.UpdateIntegrityMonitoring();
         PoseRuntime.Update();
         UpdateFeature("asset-bundles", AssetBundleManager.Update, failClosed: true);

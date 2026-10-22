@@ -17,6 +17,7 @@ internal static partial class RuntimeGuard
     private static int _working;
     private static int _source;
     private static long _nextChecks;
+    private static long _lastHeartbeatTick;
     private static VerificationPass? _pass;
     private static TargetAudit? _targetAudit;
     private static Completion? _completion;
@@ -28,6 +29,22 @@ internal static partial class RuntimeGuard
     internal static long CompletedChecks => Interlocked.Read(ref _completedChecks);
     internal static long CheckpointReuses => Interlocked.Read(ref _checkpointReuses);
     internal static long AuditedPatchRecords => Interlocked.Read(ref _auditedPatchRecords);
+    internal static bool HeartbeatFresh
+    {
+        get
+        {
+            long now = Environment.TickCount64;
+            long lastHeartbeat = Volatile.Read(ref _lastHeartbeatTick);
+            var completion = Volatile.Read(ref _completion);
+            return _installed && Snapshot.Healthy && lastHeartbeat != 0 &&
+                now - lastHeartbeat <= 5000 && completion != null &&
+                now - completion.Tick <= 60000 &&
+                !DeadlineBeyondCadence(Volatile.Read(ref _nextChecks), now);
+        }
+    }
+
+    internal static bool DeadlineBeyondCadence(long deadline, long now) =>
+        deadline > now && deadline - now > 5000;
 
     private readonly record struct RequiredPatch(MethodInfo Method, HarmonyPatchType Kind, string? Owner);
     private readonly record struct WorkStamp(long Catalog, long Trust, long Native, long Targets, long Required, long Operations, long PendingNative);
@@ -88,6 +105,11 @@ internal static partial class RuntimeGuard
     private static bool VerifyCheckpoint(bool requireComplete)
     {
         if (!_installed) return false;
+        if (DeadlineBeyondCadence(Volatile.Read(ref _nextChecks), Environment.TickCount64))
+        {
+            Invalidate("Guard verification deadline was delayed beyond its allowed cadence.");
+            return false;
+        }
         if (!ClrEntryStubPreserver.IsInstalled)
         {
             Invalidate("Required CLR entry stub preservation was replaced.");
@@ -144,12 +166,18 @@ internal static partial class RuntimeGuard
     internal static void Update(Func<bool>? emitDiagnostic = null)
     {
         if (!_installed || !ProtectedMethodCatalog.IsMainThread || Interlocked.CompareExchange(ref _working, 1, 0) != 0) return;
+        Volatile.Write(ref _lastHeartbeatTick, Environment.TickCount64);
         using var timing = GuardTimingDiagnostics.Begin(GuardTimingPhase.GuardSlice);
         var budget = new GuardWorkBudget();
         int warnings = 0;
         try
         {
             FailAbandonedIlHookApplications();
+            if (DeadlineBeyondCadence(Volatile.Read(ref _nextChecks), Environment.TickCount64))
+            {
+                Invalidate("Guard verification deadline was delayed beyond its allowed cadence.");
+                return;
+            }
             if (!ClrEntryStubPreserver.IsInstalled)
             {
                 Invalidate("Required CLR entry stub preservation was replaced.");
@@ -230,6 +258,8 @@ internal static partial class RuntimeGuard
         Volatile.Write(ref _completion, new Completion(stamp, requireComplete || complete, Environment.TickCount64, _pass));
         _pass = null;
         _nextChecks = Environment.TickCount64 + 1000;
+        if (Volatile.Read(ref _lastHeartbeatTick) == 0)
+            Volatile.Write(ref _lastHeartbeatTick, Environment.TickCount64);
         Interlocked.Increment(ref _completedChecks);
         GuardTimingDiagnostics.CountTotal(GuardTimingTotal.CompletedChecks);
         return true;

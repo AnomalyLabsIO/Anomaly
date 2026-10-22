@@ -16,6 +16,7 @@ public sealed class Core : MelonPlugin
     private string[] _diagnosticEntries = Array.Empty<string>();
     private int _diagnosticIndex;
     private Func<bool>? _emitDiagnostic;
+    private bool _deinitializing;
 
     public override void OnEarlyInitializeMelon()
     {
@@ -53,7 +54,11 @@ public sealed class Core : MelonPlugin
 
     public override void OnApplicationStarted()
     {
-        if (State != StartupState.Ready) return;
+        if (State != StartupState.Ready)
+        {
+            Fail("Bootstrap lifecycle state changed before the game started.");
+            return;
+        }
         try
         {
             ProtectedMethodCatalog.ResolveNativeTargetsAfterSupportReady();
@@ -71,7 +76,12 @@ public sealed class Core : MelonPlugin
 
     public override void OnUpdate()
     {
-        if (State != StartupState.Ready) return;
+        if (_deinitializing && State == StartupState.Failed && !RuntimeGuard.Snapshot.Healthy) return;
+        if (State != StartupState.Ready)
+        {
+            Fail("Bootstrap lifecycle state changed after protection became ready.");
+            return;
+        }
         if (HandleGuardFailure()) return;
         RuntimeGuard.Update(_emitDiagnostic ??= TryLogGuardDiagnostic);
         if (HandleGuardFailure()) return;
@@ -107,6 +117,7 @@ public sealed class Core : MelonPlugin
 
     public override void OnDeinitializeMelon()
     {
+        _deinitializing = true;
         State = StartupState.Failed;
         RuntimeGuard.Invalidate("Bootstrap was unregistered or the loader shut down.");
     }

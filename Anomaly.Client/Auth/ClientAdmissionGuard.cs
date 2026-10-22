@@ -81,6 +81,7 @@ internal static class ClientAdmissionGuard
 
         var guard = RuntimeGuard.Snapshot;
         if (!guard.Healthy || guard.MutationInProgress != 0 || Bootstrap.Core.State != StartupState.Ready ||
+            !RuntimeGuard.HeartbeatFresh ||
             (!ProtectedMethodCatalog.NativeCoverageReady &&
              (claim.Audit.Flags & ClientIntegrityAuditFlags.CoverageIncomplete) == 0) ||
             guard.Generation != claim.GuardGeneration ||

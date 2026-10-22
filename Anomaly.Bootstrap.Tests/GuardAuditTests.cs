@@ -5,6 +5,16 @@ namespace Anomaly.Bootstrap.Tests;
 
 public sealed class GuardAuditTests
 {
+    [Theory]
+    [InlineData(1000, 0, false)]
+    [InlineData(5000, 0, false)]
+    [InlineData(5001, 0, true)]
+    [InlineData(long.MaxValue, 1000, true)]
+    public void Verification_deadline_must_remain_within_bounded_cadence(long deadline, long now, bool abnormal)
+    {
+        Assert.Equal(abnormal, RuntimeGuard.DeadlineBeyondCadence(deadline, now));
+    }
+
     [Fact]
     public void Mutation_barrier_covers_nested_changes_and_commits_risk_before_reopening()
     {
