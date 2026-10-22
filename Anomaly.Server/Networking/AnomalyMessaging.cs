@@ -13,6 +13,8 @@ namespace Anomaly.Server.Networking;
 
 internal static class AnomalyMessaging
 {
+    private const int MaximumOptionalReliableQueuePackets = 128;
+
     public static event Action<ReferenceHub, IAnomalyMessage> MessageReceived;
 
     /// <summary>
@@ -65,9 +67,43 @@ internal static class AnomalyMessaging
                 $"Anomaly message '{msg?.MessageName ?? "<null>"}' could not be delivered.");
     }
 
-    internal static bool TrySendToClient(ReferenceHub hub, IAnomalyMessage msg)
+    internal static bool TryGetPayloadBudget(
+        ReferenceHub hub,
+        IAnomalyMessage contract,
+        out MessagePayloadBudget budget)
     {
-        if (!IsAnomalyTarget(hub)) return false;
+        budget = default;
+        try
+        {
+            if (!IsAnomalyTarget(hub) || hub.connectionToClient == null || hub.encryptedChannelManager == null ||
+                (!hub.encryptedChannelManager.isLocalPlayer && !AuthenticatedTransportSessions.IsActive(hub)) ||
+                !AnomalyMessageRegistry.TryGetSendContract(contract, AnomalyMessageDirection.ServerToClient,
+                    out _, out var channel, out var policy) ||
+                !TryGetPacketLimits(hub, channel, out int maximum, out int singlePacket))
+                return false;
+
+            return TransportPacketPolicy.TryGetPayloadBudget(maximum, singlePacket, policy.MaxPayloadBytes,
+                !hub.encryptedChannelManager.isLocalPlayer, out budget);
+        }
+        catch { return false; }
+    }
+
+    internal static bool TrySendToClient(ReferenceHub hub, IAnomalyMessage msg) =>
+        TrySendToClientCore(hub, msg, optional: false);
+
+    /// <summary>
+    /// Best-effort presentation delivery. Admission, encryption and replay rules still apply,
+    /// but an unavailable or congested recipient must not be disconnected for dropped visuals.
+    /// </summary>
+    internal static bool TrySendOptionalToClient(ReferenceHub hub, IAnomalyMessage msg)
+    {
+        try { return TrySendToClientCore(hub, msg, optional: true); }
+        catch { return false; }
+    }
+
+    private static bool TrySendToClientCore(ReferenceHub hub, IAnomalyMessage msg, bool optional)
+    {
+        if (!IsAnomalyTarget(hub) || hub.encryptedChannelManager == null) return false;
 
         bool localTransport = hub.encryptedChannelManager.isLocalPlayer;
         bool authenticatedTransportRequired =
@@ -81,9 +117,10 @@ internal static class AnomalyMessaging
         }
         if (hub.connectionToClient == null)
         {
-            FailClosedDisconnect(
-                hub,
-                "AnomalyMessaging.SendToClient: Authenticated connection disappeared before delivery.");
+            if (!optional)
+                FailClosedDisconnect(
+                    hub,
+                    "AnomalyMessaging.SendToClient: Authenticated connection disappeared before delivery.");
             return false;
         }
 
@@ -94,15 +131,26 @@ internal static class AnomalyMessaging
             return false;
         }
 
+        MessagePayloadBudget optionalBudget = default;
+        if (optional && (!TryGetPayloadBudget(hub, msg, out optionalBudget) || !HasOptionalQueueCapacity(hub)))
+            return false;
+
         var data = BuildPayload(msg, 0, hash, policy);
         if (data == null) return false;
+        // Serialization is caller code and can race lifecycle/MTU changes. Recheck before
+        // consuming a counter or allocating an authenticated envelope for optional traffic.
+        if (optional && (!TryGetPayloadBudget(hub, msg, out optionalBudget) ||
+            data.Length - TransportPacketPolicy.AnomalyEnvelopeBytes > optionalBudget.MaxPayloadBytes ||
+            !HasOptionalQueueCapacity(hub)))
+            return false;
         var state = AnomalyReplayTable.GetOrCreate(hub);
         uint counter = state.NextTxCounter(channel);
         if (counter == 0 || counter == uint.MaxValue)
         {
-            FailClosedDisconnect(
-                hub,
-                "AnomalyMessaging.SendToClient: Counter exhausted; disconnecting before counter reuse.");
+            if (!optional)
+                FailClosedDisconnect(
+                    hub,
+                    "AnomalyMessaging.SendToClient: Counter exhausted; disconnecting before counter reuse.");
             return false;
         }
         BitConverter.GetBytes(counter).CopyTo(data, 1);
@@ -120,17 +168,19 @@ internal static class AnomalyMessaging
             {
                 if (!AuthenticatedTransportSessions.TryEncryptToClient(hub, data, out encrypted))
                 {
-                    FailClosedDisconnect(
-                        hub,
-                        "AnomalyMessaging.SendToClient: Directional authenticated transport disappeared before encryption.");
+                    if (!optional)
+                        FailClosedDisconnect(
+                            hub,
+                            "AnomalyMessaging.SendToClient: Directional authenticated transport disappeared before encryption.");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                FailClosedDisconnect(
-                    hub,
-                    "AnomalyMessaging.SendToClient: Required authenticated encryption failed.");
+                if (!optional)
+                    FailClosedDisconnect(
+                        hub,
+                        "AnomalyMessaging.SendToClient: Required authenticated encryption failed.");
                 SafeLogWarning(
                     $"AnomalyMessaging.SendToClient: Encryption failed: {ex.GetType().Name}: {ex.Message}");
                 return false;
@@ -140,11 +190,12 @@ internal static class AnomalyMessaging
         }
 
         if (!FitsDeployedTransport(
+                hub,
                 channel,
                 packed.Data?.Length ?? 0,
                 out string transportFailure))
         {
-            if (authenticatedTransportRequired)
+            if (authenticatedTransportRequired && !optional)
             {
                 FailClosedDisconnect(
                     hub,
@@ -155,11 +206,16 @@ internal static class AnomalyMessaging
         }
         try
         {
-            hub.connectionToClient.Send(packed, (int)channel);
+            if (!SendPackedToClient(hub, packed, channel))
+            {
+                if (authenticatedTransportRequired && !optional)
+                    FailClosedDisconnect(hub, "AnomalyMessaging.SendToClient: Required transport delivery was rejected.");
+                return false;
+            }
         }
         catch (Exception exception)
         {
-            if (authenticatedTransportRequired)
+            if (authenticatedTransportRequired && !optional)
             {
                 FailClosedDisconnect(
                     hub,
@@ -513,6 +569,7 @@ internal static class AnomalyMessaging
     }
 
     private static bool FitsDeployedTransport(
+        ReferenceHub hub,
         MessageChannel channel,
         int encodedBytes,
         out string failure)
@@ -520,17 +577,12 @@ internal static class AnomalyMessaging
         failure = null;
         try
         {
-            var transport = LiteNetLib4MirrorTransport.Singleton;
-            if (transport == null)
+            if (!TryGetPacketLimits(hub, channel, out int maximum, out _))
             {
-                failure = "AnomalyMessaging.SendToClient: No deployed transport is active.";
+                failure = "AnomalyMessaging.SendToClient: The recipient transport is unavailable.";
                 return false;
             }
-            bool fits = TransportPacketPolicy.FitsReportedChannel(
-                channel,
-                encodedBytes,
-                transport.GetMaxPacketSize,
-                out int maximum);
+            bool fits = TransportPacketPolicy.Fits(maximum, encodedBytes);
             // Reserve framing space for Mirror's message id/length and the encrypted wrapper.
             if (fits)
                 return true;
@@ -548,5 +600,95 @@ internal static class AnomalyMessaging
                 $"AnomalyMessaging.SendToClient: transport ceiling query failed closed: {exception.Message}";
             return false;
         }
+    }
+
+    private static bool TryGetPacketLimits(
+        ReferenceHub hub,
+        MessageChannel channel,
+        out int maximumPacketBytes,
+        out int singlePacketBytes)
+    {
+        maximumPacketBytes = singlePacketBytes = 0;
+        var transport = LiteNetLib4MirrorTransport.Singleton;
+        int channelId = (int)channel;
+        if (transport == null || transport.channels == null || channelId < 0 ||
+            channelId >= transport.channels.Length || hub?.connectionToClient == null)
+            return false;
+
+        if (hub.encryptedChannelManager.isLocalPlayer)
+        {
+            maximumPacketBytes = singlePacketBytes = transport.GetMaxPacketSize(channelId);
+            return maximumPacketBytes > 0;
+        }
+
+        if (LiteNetLib4MirrorServer.Peers == null ||
+            !LiteNetLib4MirrorServer.Peers.TryGetValue(hub.connectionToClient.connectionId, out var peer) ||
+            peer == null || peer.ConnectionState != LiteNetLib.ConnectionState.Connected)
+            return false;
+
+        var delivery = transport.channels[channelId];
+        singlePacketBytes = peer.GetMaxSinglePacketSize(delivery);
+        maximumPacketBytes = TransportPacketPolicy.GetMaximumPacketBytes(singlePacketBytes,
+            delivery == LiteNetLib.DeliveryMethod.ReliableOrdered || delivery == LiteNetLib.DeliveryMethod.ReliableUnordered);
+        // Mirror's own admission still uses the transport-wide (first-peer) ceiling.
+        // Honor that bound as well as the actual recipient's smaller packet limit.
+        maximumPacketBytes = Math.Min(maximumPacketBytes, transport.GetMaxPacketSize(channelId));
+        singlePacketBytes = Math.Min(singlePacketBytes, maximumPacketBytes);
+        return maximumPacketBytes > 0;
+    }
+
+    private static bool SendPackedToClient(
+        ReferenceHub hub,
+        EncryptedChannelManager.EncryptedMessageOutside packed,
+        MessageChannel channel)
+    {
+        var transport = LiteNetLib4MirrorTransport.Singleton;
+        var delivery = transport.channels[(int)channel];
+        if (hub.encryptedChannelManager.isLocalPlayer || delivery == LiteNetLib.DeliveryMethod.ReliableOrdered ||
+            delivery == LiteNetLib.DeliveryMethod.ReliableUnordered)
+        {
+            // Keep reliable controls behind native role messages in the same connection FIFO.
+            hub.connectionToClient.Send(packed, (int)channel);
+            return true;
+        }
+
+        // Mirror's shared first-peer batch threshold can exceed this recipient's MTU.
+        // A standalone batch preserves Mirror's framing without changing game-owned batchers.
+        if (!TryGetPacketLimits(hub, channel, out _, out int singlePacketBytes))
+            return false;
+        using (var messageWriter = NetworkWriterPool.Get())
+        using (var batchWriter = NetworkWriterPool.Get())
+        {
+            NetworkMessages.Pack(packed, messageWriter);
+            var batcher = new Batcher(singlePacketBytes);
+            batcher.AddMessage(messageWriter.ToArraySegment(), NetworkTime.localTime);
+            if (!batcher.GetBatch(batchWriter) || batchWriter.Position > singlePacketBytes)
+                return false;
+            var bytes = batchWriter.ToArraySegment();
+            return LiteNetLib4MirrorServer.Send(hub.connectionToClient.connectionId, delivery,
+                bytes.Array, bytes.Offset, bytes.Count, (byte)channel);
+        }
+    }
+
+    private static bool HasOptionalQueueCapacity(ReferenceHub hub)
+    {
+        if (hub.encryptedChannelManager.isLocalPlayer)
+            return true;
+        var transport = LiteNetLib4MirrorTransport.Singleton;
+        if (transport?.channels == null || hub.connectionToClient == null || LiteNetLib4MirrorServer.Peers == null ||
+            !LiteNetLib4MirrorServer.Peers.TryGetValue(hub.connectionToClient.connectionId, out var peer) || peer == null)
+            return false;
+
+        long queued = 0;
+        for (int i = 0; i < transport.channels.Length; i++)
+        {
+            var delivery = transport.channels[i];
+            if (delivery != LiteNetLib.DeliveryMethod.ReliableOrdered && delivery != LiteNetLib.DeliveryMethod.ReliableUnordered)
+                continue;
+            queued += peer.GetPacketsCountInReliableQueue((byte)i, delivery == LiteNetLib.DeliveryMethod.ReliableOrdered);
+            if (queued >= MaximumOptionalReliableQueuePackets)
+                return false;
+        }
+        return true;
     }
 }

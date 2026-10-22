@@ -182,6 +182,7 @@ public class Plugin : Plugin<Config>
             [ServerInitializationStage.FeatureBridges] = () =>
             {
                 ClientCapabilities.Init();
+                Poses.PlayerPoseRuntime.Init();
                 PlayerColorBridge.Init();
                 ContentCatalogBridge.Init();
             },
@@ -402,6 +403,7 @@ public class Plugin : Plugin<Config>
         RunCleanup(context, "content registry", ContentRegistry.Reset);
         RunCleanup(context, "player color bridge", PlayerColorBridge.Disable);
         RunCleanup(context, "client capabilities", ClientCapabilities.Disable);
+        RunCleanup(context, "player poses", Poses.PlayerPoseRuntime.Disable);
         RunCleanup(context, "player motion", PlayerMotion.ResetAll);
         RunCleanup(context, "replay table", AnomalyReplayTable.Reset);
         RunCleanup(context, "authenticated transport sessions", AuthenticatedTransportSessions.Reset);
@@ -485,6 +487,7 @@ public class Plugin : Plugin<Config>
         RunCleanup(context, "file transfer session", () => FileTransferSession.CleanupPlayer(hub));
         RunCleanup(context, "replay table", () => AnomalyReplayTable.Remove(hub));
         RunCleanup(context, "player motion", () => PlayerMotion.Reset(hub));
+        RunCleanup(context, "player poses", () => Poses.PlayerPoseRuntime.RemovePlayer(hub));
     }
 
     private static void RunCleanup(string context, string component, Action cleanup)

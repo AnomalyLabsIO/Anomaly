@@ -7,4 +7,8 @@
     <AssemblyName>Anomaly.ReleasePackaging</AssemblyName>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Anomaly.AssetValidation\Anomaly.AssetValidation.csproj" />
+    <ProjectReference Include="..\AssetPackPolicy\AssetPackPolicy.csproj" />
+  </ItemGroup>
 </Project>

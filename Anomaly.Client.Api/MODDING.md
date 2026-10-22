@@ -74,22 +74,12 @@ SHA-256. Anomaly checks game compatibility and the hash before
 any module, and tears down context-owned commands, scheduled work,
 cancellation, subscriptions, and tracked resources on disable.
 
-The launcher verifies signed official-core packages and approves third-party
-artifacts by SHA-256. Before process creation it stages or quarantines every
-MelonLoader-scanned DLL, including `UserLibs`, `Plugins`, `Mods`, nested
-folders that MelonLoader reclassifies, and managed modules.
-`Anomaly.Bootstrap` repeats the check for ordinary Mods and managed modules
-before the Mods phase; it is defense in depth, not the authority for
-earlier-loading `UserLibs` or `Plugins`. A changed third-party binary
-requires renewed consent.
-
-Trust state lives at
-`<modded-game>/UserData/Anomaly/mod-trust.json`; quarantine is under
-`<modded-game>/UserData/Anomaly/Quarantine/`. Repeated managed-module startup
-failures move to
-`Quarantine/managed-runtime/repeated-startup-failure/`. Approval is a
-full-process trust decision, not a sandbox: approved managed code and ordinary
-MelonMods have the authority of the game process.
+Anomaly loads local mods without a separate hash-approval file or automatic
+mod quarantine. A managed module that fails is disabled for that process and
+remains in its installation directory so it can be retried on the next launch.
+`Anomaly.Bootstrap` checks runtime protection before the Mods phase and records
+the loaded mod inventory for server admission. Managed code and ordinary
+MelonMods run with the authority of the game process; they are not sandboxed.
 
 ## Picking an id
 
@@ -162,6 +152,7 @@ All public APIs live under `Anomaly.Client.Api.*`. Quick pointers:
 - **`Scheduler`** — delayed and recurring callbacks plus named cooldowns. `Scheduler.In`, `Scheduler.Every`, `Scheduler.StartCooldown`, `Scheduler.GetCooldownRemaining`. Tick-accurate; advances on `Time.unscaledDeltaTime` so pauses don't skip work. Retain and cancel your own `ScheduledTask` handles. Global reset/pause/resume and owner-scoped cleanup are internal framework boundaries.
 - **`UiCanvas`** and **`UiLayer`** — the shared Anomaly screen-space canvas. `UiCanvas.GetLayer(UiLayer.HUD)` returns a `RectTransform` parent; instantiate your prefabs under it. Helpers: `UiAnchorExtensions`, `SafeArea`, `UiParameterBinder`, `UiPrefabValidator`.
 - **`AnomalyMessaging`** and **`AnomalyMessageRegistry`** — custom client⇆server messages over the Anomaly encrypted channel. See [NETWORKING.md](Networking/NETWORKING.md) for message authoring, wire format, and transport channels.
+- **`PlayerPoseRigs`** — discover built-in stable bone IDs and capture model-root-relative final poses after a local solver. Base Anomaly renders server-owned poses without requiring the producing mod; see [the pose contract](../Anomaly.Server/PLAYER_POSES.md).
 - **`Tr`** — translations. `Tr.RegisterMod(namespace)` loads `UserData/i18n/<namespace>/`; `Tr.RegisterMod(namespace, dir)` can point at a custom per-locale YAML directory. `Tr.Get(key, args...)` uses exact locale, language-prefix, then English fallback. Missing English keys return the raw key and log a warning. Locale changes require restart in v1. See [LOCALIZATION.md](Localization/LOCALIZATION.md).
 - **`AnomalyResources`** — content-addressed PNG texture and OGG audio loading, populated by the file-transfer layer. Use `TryGetTexture(hash, ...)` and `TryGetAudioClip(hash, ...)`; treat returned objects as borrowed resources valid for the current connection. The framework owns disk-cache maintenance and shared-object unloading. Remote AssetBundles are not part of public v1.
 - **`Coroutines`** — `Coroutines.Start(IEnumerator)` / `Coroutines.Stop` / `Coroutines.CallDelayed(float, Action)` wrappers over `MelonCoroutines`.

@@ -5,6 +5,7 @@ using Anomaly.Client.Api.Internal.Wrappers;
 using Anomaly.Client.Api.Modding;
 using Anomaly.Shared.Auth;
 using Anomaly.Shared.Networking;
+using Anomaly.Shared.Networking.Messages;
 using Il2Cpp;
 using Il2CppMirror;
 using Il2CppMirror.LiteNetLib4Mirror;
@@ -30,6 +31,31 @@ public static class AnomalyMessaging
         if (!TrySend(msg))
             throw new InvalidOperationException(
                 $"Anomaly message '{msg?.MessageName ?? "<null>"}' could not be delivered.");
+    }
+
+    /// <summary>
+    /// Gets current capacity for a registered outgoing message contract. Does not serialize,
+    /// send, advance replay counters, or change the authenticated session. The result measures
+    /// only bytes written by the message serializer; delivery rechecks the transport.
+    /// </summary>
+    public static bool TryGetPayloadBudget(IAnomalyMessage contract, out MessagePayloadBudget budget)
+    {
+        budget = default;
+        try
+        {
+            var hub = LocalPlayer.Instance?.ReferenceHub;
+            if (hub == null && !PlayerRegistry.TryGetLocalHub(out hub))
+                return false;
+            if ((!NetworkServer.active && !HasTransportSession()) ||
+                !AnomalyMessageRegistry.TryGetSendContract(contract, AnomalyMessageDirection.ClientToServer,
+                    out _, out var channel, out var policy) ||
+                !TryGetPacketLimits(channel, out int maximum, out int singlePacket))
+                return false;
+
+            return TransportPacketPolicy.TryGetPayloadBudget(maximum, singlePacket, policy.MaxPayloadBytes,
+                !NetworkServer.active, out budget);
+        }
+        catch { return false; }
     }
 
     internal static bool TrySend(IAnomalyMessage msg)
@@ -87,7 +113,7 @@ public static class AnomalyMessaging
 
         if (!FitsDeployedTransport(
                 channel,
-                data.Length + AuthTransportCrypto.NonceSize + AuthTransportCrypto.TagSize,
+                data.Length + (NetworkServer.active ? 0 : AuthTransportCrypto.EnvelopeOverhead),
                 out string transportFailure))
         {
             if (authenticatedTransportRequired)
@@ -179,7 +205,19 @@ public static class AnomalyMessaging
         uint hash = BitConverter.ToUInt32(anomalyPayload, 4);
         int payloadBytes = anomalyPayload.Length - 8;
 
-        var rateResult = AnomalyReplayTable.InboundRateLimiter.TryAccept(hash, payloadBytes);
+        // These registered built-ins are optional, authenticated server presentation. Keep
+        // their bounded allowance separate so normal traffic cannot turn cosmetic congestion
+        // into a disconnect. Invalid counters and oversized contracts keep the strict path.
+        bool poseSample = AnomalyMessageRegistry.IsRegisteredType<PlayerPoseSampleMessage>(hash) ||
+            AnomalyMessageRegistry.IsRegisteredType<PlayerCombatPoseSampleMessage>(hash);
+        bool optionalPose = encryptedAndAuthenticated && !beforeHubReady && counter != 0 && counter != uint.MaxValue &&
+            (poseSample || AnomalyMessageRegistry.IsRegisteredType<PlayerPoseControlMessage>(hash) ||
+             AnomalyMessageRegistry.IsRegisteredType<PlayerCombatPoseControlMessage>(hash)) &&
+            AnomalyMessageRegistry.TryGetPolicy(hash, out var posePolicy) &&
+            posePolicy.Direction == AnomalyMessageDirection.ServerToClient && payloadBytes <= posePolicy.MaxPayloadBytes;
+        var rateResult = optionalPose
+            ? AnomalyReplayTable.PoseInboundRateLimiter.TryAcceptOptional(hash, payloadBytes)
+            : AnomalyReplayTable.InboundRateLimiter.TryAccept(hash, payloadBytes);
         if (!rateResult.Allowed)
         {
             HandleRateLimitResult(
@@ -233,6 +271,11 @@ public static class AnomalyMessaging
         var rx = AnomalyReplayTable.Instance.TryAcceptRx(channel, counter, out bool shouldLog);
         if (rx != AnomalyReplayState.RxResult.Accepted)
         {
+            // Unreliable pose samples may legitimately arrive outside the transport replay
+            // window or repeat after jitter. They still never reach deserialization/handlers.
+            if (optionalPose && poseSample &&
+                (rx == AnomalyReplayState.RxResult.RejectedReplay || rx == AnomalyReplayState.RxResult.RejectedStale))
+                return;
             if (shouldLog)
             {
                 RegisterProtocolViolation(
@@ -507,17 +550,12 @@ public static class AnomalyMessaging
         failure = null;
         try
         {
-            var transport = LiteNetLib4MirrorTransport.Singleton;
-            if (transport == null)
+            if (!TryGetPacketLimits(channel, out int maximum, out _))
             {
-                failure = "AnomalyMessaging.Send: No deployed transport is active.";
+                failure = "AnomalyMessaging.Send: The recipient transport is unavailable.";
                 return false;
             }
-            bool fits = TransportPacketPolicy.FitsReportedChannel(
-                channel,
-                encodedBytes,
-                transport.GetMaxPacketSize,
-                out int maximum);
+            bool fits = TransportPacketPolicy.Fits(maximum, encodedBytes);
             if (fits)
                 return true;
             int required = encodedBytes > int.MaxValue - TransportPacketPolicy.FramingReserveBytes
@@ -534,5 +572,33 @@ public static class AnomalyMessaging
                 $"AnomalyMessaging.Send: transport ceiling query failed closed: {exception.Message}";
             return false;
         }
+    }
+
+    private static bool TryGetPacketLimits(MessageChannel channel, out int maximumPacketBytes, out int singlePacketBytes)
+    {
+        maximumPacketBytes = singlePacketBytes = 0;
+        var transport = LiteNetLib4MirrorTransport.Singleton;
+        int channelId = (int)channel;
+        if (transport == null || transport.channels == null || channelId < 0 || channelId >= transport.channels.Length)
+            return false;
+
+        if (NetworkServer.active)
+        {
+            maximumPacketBytes = singlePacketBytes = transport.GetMaxPacketSize(channelId);
+            return maximumPacketBytes > 0;
+        }
+
+        // A client has one remote peer. Server budgets instead resolve the target connection.
+        var peer = LiteNetLib4MirrorCore.Host?.FirstPeer;
+        if (peer == null || peer.ConnectionState != Il2CppLiteNetLib.ConnectionState.Connected)
+            return false;
+        var delivery = transport.channels[channelId];
+        singlePacketBytes = peer.GetMaxSinglePacketSize(delivery);
+        maximumPacketBytes = TransportPacketPolicy.GetMaximumPacketBytes(singlePacketBytes,
+            delivery == Il2CppLiteNetLib.DeliveryMethod.ReliableOrdered ||
+            delivery == Il2CppLiteNetLib.DeliveryMethod.ReliableUnordered);
+        maximumPacketBytes = Math.Min(maximumPacketBytes, transport.GetMaxPacketSize(channelId));
+        singlePacketBytes = Math.Min(singlePacketBytes, maximumPacketBytes);
+        return maximumPacketBytes > 0;
     }
 }

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>HelloPlayerPoses</AssemblyName>
+  </PropertyGroup>
+  <Import Project="..\Anomaly.Server.Sample.props" />
+  <ItemGroup>
+    <Reference Include="CommandSystem.Core" HintPath="$(AnomalyServerReferenceDir)\CommandSystem.Core.dll" Private="false" />
+    <Reference Include="UnityEngine.AnimationModule" HintPath="$(AnomalyServerReferenceDir)\UnityEngine.AnimationModule.dll" Private="false" />
+    <Reference Include="Mirror" HintPath="$(AnomalyServerReferenceDir)\Mirror.dll" Private="false" />
+    <Reference Include="Pooling" HintPath="$(AnomalyServerReferenceDir)\Pooling.dll" Private="false" />
+  </ItemGroup>
+</Project>

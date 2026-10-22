@@ -1,5 +1,4 @@
 using MelonLoader;
-using MelonLoader.Utils;
 
 [assembly: MelonInfo(typeof(Anomaly.Bootstrap.Core), "Anomaly Bootstrap", "1.0.0", "AnomalyLabs", null)]
 [assembly: MelonGame("Northwood", "SCPSL")]
@@ -39,38 +38,14 @@ public sealed class Core : MelonPlugin
     {
         try
         {
-            ApplyTrustGate();
             if (!RuntimeGuard.Verify(requireComplete: false))
                 throw new InvalidOperationException("Required Bootstrap protection is unavailable.");
             State = StartupState.Ready;
         }
         catch (Exception ex)
         {
-            Fail("The pre-load trust gate or protection failed before MelonMods were loaded.", ex);
+            Fail("Bootstrap protection failed before MelonMods were loaded.", ex);
         }
-    }
-
-    private static void ApplyTrustGate()
-    {
-        var anomalyRoot = Path.Combine(MelonEnvironment.UserDataDirectory, "Anomaly");
-        var gate = new ModTrustGate(
-            MelonEnvironment.ModsDirectory,
-            Path.Combine(anomalyRoot, "Modules"),
-            Path.Combine(anomalyRoot, "mod-trust.json"),
-            Path.Combine(anomalyRoot, "Quarantine"));
-
-        var result = gate.Apply();
-        foreach (var approved in result.Approved)
-            MelonLogger.Msg($"Mod trust approved: {approved.FileName} ({approved.Sha256}).");
-        foreach (var warning in result.Warnings)
-            MelonLogger.Warning(warning);
-        foreach (var quarantined in result.Quarantined)
-            MelonLogger.Warning($"Unapproved module quarantined before load: {quarantined.FileName} ({quarantined.Sha256}).");
-        foreach (var failure in result.Failures)
-            MelonLogger.Error(failure);
-
-        if (result.Failures.Count > 0)
-            throw new InvalidOperationException("The pre-load trust gate could not contain every unapproved assembly.");
     }
 
     public override void OnApplicationStarted()
@@ -85,9 +60,13 @@ public sealed class Core : MelonPlugin
         if (State != StartupState.Ready || Environment.TickCount64 < _nextVerification)
             return;
         _nextVerification = Environment.TickCount64 + 1000;
-        ProtectedMethodCatalog.ResolveNativeTargetsAfterSupportReady();
-        RuntimeGuard.Verify();
-        LogGuardDiagnostics();
+        using (GuardTimingDiagnostics.Begin(GuardTimingPhase.CoreResolve))
+            ProtectedMethodCatalog.ResolveNativeTargetsAfterSupportReady();
+        using (GuardTimingDiagnostics.Begin(GuardTimingPhase.CoreVerify))
+            RuntimeGuard.Verify();
+        using (GuardTimingDiagnostics.Begin(GuardTimingPhase.CoreLogDiagnostics))
+            LogGuardDiagnostics();
+        GuardTimingDiagnostics.ReportIfDue();
     }
 
     private void LogGuardDiagnostics()

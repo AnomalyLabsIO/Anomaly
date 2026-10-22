@@ -16,6 +16,7 @@ using Anomaly.Client.Internal.Bootstrap;
 using Anomaly.Client.Api.Internal.UI;
 using Anomaly.Client.Internal.UI;
 using Anomaly.Client.Internal.Motion;
+using Anomaly.Client.Internal.Poses;
 using Anomaly.Client.Internal.Modding;
 using Anomaly.Client.Patches.Menu;
 using Anomaly.Client.Patches.Menu.ModSettings;
@@ -94,6 +95,7 @@ public class Core : MelonMod
         _capabilitiesReady = InitializeFeature("capabilities", ClientCapabilities.Initialize);
         InitializeFeature("motion", LocalPlayerMotionAdapter.Initialize);
         _clientRuntimeReady = InitializeFeature("runtime-hooks", ClientRuntime.Initialize);
+        InitializeFeature("player-poses", PoseRuntime.Initialize);
         _diagnosticsReady = InitializeFeature("diagnostics", DiagnosticBootstrap.Initialize);
         InitializeFeature("ui", UiBootstrap.Init);
         InitializeFeature("asset-bundles", AssetBundleManager.Initialize);
@@ -201,6 +203,7 @@ public class Core : MelonMod
     public override void OnUpdate()
     {
         AuthHandler.UpdateIntegrityMonitoring();
+        PoseRuntime.Update();
         UpdateFeature("asset-bundles", AssetBundleManager.Update, failClosed: true);
         if (_clientRuntimeReady)
             _clientRuntimeReady = UpdateFeature("runtime-hooks", ClientRuntime.Update, failClosed: true);
@@ -210,6 +213,7 @@ public class Core : MelonMod
 
     public override void OnApplicationQuit()
     {
+        ShutdownFeature("player-poses", PoseRuntime.Shutdown);
         if (_managedModsReady) ShutdownFeature("managed-mods", ManagedModRuntime.Shutdown);
         if (_clientRuntimeReady) ShutdownFeature("runtime-hooks", ClientRuntime.Shutdown);
         RuntimeTeardown.FlushBeforeCancel(

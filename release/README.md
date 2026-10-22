@@ -1,5 +1,101 @@
 # Anomaly release production
 
+To build the client, server, and developer SDK release artifacts locally, run this from the repository
+root in PowerShell 7:
+
+```powershell
+./release/Build-RuntimeRelease.ps1 -Version 1.0.0
+```
+
+The output directory, `artifacts/runtime-1.0.0/`, contains:
+
+- `anomaly-client-1.0.0.zip`
+- `anomaly-server-1.0.0.zip`
+- `anomaly-sdk-1.0.0.zip`
+- `SHA256SUMS`, covering all three ZIPs
+
+The script builds
+Bootstrap, Client, Api, Shared, AssetValidation, and Server in Release with
+`DeployLocal=false`. It works from the current checkout, including uncommitted
+changes, and needs no Git tag or signing keys. Use a new or empty output
+directory; existing archives are never overwritten. `-Version` labels the ZIP
+filenames; assembly and MelonMod versions remain defined by their source.
+
+Install the client ZIP beside `SCPSL.exe` and the server ZIP into the LabAPI root,
+as described in the [main README](../README.md). Client directories are `Mods`,
+`Plugins`, `UserLibs`, and `UserData`. The client ZIP includes the checked-in
+logo/background pack from `release/assets/skins/`, installed as
+`UserData/Anomaly/AssetBundles/personal-skins.bundle` and
+`personal-skins.index.json`. Only that pair is copied; authoring logs, Unity
+manifests, smoke plugins, other local packs, and personal profiles are excluded.
+
+The minimum additional third-party runtime libraries for the current supported
+game/loader profile are:
+
+| ZIP | Bundled third-party DLLs | Runtime support already supplied by the host |
+|---|---|---|
+| Client | `BouncyCastle.Cryptography.dll`, `AssetsTools.NET.dll`, `YamlDotNet.dll` in `UserLibs/` | MelonLoader 0.7.3 supplies HarmonyX, MonoMod, Newtonsoft.Json, and Il2CppInterop; the game supplies Unity/generated interop; .NET 6 supplies framework assemblies. |
+| Server | `0Harmony.dll` (Lib.Harmony 2.2.2) in `dependencies/global/` | SCP:SL 14.2.7 supplies Bouncy Castle 2.0.0.0 and game/Unity assemblies; LabAPI supplies the plugin host; the server supplies its framework runtime. |
+
+The client also carries five Anomaly DLLs: Bootstrap in `Plugins/`, Client in
+`Mods/`, and Api, Shared, and AssetValidation in `UserLibs/`. The server carries
+Server in `plugins/global/` and Shared in `dependencies/global/`. These installation
+ZIPs contain only those DLLs and the client's skin bundle/index pair. Documentation,
+license notices, and dependency declarations are maintained separately. Build tools,
+test libraries, NVorbis, and raw-image decoders are unnecessary at runtime.
+
+Extract the SDK ZIP into a separate developer directory. It includes the client
+and server API DLLs, Shared and its public Bouncy Castle compile dependency,
+adjacent XML IntelliSense docs, shipped API baselines, reference metadata,
+developer guides, four starter projects, and their supporting sources. SDK
+documentation and license files stay in that archive, separate from game
+installation files. Its entries come from the complete `anomaly-sdk` definition
+in `package-layout.json`.
+
+The script uses the DLL entries in `package-layout.json` as its allowlist and audits the emitted
+assembly references against packaged DLLs and the actual resolved host inputs.
+The default skin pair is declared in that layout for the full release pipeline
+as well; `-SkinIndexPath` substitutes a different skin pair for the local command.
+It validates the skin index, bundle length/hash, and both texture roots with the
+production bundle validator, then checks every ZIP entry's path, length, and
+SHA-256. All three ZIPs are validated, and the SDK's four starters and its
+positive/negative compile-dependency probes are built using the same host
+references as the runtime projects, before any artifacts reach the output
+directory. `DeployLocal=false` applies throughout.
+This command creates unsigned local packages; the complete release gate below
+provides the additional core tests, reproducibility, and signing evidence for
+publication.
+
+After building the default skin package, run the focused regression checks:
+
+```powershell
+./release/Test-RuntimeRelease.ps1 -Version 1.0.0
+```
+
+These require the exact runtime DLL/install paths and skin pair with no extra
+files, verify the SDK's declared files and hashes, verify `SHA256SUMS`, reject
+corrupt or incomplete skin packs, and prove an existing output directory is
+rejected without changing its artifacts. They do not start the game or server.
+
+Building requires the .NET 8 SDK (or a newer SDK plus the .NET 8 runtime) and the
+configured local game/loader references in `Directory.Build.props`. Override
+reference locations or supply a different exported skin pair when needed:
+
+```powershell
+./release/Build-RuntimeRelease.ps1 -Version 1.0.0 `
+  -OutputDirectory artifacts/my-runtime-release `
+  -ClientRoot 'E:\Games\SCP Secret Laboratory - Modded' `
+  -ServerGameDirectory 'E:\Server\server' `
+  -ServerReferenceDirectory 'E:\Server\server\SCPSL_Data\Managed' `
+  -LabApiDirectory 'E:\Server\server\SCPSL_Data\Managed' `
+  -SkinIndexPath 'E:\Packs\skins\personal-skins.index.json'
+```
+
+The skin index must have exactly `game/skin/logo` and `game/skin/background`
+Texture2D roots, with its named `.bundle` beside it. An invalid or missing pack
+fails the command. Reference overrides apply to both builds and dependency
+capture; missing references report their configured path.
+
 Run the complete unsigned release gate from the repository root:
 
 ```powershell
@@ -52,7 +148,7 @@ of redistributing competing copies. The SCP:SL, Unity, IL2CPP interop,
 MelonLoader, LabAPI, and
 CLR/framework assemblies remain host-provided and are not redistributed.
 
-Every client, server, and SDK archive includes the project `LICENSE`, `NOTICE`,
+The complete release pipeline's client, server, and SDK archives include the project `LICENSE`, `NOTICE`,
 and the exact `THIRD_PARTY_DEPENDENCIES.md` whose SHA-256 is bound into the
 dependency inventory. The declaration contains an assembly-by-assembly map for
 all redistributed third-party runtime DLLs. Mono.Cecil remains a build-tool

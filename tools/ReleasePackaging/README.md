@@ -1,5 +1,27 @@
 # Deterministic release packaging
 
+`release/Build-RuntimeRelease.ps1` uses the `create-local` command to
+produce client, server, and SDK ZIPs plus `SHA256SUMS` from a local checkout. Installation ZIPs
+contain only the declared runtime DLLs and the client's skin bundle/index pair;
+documentation and license files are excluded. It shares the
+reviewed layout, PE assembly dependency audit, archive writer, and ZIP hash
+verification below. It also validates and includes the logo/background skin
+pair with the production index and bundle validators. The SDK uses its complete
+declared layout, including documentation, baselines, reference metadata,
+samples, and license files. The PowerShell wrapper compiles the staged SDK
+starters and positive/negative compile probes before copying the artifacts to
+the destination. This mode accepts a dirty
+checkout and emits no commit receipt or signing evidence; the existing
+`create` and `verify` release workflow retains its full contract.
+
+```text
+create-local <repository-root> <output-directory> <version> <resolved-reference-directory> <skin-index-path>
+create-runtime <repository-root> <output-directory> <version> <resolved-reference-directory> <skin-index-path>
+validate-skins <skin-index-path>
+```
+
+`create-runtime` remains available for a two-ZIP runtime-only package.
+
 `Build-Release.ps1` builds the x64 runtime projects, captures each project's
 resolved assembly inputs, and invokes this tool. The higher-level
 `Invoke-CompleteReleaseGate.ps1` also runs tests, API/compile-list/secret gates,
@@ -38,7 +60,7 @@ Castle from an isolated copy and proves the same probe fails.
 The dependency inventory records names, sizes, and SHA-256 hashes without
 publishing machine-specific absolute paths. `release-receipt.json` binds the
 source commit, archive hashes, runtime version, reproducibility timestamp, and
-canonical release commands. Every archive carries `LICENSE`, `NOTICE`, and the
+canonical release commands. Each full release archive carries `LICENSE`, `NOTICE`, and the
 same `THIRD_PARTY_DEPENDENCIES.md` whose hash is bound by the inventory. Signing
 is a separate operator step so private keys never enter the repository or
 ordinary CI workers.

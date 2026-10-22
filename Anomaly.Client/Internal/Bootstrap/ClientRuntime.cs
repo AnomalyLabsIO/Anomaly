@@ -133,6 +133,8 @@ internal static class ClientRuntime
                 () => InteractionCoordinator.OnClientInteracted += interacted,
                 () => InteractionCoordinator.OnClientInteracted -= interacted),
             new InitializationStep(PlayerRegistry.Resync, PlayerRegistry.Clear),
+            new InitializationStep(Anomaly.Client.Api.Internal.Poses.PoseCaptureCache.Initialize,
+                Anomaly.Client.Api.Internal.Poses.PoseCaptureCache.Shutdown),
             new InitializationStep(PlayerObservationBridge.Initialize, PlayerObservationBridge.Shutdown),
             new InitializationStep(ItemStateRuntime.Initialize, ItemStateRuntime.Shutdown),
             new InitializationStep(FacilityEventsRuntime.Init, FacilityEventsRuntime.Shutdown));
@@ -274,6 +276,7 @@ internal static class ClientRuntime
         // feature health flips to Failed and the authenticated session is torn
         // down instead of continuing in a partially-wired state.
         SchedulerTick.Update();
+        Anomaly.Client.Api.Internal.Poses.PoseCaptureCache.Tick();
         Anomaly.Client.Internal.Map.FacilityRecipeClient.Tick();
         InputPoller.Update();
         VirtualInputs.TickProviders();

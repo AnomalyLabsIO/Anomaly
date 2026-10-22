@@ -20,9 +20,12 @@ internal static class ProtectedMethodCatalog
     private const string Packet = "Il2CppLiteNetLib.NetPacket";
     private static readonly object Sync = new();
     private static readonly string[] CoreNames = { "Anomaly.Bootstrap", "Anomaly.Client", "Anomaly.Client.Api", "Anomaly.Shared" };
+    private static readonly HashSet<string> CoreAssemblyNames = new(CoreNames, StringComparer.Ordinal);
     private static readonly Dictionary<string, Assembly> PinnedAssemblies = new(StringComparer.Ordinal);
     private static readonly HashSet<Assembly> CoreAssemblies = new(ReferenceEqualityComparer.Instance);
     private static readonly HashSet<MethodBase> External = new();
+    private static MethodBase[] _externalSnapshot = Array.Empty<MethodBase>();
+    private static bool _externalSnapshotDirty = true;
     private static readonly HashSet<MethodBase> Infrastructure = new();
     private static readonly HashSet<(MethodBase Target, MethodInfo Patch, HarmonyPatchType Kind)> Trusted = new();
     private static readonly Dictionary<IntPtr, MethodBase> NativeTargets = new();
@@ -49,7 +52,7 @@ internal static class ProtectedMethodCatalog
         internal string TypeName { get; }
         internal string Name { get; }
         internal IReadOnlyList<string> Parameters { get; }
-        internal string Key => AssemblyName + ":" + TypeName + "." + Name + "(" + string.Join(",", Parameters) + ")";
+        internal string Key { get; }
 
         internal MethodSpec(string assembly, string type, string name, params string[] parameters)
         {
@@ -57,6 +60,7 @@ internal static class ProtectedMethodCatalog
             TypeName = type;
             Name = name;
             Parameters = Array.AsReadOnly(parameters.ToArray());
+            Key = AssemblyName + ":" + TypeName + "." + Name + "(" + string.Join(",", Parameters) + ")";
         }
     }
 
@@ -94,6 +98,9 @@ internal static class ProtectedMethodCatalog
         new("BouncyCastle.Cryptography", "Org.BouncyCastle.Crypto.Signers.DsaDigestSigner", "VerifySignature", "System.Byte[]"),
         new("BouncyCastle.Cryptography", "Org.BouncyCastle.Crypto.Agreement.X25519Agreement", "CalculateAgreement", "Org.BouncyCastle.Crypto.ICipherParameters", "System.Byte[]", "System.Int32"),
     };
+
+    private static readonly HashSet<string> RelevantAssemblyNames = new(
+        CoreNames.Concat(RequiredMethods.Select(spec => spec.AssemblyName)), StringComparer.Ordinal);
 
     internal static IReadOnlyList<MethodSpec> RequiredMethodSpecifications => Array.AsReadOnly(RequiredMethods);
 
@@ -157,6 +164,8 @@ internal static class ProtectedMethodCatalog
         if (_resolving)
             return;
         _resolving = true;
+        using var resolveTiming = GuardTimingDiagnostics.Begin(GuardTimingPhase.CatalogResolveLoaded);
+        GuardTimingDiagnostics.CountTotal(GuardTimingTotal.ResolverCalls);
         try
         {
             lock (Sync)
@@ -165,8 +174,9 @@ internal static class ProtectedMethodCatalog
                     _mainThreadId = Environment.CurrentManagedThreadId;
                 foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
                 {
+                    GuardTimingDiagnostics.CountTotal(GuardTimingTotal.ResolverAssemblies);
                     string? name = assembly.GetName().Name;
-                    if (name == null || (!CoreNames.Contains(name) && !RequiredMethods.Any(spec => spec.AssemblyName == name)))
+                    if (name == null || !RelevantAssemblyNames.Contains(name))
                         continue;
                     if (PinnedAssemblies.TryGetValue(name, out var previous))
                     {
@@ -176,7 +186,7 @@ internal static class ProtectedMethodCatalog
                     }
                     PinnedAssemblies.Add(name, assembly);
                     _nativeRefreshRequired = true;
-                    if (CoreNames.Contains(name))
+                    if (CoreAssemblyNames.Contains(name))
                         CoreAssemblies.Add(assembly);
                 }
                 ResolvePlatform();
@@ -189,7 +199,7 @@ internal static class ProtectedMethodCatalog
                     MethodBase? method = type == null ? null : ResolveExactMethod(type, spec.Name, spec.Parameters.ToArray());
                     if (method == null)
                         continue;
-                    _nativeRefreshRequired |= External.Add(method);
+                    _nativeRefreshRequired |= AddExternalTargetLocked(method);
                     RequiredRuntimeMethods.Add(method);
                     ResolvedSpecs.Add(spec.Key);
                 }
@@ -240,13 +250,15 @@ internal static class ProtectedMethodCatalog
         // The first patch can arrive immediately after AssemblyLoad. Resolve a
         // relevant new assembly BEFORE returning None to the policy interceptor.
         string? assemblyName = target.Module.Assembly.GetName().Name;
-        if (CoreNames.Contains(assemblyName) || RequiredMethods.Any(spec => spec.AssemblyName == assemblyName))
+        if (assemblyName != null && RelevantAssemblyNames.Contains(assemblyName))
         {
+            using var classificationTiming = GuardTimingDiagnostics.Begin(GuardTimingPhase.CatalogCandidateClassification);
+            GuardTimingDiagnostics.CountTotal(GuardTimingTotal.CandidateClassifications);
             ResolveLoadedAssemblies();
             lock (Sync)
             {
                 if (Infrastructure.Contains(target)) return ProtectionScope.Infrastructure;
-                if (CoreNames.Contains(assemblyName)) return ProtectionScope.Core;
+                if (CoreAssemblyNames.Contains(assemblyName)) return ProtectionScope.Core;
                 if (External.Contains(target)) return ProtectionScope.External;
             }
         }
@@ -260,7 +272,7 @@ internal static class ProtectedMethodCatalog
 
     internal static void RegisterExternalTarget(MethodBase target)
     {
-        lock (Sync) _nativeRefreshRequired |= External.Add(target);
+        lock (Sync) _nativeRefreshRequired |= AddExternalTargetLocked(target);
     }
 
     internal static void RegisterTrustedPatch(MethodBase target, MethodInfo patch, HarmonyPatchType kind)
@@ -399,7 +411,35 @@ internal static class ProtectedMethodCatalog
     {
         foreach (MethodBase method in type.GetMethods(AllDeclared).Cast<MethodBase>().Concat(type.GetConstructors(AllDeclared)))
             if (!method.IsAbstract && !method.ContainsGenericParameters)
-                _nativeRefreshRequired |= External.Add(method);
+                _nativeRefreshRequired |= AddExternalTargetLocked(method);
+    }
+
+    // All External insertion paths hold Sync. Registration remains getter-free;
+    // only the detached target snapshot is invalidated by a new registration.
+    private static bool AddExternalTargetLocked(MethodBase target)
+    {
+        bool added = External.Add(target);
+        if (added)
+            _externalSnapshotDirty = true;
+        return added;
+    }
+
+    private static (string TypeName, string MethodName)? GetClientPatchDescriptor(MethodBase target)
+    {
+        string? targetType = target.DeclaringType?.FullName;
+        if (targetType == "Il2Cpp.CustomLiteNetLib4MirrorTransport" && target.Name == "GetConnectData")
+            return ("Anomaly.Client.Patches.Auth.NetDataWriterPut", "OnPrefix1");
+        if (targetType == "Il2Cpp.CustomLiteNetLib4MirrorTransport" && target.Name == "OnConncetionRefused")
+            return ("Anomaly.Client.Patches.Auth.NetDataWriterPut", "ConnectionRefused");
+        if (targetType == "Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport" && target.Name == "ClientDisconnect")
+            return ("Anomaly.Client.Patches.Auth.NetDataWriterPut", "ObserveLocalDisconnect");
+        if (targetType == "Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorClient" && target.Name == "OnPeerDisconnected")
+            return ("Anomaly.Client.Patches.Auth.NetDataWriterPut", "ObservePeerDisconnect");
+        if (targetType == "Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorClient" && target.Name == "ConnectClient")
+            return ("Anomaly.Client.Patches.Auth.ClientConnectAdmissionGuard", "Prefix");
+        if (targetType == "Il2CppLiteNetLib.LiteNetManager" && target.Name is "SendRaw" or "SendRawAndRecycle" or "SendRawCore" or "SendRawCoreWithCleanup")
+            return ("Anomaly.Client.Patches.Auth.AdmissionTransportGuard", "Prefix");
+        return null;
     }
 
     private static void ProtectInfrastructureTree(Type type)
@@ -415,21 +455,20 @@ internal static class ProtectedMethodCatalog
     {
         if (!PinnedAssemblies.TryGetValue("Anomaly.Client", out var client))
             return;
-        foreach (var target in External.ToArray())
+        // Preserve the original detached snapshot and metadata read order. New
+        // registrations invalidate it even when reflection reenters this lock.
+        // Eligibility and actual client bindings are retried on every resolution.
+        if (_externalSnapshotDirty)
         {
-            string? targetType = target.DeclaringType?.FullName;
-            if (targetType == "Il2Cpp.CustomLiteNetLib4MirrorTransport" && target.Name == "GetConnectData")
-                TrustClientPatch(client, target, "Anomaly.Client.Patches.Auth.NetDataWriterPut", "OnPrefix1");
-            else if (targetType == "Il2Cpp.CustomLiteNetLib4MirrorTransport" && target.Name == "OnConncetionRefused")
-                TrustClientPatch(client, target, "Anomaly.Client.Patches.Auth.NetDataWriterPut", "ConnectionRefused");
-            else if (targetType == "Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport" && target.Name == "ClientDisconnect")
-                TrustClientPatch(client, target, "Anomaly.Client.Patches.Auth.NetDataWriterPut", "ObserveLocalDisconnect");
-            else if (targetType == "Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorClient" && target.Name == "OnPeerDisconnected")
-                TrustClientPatch(client, target, "Anomaly.Client.Patches.Auth.NetDataWriterPut", "ObservePeerDisconnect");
-            else if (targetType == "Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorClient" && target.Name == "ConnectClient")
-                TrustClientPatch(client, target, "Anomaly.Client.Patches.Auth.ClientConnectAdmissionGuard", "Prefix");
-            else if (targetType == "Il2CppLiteNetLib.LiteNetManager" && new[] { "SendRaw", "SendRawAndRecycle", "SendRawCore", "SendRawCoreWithCleanup" }.Contains(target.Name))
-                TrustClientPatch(client, target, "Anomaly.Client.Patches.Auth.AdmissionTransportGuard", "Prefix");
+            _externalSnapshot = External.ToArray();
+            _externalSnapshotDirty = false;
+        }
+        var snapshot = _externalSnapshot;
+        foreach (var target in snapshot)
+        {
+            var descriptor = GetClientPatchDescriptor(target);
+            if (descriptor.HasValue)
+                TrustClientPatch(client, target, descriptor.Value.TypeName, descriptor.Value.MethodName);
         }
     }
 

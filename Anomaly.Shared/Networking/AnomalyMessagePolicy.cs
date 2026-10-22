@@ -143,16 +143,42 @@ namespace Anomaly.Shared.Networking
 
         private readonly object _sync = new object();
         private readonly Dictionary<uint, MessageBucket> _byHash = new Dictionary<uint, MessageBucket>();
-        private readonly MessageBucket _aggregate = new MessageBucket(
-            AggregateMessageBurst,
-            AggregateByteBurst,
-            Stopwatch.GetTimestamp());
+        private readonly MessageBucket _aggregate;
+        private readonly int _messageBurst;
+        private readonly double _messagesPerSecond;
+        private readonly long _byteBurst;
+        private readonly double _bytesPerSecond;
 
         private long _dropWindowStart;
         private int _droppedInWindow;
         private bool _disconnectRaised;
 
-        public AnomalyRateLimitResult TryAccept(uint messageHash, int payloadBytes)
+        public AnomalyInboundRateLimiter() : this(AggregateMessageBurst, AggregateMessagesPerSecond,
+            AggregateByteBurst, AggregateBytesPerSecond) { }
+
+        private AnomalyInboundRateLimiter(int messageBurst, double messagesPerSecond, long byteBurst, double bytesPerSecond)
+        {
+            _messageBurst = messageBurst; _messagesPerSecond = messagesPerSecond;
+            _byteBurst = byteBurst; _bytesPerSecond = bytesPerSecond;
+            _aggregate = new MessageBucket(messageBurst, byteBurst, Stopwatch.GetTimestamp());
+        }
+
+        // Only the authenticated client receive path uses the extra optional pose allowance.
+        // Raw admission remains bounded before decryption and cannot classify ciphertext.
+        internal static AnomalyInboundRateLimiter CreateClientRaw() => new AnomalyInboundRateLimiter(
+            AggregateMessageBurst + 1024, AggregateMessagesPerSecond + 512,
+            AggregateByteBurst + 384L * 1024, AggregateBytesPerSecond + 192d * 1024);
+
+        internal static AnomalyInboundRateLimiter CreatePoseTraffic() =>
+            new AnomalyInboundRateLimiter(1024, 512, 384L * 1024, 192d * 1024);
+
+        internal AnomalyRateLimitResult TryAcceptOptional(uint messageHash, int payloadBytes) =>
+            TryAcceptCore(messageHash, payloadBytes, optional: true);
+
+        public AnomalyRateLimitResult TryAccept(uint messageHash, int payloadBytes) =>
+            TryAcceptCore(messageHash, payloadBytes, optional: false);
+
+        private AnomalyRateLimitResult TryAcceptCore(uint messageHash, int payloadBytes, bool optional)
         {
             long now = Stopwatch.GetTimestamp();
             lock (_sync)
@@ -162,18 +188,18 @@ namespace Anomaly.Shared.Networking
 
                 _aggregate.Refill(
                     now,
-                    AggregateMessageBurst,
-                    AggregateMessagesPerSecond,
-                    AggregateByteBurst,
-                    AggregateBytesPerSecond);
+                    _messageBurst,
+                    _messagesPerSecond,
+                    _byteBurst,
+                    _bytesPerSecond);
 
                 if (!_byHash.TryGetValue(messageHash, out var perHash))
                 {
                     if (_byHash.Count >= MaxTrackedHashes)
                         return RegisterDropLocked(now);
                     perHash = new MessageBucket(
-                        PerHashMessageBurst,
-                        AggregateByteBurst,
+                        _messageBurst,
+                        _byteBurst,
                         now);
                     _byHash.Add(messageHash, perHash);
                 }
@@ -181,14 +207,16 @@ namespace Anomaly.Shared.Networking
                 {
                     perHash.Refill(
                         now,
-                        PerHashMessageBurst,
-                        PerHashMessagesPerSecond,
-                        AggregateByteBurst,
-                        AggregateBytesPerSecond);
+                        _messageBurst,
+                        _messagesPerSecond,
+                        _byteBurst,
+                        _bytesPerSecond);
                 }
 
                 if (!_aggregate.CanConsume(payloadBytes) || !perHash.CanConsume(payloadBytes))
-                    return RegisterDropLocked(now);
+                    return optional
+                        ? new AnomalyRateLimitResult(false, false, false, _droppedInWindow)
+                        : RegisterDropLocked(now);
 
                 _aggregate.Consume(payloadBytes);
                 perHash.Consume(payloadBytes);

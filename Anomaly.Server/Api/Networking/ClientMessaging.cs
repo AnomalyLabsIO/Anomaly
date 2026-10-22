@@ -7,6 +7,14 @@ namespace Anomaly.Server.Api.Networking;
 /// <summary>Authenticated delivery to real Anomaly clients using native LabAPI players.</summary>
 public static class ClientMessaging
 {
+    /// <summary>
+    /// Gets the current recipient-safe capacity for a registered outgoing message contract.
+    /// Does not serialize or send the message, advance counters, or change the session.
+    /// False indicates an unavailable recipient, transport, or registered contract.
+    /// </summary>
+    public static bool TryGetPayloadBudget(Player player, IAnomalyMessage contract, out MessagePayloadBudget budget) =>
+        ServerTransport.TryGetPayloadBudget(player?.ReferenceHub, contract, out budget);
+
     /// <summary>Attempts delivery; false indicates an unavailable client or rejected message policy.</summary>
     public static bool TrySend(Player player, IAnomalyMessage message) =>
         player != null && message != null && ServerTransport.TrySendToClient(player.ReferenceHub, message);

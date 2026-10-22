@@ -27,6 +27,13 @@
     <Compile Include="..\Anomaly.Server\FileTransfer\AssetPackSnapshot.cs" Link="Production\AssetPackSnapshot.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\AssetChunkReader.cs" Link="Production\AssetChunkReader.cs" />
     <Compile Include="..\Anomaly.Server\Assets\DecorativeVisualState.cs" Link="Production\DecorativeVisualState.cs" />
+    <Compile Include="..\Anomaly.Server\Poses\PlayerPoseState.cs" Link="Production\PlayerPoseState.cs" />
+    <Compile Include="..\Anomaly.Server\Poses\PoseTrafficBudget.cs" Link="Production\PoseTrafficBudget.cs" />
+    <Compile Include="..\Anomaly.Server\Poses\PoseProjectionPolicy.cs" Link="Production\PoseProjectionPolicy.cs" />
+    <Compile Include="..\Anomaly.Server\Poses\PoseSamplePacketizer.cs" Link="Production\PoseSamplePacketizer.cs" />
+    <Compile Include="..\Anomaly.Server\Poses\PoseModelEpochs.cs" Link="Production\PoseModelEpochs.cs" />
+    <Compile Include="..\Anomaly.Server\Poses\PoseTargetLedger.cs" Link="Production\PoseTargetLedger.cs" />
+    <Compile Include="..\Anomaly.Server\Api\Features\PlayerPoseOptions.cs" Link="Production\PlayerPoseOptions.cs" />
     <Compile Include="..\Anomaly.Server\Content\ContentGrantGate.cs" Link="Production\ContentGrantGate.cs" />
     <Compile Include="..\Anomaly.Server\Content\ContentActivationCoordinator.cs" Link="Production\ContentActivationCoordinator.cs" />
     <Compile Include="..\Anomaly.Server\Api\Content\ContentReadiness.cs" Link="Production\ContentReadiness.cs" />

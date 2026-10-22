@@ -10,9 +10,25 @@ helpers live in `Anomaly.Shared.Networking`. Client and server companions
 reference that same assembly. The client and server `AnomalyMessaging` entry
 points are runtime-specific.
 
-Public v1 uses application/auth protocol `6`. Older protocol peers are rejected
-clearly during authentication; there is no downgrade path. This protocol bump
-does not change the fixed-layout authentication handshake.
+The current application/auth protocol is `8`. Older protocol peers are rejected
+clearly during authentication; there is no downgrade path. Optional player poses
+use a separately versioned renderer capability and do not change that protocol.
+
+## Recipient-safe payload budgets
+
+Client code can call `AnomalyMessaging.TryGetPayloadBudget(contract, out budget)`;
+server code uses `ClientMessaging.TryGetPayloadBudget(player, contract, out budget)`.
+The contract must already be registered for the outgoing direction. The query
+does not serialize, send, advance counters or disconnect, and returns false when
+the authenticated session or transport is unavailable.
+
+`budget.MaxPayloadBytes` limits bytes written by `Serialize`.
+`budget.MaxUnfragmentedPayloadBytes` additionally avoids transport fragmentation.
+Both account for the selected channel, actual peer MTU, Mirror admission limit,
+message contract, Anomaly framing, and directional encryption's complete marker,
+nonce and tag. Local unsecured delivery reserves no AEAD overhead. The send path
+rechecks because peer state and MTU can change after querying. A budget is a size
+limit, not a reservation of bandwidth; pace high-frequency producers separately.
 
 ## Message contract
 

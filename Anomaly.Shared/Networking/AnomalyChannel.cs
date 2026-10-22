@@ -18,8 +18,8 @@ namespace Anomaly.Shared.Networking
         public const int MaxEnvelopeBytes = 2 * 1024 * 1024;
 
         /// <summary>
-        /// AES-GCM envelopes add a 32-byte nonce and a 16-byte authentication
-        /// tag. Keep a small margin for provider-specific framing.
+        /// Directional AEAD envelopes add a 4-byte marker, 12-byte nonce and
+        /// 16-byte authentication tag. Keep a conservative framing margin.
         /// </summary>
         public const int MaxEncryptedEnvelopeBytes = MaxEnvelopeBytes + 64;
     }

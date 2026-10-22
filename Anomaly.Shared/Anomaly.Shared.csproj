@@ -54,6 +54,16 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Auth\AuthCrypto.cs" />
+        <Compile Include="Networking\MessagePayloadBudget.cs" />
+        <Compile Include="Poses\PoseFrame.cs" />
+        <Compile Include="Poses\PoseRigCatalog.cs" />
+    <Compile Include="Poses\PoseRigidAnchorCatalog.cs" />
+        <Compile Include="Poses\PoseReplication.cs" />
+        <Compile Include="Poses\PoseWireCodec.cs" />
+        <Compile Include="Networking\Messages\PlayerPoseControlMessage.cs" />
+        <Compile Include="Networking\Messages\PlayerPoseSampleMessage.cs" />
+        <Compile Include="Networking\Messages\PlayerCombatPoseControlMessage.cs" />
+        <Compile Include="Networking\Messages\PlayerCombatPoseSampleMessage.cs" />
         <Compile Include="Auth\AuthConnectionContext.cs" />
         <Compile Include="Auth\AuthSessionKeys.cs" />
         <Compile Include="Auth\AuthTranscript.cs" />

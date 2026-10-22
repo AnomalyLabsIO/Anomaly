@@ -9,7 +9,7 @@ using System.Text.Json;
 
 namespace Anomaly.ReleasePackaging;
 
-internal static class ReleasePackageBuilder
+internal static partial class ReleasePackageBuilder
 {
     private const string LayoutRelativePath = "release/package-layout.json";
     private const string ThirdPartyRelativePath = "THIRD_PARTY_DEPENDENCIES.md";
@@ -98,6 +98,9 @@ internal static class ReleasePackageBuilder
                     Sha256 = HashFile(destination),
                 });
             }
+
+            if (package.Target == "client-runtime")
+                ValidateSkinPack(ResolveUnderRoot(packageRoot, SkinPackDirectory + "/personal-skins.index.json"));
 
             packageInventory.RuntimeClosure = BuildAssemblyClosure(
                 package, packageRoot, inventory.ResolvedInputs, package.RuntimeClosure, "runtime");
@@ -654,6 +657,8 @@ internal static class ReleasePackageBuilder
         {
             ["anomaly-client"] = ("client-runtime",
             [
+                "UserData/Anomaly/AssetBundles/personal-skins.bundle",
+                "UserData/Anomaly/AssetBundles/personal-skins.index.json",
                 "Plugins/Anomaly.Bootstrap.dll",
                 "Mods/Anomaly.Client.dll",
                 "UserLibs/Anomaly.Client.Api.dll",
@@ -687,6 +692,11 @@ internal static class ReleasePackageBuilder
                 "samples/HelloAnomalyServer/HelloAnomalyServer.csproj",
                 "samples/HelloAnomalyServer/Plugin.cs",
                 "samples/HelloAnomalyServer/README.md",
+                "docs/PLAYER_POSES.md",
+                "docs/COMBAT_POSES.md",
+                "samples/HelloPlayerPoses/HelloPlayerPoses.csproj",
+                "samples/HelloPlayerPoses/Plugin.cs",
+                "samples/HelloPlayerPoses/README.md",
                 "samples/Anomaly.Sample.props",
                 "samples/HelloAnomalyMod/HelloAnomalyMod.csproj",
                 "samples/HelloAnomalyMod/Core.cs",

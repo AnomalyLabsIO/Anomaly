@@ -373,6 +373,12 @@
 
 	<ItemGroup>
 		<Compile Include="Core.cs" />
+        <Compile Include="Internal\Poses\PosePresentationLoop.cs" />
+        <Compile Include="Internal\Poses\PoseReceiptLedger.cs" />
+        <Compile Include="Internal\Poses\PoseRuntime.cs" />
+        <Compile Include="Internal\Poses\CombatPoseRuntime.cs" />
+        <Compile Include="Patches\Poses\CombatQueryPatches.cs" />
+        <Compile Include="Patches\Poses\PoseReceiptPatches.cs" />
 		<Compile Include="Assets\NativeAssetBundle.cs" />
 		<Compile Include="Assets\AssetBundleManager.cs" />
 		<Compile Include="Assets\AssetLifetime.cs" />

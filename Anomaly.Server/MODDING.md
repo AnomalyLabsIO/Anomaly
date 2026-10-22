@@ -46,6 +46,8 @@ server process, so restart after changing or removing registrations.
 | `Api.Events.Handlers.ClientEvents` | Connected, MessageReceived, CapabilitiesChanged, ContentReady, and MotionApplied notifications. |
 | `Api.Features.ClientCapabilities` | Inspect the current client capability snapshot. |
 | `Api.Features.PlayerMotion` | Apply an owned position/look/momentum discontinuity with increasing sequence values; reset only your owner ID. |
+| `Api.Features.PlayerPoseOverrides` / `PlayerPoseRigs` | Own and stream cosmetic bone poses to compatible base clients; see [PLAYER_POSES.md](PLAYER_POSES.md). |
+| `Api.Features.PlayerCombatPoseOverrides` | Independently authorize scoped native client combat queries; see [COMBAT_POSES.md](COMBAT_POSES.md). |
 | `Api.Assets.AssetRegistry` | Inspect indexed typed addresses with `IsReady`, `Contains`, `TryGetKind`, and `TryGetAudioDuration`. |
 | `Api.Assets.AssetOverrides` | Apply indexed Texture2D addresses to network objects and native LabAPI wrappers. |
 | `Api.Assets.DecorativeVisualScope` | Own bounded decorative client instances from an ordinary LabAPI plugin. |

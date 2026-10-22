@@ -14,12 +14,15 @@ internal static class AnomalyReplayTable
     internal static AnomalyInboundRateLimiter InboundRateLimiter { get; private set; } =
         new AnomalyInboundRateLimiter();
     internal static AnomalyInboundRateLimiter RawInboundRateLimiter { get; private set; } =
-        new AnomalyInboundRateLimiter();
+        AnomalyInboundRateLimiter.CreateClientRaw();
+    internal static AnomalyInboundRateLimiter PoseInboundRateLimiter { get; private set; } =
+        AnomalyInboundRateLimiter.CreatePoseTraffic();
 
     internal static void Reset()
     {
         Instance = new AnomalyReplayState();
         InboundRateLimiter = new AnomalyInboundRateLimiter();
-        RawInboundRateLimiter = new AnomalyInboundRateLimiter();
+        RawInboundRateLimiter = AnomalyInboundRateLimiter.CreateClientRaw();
+        PoseInboundRateLimiter = AnomalyInboundRateLimiter.CreatePoseTraffic();
     }
 }

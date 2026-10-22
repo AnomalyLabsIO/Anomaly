@@ -114,12 +114,14 @@ public static class SdkCompileProbe
         if ($LASTEXITCODE -ne 0) { throw "Packaged SDK starter failed: $sampleName" }
     }
 
-    $serverSampleProject = Join-Path $stagedSdk 'samples/HelloAnomalyServer/HelloAnomalyServer.csproj'
-    if (!(Test-Path -LiteralPath $serverSampleProject -PathType Leaf)) { throw 'Server SDK starter is missing.' }
-    & dotnet build $serverSampleProject -c Release -warnaserror --nologo `
-        "-p:AnomalySdkRoot=$stagedSdk" "-p:AnomalyServerReferenceDir=$AnomalyServerReferenceDir" `
-        "-p:AnomalyLabApiDir=$AnomalyLabApiDir" -p:DeployLocal=false
-    if ($LASTEXITCODE -ne 0) { throw 'Packaged server SDK starter failed.' }
+    foreach ($sampleName in @('HelloAnomalyServer', 'HelloPlayerPoses')) {
+        $serverSampleProject = Join-Path $stagedSdk "samples/$sampleName/$sampleName.csproj"
+        if (!(Test-Path -LiteralPath $serverSampleProject -PathType Leaf)) { throw "Server SDK starter is missing: $sampleName" }
+        & dotnet build $serverSampleProject -c Release -warnaserror --nologo `
+            "-p:AnomalySdkRoot=$stagedSdk" "-p:AnomalyServerReferenceDir=$AnomalyServerReferenceDir" `
+            "-p:AnomalyLabApiDir=$AnomalyLabApiDir" -p:DeployLocal=false
+        if ($LASTEXITCODE -ne 0) { throw "Packaged server SDK starter failed: $sampleName" }
+    }
 
     $bouncyCastlePath = Join-Path $stagedSdk 'lib/net48/BouncyCastle.Cryptography.dll'
     if (-not (Test-Path -LiteralPath $bouncyCastlePath -PathType Leaf)) {

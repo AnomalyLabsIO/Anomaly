@@ -17,12 +17,10 @@ namespace Anomaly.Client.Internal.Modding;
 internal static class ManagedModRuntime
 {
     private const long MaxManifestBytes = 256 * 1024;
-    private const int QuarantineAfterFailures = 2;
 
     private sealed class Candidate
     {
         internal string AssemblyPath;
-        internal string ManifestPath;
         internal ModManifest Manifest;
     }
 
@@ -118,11 +116,6 @@ internal static class ManagedModRuntime
         foreach (var manifest in resolution.Ordered)
         {
             var candidate = byId[manifest.Id];
-            if (GetFailureCount(manifest.Id) >= QuarantineAfterFailures)
-            {
-                Quarantine(candidate, "repeated-startup-failure");
-                continue;
-            }
             Load(candidate);
         }
 
@@ -178,7 +171,6 @@ internal static class ManagedModRuntime
                 result.Add(new Candidate
                 {
                     AssemblyPath = Path.GetFullPath(assemblyPath),
-                    ManifestPath = Path.GetFullPath(manifestPath),
                     Manifest = manifest,
                 });
             }
@@ -313,25 +305,6 @@ internal static class ManagedModRuntime
         MelonLogger.Warning($"The previous process stopped while loading managed mod '{marker.ModId}'.");
         TryDelete(_markerPath);
         SaveState();
-    }
-
-    private static void Quarantine(Candidate candidate, string reason)
-    {
-        try
-        {
-            var directory = Path.Combine(_anomalyRoot, "Quarantine", "managed-runtime", reason);
-            Directory.CreateDirectory(directory);
-            var suffix = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss");
-            var assemblyTarget = Path.Combine(directory, suffix + "-" + Path.GetFileName(candidate.AssemblyPath));
-            var manifestTarget = assemblyTarget + ".anomaly.json";
-            File.Move(candidate.AssemblyPath, assemblyTarget);
-            File.Move(candidate.ManifestPath, manifestTarget);
-            MelonLogger.Warning($"Managed mod '{candidate.Manifest.Id}' was quarantined after repeated failures.");
-        }
-        catch (Exception ex)
-        {
-            MelonLogger.Error($"Failed to quarantine managed mod '{candidate.Manifest.Id}': {ex.Message}");
-        }
     }
 
     private static int GetFailureCount(string id) =>

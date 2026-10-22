@@ -186,6 +186,9 @@ namespace Anomaly.Shared.Networking
             return false;
         }
 
+        internal static bool IsRegisteredType<T>(uint hash) where T : IAnomalyMessage =>
+            HashToType.TryGetValue(hash, out Type type) && type == typeof(T);
+
         // Transport code uses the immutable registered contract, never a caller's
         // mutable channel or a different implementation borrowing a registered name.
         internal static bool TryGetSendContract(
@@ -268,6 +271,10 @@ namespace Anomaly.Shared.Networking
             RegisterBuiltIn("anomaly:announcer:vocabulary", () => new AnnouncerVocabularyMessage());
             RegisterBuiltIn("anomaly:visual:snapshot", () => new DecorativeVisualSnapshotMessage());
             RegisterBuiltIn("anomaly:visual:update", () => new DecorativeVisualUpdateMessage());
+            RegisterBuiltIn("anomaly:pose:control", () => new PlayerPoseControlMessage());
+            RegisterBuiltIn("anomaly:pose:sample", () => new PlayerPoseSampleMessage());
+            RegisterBuiltIn("anomaly:combat-pose:control", () => new PlayerCombatPoseControlMessage());
+            RegisterBuiltIn("anomaly:combat-pose:sample", () => new PlayerCombatPoseSampleMessage());
 
             RegisterBuiltIn("anomaly:player:setfavoritecolor", () => new SetFavoriteColorMessage());
             RegisterBuiltIn("anomaly:player:colorchanged", () => new PlayerColorChangedMessage());

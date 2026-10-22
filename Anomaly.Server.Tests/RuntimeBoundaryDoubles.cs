@@ -20,7 +20,8 @@ public sealed class EncryptedChannelManager
     public enum SecurityLevel { Unsecured, EncryptedAndAuthenticated }
     public readonly struct EncryptedMessageOutside
     {
-        public EncryptedMessageOutside(SecurityLevel level, byte[] data) => Data = data;
+        public EncryptedMessageOutside(SecurityLevel level, byte[] data) { Level = level; Data = data; }
+        public SecurityLevel Level { get; }
         public byte[] Data { get; }
     }
 }
@@ -53,6 +54,41 @@ namespace Mirror
     }
     public sealed class LocalConnectionToClient : NetworkConnectionToClient { }
     public static class NetworkServer { }
+    public static class NetworkTime { public static double localTime => 1d; }
+    public sealed class NetworkWriterPooled : IDisposable
+    {
+        internal MemoryStream Stream { get; } = new();
+        public int Position => (int)Stream.Length;
+        public ArraySegment<byte> ToArraySegment() => new(Stream.ToArray());
+        public void Dispose() => Stream.Dispose();
+    }
+    public static class NetworkWriterPool { public static NetworkWriterPooled Get() => new(); }
+    public static class NetworkMessages
+    {
+        public static void Pack(EncryptedChannelManager.EncryptedMessageOutside message, NetworkWriterPooled writer)
+        {
+            // Inert framing boundary; tests inspect routing and packet bounds, not Mirror's codec.
+            var binary = new BinaryWriter(writer.Stream);
+            binary.Write((ushort)9934);
+            binary.Write((byte)message.Level);
+            binary.Write(message.Data.Length);
+            binary.Write(message.Data);
+        }
+    }
+    public sealed class Batcher
+    {
+        private ArraySegment<byte> _message;
+        public Batcher(int threshold) { }
+        public void AddMessage(ArraySegment<byte> message, double timestamp) => _message = message;
+        public bool GetBatch(NetworkWriterPooled writer)
+        {
+            var binary = new BinaryWriter(writer.Stream);
+            binary.Write(1d);
+            binary.Write(_message.Count);
+            binary.Write(_message.Array, _message.Offset, _message.Count);
+            return true;
+        }
+    }
 }
 
 namespace NetworkManagerUtils.Dummies
@@ -65,13 +101,47 @@ namespace Mirror.LiteNetLib4Mirror
     public sealed class LiteNetLib4MirrorTransport
     {
         public static LiteNetLib4MirrorTransport Singleton { get; } = new();
-        public int GetMaxPacketSize(int channel) => int.MaxValue;
+        public int MaximumPacketBytes { get; set; } = int.MaxValue;
+        public LiteNetLib.DeliveryMethod[] channels { get; } =
+        {
+            LiteNetLib.DeliveryMethod.ReliableOrdered, LiteNetLib.DeliveryMethod.Unreliable,
+            LiteNetLib.DeliveryMethod.Sequenced, LiteNetLib.DeliveryMethod.ReliableSequenced,
+            LiteNetLib.DeliveryMethod.ReliableUnordered,
+        };
+        public int GetMaxPacketSize(int channel) => MaximumPacketBytes;
     }
-    public sealed class Peer { public IPEndPoint EndPoint { get; set; } }
+    public sealed class Peer
+    {
+        public IPEndPoint EndPoint { get; set; }
+        public LiteNetLib.ConnectionState ConnectionState { get; set; } = LiteNetLib.ConnectionState.Connected;
+        public int Mtu { get; set; } = 1200;
+        public int ReliableQueuedPackets { get; set; }
+        public bool AcceptSends { get; set; } = true;
+        public List<byte[]> SentPackets { get; } = new();
+        public int GetMaxSinglePacketSize(LiteNetLib.DeliveryMethod delivery) =>
+            Mtu - (delivery == LiteNetLib.DeliveryMethod.Unreliable ? 1 : 4);
+        public int GetPacketsCountInReliableQueue(byte channel, bool ordered) =>
+            channel == 0 ? ReliableQueuedPackets : 0;
+    }
     public static class LiteNetLib4MirrorServer
     {
         public static Dictionary<int, Peer> Peers { get; } = new();
+        public static bool Send(int connectionId, LiteNetLib.DeliveryMethod delivery,
+            byte[] data, int start, int length, byte channel)
+        {
+            if (!Peers.TryGetValue(connectionId, out var peer) || !peer.AcceptSends ||
+                peer.ConnectionState != LiteNetLib.ConnectionState.Connected)
+                return false;
+            peer.SentPackets.Add(data.Skip(start).Take(length).ToArray());
+            return true;
+        }
     }
+}
+
+namespace LiteNetLib
+{
+    public enum DeliveryMethod { ReliableUnordered, Sequenced, ReliableOrdered, ReliableSequenced, Unreliable }
+    public enum ConnectionState { Connected, Disconnected }
 }
 
 namespace Anomaly.Server

@@ -4,6 +4,10 @@ The guard targets the installed MelonLoader 0.7.3, HarmonyX 2.10.2, MonoMod
 22.7.31.1, and SCP:SL 14.2.7 contracts. Loader libraries remain host-provided.
 Bootstrap has no reference to Client, Client.Api, or Shared.
 
+Before the Mods phase, Bootstrap verifies runtime protection readiness. Local
+mods do not require a `mod-trust.json` approval file, and Bootstrap does not
+move mod assemblies into quarantine.
+
 `AdmissionInventoryLedger` records a process-lifetime mod inventory. It subscribes
 to assembly loading before enumerating existing assemblies and reads genuine
 MelonInfo/MelonID custom attribute metadata without constructing the mod or its
@@ -50,6 +54,16 @@ This is in-process defensive monitoring, not remote attestation or a sandbox for
 hostile full-trust code. Highest registration priority cannot precede every
 plugin/UserLib assembly load or constructor. The server receives authenticated
 client-reported evidence; server-side admission policy remains authoritative.
+
+## Startup patch diagnostics
+
+Set `ANOMALY_BOOTSTRAP_PATCH_TRACE` to an absolute log-file path in the launcher
+process environment to trace guard installation. Each patch records its ordinal,
+full target signature, module identity, and metadata token before entering Harmony,
+then records completion after Harmony returns. Entries are flushed to disk so a
+native startup crash can leave the last attempted target. The file is replaced
+on each process start; use a separate path for each reproduction attempt.
+Tracing is disabled when the variable is unset and does not change guard policy.
 
 ## Validation
 

@@ -27,9 +27,11 @@
           "System.Memory",
           "System.Net.NetworkInformation",
           "System.Numerics",
+          "System.Numerics.Vectors",
           "System.ObjectModel",
           "System.Reflection.Emit",
           "System.Reflection.Emit.ILGeneration",
+          "System.Reflection.Emit.Lightweight",
           "System.Reflection.Primitives",
           "System.Runtime",
           "System.Runtime.InteropServices",
@@ -74,6 +76,8 @@
         ]
       },
       "entries": [
+        { "source": "release/assets/skins/personal-skins.bundle", "path": "UserData/Anomaly/AssetBundles/personal-skins.bundle" },
+        { "source": "release/assets/skins/personal-skins.index.json", "path": "UserData/Anomaly/AssetBundles/personal-skins.index.json" },
         { "source": "Anomaly.Bootstrap/bin/Release/net6.0/Anomaly.Bootstrap.dll", "path": "Plugins/Anomaly.Bootstrap.dll" },
         { "source": "Anomaly.Client/bin/Release/net6.0/Anomaly.Client.dll", "path": "Mods/Anomaly.Client.dll" },
         { "source": "Anomaly.Client.Api/bin/Release/net6.0/Anomaly.Client.Api.dll", "path": "UserLibs/Anomaly.Client.Api.dll" },
@@ -114,6 +118,8 @@
           { "name": "CommandSystem.Core", "provider": "SCP:SL 14.2.7 dedicated server" },
           { "name": "LabApi", "provider": "SCP:SL LabAPI host" },
           { "name": "Mirror", "provider": "SCP:SL 14.2.7 dedicated server" },
+          { "name": "Pooling", "provider": "SCP:SL 14.2.7 dedicated server" },
+          { "name": "UnityEngine.AnimationModule", "provider": "SCP:SL 14.2.7 dedicated server" },
           { "name": "UnityEngine.AudioModule", "provider": "SCP:SL 14.2.7 dedicated server" },
           { "name": "UnityEngine.CoreModule", "provider": "SCP:SL 14.2.7 dedicated server" }
         ]
@@ -146,6 +152,11 @@
         { "source": "samples/HelloAnomalyServer/HelloAnomalyServer.csproj", "path": "samples/HelloAnomalyServer/HelloAnomalyServer.csproj" },
         { "source": "samples/HelloAnomalyServer/Plugin.cs", "path": "samples/HelloAnomalyServer/Plugin.cs" },
         { "source": "samples/HelloAnomalyServer/README.md", "path": "samples/HelloAnomalyServer/README.md" },
+        { "source": "Anomaly.Server/PLAYER_POSES.md", "path": "docs/PLAYER_POSES.md" },
+        { "source": "Anomaly.Server/COMBAT_POSES.md", "path": "docs/COMBAT_POSES.md" },
+        { "source": "samples/HelloPlayerPoses/HelloPlayerPoses.csproj", "path": "samples/HelloPlayerPoses/HelloPlayerPoses.csproj" },
+        { "source": "samples/HelloPlayerPoses/Plugin.cs", "path": "samples/HelloPlayerPoses/Plugin.cs" },
+        { "source": "samples/HelloPlayerPoses/README.md", "path": "samples/HelloPlayerPoses/README.md" },
         { "source": "samples/Anomaly.Sample.props", "path": "samples/Anomaly.Sample.props" },
         { "source": "samples/HelloAnomalyMod/HelloAnomalyMod.csproj", "path": "samples/HelloAnomalyMod/HelloAnomalyMod.csproj" },
         { "source": "samples/HelloAnomalyMod/Core.cs", "path": "samples/HelloAnomalyMod/Core.cs" },
