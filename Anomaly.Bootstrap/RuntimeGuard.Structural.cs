@@ -35,11 +35,11 @@ internal static partial class RuntimeGuard
     {
         string? failure = null;
         if (!ReferenceEquals(_audit, Structural.Audit))
-            failure = "Guard audit state was replaced.";
+            failure = BootstrapLocalization.Get(TrKeys.Bootstrap_AuditReplaced);
         else if (!Hooks.SequenceEqual(Structural.Hooks) || !RequiredStockHooks.SequenceEqual(Structural.StockHooks))
-            failure = "Required interceptor inventory changed outside registration.";
+            failure = BootstrapLocalization.Get(TrKeys.Bootstrap_InterceptorInventoryChanged);
         else if (Callbacks.Count != RequiredCallbackCount || Structural.Callbacks.Length != RequiredCallbackCount)
-            failure = "Guard callback inventory changed outside registration.";
+            failure = BootstrapLocalization.Get(TrKeys.Bootstrap_CallbackInventoryChanged);
         else
         {
             for (int i = 0; i < Callbacks.Count; ++i)
@@ -53,7 +53,7 @@ internal static partial class RuntimeGuard
                     actual.Field != expected.Field || !Equals(actual.Guard, expected.Guard) ||
                     !actual.Previous.SequenceEqual(expected.Previous))
                 {
-                    failure = "Guard callback inventory changed outside registration.";
+                    failure = BootstrapLocalization.Get(TrKeys.Bootstrap_CallbackInventoryChanged);
                     break;
                 }
             }
@@ -65,11 +65,11 @@ internal static partial class RuntimeGuard
                 if (RequiredPatches.Count != Structural.Required.Count ||
                     RequiredPatches.Any(pair => !Structural.Required.TryGetValue(pair.Key, out var expected) ||
                         !pair.Value.SequenceEqual(expected)))
-                    failure = "Required patch inventory changed outside registration.";
+                    failure = BootstrapLocalization.Get(TrKeys.Bootstrap_PatchInventoryChanged);
             }
         }
         if (failure == null && !ProtectedMethodCatalog.TrustedInventoryUnchanged())
-            failure = "Trusted patch inventory changed outside registration.";
+            failure = BootstrapLocalization.Get(TrKeys.Bootstrap_TrustedInventoryChanged);
         if (failure == null && !NativeCodeIntegrity.Verify(out string? nativeFailure))
             failure = nativeFailure;
         if (failure == null) return true;

@@ -312,3 +312,88 @@
 "anomaly.news.early_access": "early access"
 # {0} = integer percentage
 "anomaly.overlay.file_transfer.percent": "{0}%"
+
+# ===== Early Bootstrap protection failures =====
+"anomaly.bootstrap.failure.early_init_failed": "Early Bootstrap protection could not initialize."
+"anomaly.bootstrap.failure.protection_unavailable": "Required Bootstrap protection is unavailable."
+"anomaly.bootstrap.failure.before_mods_failed": "Bootstrap protection failed before MelonMods were loaded."
+"anomaly.bootstrap.failure.before_game_state_changed": "Bootstrap lifecycle state changed before the game started."
+"anomaly.bootstrap.failure.game_start_failed": "Bootstrap protection failed when the game started."
+"anomaly.bootstrap.failure.ready_state_changed": "Bootstrap lifecycle state changed after protection became ready."
+"anomaly.bootstrap.failure.unregistered": "Bootstrap was unregistered or the loader shut down."
+"anomaly.bootstrap.failure.heartbeat_stopped": "Required Bootstrap protection stopped advancing. Restart the game."
+"anomaly.bootstrap.failure.auth_state_unverified": "Required modded authentication state could not be verified."
+"anomaly.bootstrap.failure.auth_state_changed": "Required modded authentication state changed."
+"anomaly.bootstrap.failure.auth_state_restart": "Required modded authentication state changed. Restart the game."
+"anomaly.bootstrap.failure.already_installed": "The Bootstrap runtime guard may only be installed once."
+"anomaly.bootstrap.failure.loader_unsupported": "Unsupported loader Harmony/MonoMod contract."
+"anomaly.bootstrap.failure.install_verification_failed": "Bootstrap guard installation verification failed."
+"anomaly.bootstrap.failure.canary_patch_failed": "Unprotected guard canary could not be patched."
+"anomaly.bootstrap.failure.canary_restore_failed": "Unprotected guard canary could not be restored."
+"anomaly.bootstrap.failure.canary_modified": "Protected guard canary accepted a modification."
+"anomaly.bootstrap.failure.backend_address_missing": "Backend replacement has no native entry address."
+"anomaly.bootstrap.failure.lease_order_changed": "Guard operation lease ordering changed."
+"anomaly.bootstrap.failure.il_hook_source_changed": "ILHook callback source identity changed."
+"anomaly.bootstrap.failure.deadline_delayed": "Guard verification deadline was delayed beyond its allowed cadence."
+"anomaly.bootstrap.failure.entry_preservation_replaced": "Required CLR entry stub preservation was replaced."
+"anomaly.bootstrap.failure.audit_replaced": "Guard audit state was replaced."
+"anomaly.bootstrap.failure.interceptor_inventory_changed": "Required interceptor inventory changed outside registration."
+"anomaly.bootstrap.failure.callback_inventory_changed": "Guard callback inventory changed outside registration."
+"anomaly.bootstrap.failure.patch_inventory_changed": "Required patch inventory changed outside registration."
+"anomaly.bootstrap.failure.trusted_inventory_changed": "Trusted patch inventory changed outside registration."
+"anomaly.bootstrap.failure.il_hook_nesting_exceeded": "ILHook application nesting limit exceeded."
+"anomaly.bootstrap.failure.il_hook_operation_missing": "ILHook application has no tracked operation."
+"anomaly.bootstrap.failure.il_hook_completion_order_changed": "ILHook callback completion ordering changed."
+"anomaly.bootstrap.failure.il_hook_callback_missing": "Required ILHook callback removed/reordered before chain refresh."
+"anomaly.bootstrap.failure.il_hook_refresh_incomplete": "ILHook application did not reach its required refresh completion boundary."
+"anomaly.bootstrap.failure.mutation_accounting_changed": "Guard mutation accounting changed."
+"anomaly.bootstrap.failure.unspecified_observation": "Unspecified guard observation"
+"anomaly.bootstrap.failure.native_already_installed": "Native code integrity was already installed."
+"anomaly.bootstrap.failure.native_platform_unsupported": "Native code integrity requires Windows x64."
+"anomaly.bootstrap.failure.native_prototype_missing": "The enabled native integrity prototype is missing."
+"anomaly.bootstrap.failure.entry_preserver_already_installed": "CLR entry stub preservation is already installed."
+"anomaly.bootstrap.failure.clr_platform_unsupported": "CLR entry stub preservation requires the supported Windows x64 .NET 6 runtime."
+"anomaly.bootstrap.failure.detour_platform_unavailable": "The loader native detour platform is unavailable."
+"anomaly.bootstrap.failure.detour_endpoints_changed": "The native detour platform changed the resolved source or destination."
+"anomaly.bootstrap.failure.clr_precode_unreadable": "CLR precode metadata is unreadable."
+"anomaly.bootstrap.failure.clr_adapter_unavailable": "The supported loader CLR runtime adapter is unavailable."
+"anomaly.bootstrap.failure.clr_method_unreadable": "Pinned CLR method metadata is unreadable."
+"anomaly.bootstrap.failure.clr_layout_unsupported": "Unsupported CLR method descriptor layout; refusing to overwrite its precode."
+"anomaly.bootstrap.failure.clr_code_slot_unreadable": "Pinned CLR native code slot is unreadable."
+"anomaly.bootstrap.failure.clr_implementation_unconfirmed": "Pinned CLR method has no confirmed compiled implementation."
+"anomaly.bootstrap.failure.detour_targets_stub": "Native detour data targets a CLR entry stub instead of its compiled implementation."
+# {0}: localized guard failure reason.
+"anomaly.bootstrap.failure.protection_failed": "Required Bootstrap protection failed. {0}"
+# {0}: exception type name.
+"anomaly.bootstrap.failure.auth_state_unreadable": "Required modded authentication state could not be read: {0}"
+# {0}: exception type name; {1}: exception details.
+"anomaly.bootstrap.failure.installation_failed": "Guard installation failed: {0}: {1}"
+# {0}: exception type name; {1}: exception details.
+"anomaly.bootstrap.failure.checkpoint_failed": "Guard checkpoint failed: {0}: {1}"
+# {0}: exception type name; {1}: exception details.
+"anomaly.bootstrap.failure.heartbeat_failed": "Guard heartbeat failed: {0}: {1}"
+# {0}: generated method; {1}: exception details.
+"anomaly.bootstrap.failure.backend_unprotected": "Required generated backend could not be protected: {0}: {1}"
+# {0}: callback field identifier.
+"anomaly.bootstrap.failure.callback_dispatch_changed": "Guard callback removed/reordered during dispatch: {0}"
+# {0}: target method; {1}: interceptor method.
+"anomaly.bootstrap.failure.interceptor_missing": "Required interceptor missing: {0} <- {1}"
+# {0}: callback field identifier.
+"anomaly.bootstrap.failure.callback_changed": "Guard or loader callback removed/reordered: {0}"
+# {0}: loader type name.
+"anomaly.bootstrap.failure.patch_shield_callback_missing": "Required loader PatchShield detour callback missing: {0}"
+# {0}: protected source method.
+"anomaly.bootstrap.failure.deferred_native_modification": "Deferred native modification resolved to protected source: {0}"
+# {0}: target method; {1}: patch method.
+"anomaly.bootstrap.failure.critical_patch": "Existing critical patch: {0} <- {1}"
+# {0}: target method.
+"anomaly.bootstrap.failure.critical_detour": "Existing critical detour: {0}"
+# {0}: native entry identifier.
+"anomaly.bootstrap.failure.native_baseline_failed": "Could not baseline native entry for {0}"
+# {0}: native entry identifier.
+"anomaly.bootstrap.failure.native_entry_changed": "Native executable entry or page protection changed: {0}"
+"anomaly.bootstrap.failure.missing_protection": "Required Anomaly Bootstrap protection is missing, incompatible, or failed to initialize. Restore the Anomaly installation before restarting."
+"anomaly.bootstrap.failure.clr_entrypoint_mismatch": "CLR precode does not match a pinned managed entrypoint. "
+"anomaly.bootstrap.failure.failure_title": "Anomaly - game must close"
+# {0}: localized failure details; {1}: log file path.
+"anomaly.bootstrap.failure.failure_dialog": "Anomaly cannot safely continue.\r\n\r\n{0}\r\n\r\nGameplay is paused. Select OK or close this warning to close the game.\r\n\r\nCheck {1} for details before restarting."

@@ -38,7 +38,7 @@ public sealed class Core : MelonPlugin
         }
         catch (Exception ex)
         {
-            Fail("Early Bootstrap protection could not initialize.", ex);
+            Fail(BootstrapLocalization.Get(TrKeys.Bootstrap_EarlyInitFailed), ex);
         }
     }
 
@@ -47,12 +47,12 @@ public sealed class Core : MelonPlugin
         try
         {
             if (!RuntimeGuard.Verify(requireComplete: false))
-                throw new InvalidOperationException("Required Bootstrap protection is unavailable.");
+                throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_ProtectionUnavailable));
             State = StartupState.Ready;
         }
         catch (Exception ex)
         {
-            Fail("Bootstrap protection failed before MelonMods were loaded.", ex);
+            Fail(BootstrapLocalization.Get(TrKeys.Bootstrap_BeforeModsFailed), ex);
         }
     }
 
@@ -60,7 +60,7 @@ public sealed class Core : MelonPlugin
     {
         if (State != StartupState.Ready)
         {
-            Fail("Bootstrap lifecycle state changed before the game started.");
+            Fail(BootstrapLocalization.Get(TrKeys.Bootstrap_BeforeGameStateChanged));
             return;
         }
         try
@@ -70,7 +70,7 @@ public sealed class Core : MelonPlugin
         }
         catch (Exception ex)
         {
-            Fail("Bootstrap protection failed when the game started.", ex);
+            Fail(BootstrapLocalization.Get(TrKeys.Bootstrap_GameStartFailed), ex);
             return;
         }
         if (HandleGuardFailure()) return;
@@ -83,7 +83,7 @@ public sealed class Core : MelonPlugin
         if (_deinitializing && State == StartupState.Failed && !RuntimeGuard.Snapshot.Healthy) return;
         if (State != StartupState.Ready)
         {
-            Fail("Bootstrap lifecycle state changed after protection became ready.");
+            Fail(BootstrapLocalization.Get(TrKeys.Bootstrap_ReadyStateChanged));
             return;
         }
         if (HandleGuardFailure()) return;
@@ -98,7 +98,7 @@ public sealed class Core : MelonPlugin
         // the warning after verification releases its runtime and catalog locks.
         string? reason = RuntimeGuard.FatalReason;
         if (reason == null) return false;
-        Fail("Required Bootstrap protection failed. " + reason);
+        Fail(BootstrapLocalization.Get(TrKeys.Bootstrap_ProtectionFailed, reason));
         return true;
     }
 
@@ -123,7 +123,7 @@ public sealed class Core : MelonPlugin
     {
         _deinitializing = true;
         State = StartupState.Failed;
-        RuntimeGuard.Invalidate("Bootstrap was unregistered or the loader shut down.");
+        RuntimeGuard.Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_Unregistered));
     }
 
     private static void Fail(string message, Exception? ex = null)

@@ -25,14 +25,14 @@ internal static partial class RuntimeGuard
         application = null;
         if (_pendingIlApplications?.Count >= 64)
         {
-            Invalidate("ILHook application nesting limit exceeded.");
+            Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_IlHookNestingExceeded));
             return false;
         }
         Operation? operation = null;
         if (!DetourPrefix(hook, GuardRuntimeAdapters.IlHookApply, Array.Empty<object>(), ref operation)) return false;
         if (operation == null)
         {
-            Invalidate("ILHook application has no tracked operation.");
+            Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_IlHookOperationMissing));
             return false;
         }
         application = new PendingIlApplication(operation, _foreignCallbackDepth);
@@ -45,7 +45,7 @@ internal static partial class RuntimeGuard
         if (_pendingIlApplications?.Count > 0 && ReferenceEquals(_pendingIlApplications.Peek(), application))
             _pendingIlApplications.Pop();
         else
-            Invalidate("ILHook callback completion ordering changed.");
+            Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_IlHookCompletionOrderChanged));
         DetourFinalizer(failure, application.Operation);
     }
 
@@ -55,7 +55,7 @@ internal static partial class RuntimeGuard
         // guarded callback. No admission evidence is available during that phase.
         if (_installed && !IlHookCallbackIntact())
         {
-            Invalidate("Required ILHook callback removed/reordered before chain refresh.");
+            Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_IlHookCallbackMissing));
             return false;
         }
         if (_pendingIlApplications?.Count > 0)
@@ -96,7 +96,7 @@ internal static partial class RuntimeGuard
         // commit failure evidence at the next ordinary main-thread frame.
         if (_foreignCallbackDepth != 0 || _pendingIlApplications?.Count is not > 0 ||
             !_pendingIlApplications.Peek().CallbackReturned) return;
-        Invalidate("ILHook application did not reach its required refresh completion boundary.");
+        Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_IlHookRefreshIncomplete));
         while (_pendingIlApplications.Count > 0 && _pendingIlApplications.Peek().CallbackReturned)
         {
             var application = _pendingIlApplications.Pop();

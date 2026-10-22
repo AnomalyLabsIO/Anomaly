@@ -72,7 +72,7 @@ internal sealed class GuardAudit
             if (flags != GuardAuditFlags.None)
                 Record(flags, reason, occurrence: true);
             if (_mutations <= 0)
-                Record(GuardAuditFlags.CoverageIncomplete, "Guard mutation accounting changed.", fatal: true);
+                Record(GuardAuditFlags.CoverageIncomplete, BootstrapLocalization.Get(TrKeys.Bootstrap_MutationAccountingChanged), fatal: true);
             else
                 _mutations--;
         }
@@ -89,7 +89,7 @@ internal sealed class GuardAudit
 
     internal void Record(GuardAuditFlags flags, string reason, bool fatal = false, bool occurrence = false)
     {
-        reason ??= "Unspecified guard observation";
+        reason ??= BootstrapLocalization.Get(TrKeys.Bootstrap_UnspecifiedObservation);
         if (reason.Length > 2048)
             reason = reason.Substring(0, 2048);
         lock (_sync)

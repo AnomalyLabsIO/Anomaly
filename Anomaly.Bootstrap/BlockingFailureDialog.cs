@@ -1,5 +1,8 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+#if ANOMALY_CLIENT
+using Anomaly.Client.Api.Internal.Localization;
+#endif
 using MelonLoader;
 
 // Compile the same dependency-free dialog into Client so its missing-Bootstrap
@@ -50,10 +53,8 @@ internal static class BlockingFailureDialog
         uint flags = MbOk | MbIconWarning | MbSetForeground | MbTopmost;
         if (owner == IntPtr.Zero) flags |= MbTaskModal;
         string detail = reason.Length > 4096 ? reason.Substring(0, 4096) : reason;
-        string message = "Anomaly cannot safely continue.\r\n\r\n" + detail +
-            "\r\n\r\nGameplay is paused. Select OK or close this warning to close the game." +
-            "\r\n\r\nCheck MelonLoader/Latest.log for details before restarting.";
-        if (MessageBoxW(owner, message, "Anomaly - game must close", flags) == 0)
+        string message = BootstrapLocalization.Get(TrKeys.Bootstrap_FailureDialog, detail, "MelonLoader/Latest.log");
+        if (MessageBoxW(owner, message, BootstrapLocalization.Get(TrKeys.Bootstrap_FailureTitle), flags) == 0)
             throw new Win32Exception(Marshal.GetLastWin32Error(), "MessageBoxW could not create the Bootstrap warning.");
     }
 

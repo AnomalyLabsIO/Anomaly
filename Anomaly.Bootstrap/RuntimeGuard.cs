@@ -39,7 +39,7 @@ internal static partial class RuntimeGuard
     internal static void ReportInventoryDivergence(string reason) => _audit.Record(GuardAuditFlags.InventoryDivergence, reason);
     internal static void Invalidate(string reason) => _audit.Record(GuardAuditFlags.CoverageIncomplete, reason, fatal: true);
     internal static void ReportNativeObservation(MethodBase target) => _audit.Record(GuardAuditFlags.ExternalDetourModification,
-        "Deferred native modification resolved to protected source: " + Describe(target),
+        BootstrapLocalization.Get(TrKeys.Bootstrap_DeferredNativeModification, Describe(target)),
         fatal: ProtectedMethodCatalog.Classify(target) is ProtectionScope.Core or ProtectionScope.Infrastructure, occurrence: true);
 
     internal static void Install(HostHarmony harmony, bool allowExternal, bool enableNativeCodeIntegrity = false)
@@ -47,7 +47,7 @@ internal static partial class RuntimeGuard
         lock (InstallationSync)
         {
             if (_installed || _installing)
-                throw new InvalidOperationException("The Bootstrap runtime guard may only be installed once.");
+                throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_AlreadyInstalled));
             _installing = true;
             _audit = new GuardAudit(allowExternal);
             using var trace = PatchInstallationTrace.Open();
@@ -56,7 +56,7 @@ internal static partial class RuntimeGuard
             {
                 if (typeof(HostHarmony).Assembly.GetName().Version != new Version(2, 10, 2, 0) ||
                     typeof(Detour).Assembly.GetName().Version != new Version(22, 7, 31, 1))
-                    throw new NotSupportedException("Unsupported loader Harmony/MonoMod contract.");
+                    throw new NotSupportedException(BootstrapLocalization.Get(TrKeys.Bootstrap_LoaderUnsupported));
 
                 ClrEntryStubPreserver.Install();
                 ProtectedMethodCatalog.ResolveLoadedAssemblies();
@@ -117,14 +117,14 @@ internal static partial class RuntimeGuard
                 AuditPreexisting();
                 RunCanary(harmony);
                 if (!Verify(requireComplete: false))
-                    throw new InvalidOperationException("Bootstrap guard installation verification failed.");
+                    throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_InstallVerificationFailed));
                 if (enableNativeCodeIntegrity) NativeCodeIntegrity.Install();
                 trace?.Write($"INSTALL_COMPLETE patches={Hooks.Count}");
             }
             catch (Exception ex)
             {
                 trace?.Write("INSTALL_FAILED " + ex);
-                Invalidate("Guard installation failed: " + ex.GetType().Name + ": " + ex.Message);
+                Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_InstallationFailed, ex.GetType().Name, ex.Message));
                 throw;
             }
             finally { _installationTrace = null; _installing = false; }
@@ -586,16 +586,16 @@ internal static partial class RuntimeGuard
         {
             harmony.Patch(control, prefix: new HarmonyMethod(prefix));
             if ((int)control.Invoke(null, null)! != 2)
-                throw new InvalidOperationException("Unprotected guard canary could not be patched.");
+                throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_CanaryPatchFailed));
             harmony.Unpatch(control, prefix);
             if ((int)control.Invoke(null, null)! != 1)
-                throw new InvalidOperationException("Unprotected guard canary could not be restored.");
+                throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_CanaryRestoreFailed));
             harmony.Patch(sentinel, prefix: new HarmonyMethod(prefix));
             harmony.CreateClassProcessor(typeof(CanaryPatch)).Patch();
             using var hook = new Hook(sentinel, (Func<int>)(() => 3));
             if (hook.IsApplied || (int)sentinel.Invoke(null, null)! != 1 ||
                 (HostHarmony.GetPatchInfo(sentinel)?.Prefixes.Count ?? 0) != 0)
-                throw new InvalidOperationException("Protected guard canary accepted a modification.");
+                throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_CanaryModified));
         }
         finally { _canaryTarget = null; }
     }
@@ -639,7 +639,7 @@ internal static partial class RuntimeGuard
             // interception targets; catalog owns its explicit allowlist.
             bool fatal = scope is ProtectionScope.Core or ProtectionScope.Infrastructure;
             _audit.Record(GuardAuditFlags.ExternalHarmonyModification,
-                "Existing critical patch: " + Describe(target) + " <- " + Describe(entry.Patch.PatchMethod), fatal);
+                BootstrapLocalization.Get(TrKeys.Bootstrap_CriticalPatch, Describe(target), Describe(entry.Patch.PatchMethod)), fatal);
         }
     }
 
@@ -690,7 +690,7 @@ internal static partial class RuntimeGuard
             }
             lock (Sync) ObservedDetours[detour] = target;
             ProtectionScope scope = ProtectedMethodCatalog.Classify(target);
-            _audit.Record(GuardAuditFlags.ExternalDetourModification, "Existing critical detour: " + Describe(target),
+            _audit.Record(GuardAuditFlags.ExternalDetourModification, BootstrapLocalization.Get(TrKeys.Bootstrap_CriticalDetour, Describe(target)),
                 fatal: scope is ProtectionScope.Core or ProtectionScope.Infrastructure);
         }
     }
@@ -801,12 +801,12 @@ internal static partial class RuntimeGuard
             try
             {
                 IntPtr address = replacement.GetNativeStart();
-                if (address == IntPtr.Zero) throw new InvalidOperationException("Backend replacement has no native entry address.");
+                if (address == IntPtr.Zero) throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_BackendAddressMissing));
                 ProtectedMethodCatalog.RegisterCompiledNativeTarget(replacement, address);
             }
             catch (Exception ex)
             {
-                Invalidate("Required generated backend could not be protected: " + Describe(replacement) + ": " + ex.Message);
+                Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_BackendUnprotected, Describe(replacement), ex.Message));
                 throw;
             }
         }
@@ -873,7 +873,7 @@ internal static partial class RuntimeGuard
         if (_operations?.Count > 0 && ReferenceEquals(_operations.Peek(), operation))
             _operations.Pop();
         else
-            Invalidate("Guard operation lease ordering changed.");
+            Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_LeaseOrderChanged));
         if (operation.VerificationTracked)
         {
             EnqueueTargetAudit(operation.Target);
@@ -899,7 +899,7 @@ internal static partial class RuntimeGuard
             {
                 // A public field replacement must not borrow a live backend lease
                 // during the interval before the periodic invariant check.
-                Invalidate("Guard callback removed/reordered during dispatch: " + slot.Field.DeclaringType?.Name + "." + slot.Field.Name);
+                Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_CallbackDispatchChanged, slot.Field.DeclaringType?.Name + "." + slot.Field.Name));
                 entries = Array.Empty<Delegate>();
                 return true;
             }
@@ -915,7 +915,7 @@ internal static partial class RuntimeGuard
         {
             if (__1.Length != 3 || __1[0] is not ILHook hook || __1[1] is not MethodBase source || !Equals(source, hook.Method))
             {
-                Invalidate("ILHook callback source identity changed.");
+                Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_IlHookSourceChanged));
                 __result = false;
                 return false;
             }

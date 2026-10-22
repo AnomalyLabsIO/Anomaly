@@ -17,11 +17,11 @@ internal sealed class ClrEntryStubPreserver : IDetourNativePlatform
 
     internal static void Install()
     {
-        if (_installed != null) throw new InvalidOperationException("CLR entry stub preservation is already installed.");
+        if (_installed != null) throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_EntryPreserverAlreadyInstalled));
         if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64 || Environment.Version.Major != 6)
-            throw new NotSupportedException("CLR entry stub preservation requires the supported Windows x64 .NET 6 runtime.");
+            throw new NotSupportedException(BootstrapLocalization.Get(TrKeys.Bootstrap_ClrPlatformUnsupported));
         var platform = new ClrEntryStubPreserver(DetourHelper.Native
-            ?? throw new InvalidOperationException("The loader native detour platform is unavailable."));
+            ?? throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_DetourPlatformUnavailable)));
         DetourHelper.Native = platform;
         _installed = platform;
     }
@@ -46,7 +46,7 @@ internal sealed class ClrEntryStubPreserver : IDetourNativePlatform
         IntPtr source = entry != null && IsFixupPrecode(entry) ? ResolveBody(from, entry) : from;
         NativeDetourData data = _inner.Create(source, to, type);
         if (data.Method != source || data.Target != to)
-            throw new InvalidOperationException("The native detour platform changed the resolved source or destination.");
+            throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_DetourEndpointsChanged));
         return data;
     }
 
@@ -56,10 +56,10 @@ internal sealed class ClrEntryStubPreserver : IDetourNativePlatform
         // a different protected method. Match its MethodDesc and an independently
         // resolved entrypoint against the loader's already-pinned managed identity.
         IntPtr chunkAddress = new(checked(source.ToInt64() + 8L + entry[7] * 8L));
-        byte[] chunk = Read(chunkAddress, 8) ?? throw new NotSupportedException("CLR precode metadata is unreadable.");
+        byte[] chunk = Read(chunkAddress, 8) ?? throw new NotSupportedException(BootstrapLocalization.Get(TrKeys.Bootstrap_ClrPrecodeUnreadable));
         long methodDesc = checked(BitConverter.ToInt64(chunk) + entry[6] * 8L);
         if (DetourHelper.Runtime is not DetourRuntimeILPlatform runtime)
-            throw new NotSupportedException("The supported loader CLR runtime adapter is unavailable.");
+            throw new NotSupportedException(BootstrapLocalization.Get(TrKeys.Bootstrap_ClrAdapterUnavailable));
         var pin = runtime.GetPins().FirstOrDefault(candidate => candidate.Handle.Value.ToInt64() == methodDesc);
         IntPtr canonical = pin.Method == null ? IntPtr.Zero : pin.Handle.GetFunctionPointer();
         // GetFunctionPointer is not the only entrypoint for a method. MonoMod
@@ -68,7 +68,7 @@ internal sealed class ClrEntryStubPreserver : IDetourNativePlatform
         // never by following an arbitrary caller-supplied source jump.
         IntPtr resolved = pin.Method == null || canonical == source ? canonical : runtime.GetNativeStart(pin.Method);
         if (pin.Method == null || (canonical != source && resolved != source))
-            throw new NotSupportedException($"CLR precode does not match a pinned managed entrypoint. " +
+            throw new NotSupportedException(BootstrapLocalization.Get(TrKeys.Bootstrap_ClrEntrypointMismatch) +
                 $"source=0x{source.ToInt64():X} descriptor=0x{methodDesc:X} canonical=0x{canonical.ToInt64():X} resolved=0x{resolved.ToInt64():X} " +
                 $"pinned={pin.Method != null} method={pin.Method?.DeclaringType?.FullName}::{pin.Method} " +
                 $"entry={Convert.ToHexString(entry)}");
@@ -76,16 +76,16 @@ internal sealed class ClrEntryStubPreserver : IDetourNativePlatform
         // Pinning normally already prepared this method. Preparation is bounded
         // and precedes all native writes, including for a cold fixup entrypoint.
         RuntimeHelpers.PrepareMethod(pin.Handle);
-        byte[] descriptor = Read(pin.Handle.Value, 8) ?? throw new NotSupportedException("Pinned CLR method metadata is unreadable.");
+        byte[] descriptor = Read(pin.Handle.Value, 8) ?? throw new NotSupportedException(BootstrapLocalization.Get(TrKeys.Bootstrap_ClrMethodUnreadable));
         int offset = NativeCodeSlotOffset(BitConverter.ToUInt16(descriptor, 6));
-        if (offset < 0) throw new NotSupportedException("Unsupported CLR method descriptor layout; refusing to overwrite its precode.");
+        if (offset < 0) throw new NotSupportedException(BootstrapLocalization.Get(TrKeys.Bootstrap_ClrLayoutUnsupported));
         byte[] slot = Read(new IntPtr(checked(methodDesc + offset)), 8)
-            ?? throw new NotSupportedException("Pinned CLR native code slot is unreadable.");
+            ?? throw new NotSupportedException(BootstrapLocalization.Get(TrKeys.Bootstrap_ClrCodeSlotUnreadable));
         long address = BitConverter.ToInt64(slot);
         IntPtr body = new(address);
         byte[]? bodyEntry = address > 0 && (address & 1) == 0 && body != source ? Read(body, 8) : null;
         if (bodyEntry == null || IsFixupPrecode(bodyEntry))
-            throw new NotSupportedException("Pinned CLR method has no confirmed compiled implementation.");
+            throw new NotSupportedException(BootstrapLocalization.Get(TrKeys.Bootstrap_ClrImplementationUnconfirmed));
         return body;
     }
 
@@ -93,7 +93,7 @@ internal sealed class ClrEntryStubPreserver : IDetourNativePlatform
     {
         byte[]? entry = Read(detour.Method, 8);
         if (entry != null && IsFixupPrecode(entry))
-            throw new InvalidOperationException("Native detour data targets a CLR entry stub instead of its compiled implementation.");
+            throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_DetourTargetsStub));
         _inner.Apply(detour);
     }
 

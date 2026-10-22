@@ -4,6 +4,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <Prefer32Bit>false</Prefer32Bit>
     <ImplicitUsings>enable</ImplicitUsings>
+    <DefineConstants>$(DefineConstants);ANOMALY_BOOTSTRAP</DefineConstants>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AssemblyName>Anomaly.Bootstrap</AssemblyName>
@@ -28,6 +29,13 @@
       <HintPath>$(AnomalyClientMelonLibDir)\MonoMod.Utils.dll</HintPath>
       <Private>false</Private>
     </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Source links keep early failure localization independent of Client.Api. -->
+    <Compile Include="..\Anomaly.Client.Api\Internal\Localization\RegistryTxtReader.cs" Link="Localization\RegistryTxtReader.cs" />
+    <Compile Include="..\Anomaly.Client.Api\Internal\Localization\TrKeys.cs" Link="Localization\TrKeys.cs" />
+    <EmbeddedResource Include="..\Anomaly.Client\Resources\i18n\*.yaml" Link="Resources\i18n\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <Target Name="CopyBootstrapToLocalClient" AfterTargets="Build" Condition="'$(DeployLocal)' == 'true'">

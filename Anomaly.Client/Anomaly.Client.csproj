@@ -434,6 +434,7 @@
 		<Compile Include="FileTransfer\FileTransferClient.cs" />
 		<Compile Include="Internal\Bootstrap\ClientRuntime.cs" />
 		<Compile Include="..\Anomaly.Bootstrap\BlockingFailureDialog.cs" Link="Internal\Bootstrap\BlockingFailureDialog.cs" />
+        <Compile Include="..\Anomaly.Bootstrap\BootstrapLocalization.cs" Link="Internal\Bootstrap\BootstrapLocalization.cs" />
 		<Compile Include="Internal\Players\PlayerObservationBridge.cs" />
 		<Compile Include="Internal\Items\ItemStateRuntime.cs" />
 		<Compile Include="Patches\Runtime\ItemStatePatch.cs" />

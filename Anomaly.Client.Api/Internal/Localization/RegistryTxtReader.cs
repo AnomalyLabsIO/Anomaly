@@ -1,7 +1,13 @@
+#nullable disable
+
 using System;
 using System.IO;
 
+#if ANOMALY_BOOTSTRAP
+namespace Anomaly.Bootstrap;
+#else
 namespace Anomaly.Client.Api.Internal.Localization;
+#endif
 
 /// <summary>
 /// Reads the SCPSL registry.txt at %APPDATA%/SCP Secret Laboratory/registry.txt

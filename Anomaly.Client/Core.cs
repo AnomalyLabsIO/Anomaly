@@ -1,3 +1,4 @@
+using Anomaly.Client.Api.Internal.Localization;
 using Anomaly.Client.Api.Commands;
 using Anomaly.Client.Api.Compatibility;
 using Anomaly.Client.Api.Config;
@@ -89,19 +90,18 @@ public class Core : MelonMod
         }
         catch (Exception exception)
         {
-            Bootstrap.RuntimeGuard.Invalidate("Required modded authentication state could not be read: " + exception.GetType().Name);
-            throw new ClientIntegrityException("Required modded authentication state could not be verified.");
+            Bootstrap.RuntimeGuard.Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_AuthStateUnreadable, exception.GetType().Name));
+            throw new ClientIntegrityException(BootstrapLocalization.Get(TrKeys.Bootstrap_AuthStateUnverified));
         }
         if (intact) return;
-        Bootstrap.RuntimeGuard.Invalidate("Required modded authentication state changed.");
-        throw new ClientIntegrityException("Required modded authentication state changed. Restart the game.");
+        Bootstrap.RuntimeGuard.Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_AuthStateChanged));
+        throw new ClientIntegrityException(BootstrapLocalization.Get(TrKeys.Bootstrap_AuthStateRestart));
     }
 
     public override void OnEarlyInitializeMelon()
     {
         bool accepted = false;
-        string failure = "Required Anomaly Bootstrap protection is missing, incompatible, or failed to initialize. " +
-            "Restore the Anomaly installation before restarting.";
+        string failure = BootstrapLocalization.Get(TrKeys.Bootstrap_MissingProtection);
         try
         {
             var security = MelonPreferences.CreateCategory("AnomalyBootstrap", "Anomaly security");
@@ -282,7 +282,7 @@ public class Core : MelonMod
     {
         if (Bootstrap.Core.State != Bootstrap.StartupState.Ready || !Bootstrap.RuntimeGuard.HeartbeatFresh)
         {
-            BlockingFailureDialog.ShowAndExit("Required Bootstrap protection stopped advancing. Restart the game.");
+            BlockingFailureDialog.ShowAndExit(BootstrapLocalization.Get(TrKeys.Bootstrap_HeartbeatStopped));
             return;
         }
         try { EnsureOfflineAuthenticationMode(); }

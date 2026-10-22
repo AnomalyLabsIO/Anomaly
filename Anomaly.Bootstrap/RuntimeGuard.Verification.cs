@@ -109,12 +109,12 @@ internal static partial class RuntimeGuard
         if (!CheckStructuralInvariants()) return false;
         if (DeadlineBeyondCadence(Volatile.Read(ref _nextChecks), Environment.TickCount64))
         {
-            Invalidate("Guard verification deadline was delayed beyond its allowed cadence.");
+            Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_DeadlineDelayed));
             return false;
         }
         if (!ClrEntryStubPreserver.IsInstalled)
         {
-            Invalidate("Required CLR entry stub preservation was replaced.");
+            Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_EntryPreservationReplaced));
             return false;
         }
         var completed = Volatile.Read(ref _completion);
@@ -159,7 +159,7 @@ internal static partial class RuntimeGuard
         }
         catch (Exception ex)
         {
-            Invalidate("Guard checkpoint failed: " + ex.GetType().Name + ": " + ex.Message);
+            Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_CheckpointFailed, ex.GetType().Name, ex.Message));
             return false;
         }
         finally { Volatile.Write(ref _working, 0); }
@@ -178,12 +178,12 @@ internal static partial class RuntimeGuard
             FailAbandonedIlHookApplications();
             if (DeadlineBeyondCadence(Volatile.Read(ref _nextChecks), Environment.TickCount64))
             {
-                Invalidate("Guard verification deadline was delayed beyond its allowed cadence.");
+                Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_DeadlineDelayed));
                 return;
             }
             if (!ClrEntryStubPreserver.IsInstalled)
             {
-                Invalidate("Required CLR entry stub preservation was replaced.");
+                Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_EntryPreservationReplaced));
                 return;
             }
             while (budget.CanStartItem())
@@ -211,7 +211,7 @@ internal static partial class RuntimeGuard
         }
         catch (Exception ex)
         {
-            Invalidate("Guard heartbeat failed: " + ex.GetType().Name + ": " + ex.Message);
+            Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_HeartbeatFailed, ex.GetType().Name, ex.Message));
         }
         finally
         {
@@ -348,7 +348,7 @@ internal static partial class RuntimeGuard
                 else
                 {
                     for (int i = 0; i < target.Required.Length; ++i)
-                        if (!_seen![i]) Invalidate("Required interceptor missing: " + Describe(target.Target) + " <- " + Describe(target.Required[i].Method));
+                        if (!_seen![i]) Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_InterceptorMissing, Describe(target.Target), Describe(target.Required[i].Method)));
                     ++_target; _cursor = null; _seen = null;
                 }
                 return;
@@ -361,9 +361,9 @@ internal static partial class RuntimeGuard
             Delegate[] current = value?.GetInvocationList() ?? Array.Empty<Delegate>();
             if (current.Length == 0 || !current[0].Equals(slot.Guard) ||
                 slot.Previous.Where(IsStockShieldCallback).Any(prior => !current.Contains(prior)))
-                Invalidate("Guard or loader callback removed/reordered: " + slot.Field.DeclaringType?.Name + "." + slot.Field.Name);
+                Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_CallbackChanged, slot.Field.DeclaringType?.Name + "." + slot.Field.Name));
             if (slot.Field.Name == "OnDetour" && slot.Field.DeclaringType != typeof(NativeDetour) && !current.Any(IsStockShieldCallback))
-                Invalidate("Required loader PatchShield detour callback missing: " + slot.Field.DeclaringType?.Name);
+                Invalidate(BootstrapLocalization.Get(TrKeys.Bootstrap_PatchShieldCallbackMissing, slot.Field.DeclaringType?.Name ?? string.Empty));
         }
         internal bool FingerprintsUnchanged()
         {
@@ -386,7 +386,7 @@ internal static partial class RuntimeGuard
         GuardTimingDiagnostics.CountTotal(GuardTimingTotal.PatchRecords);
         if (scope == ProtectionScope.None || ProtectedMethodCatalog.IsTrustedPatch(target, patch.PatchMethod, kind)) return true;
         _audit.Record(GuardAuditFlags.ExternalHarmonyModification,
-            "Existing critical patch: " + Describe(target) + " <- " + Describe(patch.PatchMethod),
+            BootstrapLocalization.Get(TrKeys.Bootstrap_CriticalPatch, Describe(target), Describe(patch.PatchMethod)),
             fatal: scope is ProtectionScope.Core or ProtectionScope.Infrastructure);
         return false;
     }
@@ -432,7 +432,7 @@ internal static partial class RuntimeGuard
             else
             {
                 lock (Sync) ObservedDetours[item] = Target;
-                _audit.Record(GuardAuditFlags.ExternalDetourModification, "Existing critical detour: " + Describe(Target),
+                _audit.Record(GuardAuditFlags.ExternalDetourModification, BootstrapLocalization.Get(TrKeys.Bootstrap_CriticalDetour, Describe(Target)),
                     fatal: _scope is ProtectionScope.Core or ProtectionScope.Infrastructure);
             }
             return false;

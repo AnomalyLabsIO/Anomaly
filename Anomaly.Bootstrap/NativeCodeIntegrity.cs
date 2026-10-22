@@ -25,11 +25,11 @@ internal static class NativeCodeIntegrity
 
     internal static void Install()
     {
-        if (_regions != null) throw new InvalidOperationException("Native code integrity was already installed.");
+        if (_regions != null) throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_NativeAlreadyInstalled));
         if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
-            throw new PlatformNotSupportedException("Native code integrity requires Windows x64.");
+            throw new PlatformNotSupportedException(BootstrapLocalization.Get(TrKeys.Bootstrap_NativePlatformUnsupported));
         string path = Path.Combine(MelonEnvironment.UserDataDirectory, "Anomaly", "Native", "Anomaly.Bootstrap.Native.dll");
-        if (!File.Exists(path)) throw new FileNotFoundException("The enabled native integrity prototype is missing.", path);
+        if (!File.Exists(path)) throw new FileNotFoundException(BootstrapLocalization.Get(TrKeys.Bootstrap_NativePrototypeMissing), path);
         IntPtr library = NativeLibrary.Load(path);
         _add = Marshal.GetDelegateForFunctionPointer<AddRegion>(NativeLibrary.GetExport(library, "AnomalyGuardAdd"));
         _check = Marshal.GetDelegateForFunctionPointer<CheckRegion>(NativeLibrary.GetExport(library, "AnomalyGuardCheck"));
@@ -44,7 +44,7 @@ internal static class NativeCodeIntegrity
             IntPtr entry = methods[i].MethodHandle.GetFunctionPointer();
             indices[i] = _add(entry, EntryBytes);
             if (indices[i] < 0)
-                throw new InvalidOperationException("Could not baseline native entry for " + Names[i]);
+                throw new InvalidOperationException(BootstrapLocalization.Get(TrKeys.Bootstrap_NativeBaselineFailed, Names[i]));
         }
         _regions = indices;
     }
@@ -56,7 +56,7 @@ internal static class NativeCodeIntegrity
         for (int i = 0; i < _regions.Length; ++i)
         {
             if (_check!(_regions[i]) == 0) continue;
-            reason = "Native executable entry or page protection changed: " + Names[i];
+            reason = BootstrapLocalization.Get(TrKeys.Bootstrap_NativeEntryChanged, Names[i]);
             return false;
         }
         return true;

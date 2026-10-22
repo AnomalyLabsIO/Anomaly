@@ -1,4 +1,8 @@
+#if ANOMALY_BOOTSTRAP
+namespace Anomaly.Bootstrap;
+#else
 namespace Anomaly.Client.Api.Internal.Localization;
+#endif
 
 /// <summary>
 /// Compile-time constants for Anomaly's own translation keys (anomaly.* namespace).
@@ -6,6 +10,75 @@ namespace Anomaly.Client.Api.Internal.Localization;
 /// </summary>
 internal static class TrKeys
 {
+    // Early Bootstrap protection failure dialogs
+    public const string Bootstrap_EarlyInitFailed = "anomaly.bootstrap.failure.early_init_failed";
+    public const string Bootstrap_ProtectionUnavailable = "anomaly.bootstrap.failure.protection_unavailable";
+    public const string Bootstrap_BeforeModsFailed = "anomaly.bootstrap.failure.before_mods_failed";
+    public const string Bootstrap_BeforeGameStateChanged = "anomaly.bootstrap.failure.before_game_state_changed";
+    public const string Bootstrap_GameStartFailed = "anomaly.bootstrap.failure.game_start_failed";
+    public const string Bootstrap_ReadyStateChanged = "anomaly.bootstrap.failure.ready_state_changed";
+    public const string Bootstrap_Unregistered = "anomaly.bootstrap.failure.unregistered";
+    public const string Bootstrap_HeartbeatStopped = "anomaly.bootstrap.failure.heartbeat_stopped";
+    public const string Bootstrap_AuthStateUnverified = "anomaly.bootstrap.failure.auth_state_unverified";
+    public const string Bootstrap_AuthStateChanged = "anomaly.bootstrap.failure.auth_state_changed";
+    public const string Bootstrap_AuthStateRestart = "anomaly.bootstrap.failure.auth_state_restart";
+    public const string Bootstrap_AlreadyInstalled = "anomaly.bootstrap.failure.already_installed";
+    public const string Bootstrap_LoaderUnsupported = "anomaly.bootstrap.failure.loader_unsupported";
+    public const string Bootstrap_InstallVerificationFailed = "anomaly.bootstrap.failure.install_verification_failed";
+    public const string Bootstrap_CanaryPatchFailed = "anomaly.bootstrap.failure.canary_patch_failed";
+    public const string Bootstrap_CanaryRestoreFailed = "anomaly.bootstrap.failure.canary_restore_failed";
+    public const string Bootstrap_CanaryModified = "anomaly.bootstrap.failure.canary_modified";
+    public const string Bootstrap_BackendAddressMissing = "anomaly.bootstrap.failure.backend_address_missing";
+    public const string Bootstrap_LeaseOrderChanged = "anomaly.bootstrap.failure.lease_order_changed";
+    public const string Bootstrap_IlHookSourceChanged = "anomaly.bootstrap.failure.il_hook_source_changed";
+    public const string Bootstrap_DeadlineDelayed = "anomaly.bootstrap.failure.deadline_delayed";
+    public const string Bootstrap_EntryPreservationReplaced = "anomaly.bootstrap.failure.entry_preservation_replaced";
+    public const string Bootstrap_AuditReplaced = "anomaly.bootstrap.failure.audit_replaced";
+    public const string Bootstrap_InterceptorInventoryChanged = "anomaly.bootstrap.failure.interceptor_inventory_changed";
+    public const string Bootstrap_CallbackInventoryChanged = "anomaly.bootstrap.failure.callback_inventory_changed";
+    public const string Bootstrap_PatchInventoryChanged = "anomaly.bootstrap.failure.patch_inventory_changed";
+    public const string Bootstrap_TrustedInventoryChanged = "anomaly.bootstrap.failure.trusted_inventory_changed";
+    public const string Bootstrap_IlHookNestingExceeded = "anomaly.bootstrap.failure.il_hook_nesting_exceeded";
+    public const string Bootstrap_IlHookOperationMissing = "anomaly.bootstrap.failure.il_hook_operation_missing";
+    public const string Bootstrap_IlHookCompletionOrderChanged = "anomaly.bootstrap.failure.il_hook_completion_order_changed";
+    public const string Bootstrap_IlHookCallbackMissing = "anomaly.bootstrap.failure.il_hook_callback_missing";
+    public const string Bootstrap_IlHookRefreshIncomplete = "anomaly.bootstrap.failure.il_hook_refresh_incomplete";
+    public const string Bootstrap_MutationAccountingChanged = "anomaly.bootstrap.failure.mutation_accounting_changed";
+    public const string Bootstrap_UnspecifiedObservation = "anomaly.bootstrap.failure.unspecified_observation";
+    public const string Bootstrap_NativeAlreadyInstalled = "anomaly.bootstrap.failure.native_already_installed";
+    public const string Bootstrap_NativePlatformUnsupported = "anomaly.bootstrap.failure.native_platform_unsupported";
+    public const string Bootstrap_NativePrototypeMissing = "anomaly.bootstrap.failure.native_prototype_missing";
+    public const string Bootstrap_EntryPreserverAlreadyInstalled = "anomaly.bootstrap.failure.entry_preserver_already_installed";
+    public const string Bootstrap_ClrPlatformUnsupported = "anomaly.bootstrap.failure.clr_platform_unsupported";
+    public const string Bootstrap_DetourPlatformUnavailable = "anomaly.bootstrap.failure.detour_platform_unavailable";
+    public const string Bootstrap_DetourEndpointsChanged = "anomaly.bootstrap.failure.detour_endpoints_changed";
+    public const string Bootstrap_ClrPrecodeUnreadable = "anomaly.bootstrap.failure.clr_precode_unreadable";
+    public const string Bootstrap_ClrAdapterUnavailable = "anomaly.bootstrap.failure.clr_adapter_unavailable";
+    public const string Bootstrap_ClrMethodUnreadable = "anomaly.bootstrap.failure.clr_method_unreadable";
+    public const string Bootstrap_ClrLayoutUnsupported = "anomaly.bootstrap.failure.clr_layout_unsupported";
+    public const string Bootstrap_ClrCodeSlotUnreadable = "anomaly.bootstrap.failure.clr_code_slot_unreadable";
+    public const string Bootstrap_ClrImplementationUnconfirmed = "anomaly.bootstrap.failure.clr_implementation_unconfirmed";
+    public const string Bootstrap_DetourTargetsStub = "anomaly.bootstrap.failure.detour_targets_stub";
+    public const string Bootstrap_ProtectionFailed = "anomaly.bootstrap.failure.protection_failed";
+    public const string Bootstrap_AuthStateUnreadable = "anomaly.bootstrap.failure.auth_state_unreadable";
+    public const string Bootstrap_InstallationFailed = "anomaly.bootstrap.failure.installation_failed";
+    public const string Bootstrap_CheckpointFailed = "anomaly.bootstrap.failure.checkpoint_failed";
+    public const string Bootstrap_HeartbeatFailed = "anomaly.bootstrap.failure.heartbeat_failed";
+    public const string Bootstrap_BackendUnprotected = "anomaly.bootstrap.failure.backend_unprotected";
+    public const string Bootstrap_CallbackDispatchChanged = "anomaly.bootstrap.failure.callback_dispatch_changed";
+    public const string Bootstrap_InterceptorMissing = "anomaly.bootstrap.failure.interceptor_missing";
+    public const string Bootstrap_CallbackChanged = "anomaly.bootstrap.failure.callback_changed";
+    public const string Bootstrap_PatchShieldCallbackMissing = "anomaly.bootstrap.failure.patch_shield_callback_missing";
+    public const string Bootstrap_DeferredNativeModification = "anomaly.bootstrap.failure.deferred_native_modification";
+    public const string Bootstrap_CriticalPatch = "anomaly.bootstrap.failure.critical_patch";
+    public const string Bootstrap_CriticalDetour = "anomaly.bootstrap.failure.critical_detour";
+    public const string Bootstrap_NativeBaselineFailed = "anomaly.bootstrap.failure.native_baseline_failed";
+    public const string Bootstrap_NativeEntryChanged = "anomaly.bootstrap.failure.native_entry_changed";
+    public const string Bootstrap_MissingProtection = "anomaly.bootstrap.failure.missing_protection";
+    public const string Bootstrap_ClrEntrypointMismatch = "anomaly.bootstrap.failure.clr_entrypoint_mismatch";
+    public const string Bootstrap_FailureTitle = "anomaly.bootstrap.failure.failure_title";
+    public const string Bootstrap_FailureDialog = "anomaly.bootstrap.failure.failure_dialog";
+
     // Auth overlay
     public const string Overlay_Authenticating = "anomaly.overlay.authenticating";
     public const string Overlay_ConnectionAuthenticating = "anomaly.overlay.connection_authenticating";
