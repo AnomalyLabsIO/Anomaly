@@ -2,10 +2,11 @@
   <PropertyGroup>
     <AnomalyRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))</AnomalyRepositoryRoot>
 
-    <!-- All machine-specific inputs are overridable MSBuild properties. The defaults
-         describe the sibling layout used by local Anomaly development. -->
+    <!-- All machine-specific inputs are overridable MSBuild properties. The client
+         default is the MelonLoader 0.7.3 installation; server inputs retain the
+         sibling layout used by local Anomaly development. -->
     <AnomalyClientRoot Condition="'$(AnomalyClientRoot)' == '' And '$(AnomalyGameRoot)' != ''">$(AnomalyGameRoot)</AnomalyClientRoot>
-    <AnomalyClientRoot Condition="'$(AnomalyClientRoot)' == ''">$([System.IO.Path]::GetFullPath('$(AnomalyRepositoryRoot)..\Client'))</AnomalyClientRoot>
+    <AnomalyClientRoot Condition="'$(AnomalyClientRoot)' == ''">E:\Steam\steamapps\common\SCP Secret Laboratory - Copy</AnomalyClientRoot>
     <AnomalyClientInteropDir Condition="'$(AnomalyClientInteropDir)' == ''">$(AnomalyClientRoot)\MelonLoader\Il2CppAssemblies</AnomalyClientInteropDir>
     <AnomalyClientMelonLibDir Condition="'$(AnomalyClientMelonLibDir)' == ''">$(AnomalyClientRoot)\MelonLoader\net6</AnomalyClientMelonLibDir>
 

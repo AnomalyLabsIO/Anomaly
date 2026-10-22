@@ -35,6 +35,7 @@ using MelonLoader.Utils;
 [assembly: MelonID("anomaly.client")]
 [assembly: MelonGame("Northwood", "SCPSL")]
 [assembly: SupportedGameVersion("14.2.7^")]
+[assembly: PatchShield]
 
 namespace Anomaly.Client;
 
@@ -53,6 +54,21 @@ public class Core : MelonMod
         Instance != null && Instance._offlineAuthReady && Instance._mandatoryPatchesReady &&
         Instance._clientRuntimeReady &&
         Instance._capabilitiesReady && ClientRuntime.IsInitialized;
+
+    public override void OnEarlyInitializeMelon()
+    {
+        try
+        {
+            if (PullUpBootstraps())
+                return;
+        }
+        catch (Exception ex)
+        {
+            MelonLogger.Error($"Bootstrap verification failed: {ex}");
+        }
+
+        Environment.Exit(78);
+    }
 
     public override void OnInitializeMelon()
     {
@@ -230,5 +246,29 @@ public class Core : MelonMod
             catch { }
             return false;
         }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(
+        System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static bool PullUpBootstraps()
+    {
+        if(Bootstrap.Core.State!= Bootstrap.StartupState.Ready)
+        {
+            MelonLogger.Error("Anomaly bootstrap failed to initialize. Aborting.");
+            return false;
+        }
+        foreach (var melonbase in MelonBase.RegisteredMelons)
+        {
+            if(melonbase is Bootstrap.Core)
+            {
+                if (melonbase.MelonAssembly.Assembly.IsDefined(typeof(MelonLoader.PatchShield), inherit: false))
+                {
+                    MelonLogger.Msg("Anomaly bootstrap is loaded and passed.");
+                    return true;
+                }
+            }
+        }
+        MelonLogger.Error("Anomaly bootstrap was not loaded. Aborting.");
+        return false;
     }
 }

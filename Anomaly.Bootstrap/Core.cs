@@ -3,13 +3,17 @@ using MelonLoader.Utils;
 
 [assembly: MelonInfo(typeof(Anomaly.Bootstrap.Core), "Anomaly Bootstrap", "1.0.0", "AnomalyLabs", null)]
 [assembly: MelonGame("Northwood", "SCPSL")]
+[assembly: PatchShield]
 
 namespace Anomaly.Bootstrap;
 
 public sealed class Core : MelonPlugin
 {
+    public static StartupState State { get; private set; } = StartupState.NotStarted;
+    
     public override void OnPreModsLoaded()
     {
+        State = StartupState.Running;
         var anomalyRoot = Path.Combine(MelonEnvironment.UserDataDirectory, "Anomaly");
         var gate = new ModTrustGate(
             MelonEnvironment.ModsDirectory,
@@ -29,8 +33,18 @@ public sealed class Core : MelonPlugin
 
         if (result.Failures.Count > 0)
         {
+            State = StartupState.Failed;
             MelonLogger.Error("The pre-load trust gate could not contain every unapproved assembly. Exiting before MelonMods are loaded.");
             Environment.Exit(78);
         }
+        State = StartupState.Ready;
     }
+}
+
+public enum StartupState
+{
+    NotStarted,
+    Running,
+    Failed,
+    Ready
 }

@@ -499,6 +499,7 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\Anomaly.AssetValidation\Anomaly.AssetValidation.csproj" />
+	  <ProjectReference Include="..\Anomaly.Bootstrap\Anomaly.Bootstrap.csproj" Private="false" />
 	  <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj"
 	                    AdditionalProperties="DeployLocal=$(DeployLocal)" />
 	  <ProjectReference Include="..\Anomaly.Client.Api\Anomaly.Client.Api.csproj"
