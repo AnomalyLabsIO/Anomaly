@@ -6,6 +6,7 @@ using Il2Cpp;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -50,6 +51,7 @@ public static class CameraManager
     /// Useful for mods that need to re-attach VFX, UI, or post-process bindings
     /// when the rig swaps (role change, scene change, custom override).
     /// </summary>
+    [ScriptIgnore]
     public static event Action<Camera> Changed;
 
     /// <summary>

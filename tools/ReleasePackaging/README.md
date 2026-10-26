@@ -2,13 +2,18 @@
 
 `release/Build-RuntimeRelease.ps1` uses the `create-local` command to
 produce client, server, and SDK ZIPs plus `SHA256SUMS` from a local checkout. Installation ZIPs
-contain only the declared runtime DLLs and the client's skin bundle/index pair;
-documentation and license files are excluded. It shares the
+contain the declared runtime DLLs, license notices, dependency declaration, and
+client skin bundle/index pair and asset guide. The client includes the private
+MoonSharp fork's BSD-3-Clause license and provenance. It shares the
 reviewed layout, PE assembly dependency audit, archive writer, and ZIP hash
 verification below. It also validates and includes the logo/background skin
 pair with the production index and bundle validators. The SDK uses its complete
 declared layout, including documentation, baselines, reference metadata,
-samples, and license files. The PowerShell wrapper compiles the staged SDK
+samples, and license files. Its required `reference/` payload also includes
+`Anomaly.Client.Scripting.ScriptAPI.Shipped.txt`, the generated
+`Anomaly.Client.Scripting.ScriptAPI.json`, and `Anomaly.Client.Api.d.lua` LuaLS
+definitions from the approved runtime catalog. Missing script exports fail
+layout preflight. The PowerShell wrapper compiles the staged SDK
 starters and positive/negative compile probes before copying the artifacts to
 the destination. This mode accepts a dirty
 checkout and emits no commit receipt or signing evidence; the existing

@@ -18,6 +18,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
     {
         ContentCatalogClient.Init();
         Dispose();
+        ContentConsentFixture.Begin();
     }
 
     [Fact]
@@ -26,7 +27,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
         Offer(1);
         Action oldApproval = PasswordPrompt.Approve;
         Assert.Empty(AnomalyMessaging.Sent);
-        ContentCatalogClient.BeginFacilityScene();
+        ConnectionContentBootstrap.BeginFacilityGeneration(2);
         Offer(2);
 
         oldApproval();
@@ -38,20 +39,33 @@ public sealed class ContentSceneLifecycleTests : IDisposable
     }
 
     [Fact]
-    public void DeclinedOfferCanPromptAgainForTheReplacementPlayerHub()
+    public void InitialFacilityAwakePreservesTheEarlyAuthenticatedOffer()
+    {
+        FileCache.HasFileResult = _ => true;
+        Offer(3);
+        Action approval = PasswordPrompt.Approve;
+        ContentCatalogClient.BeginFacilityScene();
+        Assert.Same(approval, PasswordPrompt.Approve);
+        Assert.Equal("AwaitingConsent", TransferState());
+        approval();
+        Assert.True(ContentCatalogClient.IsActivated);
+        Assert.Equal(1, ClientContentRegistrar.Activations);
+        Assert.Equal(0, AnomalyMessaging.TransportFailures);
+    }
+
+    [Fact]
+    public void Declined_offer_closes_the_connection_without_requesting_any_bytes()
     {
         Offer(10);
         PasswordPrompt.Decline();
-        Assert.Equal("Aborted", TransferState());
+        Assert.Equal("Idle", TransferState());
         Assert.Equal(ContentCatalogDecision.Declined,
             Assert.Single(AnomalyMessaging.Sent.OfType<ContentCatalogDecisionMessage>()).Decision);
 
-        ContentCatalogClient.BeginFacilityScene();
-        Offer(11);
-        Assert.Equal("AwaitingConsent", TransferState());
-        Assert.Equal(2, PasswordPrompt.Shown);
+        Assert.Equal(1, PasswordPrompt.Shown);
         Assert.Empty(AnomalyMessaging.Sent.OfType<FileRequestMessage>());
-        Assert.Equal(0, AnomalyMessaging.TransportFailures);
+        ContentConsentFixture.DrainGrace();
+        Assert.Equal(1, AnomalyMessaging.TransportFailures);
     }
 
     [Fact]
@@ -65,7 +79,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
         Assert.False(FileTransferOverlay.Visible);
         Assert.Equal(1, ClientContentRegistrar.Activations);
 
-        ContentCatalogClient.BeginFacilityScene();
+        ConnectionContentBootstrap.BeginFacilityGeneration(2);
         Assert.False(FileTransferClient.IsFileApproved(first.Files[0].Hash, FileContentKind.Bundle));
         Assert.False(ClientContentRegistrar.Active);
         FileTransferOverlay.Show();
@@ -112,7 +126,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
         FileCache.HasFileResult = _ => true;
         var first = Offer(30);
         PasswordPrompt.Approve();
-        ContentCatalogClient.BeginFacilityScene();
+        ConnectionContentBootstrap.BeginFacilityGeneration(2);
         Offer(31, hashByte: 0x22);
 
         Assert.Equal(2, PasswordPrompt.Shown);
@@ -144,7 +158,8 @@ public sealed class ContentSceneLifecycleTests : IDisposable
         PasswordPrompt.Approve();
         ClientContentRegistrar.ThrowOnReset = true;
 
-        Assert.Throws<InvalidOperationException>(ContentCatalogClient.BeginFacilityScene);
+        FileTransferClient.Reset();
+        Assert.Throws<InvalidOperationException>(ContentCatalogClient.ResetForShutdown);
         Assert.Equal("Idle", TransferState());
         Assert.False(FileTransferClient.IsFileApproved(first.Files[0].Hash, FileContentKind.Bundle));
         Assert.Null(PasswordPrompt.Approve);
@@ -180,16 +195,5 @@ public sealed class ContentSceneLifecycleTests : IDisposable
     private static string TransferState() => typeof(FileTransferClient)
         .GetField("_state", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null).ToString();
 
-    public void Dispose()
-    {
-        ClientContentRegistrar.ThrowOnReset = false;
-        ContentCatalogClient.Reset();
-        FileTransferClient.Reset();
-        FileCache.HasFileResult = _ => false;
-        ContentConsentStore.Approved.Clear();
-        ClientContentRegistrar.Activations = 0;
-        PasswordPrompt.Shown = 0;
-        AnomalyMessaging.ResetForTests();
-        AnomalyMessaging.TransportFailures = 0;
-    }
+    public void Dispose() => ContentConsentFixture.Reset();
 }

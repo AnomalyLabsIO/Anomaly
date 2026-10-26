@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Args;
 
@@ -7,6 +8,7 @@ namespace Anomaly.Client.Api.Events.Args;
 /// before the <c>CmdDropItem</c> RPC is sent. Cancelling keeps the item in the
 /// local inventory; the server never sees the drop request.
 /// </summary>
+[ScriptType]
 public class PlayerDroppingItemEventArgs : PlayerEventArgs, ICancellableEvent, IItemEvent
 {
     public PlayerDroppingItemEventArgs(Player player, ushort itemSerial, bool tryThrow) : base(player)
@@ -17,13 +19,17 @@ public class PlayerDroppingItemEventArgs : PlayerEventArgs, ICancellableEvent, I
     }
 
     /// <summary>Serial of the item the player is attempting to drop.</summary>
+    [ScriptVisible]
     public ushort ItemSerial { get; }
 
     /// <summary>The item when it can be resolved from the client cache.</summary>
+    [ScriptVisible]
     public Item Item { get; }
 
     /// <summary>True if the player is performing a drop-and-throw (G + movement), false for a plain drop.</summary>
+    [ScriptVisible]
     public bool TryThrow { get; }
 
+    [ScriptVisible]
     public bool IsAllowed { get; set; } = true;
 }

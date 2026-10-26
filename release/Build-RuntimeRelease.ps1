@@ -48,7 +48,7 @@ foreach ($override in @(
 }
 
 $runtimeProjects = @(
-    'Anomaly.Bootstrap', 'Anomaly.Client', 'Anomaly.Client.Api',
+    'Anomaly.Bootstrap', 'Anomaly.Client', 'Anomaly.Client.Api', 'Anomaly.Client.Scripting',
     'Anomaly.AssetValidation', 'Anomaly.Server', 'Anomaly.Shared'
 )
 $packagerProject = Join-Path $runtimeRepositoryRoot 'tools/ReleasePackaging/ReleasePackaging.csproj'
@@ -63,7 +63,8 @@ try {
     & dotnet $packagerAssembly validate-skins $SkinIndexPath
     if ($LASTEXITCODE -ne 0) { throw 'Skin pack validation failed.' }
 
-    # Client and Server build Api, Shared, and AssetValidation transitively.
+    # Client and Server build Api, Scripting (including the private MoonSharp
+    # fork), Shared, and AssetValidation transitively.
     foreach ($project in @('Anomaly.Bootstrap', 'Anomaly.Client', 'Anomaly.Server')) {
         & dotnet build (Join-Path $runtimeRepositoryRoot "$project/$project.csproj") `
             -c Release @runtimeBuildProperties --nologo -v:minimal
@@ -77,7 +78,7 @@ try {
             "-p:AnomalyResolvedReferenceList=$referenceList" -nologo -v:minimal
         if ($LASTEXITCODE -ne 0) { throw "Reference capture failed for $project." }
     }
-    # Runtime ZIPs stay minimal; the SDK has the complete developer layout.
+    # Each ZIP carries its reviewed payload and redistribution notices.
     $localReleaseStage = Join-Path $runtimeScratchDirectory 'release-output'
     & dotnet $packagerAssembly create-local $runtimeRepositoryRoot $localReleaseStage `
         $Version $runtimeScratchDirectory $SkinIndexPath

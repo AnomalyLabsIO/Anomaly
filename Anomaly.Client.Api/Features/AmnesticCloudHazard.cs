@@ -1,9 +1,11 @@
 using Il2CppPlayerRoles.PlayableScps.Scp939;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>An SCP-939 cloud's replicated presentation state.</summary>
+[ScriptType]
 public sealed class AmnesticCloudHazard : DecayableHazard
 {
     internal AmnesticCloudHazard(Scp939AmnesticCloudInstance value) : base(value) => CloudBase = value;

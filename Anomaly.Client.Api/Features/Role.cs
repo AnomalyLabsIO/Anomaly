@@ -1,7 +1,9 @@
 ﻿using Il2CppPlayerRoles;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class Role
 {
     private static readonly Dictionary<PlayerRoleBase, Role> _roles = new();
@@ -19,20 +21,28 @@ public class Role
     /// Whether the native role was destroyed, returned to its pool, or reused
     /// for a different life. Role wrappers should not be retained across lives.
     /// </summary>
+    [ScriptVisible]
     public bool IsDestroyed => Base == null || Base.Pooled || Base.UniqueLifeIdentifier != _lifeIdentifier;
 
+    [ScriptVisible]
     public RoleTypeId Type => Base.RoleTypeId;
 
+    [ScriptVisible]
     public Team Team => Base.Team;
 
+    [ScriptVisible]
     public int LifeIdentifier => Base.UniqueLifeIdentifier;
 
+    [ScriptVisible]
     public string Name => Type.ToString();
 
+    [ScriptVisible]
     public bool IsAlive => Team != Team.Dead;
 
+    [ScriptVisible]
     public bool IsHuman => IsAlive && Team != Team.SCPs;
 
+    [ScriptVisible]
     public bool IsScp => Team == Team.SCPs;
 
     public static Role Get(PlayerRoleBase roleBase)

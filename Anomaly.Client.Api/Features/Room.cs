@@ -1,9 +1,11 @@
 ﻿using System.Collections.ObjectModel;
 using Il2CppMapGeneration;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class Room
 {
     private static readonly Dictionary<RoomIdentifier, Room> _rooms = new();
@@ -15,6 +17,7 @@ public class Room
 
     public RoomIdentifier Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
 
     public GameObject GameObject => IsDestroyed ? null : Base.gameObject;
@@ -39,12 +42,16 @@ public class Room
         }
     }
 
+    [ScriptVisible]
     public string Name => Base.Name.ToString();
 
+    [ScriptVisible]
     public RoomName RoomName => Base.Name;
 
+    [ScriptVisible]
     public FacilityZone Zone => Base.Zone;
 
+    [ScriptVisible]
     public RoomShape Shape => Base.Shape;
 
     public Sprite Icon => Base.Icon;

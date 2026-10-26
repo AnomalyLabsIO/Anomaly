@@ -10,12 +10,18 @@ using Il2Cpp;
 using Il2CppMirror;
 using Il2CppMirror.LiteNetLib4Mirror;
 using MelonLoader;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Networking;
 
 public static class AnomalyMessaging
 {
     internal static Action<Anomaly.Shared.Networking.Messages.FacilitySnapshotMessage> FacilitySnapshotReceived;
+    internal static Action<IAnomalyMessage> ContentBootstrapMessageReceived;
+    internal static Action TransportSessionRevoked;
+    internal static Func<ScriptToClientMessage, bool> ScriptMessageReceived;
+    internal static Func<ScriptToServerMessage, bool> ScriptMessageSendAllowed;
+    [ScriptIgnore]
     public static event Action<IAnomalyMessage> MessageReceived;
 
     private static readonly object TransportSync = new();
@@ -25,6 +31,14 @@ public static class AnomalyMessaging
     private static byte[] _sessionId;
     private static byte[] _transcriptHash;
     private static uint _currentRoundEpoch;
+    private static long _transportGeneration;
+
+    // Native connection pointers can survive a rekey. Pending work must also
+    // belong to the exact local lifetime of the directional crypto material.
+    internal static long TransportGeneration
+    {
+        get { lock (TransportSync) return _transportGeneration; }
+    }
 
     public static void Send(IAnomalyMessage msg)
     {
@@ -61,7 +75,8 @@ public static class AnomalyMessaging
     internal static bool TrySend(IAnomalyMessage msg)
     {
         var hub = LocalPlayer.Instance?.ReferenceHub;
-        if (hub == null && !PlayerRegistry.TryGetLocalHub(out hub))
+        if (hub == null && !PlayerRegistry.TryGetLocalHub(out hub) &&
+            !(NetworkClient.connection != null && HasTransportSession() && ContentBootstrapPolicy.IsClientMessage(msg)))
         {
             SafeLogWarning("AnomalyMessaging.Send: No local player hub available.");
             return false;
@@ -82,6 +97,10 @@ public static class AnomalyMessaging
             return false;
         }
 
+        if (msg is ScriptToServerMessage scriptMessage && ScriptMessageSendAllowed?.Invoke(scriptMessage) != true)
+            return false;
+        if (msg is ScriptToServerMessage && !HasScriptQueueCapacity()) return false;
+
         // Serialize the inner payload: [hash][message payload]
         using var innerMs = new MemoryStream();
         using var innerWriter = new BinaryWriter(innerMs);
@@ -98,6 +117,8 @@ public static class AnomalyMessaging
                 $"({serializedPayloadBytes}/{policy.MaxPayloadBytes} bytes).");
             return false;
         }
+
+        if (msg is ScriptToServerMessage && !HasScriptQueueCapacity()) return false;
 
         // Build the full envelope: [0xFE][4:counter][inner]
         uint counter = AnomalyReplayTable.Instance.NextTxCounter(channel);
@@ -300,6 +321,12 @@ public static class AnomalyMessaging
             return;
         }
 
+        if (beforeHubReady && !ContentBootstrapPolicy.IsServerMessage(message))
+        {
+            FailClosedTransport("Only authenticated connection bootstrap is permitted before player readiness.");
+            return;
+        }
+
         try
         {
             using var ms = new MemoryStream(anomalyPayload, 8, anomalyPayload.Length - 8);
@@ -311,9 +338,9 @@ public static class AnomalyMessaging
         }
         catch (Exception ex)
         {
-            if (message is Anomaly.Shared.Networking.Messages.FacilitySnapshotMessage)
+            if (ContentBootstrapPolicy.IsServerMessage(message))
             {
-                FailClosedTransport("The authenticated facility snapshot was malformed: " + ex.Message);
+                FailClosedTransport("The authenticated connection bootstrap was malformed: " + ex.Message);
                 return;
             }
             RegisterProtocolViolation(
@@ -337,9 +364,18 @@ public static class AnomalyMessaging
             }
             return;
         }
-        if (beforeHubReady)
+        if (ContentBootstrapPolicy.IsServerMessage(message))
         {
-            FailClosedTransport("Only authenticated facility bootstrap is permitted before player readiness.");
+            try
+            {
+                var receiver = ContentBootstrapMessageReceived ??
+                    throw new InvalidOperationException("The content bootstrap receiver is unavailable.");
+                receiver(message);
+            }
+            catch (Exception exception)
+            {
+                FailClosedTransport("The authenticated content bootstrap failed: " + exception.Message);
+            }
             return;
         }
 
@@ -365,6 +401,21 @@ public static class AnomalyMessaging
                     $"(hash=0x{hash:X8}, epoch={scoped.RoundEpoch}/{_currentRoundEpoch}, " +
                     $"sequence={scoped.Sequence}, reason={result})",
                     localTransport);
+                return;
+            }
+        }
+
+        if (message is ScriptToClientMessage scriptMessage)
+        {
+            try
+            {
+                // The client-owned bridge checks the immutable approved pack and
+                // queues Lua before ordinary observers can see this carrier.
+                if (ScriptMessageReceived?.Invoke(scriptMessage) != true) return;
+            }
+            catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+            {
+                FailClosedTransport("The approved script message bridge failed: " + exception.GetType().Name);
                 return;
             }
         }
@@ -419,9 +470,13 @@ public static class AnomalyMessaging
             transcriptHash?.Length != AuthTransportCrypto.TranscriptHashSize)
             throw new ArgumentException("Invalid directional authenticated transport session material.");
 
+        // Erase old keys first: failing cleanup must leave neither the previous
+        // session nor a replacement authenticated transport usable.
+        lock (TransportSync)
+            ClearTransportSessionLocked();
+        TransportSessionRevoked?.Invoke();
         lock (TransportSync)
         {
-            ClearTransportSessionLocked();
             _clientToServerKey = (byte[])clientToServerKey.Clone();
             _serverToClientKey = (byte[])serverToClientKey.Clone();
             _sessionId = (byte[])sessionId.Clone();
@@ -429,10 +484,17 @@ public static class AnomalyMessaging
         }
     }
 
-    internal static void ClearTransportSession()
+    internal static long ClearTransportSession()
     {
+        long generation;
         lock (TransportSync)
+        {
             ClearTransportSessionLocked();
+            generation = _transportGeneration;
+        }
+        try { TransportSessionRevoked?.Invoke(); }
+        catch (Exception exception) { SafeLogError("Connection scope revocation failed: " + exception); }
+        return generation;
     }
 
     private static bool HasTransportSession()
@@ -522,6 +584,9 @@ public static class AnomalyMessaging
         _serverToClientKey = null;
         _sessionId = null;
         _transcriptHash = null;
+        // Exhaustion fails closed after erasing material; never wrap and make a
+        // prior lifetime current again.
+        _transportGeneration = checked(_transportGeneration + 1);
     }
 
     private static void SafeLogWarning(string message)
@@ -572,6 +637,31 @@ public static class AnomalyMessaging
                 $"AnomalyMessaging.Send: transport ceiling query failed closed: {exception.Message}";
             return false;
         }
+    }
+
+    private static bool HasScriptQueueCapacity()
+    {
+        if (NetworkServer.active) return true;
+        try
+        {
+            var transport = LiteNetLib4MirrorTransport.Singleton;
+            var peer = LiteNetLib4MirrorCore.Host?.FirstPeer;
+            if (transport?.channels == null || transport.channels.Length > 32 || peer == null ||
+                peer.ConnectionState != Il2CppLiteNetLib.ConnectionState.Connected) return false;
+            long queued = 0;
+            for (int index = 0; index < transport.channels.Length; index++)
+            {
+                var delivery = transport.channels[index];
+                if (delivery != Il2CppLiteNetLib.DeliveryMethod.ReliableOrdered &&
+                    delivery != Il2CppLiteNetLib.DeliveryMethod.ReliableUnordered) continue;
+                int count = peer.GetPacketsCountInReliableQueue((byte)index,
+                    delivery == Il2CppLiteNetLib.DeliveryMethod.ReliableOrdered);
+                if (count < 0 || (queued += count) >= 128) return false;
+            }
+            return true;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+        { return false; }
     }
 
     private static bool TryGetPacketLimits(MessageChannel channel, out int maximumPacketBytes, out int singlePacketBytes)

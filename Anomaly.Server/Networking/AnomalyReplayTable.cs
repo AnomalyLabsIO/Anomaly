@@ -34,12 +34,14 @@ namespace Anomaly.Server.Networking
 
         internal static AnomalyInboundRateLimiter GetRateLimiterOrCreate(ReferenceHub hub)
         {
-            return RateLimiters.GetOrAdd(hub, _ => new AnomalyInboundRateLimiter());
+            return AuthenticatedTransportSessions.GetRateLimiter(hub, raw: false) ??
+                   RateLimiters.GetOrAdd(hub, _ => new AnomalyInboundRateLimiter());
         }
 
         internal static AnomalyInboundRateLimiter GetRawRateLimiterOrCreate(ReferenceHub hub)
         {
-            return RawRateLimiters.GetOrAdd(hub, _ => new AnomalyInboundRateLimiter());
+            return AuthenticatedTransportSessions.GetRateLimiter(hub, raw: true) ??
+                   RawRateLimiters.GetOrAdd(hub, _ => new AnomalyInboundRateLimiter());
         }
 
         internal static void Remove(ReferenceHub hub)

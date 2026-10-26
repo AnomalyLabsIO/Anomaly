@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Args;
 
@@ -7,11 +8,13 @@ namespace Anomaly.Client.Api.Events.Args;
 /// Cancelling keeps the movement state at walking; the server only observes
 /// movement state changes, so suppressing this is desync-safe.
 /// </summary>
+[ScriptType]
 public class PlayerSprintingEventArgs : PlayerEventArgs, ICancellableEvent
 {
     public PlayerSprintingEventArgs(Player player) : base(player)
     {
     }
 
+    [ScriptVisible]
     public bool IsAllowed { get; set; } = true;
 }

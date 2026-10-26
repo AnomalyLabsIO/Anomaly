@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Il2CppInventorySystem.Items.Usables.Scp330;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -14,6 +15,7 @@ namespace Anomaly.Client.Api.Features;
 /// server-side wrapper. The underlying IL2CPP type is <see cref="Scp330Bag"/>.
 /// Maximum candies per bag is <see cref="Scp330Bag.MaxCandies"/> (6).
 /// </remarks>
+[ScriptType]
 public class Scp330Item : UsableItem
 {
     internal Scp330Item(Scp330Bag bagBase) : base(bagBase)

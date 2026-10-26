@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Handlers;
 
@@ -12,6 +13,7 @@ namespace Anomaly.Client.Api.Events.Handlers;
 public static class AudioEvents
 {
     /// <summary>Fires before a pooled audio source plays on this client. Cancel to silence.</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<AudioPlayingEventArgs> Playing;
 
     internal static void OnPlaying(AudioPlayingEventArgs args) => EventInvoker.Invoke(Playing, args);

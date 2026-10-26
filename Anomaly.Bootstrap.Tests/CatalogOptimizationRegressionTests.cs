@@ -29,7 +29,8 @@ public sealed class CatalogOptimizationRegressionTests
     {
         // These distinct, noncritical assembly names never pin a required identity
         // or contaminate the existing first-Assembly-CSharp catalog test.
-        foreach (string name in new[] { "anomaly.client", "ANOMALY.CLIENT", "assembly-csharp", "bouncycastle.cryptography" })
+        foreach (string name in new[] { "anomaly.client", "ANOMALY.CLIENT", "anomaly.client.scripting",
+            "ANOMALY.MOONSHARP.INTERPRETER", "assembly-csharp", "bouncycastle.cryptography" })
         {
             var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(name), AssemblyBuilderAccess.Run);
             var type = assembly.DefineDynamicModule("ordinal-fixture").DefineType("Fixture.NonCritical", TypeAttributes.Public);

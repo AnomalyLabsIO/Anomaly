@@ -1,5 +1,6 @@
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Shared.Networking.Messages;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Handlers;
 
@@ -14,12 +15,19 @@ namespace Anomaly.Client.Api.Events.Handlers;
 /// </remarks>
 public static class RoundEvents
 {
+    [ScriptEvent]
     public static event AnomalyEventHandler<RoundPhaseChangedEventArgs> PhaseChanged;
+    [ScriptEvent]
     public static event AnomalyEventHandler<RoundPhaseChangedEventArgs> WaitingForPlayers;
+    [ScriptEvent]
     public static event AnomalyEventHandler<RoundPhaseChangedEventArgs> Starting;
+    [ScriptEvent]
     public static event AnomalyEventHandler<RoundPhaseChangedEventArgs> Started;
+    [ScriptEvent]
     public static event AnomalyEventHandler<RoundPhaseChangedEventArgs> Ending;
+    [ScriptEvent]
     public static event AnomalyEventHandler<RoundPhaseChangedEventArgs> Ended;
+    [ScriptEvent]
     public static event AnomalyEventHandler<RoundPhaseChangedEventArgs> Restarted;
 
     /// <summary>

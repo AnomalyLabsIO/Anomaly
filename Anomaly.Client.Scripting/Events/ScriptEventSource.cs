@@ -1,11 +1,13 @@
 using System.Reflection;
+using MoonSharp.Interpreter;
 
 namespace Anomaly.Client.Scripting.Events;
 
 internal sealed class ScriptEventSource : IDisposable
 {
     private readonly object _sync = new();
-    private readonly List<ScriptEventRegistration> _registrations = new();
+    private readonly List<ScriptEventRegistration> _registrations = new(256);
+    private bool _publishing;
     private readonly ScriptEventSnapshotPlan? _snapshot;
     private readonly int _ownerThread = Environment.CurrentManagedThreadId;
     private Delegate? _handler;
@@ -20,11 +22,16 @@ internal sealed class ScriptEventSource : IDisposable
         EventInfo = eventInfo;
         Parameters = parameters;
         _snapshot = snapshot;
+        QualifiedName = "Events." + category + "." + name;
+        AddName = QualifiedName + ".Add";
+        RemoveName = QualifiedName + ".Remove";
     }
 
     internal string Category { get; }
     internal string Name { get; }
-    internal string QualifiedName => "Events." + Category + "." + Name;
+    internal string QualifiedName { get; }
+    internal string AddName { get; }
+    internal string RemoveName { get; }
     internal EventInfo EventInfo { get; }
     internal ParameterInfo[] Parameters { get; }
 
@@ -45,7 +52,7 @@ internal sealed class ScriptEventSource : IDisposable
             var handler = Delegate.CreateDelegate(EventInfo.EventHandlerType!, this, method);
             _handler = handler;
             try { EventInfo.AddEventHandler(null, handler); }
-            catch
+            catch (Exception exception)
             {
                 // A custom accessor may attach before throwing. Roll back once and
                 // quarantine this source so repeated attempts cannot add stale bridges.
@@ -54,6 +61,7 @@ internal sealed class ScriptEventSource : IDisposable
                 registration.Deactivate();
                 try { EventInfo.RemoveEventHandler(null, handler); _handler = null; }
                 catch (Exception) { }
+                ScriptHostException.RethrowFatal(exception);
                 throw;
             }
         }
@@ -81,35 +89,90 @@ internal sealed class ScriptEventSource : IDisposable
 
     private void Publish(object? value)
     {
-        ScriptEventRegistration[] registrations;
-        lock (_sync) registrations = _registrations.Where(value => value.IsActive).ToArray();
-        if (registrations.Length == 0) return;
-        if (Environment.CurrentManagedThreadId != _ownerThread)
+        // Foreign publishers only signal existing registrations. They must not
+        // allocate snapshots, inspect arguments or enter an interpreter budget.
+        if (Environment.CurrentManagedThreadId != _ownerThread || _publishing)
         {
-            foreach (var registration in registrations) registration.Owner.RequestRetirement();
+            lock (_sync)
+                foreach (var registration in _registrations)
+                    if (registration.IsActive) registration.Owner.RequestRetirement();
             return;
         }
-        object?[] arguments;
-        try { arguments = _snapshot == null ? Array.Empty<object?>() : new[] { _snapshot.Capture(value) }; }
-        catch (Exception exception) when (exception is not OutOfMemoryException && exception is not StackOverflowException)
+        _publishing = true;
+        var firstMemory = default(MemoryBudget.AllocationReservation);
+        Delivery[]? deliveries = null;
+        var count = 0;
+        try
         {
-            foreach (var registration in registrations) registration.Owner.RequestRetirement();
-            return;
+            ScriptEventRegistration? first = null;
+            lock (_sync)
+                foreach (var registration in _registrations)
+                    if (registration.IsActive && registration.Owner.TryReservePublication(out firstMemory))
+                    { first = registration; break; }
+            if (first == null) return;
+            // No publication array/list/anchor is allocated until a recipient
+            // has reserved the maximum bounded snapshot and delivery workspace.
+            var allocationOwner = new object();
+            firstMemory.Bind(allocationOwner);
+            lock (_sync)
+            {
+                deliveries = new Delivery[_registrations.Count];
+                deliveries[count++] = new Delivery(first, firstMemory);
+                foreach (var registration in _registrations)
+                    if (!ReferenceEquals(registration, first) && registration.IsActive &&
+                        registration.Owner.TryReservePublication(out var reservation))
+                    {
+                        reservation.Bind(allocationOwner);
+                        deliveries[count++] = new Delivery(registration, reservation);
+                    }
+            }
+            object?[] arguments;
+            try { arguments = _snapshot == null ? Array.Empty<object?>() : new[] { _snapshot.Capture(value, allocationOwner) }; }
+            catch (Exception exception)
+            {
+                for (var index = 0; index < count; index++) deliveries[index].Registration.Owner.RequestRetirement();
+                ScriptHostException.RethrowFatal(exception);
+                return;
+            }
+            for (var index = 0; index < count; index++)
+            {
+                var registration = deliveries[index].Registration;
+                if (!registration.IsActive) continue;
+                try { registration.Owner.Enqueue(new ScriptEventInvocation(registration, arguments, allocationOwner)); }
+                catch (Exception exception)
+                {
+                    for (var recipient = 0; recipient < count; recipient++)
+                        deliveries[recipient].Registration.Owner.RequestRetirement();
+                    ScriptHostException.RethrowFatal(exception);
+                }
+            }
+            GC.KeepAlive(allocationOwner);
         }
-        foreach (var registration in registrations)
+        catch (Exception exception)
         {
-            if (!registration.IsActive) continue;
-            try { registration.Owner.Enqueue(new ScriptEventInvocation(registration, arguments)); }
-            catch (Exception exception) when (exception is not OutOfMemoryException && exception is not StackOverflowException)
-            { registration.Owner.RequestRetirement(); }
+            // Bookkeeping and binding can also fail before snapshot capture.
+            // Retire existing registrations without allocating a recovery array.
+            lock (_sync)
+                foreach (var registration in _registrations)
+                    registration.Owner.RequestRetirement();
+            ScriptHostException.RethrowFatal(exception);
+        }
+        finally
+        {
+            firstMemory.Dispose();
+            if (deliveries != null)
+                for (var index = 0; index < count; index++) deliveries[index].Memory.Dispose();
+            _publishing = false;
         }
     }
+
+    private readonly record struct Delivery(ScriptEventRegistration Registration, MemoryBudget.AllocationReservation Memory);
 
     private void Detach()
     {
         if (_handler == null) return;
         try { EventInfo.RemoveEventHandler(null, _handler); _handler = null; }
-        catch { _faulted = true; throw; }
+        catch (Exception exception) { _faulted = true; ScriptHostException.RethrowFatal(exception); throw; }
     }
 
     public void Dispose()

@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Handlers;
 
@@ -11,9 +12,11 @@ namespace Anomaly.Client.Api.Events.Handlers;
 public static class RagdollEvents
 {
     /// <summary>Fires when a new ragdoll spawns into the scene (someone died).</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<RagdollEventArgs> Spawned;
 
     /// <summary>Fires when a ragdoll is removed from the scene (cleanup, round restart).</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<RagdollEventArgs> Removed;
 
     internal static void OnSpawned(RagdollEventArgs args) => EventInvoker.Invoke(Spawned, args);

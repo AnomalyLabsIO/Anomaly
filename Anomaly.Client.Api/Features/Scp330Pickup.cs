@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Il2CppInventorySystem.Items.Usables.Scp330;
 using Scp330PickupBase = Il2CppInventorySystem.Items.Usables.Scp330.Scp330Pickup;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -10,6 +11,7 @@ namespace Anomaly.Client.Api.Features;
 /// candy bag dropped on the ground. Exposes the bag's contents and the
 /// currently exposed (visually displayed) candy.
 /// </summary>
+[ScriptType]
 public class Scp330Pickup : Pickup
 {
     internal Scp330Pickup(Scp330PickupBase scp330PickupBase) : base(scp330PickupBase)

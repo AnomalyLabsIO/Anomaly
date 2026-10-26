@@ -32,10 +32,9 @@ namespace Anomaly.Shared.Networking
     public static class AnomalyProtocol
     {
         /// <summary>
-        /// v8: binds lifetime mod inventory and mandatory integrity audit in the encrypted signed login. Older versions are intentionally
-        /// rejected; there is no silent downgrade path.
+        /// v12: authenticated source packs bind direct Lua files, message schemas and connection approval.
         /// </summary>
-        public const byte CurrentVersion = 8;
+        public const byte CurrentVersion = 12;
     }
 
     /// <summary>

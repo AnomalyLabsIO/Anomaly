@@ -21,6 +21,7 @@ try {
         'anomaly-client' = @(
             'Plugins/Anomaly.Bootstrap.dll', 'Mods/Anomaly.Client.dll',
             'UserLibs/Anomaly.Client.Api.dll', 'UserLibs/Anomaly.Shared.dll',
+            'UserLibs/Anomaly.Client.Scripting.dll', 'UserLibs/Anomaly.MoonSharp.Interpreter.dll',
             'UserLibs/Anomaly.AssetValidation.dll', 'UserLibs/BouncyCastle.Cryptography.dll',
             'UserLibs/AssetsTools.NET.dll', 'UserLibs/YamlDotNet.dll'
         )
@@ -29,6 +30,7 @@ try {
             'dependencies/global/0Harmony.dll'
         )
     }
+    $packageLayout = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'package-layout.json') | ConvertFrom-Json
     $artifacts = @(Get-ChildItem -LiteralPath $ReleaseOutput -Force)
     $expectedArtifacts = @(
         "anomaly-client-$Version.zip", "anomaly-server-$Version.zip", "anomaly-sdk-$Version.zip", 'SHA256SUMS'
@@ -49,15 +51,26 @@ try {
         $archive = [IO.Compression.ZipFile]::OpenRead($archivePath)
         try {
             $paths = @($archive.Entries.FullName)
-            $expectedPaths = @($expectedDlls[$packageId])
-            if ($packageId -eq 'anomaly-client') {
-                $expectedPaths += @(
-                    'UserData/Anomaly/AssetBundles/personal-skins.bundle',
-                    'UserData/Anomaly/AssetBundles/personal-skins.index.json'
-                )
-            }
+            $definition = @($packageLayout.packages | Where-Object packageId -eq $packageId)
+            if ($definition.Count -ne 1) { throw "Expected one package definition for $packageId." }
+            # Notice/provenance documents are runtime payloads too. The complete
+            # manifest controls the exact layout; DLLs retain an independent list
+            # so dropping a required dependency from the manifest still fails.
+            $expectedPaths = @($definition[0].entries.path)
             $difference = @(Compare-Object ($expectedPaths | Sort-Object) ($paths | Sort-Object) -CaseSensitive)
             if ($difference.Count -ne 0) { throw "Missing or unexpected runtime archive files in $packageId." }
+            $archivedDlls = @($paths | Where-Object { $_.EndsWith('.dll', [StringComparison]::OrdinalIgnoreCase) })
+            $dllDifference = @(Compare-Object ($expectedDlls[$packageId] | Sort-Object) ($archivedDlls | Sort-Object) -CaseSensitive)
+            if ($dllDifference.Count -ne 0) { throw "Missing or unexpected runtime DLLs in $packageId." }
+            foreach ($file in $definition[0].entries) {
+                $entry = $archive.GetEntry($file.path)
+                $stream = $entry.Open()
+                try { $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)) }
+                finally { $stream.Dispose() }
+                if ($hash -ne (Get-FileHash -LiteralPath (Join-Path $runtimeTestRepository $file.source)).Hash) {
+                    throw "Runtime file differs from the declared build/source input: $($file.path)"
+                }
+            }
             $userData = @($paths | Where-Object { $_ -like 'UserData/*' })
             if ($packageId -eq 'anomaly-client') {
                 $skinFiles = @('personal-skins.bundle','personal-skins.index.json')
@@ -77,8 +90,7 @@ try {
         finally { $archive.Dispose() }
     }
 
-    $sdkDefinition = (Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'package-layout.json') |
-        ConvertFrom-Json).packages | Where-Object packageId -eq 'anomaly-sdk'
+    $sdkDefinition = $packageLayout.packages | Where-Object packageId -eq 'anomaly-sdk'
     $sdkArchive = [IO.Compression.ZipFile]::OpenRead((Join-Path $ReleaseOutput "anomaly-sdk-$Version.zip"))
     try {
         $difference = @(Compare-Object ($sdkDefinition.entries.path | Sort-Object) `
@@ -129,7 +141,7 @@ try {
     if ($LASTEXITCODE -eq 0 -or ($failure -join "`n") -notlike '*exactly the logo and background*') {
         throw 'Incomplete logo/background pack was not rejected.'
     }
-    Write-Host 'Runtime/SDK ZIP layouts, SDK file hashes, SHA256SUMS, skin rejection, and overwrite protection passed.'
+    Write-Host 'Runtime/SDK ZIP layouts, runtime/SDK file hashes, SHA256SUMS, skin rejection, and overwrite protection passed.'
 }
 finally {
     $runtimeResolvedTestTemp = [IO.Path]::GetFullPath($runtimeTestTemp)

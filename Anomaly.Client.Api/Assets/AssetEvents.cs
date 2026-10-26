@@ -1,5 +1,6 @@
 using Anomaly.Client.Api.Events;
 using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Assets;
 
@@ -8,7 +9,9 @@ namespace Anomaly.Client.Api.Assets;
 /// </summary>
 public static class AssetEvents
 {
+    [ScriptEvent]
     public static event AnomalyEventHandler<AssetOverrideAppliedEventArgs> OverrideApplied;
+    [ScriptEvent]
     public static event AnomalyEventHandler<AssetOverrideClearedEventArgs> OverrideCleared;
 
     internal static void OnOverrideApplied(AssetOverrideAppliedEventArgs args) => EventInvoker.Invoke(OverrideApplied, args);

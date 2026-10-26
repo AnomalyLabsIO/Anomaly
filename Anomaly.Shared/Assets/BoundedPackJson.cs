@@ -12,15 +12,29 @@ internal sealed class BoundedPackJson
 {
     private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
     private readonly string _text;
+    private readonly int _maxDepth, _maxTokens, _maxArrayItems, _maxObjectProperties, _maxStringLength;
     private int _position;
     private int _tokens;
-    private BoundedPackJson(byte[] bytes) => _text = Utf8.GetString(bytes);
+    private BoundedPackJson(byte[] bytes, int maxDepth, int maxTokens, int maxArrayItems, int maxObjectProperties, int maxStringLength)
+    {
+        _text = Utf8.GetString(bytes);
+        _maxDepth = maxDepth;
+        _maxTokens = maxTokens;
+        _maxArrayItems = maxArrayItems;
+        _maxObjectProperties = maxObjectProperties;
+        _maxStringLength = maxStringLength;
+    }
 
-    internal static Dictionary<string, object> Read(byte[] bytes)
+    internal static Dictionary<string, object> Read(byte[] bytes) => Read(bytes, 16, 32768, 4096, int.MaxValue, 1024);
+
+    // A caller with a smaller data shape can reject oversized trees while they
+    // are being built, before retaining nodes it will subsequently reject.
+    internal static Dictionary<string, object> Read(byte[] bytes, int maxDepth, int maxTokens, int maxArrayItems,
+        int maxObjectProperties, int maxStringLength)
     {
         if (bytes == null || bytes.Length == 0 || bytes.Length > AssetPackIndexCodec.MaxIndexBytes)
             throw new InvalidDataException("Pack index size is outside its limit.");
-        var parser = new BoundedPackJson(bytes);
+        var parser = new BoundedPackJson(bytes, maxDepth, maxTokens, maxArrayItems, maxObjectProperties, maxStringLength);
         object value = parser.Value(0);
         parser.White();
         if (parser._position != parser._text.Length || !(value is Dictionary<string, object> result))
@@ -30,7 +44,7 @@ internal sealed class BoundedPackJson
 
     private object Value(int depth)
     {
-        if (depth > 16 || ++_tokens > 32768) throw Bad("JSON nesting or item count exceeded its limit");
+        if (depth > _maxDepth || ++_tokens > _maxTokens) throw Bad("JSON nesting or item count exceeded its limit");
         White();
         if (_position >= _text.Length) throw Bad("Truncated value");
         char next = _text[_position];
@@ -43,6 +57,7 @@ internal sealed class BoundedPackJson
             if (Take('}')) return map;
             do
             {
+                if (map.Count >= _maxObjectProperties) throw Bad("JSON object property count exceeded its limit");
                 White();
                 string key = String();
                 if (map.ContainsKey(key)) throw Bad("Duplicate JSON property");
@@ -61,7 +76,7 @@ internal sealed class BoundedPackJson
             if (Take(']')) return list;
             do
             {
-                if (list.Count >= 4096) throw Bad("JSON array exceeded its limit");
+                if (list.Count >= _maxArrayItems) throw Bad("JSON array exceeded its limit");
                 list.Add(Value(depth + 1));
                 White();
                 if (Take(']')) return list;
@@ -120,7 +135,7 @@ internal sealed class BoundedPackJson
                     default: throw Bad("Invalid string escape");
                 }
             }
-            if (result.Length >= 1024) throw Bad("JSON string exceeded its limit");
+            if (result.Length >= _maxStringLength) throw Bad("JSON string exceeded its limit");
             result.Append(character);
         }
         throw Bad("Unterminated string");

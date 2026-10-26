@@ -1,4 +1,5 @@
 using KeycardPickupBase = Il2CppInventorySystem.Items.Keycards.KeycardPickup;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -7,6 +8,7 @@ namespace Anomaly.Client.Api.Features;
 /// typed downcast plus the keycard-pickup-specific
 /// <see cref="OpensDoorsOnCollision"/> flag.
 /// </summary>
+[ScriptType]
 public class KeycardPickup : Pickup
 {
     internal KeycardPickup(KeycardPickupBase keycardPickupBase) : base(keycardPickupBase)

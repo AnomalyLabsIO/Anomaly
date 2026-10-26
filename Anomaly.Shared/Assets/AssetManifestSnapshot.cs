@@ -23,7 +23,7 @@ namespace Anomaly.Shared.Assets
             {
                 if (entry.Hash == null || entry.Hash.Length != 32)
                     throw new InvalidDataException("Manifest authorization requires 32-byte SHA-256 hashes.");
-                if (entry.Kind != FileContentKind.Bundle && entry.Kind != FileContentKind.PackIndex)
+                if (entry.Kind != FileContentKind.Bundle && entry.Kind != FileContentKind.PackIndex && entry.Kind != FileContentKind.ScriptIndex && entry.Kind != FileContentKind.LuaSource)
                     throw new InvalidDataException("Manifest authorization contained an unsupported asset kind.");
                 string hash = ToHex(entry.Hash);
                 if (_assets.ContainsKey(hash))

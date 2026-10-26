@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Args;
 
@@ -8,11 +9,13 @@ namespace Anomaly.Client.Api.Events.Args;
 /// gating still applies; this event lets local mods (e.g., admin tooling)
 /// suppress the toggle attempt entirely.
 /// </summary>
+[ScriptType]
 public class PlayerNoclipTogglingEventArgs : PlayerEventArgs, ICancellableEvent
 {
     public PlayerNoclipTogglingEventArgs(Player player) : base(player)
     {
     }
 
+    [ScriptVisible]
     public bool IsAllowed { get; set; } = true;
 }

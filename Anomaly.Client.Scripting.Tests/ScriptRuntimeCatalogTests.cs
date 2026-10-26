@@ -19,7 +19,13 @@ public sealed class ScriptRuntimeCatalogTests
         Assert.Contains(catalog.Types, type => type.Name == "Player");
         Assert.Contains(catalog.Types, type => type.Name == "ClientReadyEventArgs");
         Assert.Contains(catalog.Types, type => type.Name == "ClientConnectedEventArgs");
-        Assert.Equal(new[] { "Events.Client.Connected", "Events.Client.Ready" }, catalog.Events.Select(value => value.Path));
+        var events = typeof(ClientEvents).Assembly.GetTypes().Where(type => type.IsVisible && type.IsAbstract && type.IsSealed)
+            .SelectMany(type => type.GetEvents(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            .Where(value => value.IsDefined(typeof(ScriptEventAttribute), false) && !value.IsDefined(typeof(ScriptIgnoreAttribute), false))
+            .Select(value => (FullName: value.DeclaringType!.FullName!, value.Name)).OrderBy(value => value.FullName).ThenBy(value => value.Name).ToArray();
+        var registered = catalog.Events.Select(value => (FullName: value.ClrDeclaringType, Name: value.ClrEventName))
+            .OrderBy(value => value.FullName).ThenBy(value => value.Name).ToArray();
+        Assert.Equal(events, registered);
         Assert.Equal(before, ReadySubscribers());
         Assert.False(ScriptingPolicy.RemoteExecutionEnabled);
         Assert.Throws<NotSupportedException>(() => runtime.CreateRemoteSession("return 1"));

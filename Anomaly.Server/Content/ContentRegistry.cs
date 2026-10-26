@@ -167,6 +167,7 @@ namespace Anomaly.Server.Content
                 ManifestSha256 = (byte[])manifestSha256.Clone(),
                 Entries = entries,
                 Packs = snapshot.CopyPacks(),
+                ScriptPacks = snapshot.CopyScriptPacks(),
             };
             offer.CatalogSha256 = CatalogBuilder.ComputeCatalogHash(offer);
             ContentCatalogMessage.ValidateCatalog(offer, validateDeclaredHash: true);

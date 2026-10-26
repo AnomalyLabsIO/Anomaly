@@ -3,10 +3,12 @@ using Anomaly.Client.Api.Internal.Wrappers;
 using Il2CppHazards;
 using Il2CppPlayerRoles.PlayableScps.Scp939;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>A hazard known to the local scene. This does not report server damage or the server's affected-player list.</summary>
+[ScriptType]
 public class Hazard
 {
     private static readonly SceneWrapperCache<EnvironmentalHazard, Hazard> Cache = new(Create);
@@ -14,17 +16,22 @@ public class Hazard
     protected Hazard(EnvironmentalHazard value) => Base = value;
 
     public EnvironmentalHazard Base { get; }
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
     public GameObject GameObject => IsDestroyed ? null : Base.gameObject;
     public Transform Transform => IsDestroyed ? null : Base.transform;
     public Vector3 Position => IsDestroyed ? Vector3.zero : Base.transform.position;
+    [ScriptVisible]
     public Room Room => IsDestroyed ? null : Room.Get(Position);
     public Vector3 SourcePosition => IsDestroyed ? Vector3.zero : Base.SourcePosition;
     public Vector3 SourceOffset => IsDestroyed ? Vector3.zero : Base.SourceOffset;
+    [ScriptVisible]
     public float MaxDistance => IsDestroyed ? 0f : Base.MaxDistance;
+    [ScriptVisible]
     public float MaxHeightDistance => IsDestroyed ? 0f : Base.MaxHeightDistance;
 
     /// <summary>The local hazard component's active state; this is not a server acceptance or damage guarantee.</summary>
+    [ScriptVisible]
     public bool IsActive => !IsDestroyed && Base.IsActive;
 
     public static ReadOnlyCollection<Hazard> List =>

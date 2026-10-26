@@ -428,8 +428,11 @@ internal static partial class RuntimeGuard
             if (((IDictionary)map)[__0] is not IList chain) return true;
             lock (chain) entries = chain.Cast<Detour>().ToArray();
         }
-        foreach (Detour entry in entries.Reverse())
+        // Walk the newest detour first without binding to an array Reverse
+        // extension that mutates in place and returns void on newer toolchains.
+        for (int index = entries.Length - 1; index >= 0; index--)
         {
+            Detour entry = entries[index];
             if (GuardRuntimeAdapters.TopDetour.GetValue(entry) is not NativeDetour native)
                 continue;
             lock (Sync)

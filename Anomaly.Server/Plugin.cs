@@ -186,11 +186,11 @@ public class Plugin : Plugin<Config>
             },
             [ServerInitializationStage.AssetsAndContent] = () =>
             {
-                ServerAssetManager.Init(Config.AssetDirectory);
+                ServerAssetManager.Init(Config.AssetDirectory, Config.ScriptDirectory);
                 AssetOverrides.Init();
                 DecorativeVisualScope.Init();
                 Announcer.Init();
-                AssetFileWatcher.Start(Config.AssetDirectory);
+                AssetFileWatcher.Start(Config.AssetDirectory, Config.ScriptDirectory);
             },
             [ServerInitializationStage.LifecycleSubscriptions] = () =>
             {
@@ -243,7 +243,7 @@ public class Plugin : Plugin<Config>
 
     private static void OnAnomalyMessage(ReferenceHub hub, IAnomalyMessage message)
     {
-        FileTransferSession.HandleMessage(hub, message);
+        // Connection-owned content messages are consumed before public hub dispatch.
     }
 
     private static void OnClientReady(ReferenceHub hub)
@@ -260,9 +260,8 @@ public class Plugin : Plugin<Config>
                 EnrollmentId = enrollmentId,
             }))
                 throw new InvalidOperationException("The authenticated enrollment identity could not be delivered.");
-            FileTransferSession.StartForPlayer(
-                hub,
-                (manifestSha256, snapshot) => ContentCatalogBridge.OfferForPlayer(hub, manifestSha256, snapshot));
+            if (!ContentCatalogBridge.AdoptForPlayer(hub))
+                throw new InvalidOperationException("The completed connection content state could not be adopted.");
         }
         catch (Exception exception)
         {
@@ -480,6 +479,8 @@ public class Plugin : Plugin<Config>
                 AuthenticatedTransportSessions.Remove(hub);
         });
         RunCleanup(context, "enrollment session", () => EnrollmentSessionRegistry.Remove(hub));
+        if (quarantineTransport || !AuthenticatedTransportSessions.IsActiveConnection(hub.connectionToClient))
+            RunCleanup(context, "connection content bootstrap", () => ConnectionContentBootstrap.Cleanup(hub.connectionToClient));
         RunCleanup(context, "content grant", () => ContentGrantGate.Remove(hub.netId));
         RunCleanup(context, "file transfer session", () => FileTransferSession.CleanupPlayer(hub));
         RunCleanup(context, "replay table", () => AnomalyReplayTable.Remove(hub));
@@ -614,6 +615,11 @@ public class Plugin : Plugin<Config>
             AccessTools.Method(typeof(MapGeneration.SeedSynchronizer), "OnNewPlayerConnected"),
             AccessTools.Method(typeof(MapGeneration.AtlasZoneGenerator), "Generate"),
             AccessTools.Method(typeof(Mirror.NetworkServer), "OnConnected"),
+            AccessTools.Method(typeof(Mirror.NetworkManager), nameof(Mirror.NetworkManager.OnServerReady)),
+            AccessTools.Method(typeof(Mirror.NetworkManager), nameof(Mirror.NetworkManager.OnServerAddPlayer)),
+            AccessTools.Method(typeof(Mirror.NetworkServer), nameof(Mirror.NetworkServer.SetClientReady)),
+            AccessTools.Method(typeof(Mirror.NetworkServer), nameof(Mirror.NetworkServer.AddPlayerForConnection),
+                new[] { typeof(Mirror.NetworkConnectionToClient), typeof(UnityEngine.GameObject) }),
             AccessTools.Method(typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnServerDisconnect)),
             AccessTools.Method(
                 typeof(CustomLiteNetLib4MirrorTransport),

@@ -9,7 +9,7 @@ internal static class CpuProbeProcess
     internal static async Task<CpuProbeResult> Run(string fixture)
     {
         var probe = Path.Combine(AppContext.BaseDirectory, "CpuProbe", "Anomaly.ScriptingCpuProbe.dll");
-        Assert.True(File.Exists(probe), $"The fixed CPU worker was not copied to {probe}.");
+        Assert.True(File.Exists(probe), $"The fixed engine worker was not copied to {probe}.");
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
             UseShellExecute = false,
@@ -41,13 +41,13 @@ internal static class CpuProbeProcess
             {
                 process.Kill(entireProcessTree: true);
                 await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
-                Assert.Fail($"CPU fixture '{fixture}' needed the external process watchdog; interpreter containment failed.");
+                Assert.Fail($"Engine fixture '{fixture}' needed the external process watchdog; interpreter containment failed.");
             }
             await exited;
             var stdout = await output;
             var stderr = await errors;
             Assert.True(process.ExitCode == 0,
-                $"CPU fixture '{fixture}' exited {process.ExitCode}. stdout: {stdout} stderr: {stderr}");
+                $"Engine fixture '{fixture}' exited {process.ExitCode}. stdout: {stdout} stderr: {stderr}");
             var result = JsonSerializer.Deserialize<CpuProbeResult>(stdout,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             return Assert.IsType<CpuProbeResult>(result);
@@ -65,4 +65,7 @@ internal static class CpuProbeProcess
 }
 
 internal sealed record CpuProbeResult(string Outcome, string? Reason, string? Error, bool Terminal,
-    int Resumes, int HostCalls, int RejectedCalls, double? Number, long ElapsedMilliseconds);
+    int Resumes, int HostCalls, int RejectedCalls, double? Number, long ElapsedMilliseconds,
+    long MemoryChargedBytes, long MemoryLimitBytes, bool MemoryTerminal, int Entries, long AllocationDeltaBytes = 0,
+    long TotalAllocatedBytes = 0, long PeakBytes = 0, int ReleasedRecords = 0, int Checks = 0, long ParentChargedBytes = 0,
+    long UnboundBytes = 0);

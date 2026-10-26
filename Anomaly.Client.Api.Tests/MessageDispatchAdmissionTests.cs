@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Anomaly.Client.Api.Tests;
 
+[Collection("Registration lifecycle")]
 public sealed class MessageDispatchAdmissionTests
 {
     [Theory]

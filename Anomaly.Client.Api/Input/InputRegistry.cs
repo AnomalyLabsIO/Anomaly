@@ -5,6 +5,7 @@ using System.Linq;
 using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Internal.Input;
 using MelonLoader;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Input;
 
@@ -49,11 +50,13 @@ public static class InputRegistry
     /// Fires when a binding transitions from not-pressed to pressed. Dispatched
     /// by the internal <see cref="InputPoller"/>.
     /// </summary>
+    [ScriptEvent]
     public static event Action<string> Pressed;
 
     /// <summary>
     /// Fires when a binding transitions from pressed to not-pressed.
     /// </summary>
+    [ScriptEvent]
     public static event Action<string> Released;
 
     /// <summary>

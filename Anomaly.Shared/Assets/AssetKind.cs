@@ -22,5 +22,6 @@ namespace Anomaly.Shared.Assets
 
         /// <summary>A bounded, data-only hierarchy constructed by Anomaly.</summary>
         DecorativeVisual = 5,
+
     }
 }

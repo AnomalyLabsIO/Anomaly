@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using Il2CppMapGeneration;
 using Il2CppPlayerRoles.PlayableScps.Scp079.Cameras;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -22,6 +23,7 @@ namespace Anomaly.Client.Api.Features;
 /// <see cref="Scp079Camera.OnInstanceRemoved"/> events; the wrapper uses
 /// lazy creation via <see cref="Get"/>.</para>
 /// </remarks>
+[ScriptType]
 public class FacilityCamera
 {
     private static readonly Dictionary<Scp079Camera, FacilityCamera> _cameras = new();
@@ -34,6 +36,7 @@ public class FacilityCamera
     /// <summary>The underlying <see cref="Scp079Camera"/>.</summary>
     public Scp079Camera Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
 
     public static bool TryGet(Scp079Camera value, out FacilityCamera wrapper)
@@ -43,22 +46,29 @@ public class FacilityCamera
     }
 
     /// <summary>True if this is the room's "main" camera (the one SCP-079 enters by default for the room).</summary>
+    [ScriptVisible]
     public bool IsMain => Base != null && Base.IsMain;
 
     /// <summary>Display label for the camera (e.g. "Heavy Containment Zone Camera 7").</summary>
+    [ScriptVisible]
     public string Label => Base?.Label;
 
     /// <summary>True if SCP-079 is currently viewing through this camera.</summary>
+    [ScriptVisible]
     public bool IsActive => Base != null && Base.IsActive;
 
     /// <summary>True if the local player is the SCP-079 currently using this camera.</summary>
+    [ScriptVisible]
     public bool IsUsedByLocalPlayer => Base != null && Base.IsUsedByLocalPlayer;
 
     /// <summary>The camera's world position (where SCP-079 sees from).</summary>
     public Vector3 CameraPosition => Base != null ? Base.CameraPosition : Vector3.zero;
 
+    [ScriptVisible]
     public float VerticalRotation => Base != null ? Base.VerticalRotation : 0f;
+    [ScriptVisible]
     public float HorizontalRotation => Base != null ? Base.HorizontalRotation : 0f;
+    [ScriptVisible]
     public float RollRotation => Base != null ? Base.RollRotation : 0f;
 
     public Transform Anchor => Base?.CameraAnchor;

@@ -302,6 +302,9 @@ internal static class TrKeys
     // Server content consent and failures
     public const string Content_ApprovalTitle = "anomaly.content.approval_title";
     public const string Content_ApprovalDetails = "anomaly.content.approval_details";
+    public const string Content_ScriptApprovalTitle = "anomaly.content.script_approval_title";
+    public const string Content_ScriptApprovalDetails = "anomaly.content.script_approval_details";
+    public const string Content_RunScripts = "anomaly.content.run_scripts";
     public const string Content_ValidationFailed = "anomaly.content.validation_failed";
     public const string Content_ActivationFailed = "anomaly.content.activation_failed";
     public const string Content_FailureAction = "anomaly.content.failure_action";

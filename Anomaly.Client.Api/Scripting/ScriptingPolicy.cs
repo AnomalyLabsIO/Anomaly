@@ -3,13 +3,13 @@ namespace Anomaly.Client.Api.Scripting;
 /// <summary>Reports the qualification gate for server-supplied client scripts.</summary>
 public static class ScriptingPolicy
 {
-    /// <summary>Memory containment is not qualified by the CPU-hardening implementation.</summary>
+    /// <summary>Memory containment remains unqualified by the experimental allocation allowance.</summary>
     public static bool MemoryHardeningQualified => false;
 
-    /// <summary>Server-supplied execution remains unavailable until memory hardening is qualified.</summary>
-    public static bool RemoteExecutionEnabled => false;
+    /// <summary>Remote script execution requires a qualified memory boundary in addition to content consent.</summary>
+    public static bool RemoteExecutionEnabled => MemoryHardeningQualified;
 
     /// <summary>The reason remote execution is unavailable. This is not a configurable permission.</summary>
-    public static string RemoteExecutionDisabledReason =>
-        "Remote script execution is disabled: per-script memory containment has not been qualified.";
+    public static string RemoteExecutionDisabledReason => MemoryHardeningQualified ? string.Empty :
+        "Remote scripts are disabled until memory containment is qualified. Accounted VM allocations do not contain arbitrary CLR or native host allocations.";
 }

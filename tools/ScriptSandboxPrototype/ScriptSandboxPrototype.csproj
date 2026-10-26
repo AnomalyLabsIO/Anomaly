@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>Anomaly.ScriptSandboxPrototype</AssemblyName>
+    <RootNamespace>Anomaly.ScriptSandboxPrototype</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <IsPackable>false</IsPackable>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="LocalMoonSharp\**\*.cs" />
+    <PackageReference Include="MoonSharp" Version="[2.0.0]" />
+    <None Include="..\..\artifacts\native\luau_sandbox.dll" Link="luau_sandbox.dll"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\artifacts\native\luau_sandbox.dll')" />
+  </ItemGroup>
+</Project>

@@ -1,4 +1,5 @@
 using TimedGrenadePickupBase = Il2CppInventorySystem.Items.ThrowableProjectiles.TimedGrenadePickup;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -12,6 +13,7 @@ namespace Anomaly.Client.Api.Features;
 /// detonate (transition to a thrown projectile) if it's in proximity to
 /// another explosion (the "chain reaction" behaviour).
 /// </remarks>
+[ScriptType]
 public class TimedGrenadePickup : Pickup
 {
     internal TimedGrenadePickup(TimedGrenadePickupBase grenadePickupBase) : base(grenadePickupBase)

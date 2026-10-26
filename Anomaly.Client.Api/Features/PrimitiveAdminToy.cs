@@ -1,8 +1,10 @@
 ﻿using Il2CppAdminToys;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class PrimitiveAdminToy : AdminToy
 {
     internal PrimitiveAdminToy(PrimitiveObjectToy toyBase) : base(toyBase)

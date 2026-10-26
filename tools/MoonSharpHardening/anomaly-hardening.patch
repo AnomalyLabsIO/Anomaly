@@ -1,0 +1,4512 @@
+diff --git a/src/CoreLib/BasicModule.cs b/src/CoreLib/BasicModule.cs
+--- a/src/CoreLib/BasicModule.cs
++++ b/src/CoreLib/BasicModule.cs
+@@ -175,7 +175,7 @@
+ 			DynValue v_num = args.AsType(0, "select", DataType.Number, false);
+ 			int num = (int)v_num.Number;
+ 
+-			List<DynValue> values = new List<DynValue>();
++			List<DynValue> values = MemoryBudget.Allocate(96L + 32L * args.Count, () => new List<DynValue>());
+ 
+ 			if (num > 0)
+ 			{
+@@ -197,7 +197,7 @@
+ 				throw ScriptRuntimeException.BadArgumentIndexOutOfRange("select", 0);
+ 			}
+ 
+-			return DynValue.NewTupleNested(values.ToArray());
++			return DynValue.NewTupleNested(MemoryBudget.Allocate(32L + 8L * values.Count, () => values.ToArray()));
+ 		}
+ 
+ 
+@@ -243,7 +243,7 @@
+ 				if (args[0].Type != DataType.Number)
+ 					ee = args.AsType(0, "tonumber", DataType.String, false);
+ 				else
+-					ee = DynValue.NewString(args[0].Number.ToString(CultureInfo.InvariantCulture));
++					ee = DynValue.NewString(MemoryBudget.AllocateString(512, () => args[0].Number.ToString(CultureInfo.InvariantCulture)));
+ 
+ 				int bb = (int)b.Number;
+ 
+@@ -265,24 +265,27 @@
+ 			if (str == null)
+ 				return DynValue.Nil;
+ 
+-			string s = str.Trim();
+-			int i = 0;
++			// Scan the original string: Trim would allocate an input-sized copy
++			// before the result DynValue could account for it.
++			int i = 0, end = str.Length;
++			while (i < end && char.IsWhiteSpace(str[i])) i++;
++			while (end > i && char.IsWhiteSpace(str[end - 1])) end--;
+ 			bool neg = false;
+ 
+-			if (i < s.Length && (s[i] == '-' || s[i] == '+'))
+-			{
+-				neg = s[i] == '-';
++			if (i < end && (str[i] == '-' || str[i] == '+'))
++			{
++				neg = str[i] == '-';
+ 				i++;
+ 			}
+ 
+-			if (i >= s.Length)
++			if (i >= end)
+ 				return DynValue.Nil;
+ 
+ 			double value = 0.0;
+ 
+-			for (; i < s.Length; i++)
+-			{
+-				char c = s[i];
++			for (; i < end; i++)
++			{
++				char c = str[i];
+ 				int digit;
+ 
+ 				if (c >= '0' && c <= '9')
+diff --git a/src/CoreLib/CoroutineModule.cs b/src/CoreLib/CoroutineModule.cs
+--- a/src/CoreLib/CoroutineModule.cs
++++ b/src/CoreLib/CoroutineModule.cs
+@@ -75,6 +75,7 @@
+ 			}
+ 			catch (ScriptRuntimeException ex)
+ 			{
++				executionContext.GetScript().ExecutionBudget?.Check();
+ 				return DynValue.NewTuple(
+ 					DynValue.False,
+ 					DynValue.NewString(ex.Message));
+diff --git a/src/CoreLib/ErrorHandlingModule.cs b/src/CoreLib/ErrorHandlingModule.cs
+--- a/src/CoreLib/ErrorHandlingModule.cs
++++ b/src/CoreLib/ErrorHandlingModule.cs
+@@ -37,7 +37,7 @@
+ 				}
+ 			}
+ 
+-			DynValue[] a = new DynValue[args.Count - firstArg];
++			DynValue[] a = MemoryBudget.Allocate(32L + 8L * (args.Count - firstArg), () => new DynValue[args.Count - firstArg]);
+ 
+ 			for (int i = firstArg; i < args.Count; i++)
+ 				a[i - firstArg] = args[i];
+@@ -72,6 +72,7 @@
+ 				}
+ 				catch (ScriptRuntimeException ex)
+ 				{
++					executionContext.GetScript().ExecutionBudget?.Check();
+ 					executionContext.PerformMessageDecorationBeforeUnwind(handlerBeforeUnwind, ex);
+ 					return DynValue.NewTupleNested(DynValue.False, DynValue.NewString(ex.DecoratedMessage));
+ 				}
+@@ -95,7 +96,7 @@
+ 
+ 		private static DynValue MakeReturnTuple(bool retstatus, CallbackArguments args)
+ 		{
+-			DynValue[] rets = new DynValue[args.Count + 1];
++			DynValue[] rets = MemoryBudget.Allocate(40L + 8L * args.Count, () => new DynValue[args.Count + 1]);
+ 
+ 			for (int i = 0; i < args.Count; i++)
+ 				rets[i + 1] = args[i];
+@@ -120,7 +121,7 @@
+ 		[MoonSharpModuleMethod]
+ 		public static DynValue xpcall(ScriptExecutionContext executionContext, CallbackArguments args)
+ 		{
+-			List<DynValue> a = new List<DynValue>();
++			List<DynValue> a = MemoryBudget.Allocate(96L + 32L * args.Count, () => new List<DynValue>());
+ 
+ 			for (int i = 0; i < args.Count; i++)
+ 			{
+diff --git a/src/CoreLib/MathModule.cs b/src/CoreLib/MathModule.cs
+--- a/src/CoreLib/MathModule.cs
++++ b/src/CoreLib/MathModule.cs
+@@ -23,16 +23,21 @@
+ 			return (rr.UserData.Object as AnonWrapper<Random>).Value;
+ 		}
+ 
+-		private static void SetRandom(Script s, Random random)
+-		{
+-			DynValue rr = UserData.Create(new AnonWrapper<Random>(random));
++		private static void SetRandom(Script s, int? seed = null)
++		{
++			using var scope = s.MemoryBudget?.EnterScope();
++			// Covers the net6 Random implementation and its private seeded state.
++			// Bind that estimate to Random so replacing a seed permits collection.
++			Random random = MemoryBudget.Allocate(1024, () => seed.HasValue ? new Random(seed.Value) : new Random());
++			var wrapper = MemoryBudget.Allocate(96, () => new AnonWrapper<Random>(random));
++			DynValue rr = UserData.Create(wrapper);
+ 			s.Registry.Set("F61E3AA7247D4D1EB7A45430B0C8C9BB_MATH_RANDOM", rr);
+ 		}
+ 
+ 
+ 		public static void MoonSharpInit(Table globalTable, Table ioTable)
+ 		{
+-			SetRandom(globalTable.OwnerScript, new Random());
++			SetRandom(globalTable.OwnerScript);
+ 		}
+ 
+ 
+@@ -285,7 +290,7 @@
+ 		{
+ 			DynValue arg = args.AsType(0, "randomseed", DataType.Number, false);
+ 			var script = executionContext.GetScript();
+-			SetRandom(script, new Random((int)arg.Number));
++			SetRandom(script, (int)arg.Number);
+ 			return DynValue.Nil;
+ 		}
+ 
+diff --git a/src/CoreLib/StringLib/KopiLua_StrLib.cs b/src/CoreLib/StringLib/KopiLua_StrLib.cs
+--- a/src/CoreLib/StringLib/KopiLua_StrLib.cs
++++ b/src/CoreLib/StringLib/KopiLua_StrLib.cs
+@@ -82,6 +82,8 @@
+ 
+ 			public MatchState()
+ 			{
++				MemoryBudget.TrackObject(this, 80);
++				capture = MemoryBudget.Allocate(32L + 8L * LUA_MAXCAPTURES, () => new capture_[LUA_MAXCAPTURES]);
+ 				for (int i = 0; i < LUA_MAXCAPTURES; i++)
+ 					capture[i] = new capture_();
+ 			}
+@@ -94,16 +96,22 @@
+ 
+ 			public class capture_
+ 			{
++				public capture_() { MemoryBudget.TrackObject(this, 32); }
+ 				public CharPtr init;
+ 				public ptrdiff_t len;
+ 			};
+-			public capture_[] capture = new capture_[LUA_MAXCAPTURES];
++			public capture_[] capture;
+ 		};
+ 
+ 
+ 		public const int MAXCCALLS = 200;
+ 		public const char L_ESC = '%';
+ 		public const string SPECIALS = "^$*+?.([%-";
++
++		private static void Charge(LuaState state, long work = 1)
++		{
++			state.ExecutionContext.GetScript().ExecutionBudget?.Charge(work);
++		}
+ 
+ 
+ 		private static int check_capture(MatchState ms, int l)
+@@ -127,6 +135,7 @@
+ 
+ 		private static CharPtr classend(MatchState ms, CharPtr p)
+ 		{
++			Charge(ms.L);
+ 			p = new CharPtr(p);
+ 			char c = p[0];
+ 			p = p.next();
+@@ -143,6 +152,7 @@
+ 						if (p[0] == '^') p = p.next();
+ 						do
+ 						{  /* look for a `]' */
++							Charge(ms.L);
+ 							if (p[0] == '\0')
+ 								LuaLError(ms.L, "malformed pattern (missing " + LUA_QL("]") + ")");
+ 							c = p[0];
+@@ -212,8 +222,9 @@
+ 		}
+ 
+ 
+-		private static int singlematch(int c, CharPtr p, CharPtr ep)
+-		{
++		private static int singlematch(MatchState ms, int c, CharPtr p, CharPtr ep)
++		{
++			Charge(ms.L, 1L + (ep - p));
+ 			switch (p[0])
+ 			{
+ 				case '.': return 1;  /* matches any char */
+@@ -237,6 +248,7 @@
+ 				int cont = 1;
+ 				while ((s = s.next()) < ms.src_end)
+ 				{
++					Charge(ms.L);
+ 					if (s[0] == e)
+ 					{
+ 						if (--cont == 0) return s + 1;
+@@ -252,7 +264,7 @@
+ 										 CharPtr p, CharPtr ep)
+ 		{
+ 			ptrdiff_t i = 0;  /* counts maximum expand for item */
+-			while ((s + i < ms.src_end) && (singlematch((byte)(s[i]), p, ep) != 0))
++			while ((s + i < ms.src_end) && (singlematch(ms, (byte)(s[i]), p, ep) != 0))
+ 				i++;
+ 			/* keeps trying to match with the maximum repetitions */
+ 			while (i >= 0)
+@@ -273,7 +285,7 @@
+ 				CharPtr res = match(ms, s, ep + 1);
+ 				if (res != null)
+ 					return res;
+-				else if ((s < ms.src_end) && (singlematch((byte)(s[0]), p, ep) != 0))
++				else if ((s < ms.src_end) && (singlematch(ms, (byte)(s[0]), p, ep) != 0))
+ 					s = s.next();  /* try with one more repetition */
+ 				else return null;
+ 			}
+@@ -312,6 +324,7 @@
+ 			uint len;
+ 			l = check_capture(ms, l);
+ 			len = (uint)ms.capture[l].len;
++			Charge(ms.L, len);
+ 			if ((uint)(ms.src_end - s) >= len &&
+ 				memcmp(ms.capture[l].init, s, len) == 0)
+ 				return s + len;
+@@ -322,11 +335,15 @@
+ 
+ 		private static CharPtr match(MatchState ms, CharPtr s, CharPtr p)
+ 		{
++			using var budgetScope = ms.L.ExecutionContext.GetScript().ExecutionBudget?.EnterScope();
+ 			s = new CharPtr(s);
+ 			p = new CharPtr(p);
+ 			if (ms.matchdepth-- == 0)
+ 				LuaLError(ms.L, "pattern too complex");
++			try
++			{
+ 		init: /* using goto's to optimize tail recursion */
++			Charge(ms.L);
+ 			switch (p[0])
+ 			{
+ 				case '(':
+@@ -358,6 +375,7 @@
+ 										LuaLError(ms.L, "missing " + LUA_QL("[") + " after " +
+ 														   LUA_QL("%f") + " in pattern");
+ 									ep = classend(ms, p);  /* points to what is next */
++									Charge(ms.L, 2L * (ep - p));
+ 									previous = (s == ms.src_init) ? '\0' : s[-1];
+ 									if ((matchbracketclass((byte)(previous), p, ep - 1) != 0) ||
+ 									   (matchbracketclass((byte)(s[0]), p, ep - 1) == 0)) return null;
+@@ -374,7 +392,7 @@
+ 									//ismeretlen hiba miatt lett ide átmásolva
+ 									{  /* it is a pattern item */
+ 										CharPtr ep = classend(ms, p);  /* points to what is next */
+-										int m = (s < ms.src_end) && (singlematch((byte)(s[0]), p, ep) != 0) ? 1 : 0;
++										int m = (s < ms.src_end) && (singlematch(ms, (byte)(s[0]), p, ep) != 0) ? 1 : 0;
+ 										switch (ep[0])
+ 										{
+ 											case '?':
+@@ -421,7 +439,7 @@
+ 				dflt:
+ 					{  /* it is a pattern item */
+ 						CharPtr ep = classend(ms, p);  /* points to what is next */
+-						int m = (s < ms.src_end) && (singlematch((byte)(s[0]), p, ep) != 0) ? 1 : 0;
++						int m = (s < ms.src_end) && (singlematch(ms, (byte)(s[0]), p, ep) != 0) ? 1 : 0;
+ 						switch (ep[0])
+ 						{
+ 							case '?':
+@@ -451,13 +469,17 @@
+ 						}
+ 					}
+ 			}
+-		}
+-
+-
+-
+-		private static CharPtr lmemfind(CharPtr s1, uint l1,
++			}
++			finally
++			{
++				ms.matchdepth++;
++			}
++		}
++
++		private static CharPtr lmemfind(LuaState state, CharPtr s1, uint l1,
+ 									   CharPtr s2, uint l2)
+ 		{
++			Charge(state, (long)l1 * (l2 == 0 ? 1 : l2));
+ 			if (l2 == 0) return s1;  /* empty strings are everywhere */
+ 			else if (l2 > l1) return null;  /* avoids a negative `l1' */
+ 			else
+@@ -527,7 +549,7 @@
+ 				strpbrk(p, SPECIALS) == null))
+ 			{  /* or no special characters? */
+ 				/* do a plain search */
+-				CharPtr s2 = lmemfind(s + init, (uint)(l1 - init), p, (uint)(l2));
++				CharPtr s2 = lmemfind(L, s + init, (uint)(l1 - init), p, (uint)(l2));
+ 				if (s2 != null)
+ 				{
+ 					LuaPushInteger(L, s2 - s + 1);
+@@ -552,6 +574,7 @@
+ 				do
+ 				{
+ 					CharPtr res;
++					Charge(L);
+ 					ms.level = 0;
+ 					// LuaAssert(ms.matchdepth == MAXCCALLS);
+ 					ms.matchdepth = MAXCCALLS;
+@@ -586,6 +609,7 @@
+ 
+ 		private class GMatchAuxData
+ 		{
++			public GMatchAuxData() { MemoryBudget.TrackObject(this, 64); }
+ 			public CharPtr S;
+ 			public CharPtr P;
+ 			public uint LS;
+@@ -608,6 +632,7 @@
+ 				 src <= ms.src_end;
+ 				 src = src.next())
+ 			{
++				Charge(L);
+ 				CharPtr e;
+ 				ms.level = 0;
+ 				//LuaAssert(ms.matchdepth == MAXCCALLS);
+@@ -634,7 +659,7 @@
+ 
+ 		public static int str_gmatch(LuaState L)
+ 		{
+-			CallbackFunction C = new CallbackFunction(gmatch_aux_2, "gmatch");
++			CallbackFunction C = MemoryBudget.Allocate(128, () => new CallbackFunction(gmatch_aux_2, "gmatch"));
+ 			string s = ArgAsType(L, 1, DataType.String, false).String;
+ 			string p = PatchPattern(ArgAsType(L, 2, DataType.String, false).String);
+ 
+@@ -760,6 +785,7 @@
+ 			ms.src_end = src + srcl;
+ 			while (n < max_s)
+ 			{
++				Charge(L);
+ 				CharPtr e;
+ 				ms.level = 0;
+ 				//LuaAssert(ms.matchdepth == MAXCCALLS);
+@@ -836,10 +862,12 @@
+ 										isfollowedbynum = true;
+ 								}
+ 
+-								if (isfollowedbynum)
+-									LuaLAddString(b, string.Format("\\{0:000}", (int)s[0]));
+-								else
+-									LuaLAddString(b, string.Format("\\{0}", (int)s[0]));
++								// Emit numeric escapes directly into the charged buffer;
++								// no per-character formatting strings or boxing are needed.
++								LuaLAddChar(b, '\\');
++								if (isfollowedbynum) LuaLAddChar(b, '0');
++								if (isfollowedbynum || s[0] >= 10) LuaLAddChar(b, (char)('0' + s[0] / 10));
++								LuaLAddChar(b, (char)('0' + s[0] % 10));
+ 							}
+ 							else
+ 							{
+@@ -899,6 +927,7 @@
+ 			LuaLBuffInit(L, b);
+ 			while (strfrmt < strfrmt_end)
+ 			{
++				Charge(L);
+ 				if (strfrmt[0] != L_ESC)
+ 				{
+ 					LuaLAddChar(b, strfrmt[0]);
+@@ -912,8 +941,8 @@
+ 				else
+ 				{ /* format item */
+ 					strfrmt = strfrmt.next();
+-					CharPtr form = new char[MAX_FORMAT];  /* to store the format (`%...') */
+-					CharPtr buff = new char[MAX_ITEM];  /* to store the formatted item */
++					CharPtr form = MemoryBudget.Allocate(32L + 2L * MAX_FORMAT, () => new char[MAX_FORMAT]);
++					CharPtr buff = MemoryBudget.Allocate(32L + 2L * MAX_ITEM, () => new char[MAX_ITEM]);
+ 					if (++arg > top)
+ 						LuaLArgError(L, arg, "no value");
+ 					strfrmt = scanformat(L, strfrmt, form);
+@@ -990,7 +1019,18 @@
+ 
+ 		private static string PatchPattern(string charPtr)
+ 		{
+-			return charPtr.Replace("\0", "%z");
++			int zeros = 0;
++			foreach (char value in charPtr) if (value == '\0') zeros++;
++			if (zeros == 0) return charPtr;
++			long length = (long)charPtr.Length + zeros;
++			char[] patched = MemoryBudget.Allocate(32L + 2L * length, () => new char[checked((int)length)]);
++			int position = 0;
++			foreach (char value in charPtr)
++			{
++				if (value == '\0') { patched[position++] = '%'; patched[position++] = 'z'; }
++				else patched[position++] = value;
++			}
++			return MemoryBudget.AllocateString(length, () => new string(patched));
+ 		}
+ 
+ 
+diff --git a/src/CoreLib/StringLib/StringRange.cs b/src/CoreLib/StringLib/StringRange.cs
+--- a/src/CoreLib/StringLib/StringRange.cs
++++ b/src/CoreLib/StringLib/StringRange.cs
+@@ -26,7 +26,7 @@
+ 			int i = start.IsNil() ? 1 : (int)start.Number;
+ 			int j = end.IsNil() ? (defaultEnd ?? i) : (int)end.Number;
+ 
+-			return new StringRange(i, j);
++			return MemoryBudget.Allocate(32, () => new StringRange(i, j));
+ 		}
+ 
+ 
+@@ -45,7 +45,7 @@
+ 			if (i > j)
+ 				return string.Empty;
+ 
+-			return value.Substring(i - 1, j - i + 1);
++			return MemoryBudget.AllocateString((long)j - i + 1, () => value.Substring(i - 1, j - i + 1));
+ 		}
+ 
+ 		public int Length()
+diff --git a/src/CoreLib/StringModule.cs b/src/CoreLib/StringModule.cs
+--- a/src/CoreLib/StringModule.cs
++++ b/src/CoreLib/StringModule.cs
+@@ -36,11 +36,14 @@
+ 				{
+ 					executionContext.GetScript().Dump(fn, ms);
+ 					ms.Seek(0, SeekOrigin.Begin);
+-					bytes = ms.ToArray();
++					bytes = MemoryBudget.Allocate(32L + ms.Length, () => ms.ToArray());
+ 				}
+-				string base64 = Convert.ToBase64String(bytes);
+-				return DynValue.NewString(BASE64_DUMP_HEADER + base64);
++				string base64 = MemoryBudget.AllocateString(((long)bytes.Length + 2) / 3 * 4,
++					() => Convert.ToBase64String(bytes));
++				return DynValue.NewString(MemoryBudget.AllocateString(BASE64_DUMP_HEADER.Length + (long)base64.Length,
++					() => BASE64_DUMP_HEADER + base64));
+ 			}
++			catch (ScriptExecutionAbortedException) { throw; }
+ 			catch (Exception ex)
+ 			{
+ 				throw new ScriptRuntimeException(ex.Message);
+@@ -51,7 +54,7 @@
+ 		[MoonSharpModuleMethod]
+ 		public static DynValue @char(ScriptExecutionContext executionContext, CallbackArguments args)
+ 		{
+-			StringBuilder sb = new StringBuilder(args.Count);
++			StringBuilder sb = MemoryBudget.Allocate(96L + 2L * Math.Max(16, args.Count), () => new StringBuilder(args.Count));
+ 
+ 			for (int i = 0; i < args.Count; i++)
+ 			{
+@@ -75,7 +78,7 @@
+ 				sb.Append((char)(d));
+ 			}
+ 
+-			return DynValue.NewString(sb.ToString());
++			return DynValue.NewString(MemoryBudget.AllocateString(sb.Length, () => sb.ToString()));
+ 		}
+ 
+ 
+@@ -114,7 +117,8 @@
+             string s = range.ApplyToString(vs.String);
+ 
+             int length = s.Length;
+-			DynValue[] rets = new DynValue[length];
++			DynValue[] rets = length == 0 ? Array.Empty<DynValue>() :
++				MemoryBudget.Allocate(32L + 8L * length, () => new DynValue[length]);
+ 
+             for (int i = 0; i < length; ++i)
+             {
+@@ -181,14 +185,14 @@
+         public static DynValue lower(ScriptExecutionContext executionContext, CallbackArguments args)
+         {
+             DynValue arg_s = args.AsType(0, "lower", DataType.String, false);
+-            return DynValue.NewString(arg_s.String.ToLower());
++            return DynValue.NewString(MemoryBudget.AllocateString(arg_s.String.Length, () => arg_s.String.ToLower()));
+         }
+ 
+         [MoonSharpModuleMethod]
+         public static DynValue upper(ScriptExecutionContext executionContext, CallbackArguments args)
+         {
+             DynValue arg_s = args.AsType(0, "upper", DataType.String, false);
+-            return DynValue.NewString(arg_s.String.ToUpper());
++            return DynValue.NewString(MemoryBudget.AllocateString(arg_s.String.Length, () => arg_s.String.ToUpper()));
+         }
+ 
+         [MoonSharpModuleMethod]
+@@ -205,18 +209,26 @@
+ 
+ 			string sep = (arg_sep.IsNotNil()) ? arg_sep.String : null;
+ 
++            if (double.IsNaN(arg_n.Number) || double.IsInfinity(arg_n.Number) || arg_n.Number > int.MaxValue)
++                throw new ScriptRuntimeException("invalid string repetition count");
+             int count = (int)arg_n.Number;
+-            StringBuilder result = new StringBuilder(arg_s.String.Length * count);
++            long length = (long)arg_s.String.Length * count + (long)(sep == null ? 0 : sep.Length) * (count - 1);
++            executionContext.GetScript().ExecutionBudget?.Charge(length);
++            using var bufferReservation = MemoryBudget.ReserveString(length);
++            if (length > int.MaxValue) throw new ScriptRuntimeException("repeated string is too large");
++            StringBuilder result = MemoryBudget.Allocate(64, () => new StringBuilder((int)length));
++            bufferReservation.Bind(result);
+ 
+             for (int i = 0; i < count; ++i)
+             {
++                if ((i & 255) == 0) executionContext.GetScript().ExecutionBudget?.Check();
+ 				if (i != 0 && sep != null)
+ 					result.Append(sep);
+ 
+                 result.Append(arg_s.String);
+             }
+ 
+-            return DynValue.NewString(result.ToString());
++            return DynValue.NewString(MemoryBudget.AllocateString(length, () => result.ToString()));
+         }
+ 
+ 		[MoonSharpModuleMethod]
+@@ -237,10 +249,10 @@
+                 return DynValue.NewString("");
+             }
+ 
+-            char[] elements = arg_s.String.ToCharArray();
++            char[] elements = MemoryBudget.Allocate(32L + 2L * arg_s.String.Length, () => arg_s.String.ToCharArray());
+             Array.Reverse(elements);
+ 
+-            return DynValue.NewString(new String(elements));
++            return DynValue.NewString(MemoryBudget.AllocateString(elements.Length, () => new String(elements)));
+         }
+ 
+         [MoonSharpModuleMethod]
+diff --git a/src/CoreLib/TableModule.cs b/src/CoreLib/TableModule.cs
+--- a/src/CoreLib/TableModule.cs
++++ b/src/CoreLib/TableModule.cs
+@@ -25,11 +25,18 @@
+ 
+ 			Table t = s.Table;
+ 
+-			DynValue[] v = new DynValue[ij - ii + 1];
++			long count = (long)ij - ii + 1;
++			if (count < 0 || count > int.MaxValue) throw new ScriptRuntimeException("invalid unpack range");
++			executionContext.GetScript().ExecutionBudget?.Charge(count);
++			DynValue[] v = MemoryBudget.Allocate(32L + 8L * count, () => new DynValue[(int)count]);
+ 
+ 			int tidx = 0;
+ 			for (int i = ii; i <= ij; i++)
++			{
++				executionContext.GetScript().ExecutionBudget?.Check();
+ 				v[tidx++] = t.Get(i);
++				if (i == int.MaxValue) break;
++			}
+ 
+ 			return DynValue.NewTuple(v);
+ 		}
+@@ -41,7 +48,10 @@
+ 			DynValue v = DynValue.NewTable(t);
+ 
+ 			for (int i = 0; i < args.Count; i++)
++			{
++				executionContext.GetScript().ExecutionBudget?.Charge();
+ 				t.Set(i + 1, args[i]);
++			}
+ 
+ 			t.Set("n", DynValue.NewNumber(args.Count));
+ 
+@@ -58,11 +68,13 @@
+ 				args.AsType(1, "sort", DataType.Function, true); // this throws
+ 
+ 			int end = GetTableLength(executionContext, vlist);
+-
+-			List<DynValue> values = new List<DynValue>();
++			List<DynValue> values = MemoryBudget.Allocate(96L + 32L * end, () => new List<DynValue>());
+ 
+ 			for (int i = 1; i <= end; i++)
++			{
++				executionContext.GetScript().ExecutionBudget?.Charge();
+ 				values.Add(vlist.Table.Get(i));
++			}
+ 
+ 			try
+ 			{
+@@ -70,12 +82,18 @@
+ 			}
+ 			catch (InvalidOperationException ex)
+ 			{
++				executionContext.GetScript().ExecutionBudget?.Check();
++				if (ex.InnerException is ScriptExecutionAbortedException)
++					System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
++				if (ex.InnerException is OutOfMemoryException || ex.InnerException is StackOverflowException)
++					System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+ 				if (ex.InnerException is ScriptRuntimeException)
+ 					throw ex.InnerException;
+ 			}
+ 
+ 			for (int i = 0; i < values.Count; i++)
+ 			{
++				executionContext.GetScript().ExecutionBudget?.Charge();
+ 				vlist.Table.Set(i + 1, values[i]);
+ 			}
+ 
+@@ -84,6 +102,7 @@
+ 
+ 		private static int SortComparer(ScriptExecutionContext executionContext, DynValue a, DynValue b, DynValue lt)
+ 		{
++			executionContext.GetScript().ExecutionBudget?.Charge();
+ 			if (lt == null || lt.IsNil())
+ 			{
+ 				lt = executionContext.GetBinaryMetamethod(a, b, "__lt");
+@@ -93,7 +112,10 @@
+ 					if (a.Type == DataType.Number && b.Type == DataType.Number)
+ 						return a.Number.CompareTo(b.Number);
+ 					if (a.Type == DataType.String && b.Type == DataType.String)
++					{
++						executionContext.GetScript().ExecutionBudget?.Charge((long)a.String.Length + b.String.Length);
+ 						return a.String.CompareTo(b.String);
++					}
+ 
+ 					throw ScriptRuntimeException.CompareInvalidType(a, b);
+ 				}
+@@ -157,6 +179,7 @@
+ 
+ 			for (int i = len; i >= pos; i--)
+ 			{
++				executionContext.GetScript().ExecutionBudget?.Charge();
+ 				list.Set(i + 1, list.Get(i));
+ 			}
+ 
+@@ -186,6 +209,7 @@
+ 
+ 			for (int i = pos; i <= len; i++)
+ 			{
++				executionContext.GetScript().ExecutionBudget?.Charge();
+ 				if (i == pos)
+ 					ret = list.Get(i);
+ 
+@@ -225,25 +249,31 @@
+ 			if (end < start)
+ 				return DynValue.NewString(string.Empty);
+ 
+-			StringBuilder sb = new StringBuilder();
++			StringBuilder sb = MemoryBudget.Allocate(96, () => new StringBuilder());
+ 
+ 			for (int i = start; i <= end; i++)
+ 			{
++				executionContext.GetScript().ExecutionBudget?.Charge();
+ 				DynValue v = list.Get(i);
+ 
+ 				if (v.Type != DataType.Number && v.Type != DataType.String)
+ 					throw new ScriptRuntimeException("invalid value ({1}) at index {0} in table for 'concat'", i, v.Type.ToLuaTypeString());
+ 
+ 				string s = v.ToPrintString();
++				executionContext.GetScript().ExecutionBudget?.Charge((long)s.Length + sep.Length);
++				// Includes builder chunks and spare capacity before Append can grow.
++				using var growthMemory = MemoryBudget.Reserve(96L + 4L * ((long)s.Length + sep.Length));
++				growthMemory.Bind(sb);
+ 
+ 				if (i != start)
+ 					sb.Append(sep);
+ 				
+ 				sb.Append(s);
+-
+-			}
+-
+-			return DynValue.NewString(sb.ToString());
++				if (i == int.MaxValue) break;
++
++			}
++
++			return DynValue.NewString(MemoryBudget.AllocateString(sb.Length, () => sb.ToString()));
+ 		}
+ 
+ 		private static int GetTableLength(ScriptExecutionContext executionContext, DynValue vlist)
+diff --git a/src/DataStructs/BudgetedCollections.cs b/src/DataStructs/BudgetedCollections.cs
+new file mode 100644
+--- /dev/null
++++ b/src/DataStructs/BudgetedCollections.cs
+@@ -0,0 +1,85 @@
++using System;
++using System.Collections.Generic;
++using System.Runtime.CompilerServices;
++
++namespace MoonSharp.Interpreter
++{
++    // Internal compiler containers only. Calls must retain these concrete types:
++    // List/Dictionary methods are not virtual. Backing arrays are private to the
++    // CLR collections, so conservative growth history stays with the container.
++    internal class BudgetedList<T> : List<T>
++    {
++        private readonly MemoryBudget _budget = MemoryBudget.Current;
++
++        internal BudgetedList() { _budget?.Track(this, 96); }
++
++        private void EnsureAdditional(int count)
++        {
++            int required = checked(Count + count);
++            if (required <= Capacity) return;
++            int capacity = Math.Max(required, Capacity > int.MaxValue / 2 ? int.MaxValue : Math.Max(4, Capacity * 2));
++            using var reservation = _budget?.ReserveAllocation(32L + (long)Unsafe.SizeOf<T>() * capacity);
++            EnsureCapacity(capacity);
++            reservation?.Bind(this);
++        }
++
++        public new void Add(T item) { EnsureAdditional(1); base.Add(item); }
++
++        public new void AddRange(IEnumerable<T> items)
++        {
++            if (items is ICollection<T> collection)
++            {
++                EnsureAdditional(collection.Count);
++                base.AddRange(collection);
++            }
++            else foreach (var item in items) Add(item);
++        }
++
++        public new T[] ToArray()
++        {
++            using var scope = _budget?.EnterScope();
++            return MemoryBudget.Allocate(32L + (long)Unsafe.SizeOf<T>() * Count, () => base.ToArray());
++        }
++    }
++
++    internal sealed class BudgetedDictionary<TKey, TValue> : Dictionary<TKey, TValue>
++    {
++        private readonly MemoryBudget _budget = MemoryBudget.Current;
++        private int _capacity;
++
++        internal BudgetedDictionary() { _budget?.Track(this, 128); }
++
++        public new void Add(TKey key, TValue value)
++        {
++            if (Count == _capacity)
++            {
++                int requested = _capacity > int.MaxValue / 2 ? int.MaxValue : Math.Max(4, _capacity * 2);
++                // Net6 prime sizing, buckets, entries and retained old arrays.
++                using var reservation = _budget?.ReserveAllocation(128L + (long)(128 + Unsafe.SizeOf<TKey>() + Unsafe.SizeOf<TValue>()) * 2 * requested);
++                _capacity = EnsureCapacity(requested);
++                reservation?.Bind(this);
++            }
++            base.Add(key, value);
++        }
++    }
++
++    internal sealed class BudgetedHashSet<T> : HashSet<T>
++    {
++        private readonly MemoryBudget _budget = MemoryBudget.Current;
++        private int _capacity;
++
++        internal BudgetedHashSet() { _budget?.Track(this, 128); }
++
++        public new bool Add(T value)
++        {
++            if (Count == _capacity)
++            {
++                int requested = _capacity > int.MaxValue / 2 ? int.MaxValue : Math.Max(4, _capacity * 2);
++                using var reservation = _budget?.ReserveAllocation(128L + (long)(96 + Unsafe.SizeOf<T>()) * 2 * requested);
++                _capacity = EnsureCapacity(requested);
++                reservation?.Bind(this);
++            }
++            return base.Add(value);
++        }
++    }
++}
+diff --git a/src/DataStructs/BudgetedStringBuilder.cs b/src/DataStructs/BudgetedStringBuilder.cs
+new file mode 100644
+--- /dev/null
++++ b/src/DataStructs/BudgetedStringBuilder.cs
+@@ -0,0 +1,40 @@
++using System;
++using System.Text;
++
++namespace MoonSharp.Interpreter
++{
++    // Lexer-only builder. Capacity is reserved before CLR buffer growth, while
++    // the final string receives a separate lease when it leaves the builder.
++    internal sealed class BudgetedStringBuilder
++    {
++        private readonly MemoryBudget _budget = MemoryBudget.Current;
++        private readonly StringBuilder _builder;
++
++        internal BudgetedStringBuilder(int capacity = 16)
++        {
++            _budget?.Track(this, 96);
++            _builder = MemoryBudget.Allocate(128L + 2L * capacity, () => new StringBuilder(capacity));
++        }
++
++        internal int Length => _builder.Length;
++
++        private void EnsureAdditional(int count)
++        {
++            long needed = (long)_builder.Length + count;
++            if (needed <= _builder.Capacity) return;
++            long capacity = Math.Max(needed, Math.Max(16L, 2L * _builder.Capacity));
++            using var reservation = _budget?.ReserveAllocation(128L + 4L * capacity);
++            _builder.EnsureCapacity(checked((int)capacity));
++            reservation?.Bind(_builder);
++        }
++
++        internal void Append(char value) { EnsureAdditional(1); _builder.Append(value); }
++        internal void Append(string value) { EnsureAdditional(value?.Length ?? 0); _builder.Append(value); }
++
++        public override string ToString()
++        {
++            using var scope = _budget?.EnterScope();
++            return MemoryBudget.AllocateString(_builder.Length, () => _builder.ToString());
++        }
++    }
++}
+diff --git a/src/DataStructs/FastStack.cs b/src/DataStructs/FastStack.cs
+--- a/src/DataStructs/FastStack.cs
++++ b/src/DataStructs/FastStack.cs
+@@ -2,21 +2,28 @@
+ 
+ using System;
+ using System.Collections.Generic;
++using System.Runtime.CompilerServices;
+ 
+ namespace MoonSharp.Interpreter.DataStructs
+ {
+ 	/// <summary>
+-	/// A preallocated, non-resizable, stack
++	/// A bounded stack which grows from a small initial allocation.
+ 	/// </summary>
+ 	/// <typeparam name="T"></typeparam>
+ 	internal class FastStack<T> : IList<T>
+ 	{
+ 		T[] m_Storage;
+ 		int m_HeadIdx = 0;
+-
+-		public FastStack(int maxCapacity)
+-		{
+-			m_Storage = new T[maxCapacity];
++		readonly Script m_Owner;
++		readonly int m_MaxCapacity;
++
++		public FastStack(int maxCapacity, Script owner = null)
++		{
++			if (maxCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(maxCapacity));
++			m_Owner = owner;
++			m_MaxCapacity = maxCapacity;
++			m_Owner?.MemoryBudget?.Track(this, 128);
++			m_Storage = Allocate(Math.Min(64, maxCapacity));
+ 		}
+ 
+ 		public T this[int index]
+@@ -27,13 +34,39 @@
+ 
+ 		public T Push(T item)
+ 		{
++			EnsureCapacity(m_HeadIdx + 1);
+ 			m_Storage[m_HeadIdx++] = item;
+ 			return item;
+ 		}
+ 
+ 		public void Expand(int size)
+ 		{
++			if (size < 0 || size > m_MaxCapacity - m_HeadIdx) CapacityExceeded();
++			EnsureCapacity(m_HeadIdx + size);
+ 			m_HeadIdx += size;
++		}
++
++		private T[] Allocate(int capacity)
++		{
++			using var memoryScope = m_Owner?.MemoryBudget?.EnterScope();
++			return MemoryBudget.Allocate(64L + (long)capacity * Unsafe.SizeOf<T>(), () => new T[capacity]);
++		}
++
++		private void EnsureCapacity(int required)
++		{
++			m_Owner?.MemoryBudget?.Check();
++			if (required < 0 || required > m_MaxCapacity) CapacityExceeded();
++			if (required <= m_Storage.Length) return;
++			int capacity = (int)Math.Min(m_MaxCapacity, Math.Max((long)required, (long)m_Storage.Length * 2));
++			var replacement = Allocate(capacity);
++			Array.Copy(m_Storage, replacement, m_HeadIdx);
++			m_Storage = replacement;
++		}
++
++		private void CapacityExceeded()
++		{
++			m_Owner?.ExecutionBudget?.Abort(ExecutionTerminationReason.DepthLimit);
++			throw new InternalErrorException("VM stack capacity exceeded.");
+ 		}
+ 
+ 		private void Zero(int from, int to)
+@@ -64,17 +97,10 @@
+ 
+ 		public void RemoveLast( int cnt = 1)
+ 		{
+-			if (cnt == 1)
+-			{
+-				--m_HeadIdx;
+-				m_Storage[m_HeadIdx] = default(T);
+-			}
+-			else
+-			{
+-				int oldhead = m_HeadIdx;
+-				m_HeadIdx -= cnt;
+-				Zero(m_HeadIdx, oldhead);
+-			}
++			if (cnt < 0 || cnt > m_HeadIdx) throw new ArgumentOutOfRangeException(nameof(cnt));
++			if (cnt == 0) return;
++			m_HeadIdx -= cnt;
++			Array.Clear(m_Storage, m_HeadIdx, cnt);
+ 		}
+ 
+ 		public T Pop()
+@@ -182,4 +208,4 @@
+ 	}
+ }
+ 
+-#endif
+\ No newline at end of file
++#endif
+diff --git a/src/DataStructs/LinkedListIndex.cs b/src/DataStructs/LinkedListIndex.cs
+--- a/src/DataStructs/LinkedListIndex.cs
++++ b/src/DataStructs/LinkedListIndex.cs
+@@ -13,14 +13,21 @@
+ 	{
+ 		LinkedList<TValue> m_LinkedList;
+ 		Dictionary<TKey, LinkedListNode<TValue>> m_Map = null;
++		readonly Script m_Owner;
++		readonly MemoryBudget m_MemoryBudget;
++		int m_Capacity;
++		MemoryBudget AllocationBudget { get { return m_Owner?.MemoryBudget ?? m_MemoryBudget ?? MemoryBudget.Current; } }
+ 
+ 		/// <summary>
+ 		/// Initializes a new instance of the <see cref="LinkedListIndex{TKey, TValue}"/> class.
+ 		/// </summary>
+ 		/// <param name="linkedList">The linked list to be indexed.</param>
+-		public LinkedListIndex(LinkedList<TValue> linkedList)
++		public LinkedListIndex(LinkedList<TValue> linkedList, Script owner = null, MemoryBudget memoryBudget = null)
+ 		{
+ 			m_LinkedList = linkedList;
++			m_Owner = owner;
++			m_MemoryBudget = memoryBudget;
++			AllocationBudget?.Track(this, 64);
+ 		}
+ 
+ 		/// <summary>
+@@ -48,6 +55,7 @@
+ 		/// <returns>The previous value of the element</returns>
+ 		public TValue Set(TKey key, TValue value)
+ 		{
++			AllocationBudget?.Check();
+ 			LinkedListNode<TValue> node = Find(key);
+ 
+ 			if (node == null)
+@@ -70,11 +78,24 @@
+ 		/// <param name="value">The value.</param>
+ 		public void Add(TKey key, TValue value)
+ 		{
++			AllocationBudget?.Check();
++			int count = m_Map == null ? 0 : m_Map.Count;
++			if (m_Map == null || count == m_Capacity)
++			{
++				int capacity = (int)System.Math.Min(int.MaxValue, System.Math.Max(4L, (long)count * 2));
++				// Reserve complete replacement buckets/entries before Dictionary can grow.
++				// Keep capacity charges until the dictionary dies, including after Clear.
++				using var reservation = AllocationBudget?.ReserveAllocation(128L + (long)capacity * (96L + System.Runtime.CompilerServices.Unsafe.SizeOf<TKey>()));
++				if (m_Map == null)
++					m_Map = new Dictionary<TKey, LinkedListNode<TValue>>(capacity);
++				else
++					m_Map.EnsureCapacity(capacity);
++				reservation?.Bind(m_Map);
++				m_Capacity = m_Map.EnsureCapacity(0);
++			}
++			using var nodeReservation = AllocationBudget?.ReserveAllocation(96L + System.Runtime.CompilerServices.Unsafe.SizeOf<TValue>());
+ 			var node = m_LinkedList.AddLast(value);
+-
+-			if (m_Map == null)
+-				m_Map = new Dictionary<TKey, LinkedListNode<TValue>>();
+-
++			nodeReservation?.Bind(node);
+ 			m_Map.Add(key, node);
+ 		}
+ 
+@@ -88,6 +109,7 @@
+ 
+ 			if (node != null)
+ 			{
++				node.Value = default(TValue);
+ 				m_LinkedList.Remove(node);
+ 				return m_Map.Remove(key);
+ 			}
+diff --git a/src/DataTypes/CallbackArguments.cs b/src/DataTypes/CallbackArguments.cs
+--- a/src/DataTypes/CallbackArguments.cs
++++ b/src/DataTypes/CallbackArguments.cs
+@@ -19,6 +19,7 @@
+ 		/// <param name="isMethodCall">if set to <c>true</c> [is method call].</param>
+ 		public CallbackArguments(IList<DynValue> args, bool isMethodCall)
+ 		{
++			MemoryBudget.TrackObject(this, 64);
+ 			m_Args = args;
+ 
+ 			if (m_Args.Count > 0)
+@@ -115,9 +116,9 @@
+ 		public DynValue[] GetArray(int skip = 0)
+ 		{
+ 			if (skip >= m_Count)
+-				return new DynValue[0];
+-
+-			DynValue[] vals = new DynValue[m_Count - skip];
++				return System.Array.Empty<DynValue>();
++
++			DynValue[] vals = MemoryBudget.Allocate(32L + 8L * (m_Count - skip), () => new DynValue[m_Count - skip]);
+ 
+ 			for (int i = skip; i < m_Count; i++)
+ 				vals[i - skip] = this[i];
+@@ -217,7 +218,7 @@
+ 		{
+ 			if (this.IsMethodCall)
+ 			{
+-				Slice<DynValue> slice = new Slice<DynValue>(m_Args, 1, m_Args.Count - 1, false);
++				Slice<DynValue> slice = MemoryBudget.Allocate(64, () => new Slice<DynValue>(m_Args, 1, m_Args.Count - 1, false));
+ 				return new CallbackArguments(slice, false);
+ 			}
+ 			else return this;
+diff --git a/src/DataTypes/CallbackFunction.cs b/src/DataTypes/CallbackFunction.cs
+--- a/src/DataTypes/CallbackFunction.cs
++++ b/src/DataTypes/CallbackFunction.cs
+@@ -32,6 +32,7 @@
+ 		/// <param name="name">The callback name, used in stacktraces, debugger, etc..</param>
+ 		public CallbackFunction(Func<ScriptExecutionContext, CallbackArguments, DynValue> callBack, string name = null)
+ 		{
++			MemoryBudget.TrackObject(this, 256);
+ 			ClrCallback = callBack;
+ 			Name = name;
+ 		}
+@@ -45,6 +46,17 @@
+ 		/// <returns></returns>
+ 		public DynValue Invoke(ScriptExecutionContext executionContext, IList<DynValue> args, bool isMethodCall = false)
+ 		{
++			var memory = executionContext.GetScript().MemoryBudget;
++			using var memoryScope = memory?.EnterScope();
++			memory?.Track(executionContext, 192);
++			var budget = executionContext.GetScript().ExecutionBudget;
++			using var budgetScope = budget?.EnterScope();
++			budget?.Charge();
++			if (budget != null)
++			{
++				foreach (var argument in args)
++					if (argument.Type == DataType.String) budget.Charge(argument.String.Length);
++			}
+ 			if (isMethodCall)
+ 			{
+ 				var colon = executionContext.GetScript().Options.ColonOperatorClrCallbackBehaviour;
+@@ -55,7 +67,10 @@
+ 					isMethodCall = (args.Count > 0 && args[0].Type == DataType.UserData);
+ 			}
+ 
+-			return ClrCallback(executionContext, new CallbackArguments(args, isMethodCall));
++			var result = ClrCallback(executionContext, new CallbackArguments(args, isMethodCall));
++			memory?.Check();
++			budget?.Check();
++			return result;
+ 		}
+ 
+ 		/// <summary>
+diff --git a/src/DataTypes/Closure.cs b/src/DataTypes/Closure.cs
+--- a/src/DataTypes/Closure.cs
++++ b/src/DataTypes/Closure.cs
+@@ -60,6 +60,7 @@
+ 		/// <param name="resolvedLocals">The resolved locals.</param>
+ 		internal Closure(Script script, int idx, SymbolRef[] symbols, IEnumerable<DynValue> resolvedLocals)
+ 		{
++			script.MemoryBudget?.Track(this, 256L + 64L * symbols.Length);
+ 			OwnerScript = script;
+ 
+ 			EntryPointByteCodeLocation = idx;
+diff --git a/src/DataTypes/Coroutine.cs b/src/DataTypes/Coroutine.cs
+--- a/src/DataTypes/Coroutine.cs
++++ b/src/DataTypes/Coroutine.cs
+@@ -1,6 +1,5 @@
+ ﻿using System;
+ using System.Collections.Generic;
+-using System.Linq;
+ using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution.VM;
+ 
+@@ -185,7 +184,7 @@
+ 		/// <exception cref="System.InvalidOperationException">Only non-CLR coroutines can be resumed with this overload of the Resume method. Use the overload accepting a ScriptExecutionContext instead</exception>
+ 		public DynValue Resume()
+ 		{
+-			return Resume(new DynValue[0]);
++			return Resume(Array.Empty<DynValue>());
+ 		}
+ 
+ 
+@@ -196,7 +195,7 @@
+ 		/// <returns></returns>
+ 		public DynValue Resume(ScriptExecutionContext context)
+ 		{
+-			return Resume(context, new DynValue[0]);
++			return Resume(context, Array.Empty<DynValue>());
+ 		}
+ 
+ 		/// <summary>
+@@ -211,7 +210,8 @@
+ 			if (Type != CoroutineType.Coroutine)
+ 				throw new InvalidOperationException("Only non-CLR coroutines can be resumed with this overload of the Resume method. Use the overload accepting a ScriptExecutionContext instead");
+ 
+-			DynValue[] dargs = new DynValue[args.Length];
++			using var memoryScope = OwnerScript?.MemoryBudget?.EnterScope();
++			DynValue[] dargs = MemoryBudget.Allocate(32L + 8L * args.Length, () => new DynValue[args.Length]);
+ 
+ 			for (int i = 0; i < dargs.Length; i++)
+ 				dargs[i] = DynValue.FromObject(this.OwnerScript, args[i]);
+@@ -228,7 +228,8 @@
+ 		/// <returns></returns>
+ 		public DynValue Resume(ScriptExecutionContext context, params object[] args)
+ 		{
+-			DynValue[] dargs = new DynValue[args.Length];
++			using var memoryScope = context.GetScript().MemoryBudget?.EnterScope();
++			DynValue[] dargs = MemoryBudget.Allocate(32L + 8L * args.Length, () => new DynValue[args.Length]);
+ 
+ 			for (int i = 0; i < dargs.Length; i++)
+ 				dargs[i] = DynValue.FromObject(context.GetScript(), args[i]);
+@@ -263,13 +264,18 @@
+ 		/// <returns></returns>
+ 		public WatchItem[] GetStackTrace(int skip, SourceRef entrySourceRef = null)
+ 		{
++			using var memoryScope = OwnerScript?.MemoryBudget?.EnterScope();
+ 			if (this.State != CoroutineState.Running)
+ 			{
+ 				entrySourceRef = m_Processor.GetCoroutineSuspendedLocation();
+ 			}
+ 
+ 			List<WatchItem> stack = m_Processor.Debugger_GetCallStack(entrySourceRef);
+-			return stack.Skip(skip).ToArray();
++			int start = Math.Max(0, Math.Min(skip, stack.Count));
++			int count = stack.Count - start;
++			var result = MemoryBudget.Allocate(32L + 8L * count, () => new WatchItem[count]);
++			stack.CopyTo(start, result, 0, count);
++			return result;
+ 		}
+ 
+ 		/// <summary>
+diff --git a/src/DataTypes/DynValue.cs b/src/DataTypes/DynValue.cs
+--- a/src/DataTypes/DynValue.cs
++++ b/src/DataTypes/DynValue.cs
+@@ -20,6 +20,13 @@
+ 		private double m_Number;
+ 		private object m_Object;
+ 		private DataType m_Type;
++		private object m_StringRetention;
++		private static bool s_InitializingStaticValues;
++
++		public DynValue()
++		{
++			if (!s_InitializingStaticValues) MemoryBudget.TrackObject(this, 64);
++		}
+ 
+ 
+ 		/// <summary>
+@@ -122,11 +129,21 @@
+ 		/// </summary>
+ 		public static DynValue NewString(string str)
+ 		{
++			// Existing host strings can be interned/immortal. Keep a retention allowance
++			// alive through value aliases instead of globally owning the underlying string.
++			var retention = CreateStringRetention(str);
+ 			return new DynValue()
+ 			{
+ 				m_Object = str,
+ 				m_Type = DataType.String,
+-			};
++				m_StringRetention = retention,
++			};
++		}
++
++		private static object CreateStringRetention(string str)
++		{
++			if (MemoryBudget.Current == null) return null;
++			return MemoryBudget.Allocate(64L + 2L * (str == null ? 0 : str.Length), () => new object());
+ 		}
+ 
+ 		/// <summary>
+@@ -134,11 +151,7 @@
+ 		/// </summary>
+ 		public static DynValue NewString(StringBuilder sb)
+ 		{
+-			return new DynValue()
+-			{
+-				m_Object = sb.ToString(),
+-				m_Type = DataType.String,
+-			};
++			return NewString(MemoryBudget.AllocateString(sb.Length, () => sb.ToString()));
+ 		}
+ 
+ 		/// <summary>
+@@ -146,11 +159,7 @@
+ 		/// </summary>
+ 		public static DynValue NewString(string format, params object[] args)
+ 		{
+-			return new DynValue()
+-			{
+-				m_Object = string.Format(format, args),
+-				m_Type = DataType.String,
+-			};
++			return NewString(string.Format(format, args));
+ 		}
+ 
+ 		/// <summary>
+@@ -255,13 +264,11 @@
+ 		/// <returns></returns>
+ 		public static DynValue NewTailCallReq(DynValue tailFn, params DynValue[] args)
+ 		{
+-			return new DynValue()
+-			{
+-				m_Object = new TailCallData()
+-				{
+-					Args = args,
+-					Function = tailFn,
+-				},
++			var data = MemoryBudget.Allocate(128, () => new TailCallData() { Args = args, Function = tailFn });
++			if (args.Length != 0) MemoryBudget.TrackObject(args, 32L + 8L * args.Length);
++			return new DynValue()
++			{
++				m_Object = data,
+ 				m_Type = DataType.TailCallRequest,
+ 			};
+ 		}
+@@ -277,6 +284,7 @@
+ 		/// <returns></returns>
+ 		public static DynValue NewTailCallReq(TailCallData tailCallData)
+ 		{
++			MemoryBudget.TrackObject(tailCallData, 128);
+ 			return new DynValue()
+ 			{
+ 				m_Object = tailCallData,
+@@ -293,9 +301,11 @@
+ 		/// <returns></returns>
+ 		public static DynValue NewYieldReq(DynValue[] args)
+ 		{
+-			return new DynValue()
+-			{
+-				m_Object = new YieldRequest() { ReturnValues = args },
++			var request = MemoryBudget.Allocate(64, () => new YieldRequest() { ReturnValues = args });
++			if (args.Length != 0) MemoryBudget.TrackObject(args, 32L + 8L * args.Length);
++			return new DynValue()
++			{
++				m_Object = request,
+ 				m_Type = DataType.YieldRequest,
+ 			};
+ 		}
+@@ -309,7 +319,7 @@
+ 		{
+ 			return new DynValue()
+ 			{
+-				m_Object = new YieldRequest() { Forced = true },
++				m_Object = MemoryBudget.Allocate(64, () => new YieldRequest() { Forced = true }),
+ 				m_Type = DataType.YieldRequest,
+ 			};
+ 		}
+@@ -324,6 +334,7 @@
+ 
+ 			if (values.Length == 1)
+ 				return values[0];
++			MemoryBudget.TrackObject(values, 32L + 8L * values.Length);
+ 
+ 			return new DynValue()
+ 			{
+@@ -343,19 +354,26 @@
+ 			if (values.Length == 1)
+ 				return values[0];
+ 
+-			List<DynValue> vals = new List<DynValue>();
++			long count = 0;
++			foreach (var v in values) count += v.Type == DataType.Tuple ? v.Tuple.Length : 1;
++			int length = checked((int)count);
++			var vals = MemoryBudget.Allocate(64L + 8L * count, () => new DynValue[length]);
++			int index = 0;
+ 
+ 			foreach (var v in values)
+ 			{
+ 				if (v.Type == DataType.Tuple)
+-					vals.AddRange(v.Tuple);
++				{
++					Array.Copy(v.Tuple, 0, vals, index, v.Tuple.Length);
++					index += v.Tuple.Length;
++				}
+ 				else
+-					vals.Add(v);
+-			}
+-
+-			return new DynValue()
+-			{
+-				m_Object = vals.ToArray(),
++					vals[index++] = v;
++			}
++
++			return new DynValue()
++			{
++				m_Object = vals,
+ 				m_Type = DataType.Tuple,
+ 			};
+ 		}
+@@ -366,6 +384,7 @@
+ 		/// </summary>
+ 		public static DynValue NewUserData(UserData userData)
+ 		{
++			if (userData != null) MemoryBudget.TrackObject(userData, 128);
+ 			return new DynValue()
+ 			{
+ 				m_Object = userData,
+@@ -408,6 +427,8 @@
+ 			v.m_HashCode = this.m_HashCode;
+ 			v.m_Type = this.m_Type;
+ 			v.m_ReadOnly = readOnly;
++			v.m_StringRetention = this.m_Type == DataType.String && MemoryBudget.Current != null
++				? CreateStringRetention(this.String) : this.m_StringRetention;
+ 			return v;
+ 		}
+ 
+@@ -441,10 +462,15 @@
+ 
+ 		static DynValue()
+ 		{
+-			Nil = new DynValue() { m_Type = DataType.Nil }.AsReadOnly();
+-			Void = new DynValue() { m_Type = DataType.Void }.AsReadOnly();
+-			True = DynValue.NewBoolean(true).AsReadOnly();
+-			False = DynValue.NewBoolean(false).AsReadOnly();
++			s_InitializingStaticValues = true;
++			try
++			{
++				Nil = new DynValue() { m_Type = DataType.Nil }.AsReadOnly();
++				Void = new DynValue() { m_Type = DataType.Void }.AsReadOnly();
++				True = DynValue.NewBoolean(true).AsReadOnly();
++				False = DynValue.NewBoolean(false).AsReadOnly();
++			}
++			finally { s_InitializingStaticValues = false; }
+ 		}
+ 
+ 
+@@ -475,7 +501,7 @@
+ 				case DataType.String:
+ 					return String;
+ 				case DataType.Tuple:
+-					return string.Join("\t", Tuple.Select(t => t.ToPrintString()).ToArray());
++					return FormatTuple("\t", true);
+ 				case DataType.TailCallRequest:
+ 					return "(TailCallRequest -- INTERNAL!)";
+ 				case DataType.YieldRequest:
+@@ -508,7 +534,7 @@
+ 			switch (Type)
+ 			{
+ 				case DataType.Tuple:
+-					return string.Join("\t", Tuple.Select(t => t.ToPrintString()).ToArray());
++					return FormatTuple("\t", true);
+ 				case DataType.TailCallRequest:
+ 					return "(TailCallRequest)";
+ 				case DataType.YieldRequest:
+@@ -534,28 +560,42 @@
+ 				case DataType.Nil:
+ 					return "nil";
+ 				case DataType.Boolean:
+-					return Boolean.ToString().ToLower();
++					return Boolean ? "true" : "false";
+ 				case DataType.Number:
+-					return Number.ToString(CultureInfo.InvariantCulture);
++					return MemoryBudget.AllocateString(512, () => Number.ToString(CultureInfo.InvariantCulture));
+ 				case DataType.String:
+-					return "\"" + String + "\"";
++					return MemoryBudget.AllocateString(2L + (String?.Length ?? 0), () => "\"" + String + "\"");
+ 				case DataType.Function:
+-					return string.Format("(Function {0:X8})", Function.EntryPointByteCodeLocation);
++					return MemoryBudget.AllocateString(32, () => string.Format("(Function {0:X8})", Function.EntryPointByteCodeLocation));
+ 				case DataType.ClrFunction:
+-					return string.Format("(Function CLR)", Function);
++					return "(Function CLR)";
+ 				case DataType.Table:
+ 					return "(Table)";
+ 				case DataType.Tuple:
+-					return string.Join(", ", Tuple.Select(t => t.ToString()).ToArray());
++					return FormatTuple(", ", false);
+ 				case DataType.TailCallRequest:
+-					return "Tail:(" + string.Join(", ", Tuple.Select(t => t.ToString()).ToArray()) + ")";
++					string tuple = FormatTuple(", ", false);
++					return MemoryBudget.AllocateString((long)tuple.Length + 7, () => "Tail:(" + tuple + ")");
+ 				case DataType.UserData:
+ 					return "(UserData)";
+ 				case DataType.Thread:
+-					return string.Format("(Coroutine {0:X8})", this.Coroutine.ReferenceID);
++					return MemoryBudget.AllocateString(32, () => string.Format("(Coroutine {0:X8})", this.Coroutine.ReferenceID));
+ 				default:
+ 					return "(???)";
+ 			}
++		}
++
++		private string FormatTuple(string separator, bool printable)
++		{
++			var values = Tuple;
++			var strings = MemoryBudget.Allocate(32L + 8L * values.Length, () => new string[values.Length]);
++			long characters = (long)Math.Max(0, values.Length - 1) * separator.Length;
++			for (int i = 0; i < values.Length; i++)
++			{
++				strings[i] = printable ? values[i].ToPrintString() : values[i].ToString();
++				characters += strings[i]?.Length ?? 0;
++			}
++			return MemoryBudget.AllocateString(characters, () => string.Join(separator, strings));
+ 		}
+ 
+ 		/// <summary>
+@@ -685,7 +725,7 @@
+ 			DynValue rv = ToScalar();
+ 			if (rv.Type == DataType.Number)
+ 			{
+-				return rv.Number.ToString();
++				return MemoryBudget.AllocateString(512, () => rv.Number.ToString());
+ 			}
+ 			else if (rv.Type == DataType.String)
+ 			{
+@@ -764,6 +804,7 @@
+ 
+ 			this.m_Number = value.m_Number;
+ 			this.m_Object = value.m_Object;
++			this.m_StringRetention = value.m_StringRetention;
+ 			this.m_Type = value.Type;
+ 			this.m_HashCode = -1;
+ 		}
+diff --git a/src/DataTypes/RefIdObject.cs b/src/DataTypes/RefIdObject.cs
+--- a/src/DataTypes/RefIdObject.cs
++++ b/src/DataTypes/RefIdObject.cs
+@@ -28,7 +28,7 @@
+ 		/// <returns></returns>
+ 		public string FormatTypeString(string typeString)
+ 		{
+-			return string.Format("{0}: {1:X8}", typeString, m_RefID);
++			return MemoryBudget.AllocateString((long)typeString.Length + 10, () => string.Format("{0}: {1:X8}", typeString, m_RefID));
+ 		}
+ 
+ 	}
+diff --git a/src/DataTypes/SymbolRef.cs b/src/DataTypes/SymbolRef.cs
+--- a/src/DataTypes/SymbolRef.cs
++++ b/src/DataTypes/SymbolRef.cs
+@@ -8,7 +8,12 @@
+ 	/// </summary>
+ 	public class SymbolRef
+ 	{
+-		private static SymbolRef s_DefaultEnv = new SymbolRef() { i_Type = SymbolRefType.DefaultEnv };
++		private static SymbolRef s_DefaultEnv = new SymbolRef(true) { i_Type = SymbolRefType.DefaultEnv };
++
++		public SymbolRef() { MemoryBudget.TrackObject(this, 96); }
++
++		// The process-wide immutable default must never acquire a script lease.
++		private SymbolRef(bool untracked) { }
+ 
+ 		// Fields are internal - direct access by the executor was a 10% improvement at profiling here!
+ 		internal SymbolRefType i_Type;
+diff --git a/src/DataTypes/Table.cs b/src/DataTypes/Table.cs
+--- a/src/DataTypes/Table.cs
++++ b/src/DataTypes/Table.cs
+@@ -14,6 +14,8 @@
+ 		readonly LinkedListIndex<string, TablePair> m_StringMap;
+ 		readonly LinkedListIndex<int, TablePair> m_ArrayMap;
+ 		readonly Script m_Owner;
++		readonly MemoryBudget m_MemoryBudget;
++		MemoryBudget AllocationBudget { get { return m_Owner?.MemoryBudget ?? m_MemoryBudget ?? MemoryBudget.Current; } }
+ 
+ 		int m_InitArray = 0;
+ 		int m_CachedLength = -1;
+@@ -25,11 +27,15 @@
+ 		/// <param name="owner">The owner script.</param>
+ 		public Table(Script owner)
+ 		{
++			m_Owner = owner;
++			// Prime/shared tables have no owner Script, but still retain their creator's allowance.
++			m_MemoryBudget = owner?.MemoryBudget ?? MemoryBudget.Current;
++			AllocationBudget?.Track(this, 128);
+ 			m_Values = new LinkedList<TablePair>();
+-			m_StringMap = new LinkedListIndex<string, TablePair>(m_Values);
+-			m_ArrayMap = new LinkedListIndex<int, TablePair>(m_Values);
+-			m_ValueMap = new LinkedListIndex<DynValue, TablePair>(m_Values);
+-			m_Owner = owner;
++			AllocationBudget?.Track(m_Values, 64);
++			m_StringMap = new LinkedListIndex<string, TablePair>(m_Values, owner, m_MemoryBudget);
++			m_ArrayMap = new LinkedListIndex<int, TablePair>(m_Values, owner, m_MemoryBudget);
++			m_ValueMap = new LinkedListIndex<DynValue, TablePair>(m_Values, owner, m_MemoryBudget);
+ 		}
+ 
+ 		/// <summary>
+@@ -42,6 +48,7 @@
+ 		{
+ 			for (int i = 0; i < arrayValues.Length; i++)
+ 			{
++				OwnerScript?.ExecutionBudget?.Charge();
+ 				this.Set(DynValue.NewNumber(i + 1), arrayValues[i]);
+ 			}
+ 		}
+@@ -59,6 +66,8 @@
+ 		/// </summary>
+ 		public void Clear()
+ 		{
++			// Pending CLR enumerators may keep detached nodes alive; do not retain their payloads.
++			for (var node = m_Values.First; node != null; node = node.Next) node.Value = default(TablePair);
+ 			m_Values.Clear();
+ 			m_StringMap.Clear();
+ 			m_ArrayMap.Clear();
+@@ -153,6 +162,7 @@
+ 		/// <param name="value">The value.</param>
+ 		public void Append(DynValue value)
+ 		{
++			using var memoryScope = AllocationBudget?.EnterScope();
+ 			this.CheckScriptOwnership(value);
+ 			PerformTableSet(m_ArrayMap, Length + 1, DynValue.NewNumber(Length + 1), value, true, Length + 1);
+ 		}
+@@ -161,6 +171,7 @@
+ 
+ 		private void PerformTableSet<T>(LinkedListIndex<T, TablePair> listIndex, T key, DynValue keyDynValue, DynValue value, bool isNumber, int appendKey)
+ 		{
++			AllocationBudget?.Check();
+ 			TablePair prev = listIndex.Set(key, new TablePair(keyDynValue, value));
+ 
+ 			// If this is an insert, we can invalidate all iterators and collect dead keys
+@@ -209,6 +220,7 @@
+ 		/// <param name="value">The value.</param>
+ 		public void Set(string key, DynValue value)
+ 		{
++			using var memoryScope = AllocationBudget?.EnterScope();
+ 			if (key == null)
+ 				throw ScriptRuntimeException.TableIndexIsNil();
+ 
+@@ -223,6 +235,7 @@
+ 		/// <param name="value">The value.</param>
+ 		public void Set(int key, DynValue value)
+ 		{
++			using var memoryScope = AllocationBudget?.EnterScope();
+ 			this.CheckScriptOwnership(value);
+ 			PerformTableSet(m_ArrayMap, key, DynValue.NewNumber(key), value, true, -1);
+ 		}
+@@ -234,6 +247,7 @@
+ 		/// <param name="value">The value.</param>
+ 		public void Set(DynValue key, DynValue value)
+ 		{
++			using var memoryScope = AllocationBudget?.EnterScope();
+ 			if (key.IsNilOrNan())
+ 			{
+ 				if (key.IsNil())
+@@ -272,6 +286,7 @@
+ 		/// <param name="value">The value.</param>
+ 		public void Set(object key, DynValue value)
+ 		{
++			using var memoryScope = AllocationBudget?.EnterScope();
+ 			if (key == null)
+ 				throw ScriptRuntimeException.TableIndexIsNil();
+ 
+@@ -538,6 +553,7 @@
+ 		{
+ 			for (LinkedListNode<TablePair> node = m_Values.First; node != null; node = node.Next)
+ 			{
++				OwnerScript?.ExecutionBudget?.Charge();
+ 				if (node.Value.Value.IsNil())
+ 				{
+ 					Remove(node.Value.Key);
+@@ -591,6 +607,7 @@
+ 		{
+ 			while (true)
+ 			{
++				OwnerScript?.ExecutionBudget?.Charge();
+ 				if (linkedListNode == null)
+ 					return null;
+ 
+@@ -617,7 +634,10 @@
+ 					m_CachedLength = 0;
+ 
+ 					for (int i = 1; m_ArrayMap.ContainsKey(i) && !m_ArrayMap.Find(i).Value.Value.IsNil(); i++)
++					{
++						OwnerScript?.ExecutionBudget?.Charge();
+ 						m_CachedLength = i;
++					}
+ 				}
+ 
+ 				return m_CachedLength;
+diff --git a/src/Debugging/SourceCode.cs b/src/Debugging/SourceCode.cs
+--- a/src/Debugging/SourceCode.cs
++++ b/src/Debugging/SourceCode.cs
+@@ -30,18 +30,19 @@
+ 		/// </summary>
+ 		public int SourceID { get; private set; }
+ 
+-		internal List<SourceRef> Refs { get; private set; }
++		internal BudgetedList<SourceRef> Refs { get; private set; }
+ 
+ 		internal SourceCode(string name, string code, int sourceID, Script ownerScript)
+ 		{
+-			Refs = new List<SourceRef>();
++			ownerScript.MemoryBudget?.Track(this, 256L + 80L * code.Length);
++			Refs = new BudgetedList<SourceRef>();
+ 
+-			List<string> lines = new List<string>();
++			BudgetedList<string> lines = new BudgetedList<string>();
+ 
+ 			Name = name;
+ 			Code = code;
+ 
+-			lines.Add(string.Format("-- Begin of chunk : {0} ", name));
++			lines.Add(DiagnosticFormatting.Format("-- Begin of chunk : {0} ", name));
+ 
+ 			lines.AddRange(Code.Split('\n'));
+ 
+diff --git a/src/Debugging/SourceRef.cs b/src/Debugging/SourceRef.cs
+--- a/src/Debugging/SourceRef.cs
++++ b/src/Debugging/SourceRef.cs
+@@ -59,6 +59,7 @@
+ 
+ 		public SourceRef(SourceRef src, bool isStepStop)
+ 		{
++			MemoryBudget.TrackObject(this, 128);
+ 			SourceIdx = src.SourceIdx;
+ 			FromChar = src.FromChar;
+ 			ToChar = src.ToChar;
+@@ -70,6 +71,7 @@
+ 
+ 		public SourceRef(int sourceIdx, int from, int to, int fromline, int toline, bool isStepStop)
+ 		{
++			MemoryBudget.TrackObject(this, 128);
+ 			SourceIdx = sourceIdx;
+ 			FromChar = from;
+ 			ToChar = to;
+@@ -183,6 +185,7 @@
+ 		/// <returns></returns>
+ 		public string FormatLocation(Script script, bool forceClassicFormat = false)
+ 		{
++			using var memoryScope = script.MemoryBudget?.EnterScope();
+ 			if (this.SourceIdx < 0)
+ 				return "[dynamic]";
+ 
+@@ -193,22 +196,22 @@
+ 
+ 			if (script.Options.UseLuaErrorLocations || forceClassicFormat)
+ 			{
+-				return string.Format("{0}:{1}", sc.Name, this.FromLine);
++				return DiagnosticFormatting.Format("{0}:{1}", sc.Name, this.FromLine);
+ 			}
+ 			else if (this.FromLine == this.ToLine)
+ 			{
+ 				if (this.FromChar == this.ToChar)
+ 				{
+-					return string.Format("{0}:({1},{2})", sc.Name, this.FromLine, this.FromChar, this.ToLine, this.ToChar);
+-				}
+-				else
+-				{
+-					return string.Format("{0}:({1},{2}-{4})", sc.Name, this.FromLine, this.FromChar, this.ToLine, this.ToChar);
++					return DiagnosticFormatting.Format("{0}:({1},{2})", sc.Name, this.FromLine, this.FromChar, this.ToLine, this.ToChar);
++				}
++				else
++				{
++					return DiagnosticFormatting.Format("{0}:({1},{2}-{4})", sc.Name, this.FromLine, this.FromChar, this.ToLine, this.ToChar);
+ 				}
+ 			}
+ 			else
+ 			{
+-				return string.Format("{0}:({1},{2}-{3},{4})", sc.Name, this.FromLine, this.FromChar, this.ToLine, this.ToChar);
++				return DiagnosticFormatting.Format("{0}:({1},{2}-{3},{4})", sc.Name, this.FromLine, this.FromChar, this.ToLine, this.ToChar);
+ 			}
+ 		}
+ 	}
+diff --git a/src/Errors/DiagnosticFormatting.cs b/src/Errors/DiagnosticFormatting.cs
+new file mode 100644
+--- /dev/null
++++ b/src/Errors/DiagnosticFormatting.cs
+@@ -0,0 +1,68 @@
++using System;
++using System.Text;
++
++namespace MoonSharp.Interpreter
++{
++    // Internal diagnostic formats use strings and bounded scalar arguments. This
++    // preflight also includes alignment/precision fields before String.Format
++    // allocates. Arbitrary host IFormattable implementations are a host boundary,
++    // not something this estimate can constrain.
++    internal static class DiagnosticFormatting
++    {
++        internal static string Format(string format, params object[] arguments)
++        {
++            if (MemoryBudget.Current == null) return string.Format(format, arguments);
++            if (arguments.Length != 0) MemoryBudget.TrackObject(arguments, 32L + 8L * arguments.Length);
++            long characters = format.Length;
++            for (int cursor = 0; cursor < format.Length; cursor++)
++            {
++                if (format[cursor] != '{') continue;
++                if (cursor + 1 < format.Length && format[cursor + 1] == '{') { cursor++; continue; }
++                cursor++;
++                long index = ReadNumber(format, ref cursor);
++                if (index < 0 || index >= arguments.Length) continue; // Let String.Format report invalid formats.
++                object argument = arguments[(int)index];
++                long size = argument is string text ? text.Length : 1024;
++                if (argument == null) size = 0;
++                while (cursor < format.Length && format[cursor] == ' ') cursor++;
++                if (cursor < format.Length && format[cursor] == ',')
++                {
++                    cursor++;
++                    while (cursor < format.Length && format[cursor] == ' ') cursor++;
++                    if (cursor < format.Length && (format[cursor] == '-' || format[cursor] == '+')) cursor++;
++                    size = Math.Max(size, ReadNumber(format, ref cursor));
++                }
++                while (cursor < format.Length && format[cursor] != '}')
++                {
++                    if (format[cursor] >= '0' && format[cursor] <= '9')
++                    {
++                        // Standard numeric precision can request a very large
++                        // output with a short format (for example F999999999).
++                        long precision = ReadNumber(format, ref cursor);
++                        if (!(argument is string)) size = Math.Max(size, precision + 1024);
++                    }
++                    else cursor++;
++                }
++                characters += size + format.Length;
++            }
++            // String.Format's growable formatter may rent temporary storage
++            // from a process-wide pool. Use an explicitly reserved, pre-sized
++            // builder instead, and give its copied result an independent lease.
++            var builder = MemoryBudget.Allocate(128L + 4L * characters,
++                () => new StringBuilder(checked((int)characters)));
++            builder.AppendFormat(format, arguments);
++            return MemoryBudget.AllocateString(builder.Length, () => builder.ToString());
++        }
++
++        private static long ReadNumber(string format, ref int cursor)
++        {
++            long value = 0;
++            while (cursor < format.Length && format[cursor] >= '0' && format[cursor] <= '9')
++            {
++                value = Math.Min(int.MaxValue, value * 10 + format[cursor] - '0');
++                cursor++;
++            }
++            return value;
++        }
++    }
++}
+diff --git a/src/Errors/InterpreterException.cs b/src/Errors/InterpreterException.cs
+--- a/src/Errors/InterpreterException.cs
++++ b/src/Errors/InterpreterException.cs
+@@ -17,7 +17,7 @@
+ 		protected InterpreterException(Exception ex, string message)
+ 			: base(message, ex)
+ 		{
+-
++			AccountException(message);
+ 		}
+ 
+ 		/// <summary>
+@@ -27,7 +27,7 @@
+ 		protected InterpreterException(Exception ex)
+ 			: base(ex.Message, ex)
+ 		{
+-
++			AccountException(ex.Message);
+ 		}
+ 
+ 		/// <summary>
+@@ -37,7 +37,7 @@
+ 		protected InterpreterException(string message)
+ 			: base(message)
+ 		{
+-
++			AccountException(message);
+ 		}
+ 
+ 		/// <summary>
+@@ -46,9 +46,17 @@
+ 		/// <param name="format">The format.</param>
+ 		/// <param name="args">The arguments.</param>
+ 		protected InterpreterException(string format, params object[] args)
+-			: base(string.Format(format, args))
++			: base(DiagnosticFormatting.Format(format, args))
+ 		{
++			AccountException(Message);
++		}
+ 
++		private void AccountException(string message)
++		{
++			// A conservative fee for the exception, retained message and ordinary
++			// CLR throw bookkeeping. CLR stack traces remain implementation-owned;
++			// this accounting is not an exact measurement of that storage.
++			MemoryBudget.TrackObject(this, 8192L + 2L * (message?.Length ?? 0));
+ 		}
+ 
+ 		/// <summary>
+@@ -75,6 +83,7 @@
+ 
+ 		internal void DecorateMessage(Script script, SourceRef sref, int ip = -1)
+ 		{
++			using var memoryScope = script.MemoryBudget?.EnterScope();
+ 			if (string.IsNullOrEmpty(this.DecoratedMessage))
+ 			{
+ 				if (DoNotDecorateMessage)
+@@ -84,11 +93,11 @@
+ 				}
+ 				else if (sref != null)
+ 				{
+-					this.DecoratedMessage = string.Format("{0}: {1}", sref.FormatLocation(script), this.Message);
++					this.DecoratedMessage = DiagnosticFormatting.Format("{0}: {1}", sref.FormatLocation(script), this.Message);
+ 				}
+ 				else
+ 				{
+-					this.DecoratedMessage = string.Format("bytecode:{0}: {1}", ip, this.Message);
++					this.DecoratedMessage = DiagnosticFormatting.Format("bytecode:{0}: {1}", ip, this.Message);
+ 				}
+ 			}
+ 		}
+diff --git a/src/Errors/ScriptExecutionAbortedException.cs b/src/Errors/ScriptExecutionAbortedException.cs
+new file mode 100644
+--- /dev/null
++++ b/src/Errors/ScriptExecutionAbortedException.cs
+@@ -0,0 +1,16 @@
++using System;
++
++namespace MoonSharp.Interpreter
++{
++    /// <summary>A terminal host limit, deliberately outside Lua's catchable exception hierarchy.</summary>
++    public sealed class ScriptExecutionAbortedException : Exception
++    {
++        public ExecutionTerminationReason Reason { get; private set; }
++
++        public ScriptExecutionAbortedException(ExecutionTerminationReason reason)
++            : base("Script execution terminated: " + reason)
++        {
++            Reason = reason;
++        }
++    }
++}
+diff --git a/src/Execution/ExecutionBudget.cs b/src/Execution/ExecutionBudget.cs
+new file mode 100644
+--- /dev/null
++++ b/src/Execution/ExecutionBudget.cs
+@@ -0,0 +1,101 @@
++using System;
++using System.Diagnostics;
++using System.Threading;
++
++namespace MoonSharp.Interpreter
++{
++    /// <summary>Host-owned, cumulative work/deadline limits. Never expose this object to Lua.</summary>
++    public sealed class ExecutionBudget
++    {
++        private readonly long _deadline;
++        private readonly int _maxCallDepth;
++        private long _remaining;
++        private int _reason;
++        private int _reentryDepth;
++
++        public ExecutionBudget(long instructionLimit, TimeSpan timeout, int maxCallDepth = 128)
++        {
++            if (instructionLimit <= 0) throw new ArgumentOutOfRangeException(nameof(instructionLimit));
++            if (timeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
++            if (maxCallDepth <= 0) throw new ArgumentOutOfRangeException(nameof(maxCallDepth));
++            _remaining = instructionLimit;
++            _maxCallDepth = maxCallDepth;
++            long now = Stopwatch.GetTimestamp();
++            double ticks = timeout.TotalSeconds * Stopwatch.Frequency;
++            _deadline = ticks >= long.MaxValue - now ? long.MaxValue : now + Math.Max(1, (long)ticks);
++        }
++
++        public bool IsTerminated { get { return Volatile.Read(ref _reason) != 0; } }
++        public ExecutionTerminationReason TerminationReason { get { return (ExecutionTerminationReason)Volatile.Read(ref _reason); } }
++
++        public void Check()
++        {
++            MemoryBudget.Current?.Check();
++            var reason = TerminationReason;
++            if (reason != ExecutionTerminationReason.None) throw new ScriptExecutionAbortedException(reason);
++            if (Stopwatch.GetTimestamp() >= _deadline) Abort(ExecutionTerminationReason.Deadline);
++        }
++
++        public void Charge(long work = 1)
++        {
++            if (work < 0) throw new ArgumentOutOfRangeException(nameof(work));
++            Check();
++            if (Interlocked.Add(ref _remaining, -work) < 0) Abort(ExecutionTerminationReason.CpuLimit);
++        }
++
++        public void Cancel()
++        {
++            Interlocked.CompareExchange(ref _reason, (int)ExecutionTerminationReason.Cancelled, 0);
++        }
++
++        internal void CheckCallDepth(int depth)
++        {
++            Check();
++            if (depth > _maxCallDepth) Abort(ExecutionTerminationReason.DepthLimit);
++        }
++
++        internal void Enter()
++        {
++            Check();
++            if (Interlocked.Increment(ref _reentryDepth) > _maxCallDepth)
++            {
++                Interlocked.Decrement(ref _reentryDepth);
++                Abort(ExecutionTerminationReason.DepthLimit);
++            }
++        }
++
++        internal void Leave()
++        {
++            Interlocked.Decrement(ref _reentryDepth);
++        }
++
++        internal Scope EnterScope()
++        {
++            Enter();
++            return new Scope(this);
++        }
++
++        internal readonly struct Scope : IDisposable
++        {
++            private readonly ExecutionBudget _budget;
++            internal Scope(ExecutionBudget budget) { _budget = budget; }
++            public void Dispose() { _budget.Leave(); }
++        }
++
++        internal void Abort(ExecutionTerminationReason reason)
++        {
++            Interlocked.CompareExchange(ref _reason, (int)reason, 0);
++            throw new ScriptExecutionAbortedException(TerminationReason);
++        }
++    }
++
++    public enum ExecutionTerminationReason
++    {
++        None,
++        CpuLimit,
++        Deadline,
++        DepthLimit,
++        Cancelled,
++        MemoryLimit
++    }
++}
+diff --git a/src/Execution/MemoryBudget.cs b/src/Execution/MemoryBudget.cs
+new file mode 100644
+--- /dev/null
++++ b/src/Execution/MemoryBudget.cs
+@@ -0,0 +1,285 @@
++using System;
++using System.Runtime.CompilerServices;
++using System.Threading;
++
++namespace MoonSharp.Interpreter
++{
++    /// <summary>Host-only conservative allocation accounting, not a CLR heap measurement.</summary>
++    public sealed class MemoryBudget
++    {
++        [ThreadStatic] private static MemoryBudget _current;
++        private const long RecordBytes = 256;
++        private const int MaximumRecords = 131072;
++        private readonly MemoryBudget _parent;
++        private readonly Registry _registry;
++        private ConditionalWeakTable<object, Allocation> _owners;
++        private long _charged, _total, _peak, _unbound;
++        private int _terminated;
++
++        public MemoryBudget(long allocationLimitBytes, MemoryBudget parent = null, bool reclaimable = false)
++        {
++            if (allocationLimitBytes <= 0) throw new ArgumentOutOfRangeException(nameof(allocationLimitBytes));
++            if (parent != null && parent.IsReclaimable != reclaimable)
++                throw new ArgumentException("Parent and child must use the same accounting mode.", nameof(parent));
++            Limit = allocationLimitBytes;
++            IsReclaimable = reclaimable;
++            _parent = parent;
++            _registry = parent?._registry ?? new Registry();
++        }
++
++        public long Limit { get; }
++        public bool IsReclaimable { get; }
++        public long ChargedBytes => Interlocked.Read(ref _charged);
++        public long TotalAllocatedBytes => Interlocked.Read(ref _total);
++        public long PeakBytes => Interlocked.Read(ref _peak);
++        public long UnboundBytes => Interlocked.Read(ref _unbound);
++        public int TrackedAllocationCount { get { lock (_registry) return _registry.Count; } }
++        public bool IsTerminated => Volatile.Read(ref _terminated) != 0 || (_parent?.IsTerminated ?? false);
++        public static MemoryBudget Current => _current;
++
++        public void Check()
++        {
++            if (IsTerminated) throw new ScriptExecutionAbortedException(ExecutionTerminationReason.MemoryLimit);
++        }
++
++        // Unknown lifetime remains charged. Reclaim requires an explicit backing owner.
++        public void Charge(long bytes) { ReserveBytes(bytes); }
++
++        private void ReserveBytes(long bytes)
++        {
++            if (bytes < 0) throw new ArgumentOutOfRangeException(nameof(bytes));
++            Check();
++            lock (_registry)
++            {
++                Check();
++                if (!CanReserve(bytes))
++                {
++                    if (IsReclaimable) SweepLocked(MaximumRecords);
++                    if (!CanReserve(bytes)) AbortDenied(bytes);
++                }
++                for (var budget = this; budget != null; budget = budget._parent)
++                {
++                    budget._charged += bytes;
++                    budget._unbound += bytes;
++                    budget._total = bytes > long.MaxValue - budget._total ? long.MaxValue : budget._total + bytes;
++                    budget._peak = Math.Max(budget._peak, budget._charged);
++                }
++            }
++        }
++
++        private bool CanReserve(long bytes)
++        {
++            for (var budget = this; budget != null; budget = budget._parent)
++                if (bytes > budget.Limit - budget._charged) return false;
++            return true;
++        }
++
++        private void AbortDenied(long bytes)
++        {
++            // Aggregate denial retires a requesting reclaimable VM, not its siblings.
++            var failed = this;
++            if (!IsReclaimable)
++                for (var budget = this; budget != null; budget = budget._parent)
++                    if (bytes > budget.Limit - budget._charged) failed = budget;
++            Interlocked.Exchange(ref failed._terminated, 1);
++            throw new ScriptExecutionAbortedException(ExecutionTerminationReason.MemoryLimit);
++        }
++
++        public AllocationReservation ReserveAllocation(long bytes)
++        {
++            if (!IsReclaimable) { Charge(bytes); return default; }
++            if (bytes < 0) throw new ArgumentOutOfRangeException(nameof(bytes));
++            if (bytes > long.MaxValue - RecordBytes) AbortDenied(long.MaxValue);
++            lock (_registry)
++            {
++                Check();
++                if (_registry.Count >= MaximumRecords) SweepLocked(MaximumRecords);
++                if (_registry.Count >= MaximumRecords) AbortDenied(long.MaxValue);
++                ReserveBytes(bytes + RecordBytes);
++                var allocation = new Allocation(this, bytes + RecordBytes);
++                Add(allocation);
++                return new AllocationReservation(allocation);
++            }
++        }
++
++        public void Track(object owner, long bytes)
++        {
++            if (owner == null) throw new ArgumentNullException(nameof(owner));
++            if (bytes < 0) throw new ArgumentOutOfRangeException(nameof(bytes));
++            Check();
++            if (!IsReclaimable) { Charge(bytes); return; }
++            lock (_registry)
++            {
++                if (_owners != null && _owners.TryGetValue(owner, out var existing))
++                {
++                    long additional = bytes - (existing.Bytes - RecordBytes);
++                    if (additional <= 0) return;
++                    using var growth = ReserveAllocation(additional);
++                    growth.Bind(owner);
++                    return;
++                }
++                using var reservation = ReserveAllocation(bytes);
++                reservation.BindUnique(owner);
++            }
++        }
++
++        public static void TrackObject(object owner, long bytes) { _current?.Track(owner, bytes); }
++        public static AllocationReservation Reserve(long bytes) => _current?.ReserveAllocation(bytes) ?? default;
++
++        public static AllocationReservation ReserveString(long characters)
++        {
++            if (_current == null) return default;
++            if (characters < 0 || characters > (long.MaxValue - 32) / 2)
++            {
++                Interlocked.Exchange(ref _current._terminated, 1);
++                _current.Check();
++            }
++            return _current.ReserveAllocation(32 + 2 * characters);
++        }
++
++        public static T Allocate<T>(long bytes, Func<T> factory) where T : class
++        {
++            if (_current == null) return factory();
++            using var reservation = _current.ReserveAllocation(bytes);
++            var result = factory();
++            if (result is Array array && array.Length == 0) return result;
++            reservation.BindUnique(result);
++            return result;
++        }
++
++        public static string AllocateString(long characters, Func<string> factory)
++        {
++            if (_current == null) return factory();
++            using var reservation = ReserveString(characters);
++            var result = factory();
++            if (!string.IsNullOrEmpty(result) && !ReferenceEquals(string.IsInterned(result), result))
++                reservation.BindUnique(result);
++            return result;
++        }
++
++        // Observation only: no forced game-wide GC, finalizers or user callbacks.
++        public int Sweep(int maxRecords = 1024)
++        {
++            if (maxRecords < 0 || maxRecords > MaximumRecords) throw new ArgumentOutOfRangeException(nameof(maxRecords));
++            lock (_registry) return SweepLocked(maxRecords);
++        }
++
++        private int SweepLocked(int maxRecords)
++        {
++            int inspect = Math.Min(maxRecords, _registry.Count), released = 0;
++            for (int index = 0; index < inspect; index++)
++            {
++                var allocation = _registry.Cursor ?? _registry.First;
++                if (allocation == null) break;
++                _registry.Cursor = allocation.Next ?? _registry.First;
++                // Long weak references retain credit through finalization/resurrection.
++                if (allocation.State == 1 && !allocation.Owner.TryGetTarget(out _))
++                {
++                    allocation.Budget.Release(allocation.Bytes, false);
++                    allocation.State = 2;
++                    Remove(allocation);
++                    released++;
++                }
++            }
++            return released;
++        }
++
++        private void Release(long bytes, bool unbound)
++        {
++            for (var budget = this; budget != null; budget = budget._parent)
++            {
++                budget._charged -= bytes;
++                if (unbound) budget._unbound -= bytes;
++            }
++        }
++
++        private void Bind(Allocation allocation, object owner, bool unique)
++        {
++            if (owner == null) throw new ArgumentNullException(nameof(owner));
++            lock (_registry)
++            {
++                if (allocation.State != 0) throw new InvalidOperationException("Reservation is already bound or cancelled.");
++                _owners ??= new ConditionalWeakTable<object, Allocation>();
++                if (_owners.TryGetValue(owner, out var existing))
++                {
++                    long additional = unique ? Math.Max(0, allocation.Bytes - existing.Bytes) : allocation.Bytes - RecordBytes;
++                    long released = allocation.Bytes - additional;
++                    for (var budget = this; budget != null; budget = budget._parent) budget._unbound -= allocation.Bytes;
++                    Release(released, false);
++                    existing.Bytes += additional;
++                    allocation.State = 2;
++                    Remove(allocation);
++                    return;
++                }
++                allocation.Owner = new WeakReference<object>(owner, true);
++                _owners.Add(owner, allocation);
++                allocation.State = 1;
++                for (var budget = this; budget != null; budget = budget._parent) budget._unbound -= allocation.Bytes;
++            }
++        }
++
++        private void Cancel(Allocation allocation)
++        {
++            lock (_registry)
++            {
++                if (allocation.State != 0) return;
++                Release(allocation.Bytes, true);
++                allocation.State = 2;
++                Remove(allocation);
++            }
++        }
++
++        private void Add(Allocation allocation)
++        {
++            allocation.Next = _registry.First;
++            if (_registry.First != null) _registry.First.Previous = allocation;
++            _registry.First = allocation;
++            _registry.Count++;
++        }
++
++        private void Remove(Allocation allocation)
++        {
++            if (_registry.Cursor == allocation) _registry.Cursor = allocation.Next ?? _registry.First;
++            if (allocation.Previous != null) allocation.Previous.Next = allocation.Next;
++            else _registry.First = allocation.Next;
++            if (allocation.Next != null) allocation.Next.Previous = allocation.Previous;
++            if (_registry.Cursor == allocation) _registry.Cursor = _registry.First;
++            allocation.Next = allocation.Previous = null;
++            _registry.Count--;
++        }
++
++        public Scope EnterScope() { Check(); return new Scope(this); }
++
++        public readonly struct Scope : IDisposable
++        {
++            private readonly MemoryBudget _previous;
++            internal Scope(MemoryBudget budget) { _previous = _current; _current = budget; }
++            public void Dispose() { _current = _previous; }
++        }
++
++        public readonly struct AllocationReservation : IDisposable
++        {
++            private readonly Allocation _allocation;
++            internal AllocationReservation(Allocation allocation) { _allocation = allocation; }
++            public void Bind(object owner) { _allocation?.Budget.Bind(_allocation, owner, false); }
++            internal void BindUnique(object owner) { _allocation?.Budget.Bind(_allocation, owner, true); }
++            public void Dispose() { _allocation?.Budget.Cancel(_allocation); }
++        }
++
++        internal sealed class Allocation
++        {
++            internal readonly MemoryBudget Budget;
++            internal long Bytes;
++            internal int State; // 0 reserved, 1 committed, 2 released
++            internal WeakReference<object> Owner;
++            internal Allocation Previous, Next;
++            internal Allocation(MemoryBudget budget, long bytes) { Budget = budget; Bytes = bytes; }
++        }
++
++        private sealed class Registry
++        {
++            internal Allocation First, Cursor;
++            internal int Count;
++        }
++    }
++}
+diff --git a/src/Execution/Scopes/BuildTimeScope.cs b/src/Execution/Scopes/BuildTimeScope.cs
+--- a/src/Execution/Scopes/BuildTimeScope.cs
++++ b/src/Execution/Scopes/BuildTimeScope.cs
+@@ -7,8 +7,8 @@
+ {
+ 	internal class BuildTimeScope
+ 	{
+-		List<BuildTimeScopeFrame> m_Frames = new List<BuildTimeScopeFrame>();
+-		List<IClosureBuilder> m_ClosureBuilders = new List<IClosureBuilder>();
++		BudgetedList<BuildTimeScopeFrame> m_Frames = new BudgetedList<BuildTimeScopeFrame>();
++		BudgetedList<IClosureBuilder> m_ClosureBuilders = new BudgetedList<IClosureBuilder>();
+ 
+ 
+ 		public void PushFunction(IClosureBuilder closureBuilder, bool hasVarArgs)
+diff --git a/src/Execution/Scopes/BuildTimeScopeBlock.cs b/src/Execution/Scopes/BuildTimeScopeBlock.cs
+--- a/src/Execution/Scopes/BuildTimeScopeBlock.cs
++++ b/src/Execution/Scopes/BuildTimeScopeBlock.cs
+@@ -7,11 +7,11 @@
+ 	internal class BuildTimeScopeBlock
+ 	{
+ 		internal BuildTimeScopeBlock Parent { get; private set; }
+-		internal List<BuildTimeScopeBlock> ChildNodes { get; private set; }
++		internal BudgetedList<BuildTimeScopeBlock> ChildNodes { get; private set; }
+ 
+ 		internal RuntimeScopeBlock ScopeBlock { get; private set; }
+ 
+-		Dictionary<string, SymbolRef> m_DefinedNames = new Dictionary<string, SymbolRef>();
++		BudgetedDictionary<string, SymbolRef> m_DefinedNames = new BudgetedDictionary<string, SymbolRef>();
+ 
+ 
+ 
+@@ -19,13 +19,15 @@
+ 		{
+ 			SymbolRef sref = m_DefinedNames[name];
+ 			m_DefinedNames.Remove(name);
+-			m_DefinedNames.Add(string.Format("@{0}_{1}", name, Guid.NewGuid().ToString("N")), sref);
++			m_DefinedNames.Add(MemoryBudget.AllocateString((long)name.Length + 34,
++				() => string.Concat("@", name, "_", Guid.NewGuid().ToString("N"))), sref);
+ 		}
+ 
+ 		internal BuildTimeScopeBlock(BuildTimeScopeBlock parent)
+ 		{
++			MemoryBudget.TrackObject(this, 256);
+ 			Parent = parent;
+-			ChildNodes = new List<BuildTimeScopeBlock>();
++			ChildNodes = new BudgetedList<BuildTimeScopeBlock>();
+ 			ScopeBlock = new RuntimeScopeBlock();
+ 		}
+ 
+@@ -87,14 +89,14 @@
+ 		}
+ 
+ 
+-		List<GotoStatement> m_PendingGotos;
+-		Dictionary<string, LabelStatement> m_LocalLabels;
++		BudgetedList<GotoStatement> m_PendingGotos;
++		BudgetedDictionary<string, LabelStatement> m_LocalLabels;
+ 		string m_LastDefinedName;
+ 
+ 		internal void DefineLabel(LabelStatement label)
+ 		{
+ 			if (m_LocalLabels == null)
+-				m_LocalLabels = new Dictionary<string, LabelStatement>();
++				m_LocalLabels = new BudgetedDictionary<string, LabelStatement>();
+ 
+ 			if (m_LocalLabels.ContainsKey(label.Label))
+ 			{
+@@ -110,7 +112,7 @@
+ 		internal void RegisterGoto(GotoStatement gotostat)
+ 		{
+ 			if (m_PendingGotos == null)
+-				m_PendingGotos = new List<GotoStatement>();
++				m_PendingGotos = new BudgetedList<GotoStatement>();
+ 
+ 			m_PendingGotos.Add(gotostat);
+ 			gotostat.SetDefinedVars(m_DefinedNames.Count, m_LastDefinedName);
+diff --git a/src/Execution/Scopes/BuildTimeScopeFrame.cs b/src/Execution/Scopes/BuildTimeScopeFrame.cs
+--- a/src/Execution/Scopes/BuildTimeScopeFrame.cs
++++ b/src/Execution/Scopes/BuildTimeScopeFrame.cs
+@@ -12,6 +12,7 @@
+ 
+ 		internal BuildTimeScopeFrame(bool hasVarArgs)
+ 		{
++			MemoryBudget.TrackObject(this, 128);
+ 			HasVarArgs = hasVarArgs;
+ 			m_ScopeTreeHead = m_ScopeTreeRoot = new BuildTimeScopeBlock(null);
+ 		}
+diff --git a/src/Execution/Scopes/ClosureContext.cs b/src/Execution/Scopes/ClosureContext.cs
+--- a/src/Execution/Scopes/ClosureContext.cs
++++ b/src/Execution/Scopes/ClosureContext.cs
+@@ -6,7 +6,7 @@
+ 	/// <summary>
+ 	/// The scope of a closure (container of upvalues)
+ 	/// </summary>
+-	internal class ClosureContext : List<DynValue>
++	internal class ClosureContext : BudgetedList<DynValue>
+ 	{
+ 		/// <summary>
+ 		/// Gets the symbols.
+@@ -15,13 +15,14 @@
+ 
+ 		internal ClosureContext(SymbolRef[] symbols, IEnumerable<DynValue> values)
+ 		{
+-			Symbols = symbols.Select(s => s.i_Name).ToArray();
++			Symbols = MemoryBudget.Allocate(32L + 8L * symbols.Length, () => new string[symbols.Length]);
++			for (int i = 0; i < symbols.Length; i++) Symbols[i] = symbols[i].i_Name;
+ 			this.AddRange(values);
+ 		}
+ 
+ 		internal ClosureContext()
+ 		{
+-			Symbols = new string[0];
++			Symbols = System.Array.Empty<string>();
+ 		}
+ 
+ 	}
+diff --git a/src/Execution/Scopes/RuntimeScopeBlock.cs b/src/Execution/Scopes/RuntimeScopeBlock.cs
+--- a/src/Execution/Scopes/RuntimeScopeBlock.cs
++++ b/src/Execution/Scopes/RuntimeScopeBlock.cs
+@@ -4,6 +4,7 @@
+ {
+ 	internal class RuntimeScopeBlock
+ 	{
++		public RuntimeScopeBlock() { MemoryBudget.TrackObject(this, 64); }
+ 		public int From { get; internal set; }
+ 		public int To { get; internal set; }
+ 		public int ToInclusive { get; internal set; }
+diff --git a/src/Execution/Scopes/RuntimeScopeFrame.cs b/src/Execution/Scopes/RuntimeScopeFrame.cs
+--- a/src/Execution/Scopes/RuntimeScopeFrame.cs
++++ b/src/Execution/Scopes/RuntimeScopeFrame.cs
+@@ -4,13 +4,14 @@
+ {
+ 	internal class RuntimeScopeFrame 
+ 	{
+-		public List<SymbolRef> DebugSymbols { get; private set; }
++		public BudgetedList<SymbolRef> DebugSymbols { get; private set; }
+ 		public int Count { get { return DebugSymbols.Count; } }
+ 		public int ToFirstBlock { get; internal set; }
+ 
+ 		public RuntimeScopeFrame()
+ 		{
+-			DebugSymbols = new List<SymbolRef>();
++			MemoryBudget.TrackObject(this, 96);
++			DebugSymbols = new BudgetedList<SymbolRef>();
+ 		}
+ 
+ 		public override string ToString()
+diff --git a/src/Execution/ScriptExecutionContext.cs b/src/Execution/ScriptExecutionContext.cs
+--- a/src/Execution/ScriptExecutionContext.cs
++++ b/src/Execution/ScriptExecutionContext.cs
+@@ -141,6 +141,7 @@
+ 		/// <exception cref="ScriptRuntimeException">If the function yields, returns a tail call request with continuations/handlers or, of course, if it encounters errors.</exception>
+ 		public DynValue Call(DynValue func, params DynValue[] args)
+ 		{
++			using var scope = GetScript().ExecutionBudget?.EnterScope();
+ 			if (func.Type == DataType.Function)
+ 			{
+ 				return this.GetScript().Call(func, args);
+@@ -179,11 +180,12 @@
+ 			{
+ 				int maxloops = 10;
+ 
+-				while (maxloops > 0)
++				while (maxloops-- > 0)
+ 				{
++					GetScript().ExecutionBudget?.Charge();
+ 					DynValue v = this.GetMetamethod(func, "__call");
+ 
+-					if (v == null && v.IsNil())
++					if (v == null || v.IsNil())
+ 					{
+ 						throw ScriptRuntimeException.AttemptToCallNonFunc(func.Type);
+ 					}
+diff --git a/src/Execution/VM/ByteCode.cs b/src/Execution/VM/ByteCode.cs
+--- a/src/Execution/VM/ByteCode.cs
++++ b/src/Execution/VM/ByteCode.cs
+@@ -11,22 +11,23 @@
+ {
+ 	internal class ByteCode : RefIdObject
+ 	{
+-		public List<Instruction> Code = new List<Instruction>();
++		public BudgetedList<Instruction> Code = new BudgetedList<Instruction>();
+ 		public Script Script { get; private set; }
+-		private List<SourceRef> m_SourceRefStack = new List<SourceRef>();
++		private BudgetedList<SourceRef> m_SourceRefStack = new BudgetedList<SourceRef>();
+ 		private SourceRef m_CurrentSourceRef = null;
+ 
+ 		internal LoopTracker LoopTracker = new LoopTracker();
+ 
+ 		public ByteCode(Script script)
+ 		{
++			script.MemoryBudget?.Track(this, 256);
+ 			Script = script;
+ 		}
+ 
+ 
+ 		public IDisposable EnterSource(SourceRef sref)
+ 		{
+-			return new SourceCodeStackGuard(sref, this);
++			return MemoryBudget.Allocate(96, () => new SourceCodeStackGuard(sref, this));
+ 		}
+ 
+ 
+@@ -92,6 +93,8 @@
+ 
+ 		private Instruction AppendInstruction(Instruction c)
+ 		{
++			Script.MemoryBudget?.Track(c, 192);
++			Script.ExecutionBudget?.Charge();
+ 			Code.Add(c);
+ 			return c;
+ 		}
+@@ -153,7 +156,8 @@
+ 		[Conditional("EMIT_DEBUG_OPS")]
+ 		public void Emit_Debug(string str)
+ 		{
+-			AppendInstruction(new Instruction(m_CurrentSourceRef) { OpCode = OpCode.Debug, Name = str.Substring(0, Math.Min(32, str.Length)) });
++			AppendInstruction(new Instruction(m_CurrentSourceRef) { OpCode = OpCode.Debug,
++				Name = MemoryBudget.AllocateString(Math.Min(32, str.Length), () => str.Substring(0, Math.Min(32, str.Length))) });
+ 		}
+ 
+ 		public Instruction Emit_Enter(RuntimeScopeBlock runtimeScopeBlock)
+diff --git a/src/Execution/VM/Processor/Processor.cs b/src/Execution/VM/Processor/Processor.cs
+--- a/src/Execution/VM/Processor/Processor.cs
++++ b/src/Execution/VM/Processor/Processor.cs
+@@ -27,8 +27,10 @@
+ 
+ 		public Processor(Script script, Table globalContext, ByteCode byteCode)
+ 		{
+-			m_ValueStack = new FastStack<DynValue>(STACK_SIZE);
+-			m_ExecutionStack = new FastStack<CallStackItem>(STACK_SIZE);
++			// Fixed processor/debug/coroutine bookkeeping; stacks reserve their arrays separately.
++			script.MemoryBudget?.Track(this, 1024);
++			m_ValueStack = new FastStack<DynValue>(STACK_SIZE, script);
++			m_ExecutionStack = new FastStack<CallStackItem>(STACK_SIZE, script);
+ 			m_CoroutinesStack = new List<Processor>();
+ 
+ 			m_Debug = new DebugContext();
+@@ -41,8 +43,9 @@
+ 
+ 		private Processor(Processor parentProcessor)
+ 		{
+-			m_ValueStack = new FastStack<DynValue>(STACK_SIZE);
+-			m_ExecutionStack = new FastStack<CallStackItem>(STACK_SIZE);
++			parentProcessor.m_Script.MemoryBudget?.Track(this, 512);
++			m_ValueStack = new FastStack<DynValue>(STACK_SIZE, parentProcessor.m_Script);
++			m_ExecutionStack = new FastStack<CallStackItem>(STACK_SIZE, parentProcessor.m_Script);
+ 			m_Debug = parentProcessor.m_Debug;
+ 			m_RootChunk = parentProcessor.m_RootChunk;
+ 			m_GlobalTable = parentProcessor.m_GlobalTable;
+@@ -54,6 +57,7 @@
+ 		//Takes the value and execution stack from recycleProcessor
+ 		internal Processor(Processor parentProcessor, Processor recycleProcessor)
+ 		{
++			parentProcessor.m_Script.MemoryBudget?.Track(this, 512);
+ 			m_ValueStack = recycleProcessor.m_ValueStack;
+ 			m_ExecutionStack = recycleProcessor.m_ExecutionStack;
+ 
+@@ -67,6 +71,7 @@
+ 
+ 		public DynValue Call(DynValue function, DynValue[] args)
+ 		{
++			using var memoryScope = m_Script.MemoryBudget?.EnterScope();
+ 			List<Processor> coroutinesStack = m_Parent != null ? m_Parent.m_CoroutinesStack : this.m_CoroutinesStack;
+ 
+ 			if (coroutinesStack.Count > 0 && coroutinesStack[coroutinesStack.Count - 1] != this)
+@@ -78,16 +83,20 @@
+ 			{
+ 				var stopwatch = this.m_Script.PerformanceStats.StartStopwatch(Diagnostics.PerformanceCounter.Execution);
+ 
++				bool previousCanYield = m_CanYield;
+ 				m_CanYield = false;
+ 
+ 				try
+ 				{
+ 					int entrypoint = PushClrToScriptStackFrame(CallStackItemFlags.CallEntryPoint, function, args);
+-					return Processing_Loop(entrypoint);
++					var result = Processing_Loop(entrypoint);
++					m_Script.ExecutionBudget?.Check();
++					m_Script.MemoryBudget?.Check();
++					return result;
+ 				}
+ 				finally
+ 				{
+-					m_CanYield = true;
++					m_CanYield = previousCanYield;
+ 
+ 					if (stopwatch != null)
+ 						stopwatch.Dispose();
+@@ -103,6 +112,7 @@
+ 		// at vstack top.
+ 		private int PushClrToScriptStackFrame(CallStackItemFlags flags, DynValue function, DynValue[] args)
+ 		{
++			m_Script.ExecutionBudget?.CheckCallDepth(m_ExecutionStack.Count + 1);
+ 			if (function == null)
+ 				function = m_ValueStack.Peek();
+ 			else
+@@ -115,7 +125,7 @@
+ 
+ 			m_ValueStack.Push(DynValue.NewNumber(args.Length));  // func args count
+ 
+-			m_ExecutionStack.Push(new CallStackItem()
++			m_ExecutionStack.Push(MemoryBudget.Allocate(192, () => new CallStackItem()
+ 			{
+ 				BasePointer = m_ValueStack.Count,
+ 				Debug_EntryPoint = function.Function.EntryPointByteCodeLocation,
+@@ -123,9 +133,18 @@
+ 				ClosureScope = function.Function.ClosureContext,
+ 				CallingSourceRef = SourceRef.GetClrLocation(),
+ 				Flags = flags
+-			});
++			}));
+ 
+ 			return function.Function.EntryPointByteCodeLocation;
++		}
++
++		private DynValue[] AllocateValues(int count)
++		{
++			m_Script.MemoryBudget?.Check();
++			if (count < 0) throw new InternalErrorException("Invalid VM array length.");
++			if (count == 0) return Array.Empty<DynValue>();
++			using var memoryScope = m_Script.MemoryBudget?.EnterScope();
++			return MemoryBudget.Allocate(64L + (long)count * IntPtr.Size, () => new DynValue[count]);
+ 		}
+ 
+ 
+@@ -134,6 +153,7 @@
+ 
+ 		private void LeaveProcessor()
+ 		{
++			m_Script.ExecutionBudget?.Leave();
+ 			m_ExecutionNesting -= 1;
+ 			m_OwningThreadID = -1;
+ 
+@@ -156,6 +176,7 @@
+ 
+ 		private void EnterProcessor()
+ 		{
++			m_Script.MemoryBudget?.Check();
+ 			int threadID = GetThreadId();
+ 
+ 			if (m_OwningThreadID >= 0 && m_OwningThreadID != threadID && m_Script.Options.CheckThreadAccess)
+@@ -164,8 +185,18 @@
+ 				throw new InvalidOperationException(msg);
+ 			}
+ 
++			// Reserve the full replacement array before entering or mutating processor state.
++			if (m_Parent != null && m_Parent.m_CoroutinesStack.Count == m_Parent.m_CoroutinesStack.Capacity)
++			{
++				int capacity = m_Parent.m_CoroutinesStack.Capacity == 0 ? 4 : checked(m_Parent.m_CoroutinesStack.Capacity * 2);
++				using var reservation = m_Script.MemoryBudget?.ReserveAllocation(64L + (long)capacity * IntPtr.Size);
++				m_Parent.m_CoroutinesStack.Capacity = capacity;
++				reservation?.Bind(m_Parent.m_CoroutinesStack);
++			}
++
+ 			m_OwningThreadID = threadID;
+ 
++			m_Script.ExecutionBudget?.Enter();
+ 			m_ExecutionNesting += 1;
+ 
+ 			if (m_Parent != null)
+diff --git a/src/Execution/VM/Processor/Processor_Coroutines.cs b/src/Execution/VM/Processor/Processor_Coroutines.cs
+--- a/src/Execution/VM/Processor/Processor_Coroutines.cs
++++ b/src/Execution/VM/Processor/Processor_Coroutines.cs
+@@ -9,6 +9,7 @@
+ 	{
+ 		public DynValue Coroutine_Create(Closure closure)
+ 		{
++			using var memoryScope = m_Script.MemoryBudget?.EnterScope();
+ 			// create a processor instance
+ 			Processor P = new Processor(this);
+ 
+@@ -21,6 +22,7 @@
+ 
+ 		public DynValue Coroutine_Recycle(Processor mainProcessor, Closure closure)
+ 		{
++			using var memoryScope = m_Script.MemoryBudget?.EnterScope();
+ 			// Clear the used parts of the stacks to prep for reuse
+ 			this.m_ValueStack.ClearUsed();
+ 			this.m_ExecutionStack.ClearUsed();
+@@ -40,6 +42,7 @@
+ 
+ 		public DynValue Coroutine_Resume(DynValue[] args)
+ 		{
++			using var memoryScope = m_Script.MemoryBudget?.EnterScope();
+ 			EnterProcessor();
+ 
+ 			try
+@@ -68,6 +71,8 @@
+ 
+ 				m_State = CoroutineState.Running;
+ 				DynValue retVal = Processing_Loop(entrypoint);
++				m_Script.ExecutionBudget?.Check();
++				m_Script.MemoryBudget?.Check();
+ 
+ 				if (retVal.Type == DataType.YieldRequest)
+ 				{
+diff --git a/src/Execution/VM/Processor/Processor_Debugger.cs b/src/Execution/VM/Processor/Processor_Debugger.cs
+--- a/src/Execution/VM/Processor/Processor_Debugger.cs
++++ b/src/Execution/VM/Processor/Processor_Debugger.cs
+@@ -429,7 +429,10 @@
+ 
+ 		internal List<WatchItem> Debugger_GetCallStack(SourceRef startingRef)
+ 		{
+-			List<WatchItem> wis = new List<WatchItem>();
++			// Ordinary Lua errors use this path even when no debugger is installed.
++			// Terminal aborts bypass InterpreterException decoration entirely.
++			List<WatchItem> wis = MemoryBudget.Allocate(128L + 16L * m_ExecutionStack.Count,
++				() => new List<WatchItem>(checked(m_ExecutionStack.Count * 2)));
+ 
+ 			for (int i = 0; i < m_ExecutionStack.Count; i++)
+ 			{
+@@ -441,36 +444,36 @@
+ 
+ 				if (c.ClrFunction != null)
+ 				{
+-					wis.Add(new WatchItem()
++					wis.Add(MemoryBudget.Allocate(256, () => new WatchItem()
+ 					{
+ 						Address = -1,
+ 						BasePtr = -1,
+ 						RetAddress = c.ReturnAddress,
+ 						Location = startingRef,
+ 						Name = c.ClrFunction.Name
+-					});
++					}));
+ 				}
+ 				else
+ 				{
+-					wis.Add(new WatchItem()
++					wis.Add(MemoryBudget.Allocate(256, () => new WatchItem()
+ 					{
+ 						Address = c.Debug_EntryPoint,
+ 						BasePtr = c.BasePointer,
+ 						RetAddress = c.ReturnAddress,
+ 						Name = callname,
+ 						Location = startingRef,
+-					});
++					}));
+ 				}
+ 
+ 				startingRef = c.CallingSourceRef;
+ 
+ 				if (c.Continuation != null)
+ 				{
+-					wis.Add(new WatchItem()
++					wis.Add(MemoryBudget.Allocate(256, () => new WatchItem()
+ 					{
+ 						Name = c.Continuation.Name,
+ 						Location = SourceRef.GetClrLocation()
+-					});
++					}));
+ 				}
+ 
+ 
+diff --git a/src/Execution/VM/Processor/Processor_InstructionLoop.cs b/src/Execution/VM/Processor/Processor_InstructionLoop.cs
+--- a/src/Execution/VM/Processor/Processor_InstructionLoop.cs
++++ b/src/Execution/VM/Processor/Processor_InstructionLoop.cs
+@@ -27,6 +27,10 @@
+ 			{
+ 				while (true)
+ 				{
++					// A hard budget applies even where a cooperative yield is forbidden.
++					m_Script.ExecutionBudget?.Charge();
++					m_Script.MemoryBudget?.Check();
++					m_Script.ExecutionBudget?.CheckCallDepth(m_ExecutionStack.Count);
+ 					Instruction i = m_RootChunk.Code[instructionPtr];
+ 
+ 					if (m_Debug.DebuggerAttached != null)
+@@ -248,6 +252,9 @@
+ 			}
+ 			catch (InterpreterException ex)
+ 			{
++				// A swallowed/translated terminal abort must never run Lua error handlers.
++				m_Script.ExecutionBudget?.Check();
++				m_Script.MemoryBudget?.Check();
+ 				FillDebugData(ex, instructionPtr);
+ 
+ 				if (!(ex is ScriptRuntimeException))
+@@ -290,7 +297,8 @@
+ 							m_ValueStack.RemoveLast(argscnt + 1);
+ 						}
+ 
+-						var cbargs = new DynValue[] { DynValue.NewString(ex.DecoratedMessage) };
++						var cbargs = AllocateValues(1);
++						cbargs[0] = DynValue.NewString(ex.DecoratedMessage);
+ 
+ 						DynValue handled = csi.ErrorHandler.Invoke(new ScriptExecutionContext(this, csi.ErrorHandler, GetCurrentSourceRef(instructionPtr)), cbargs);
+ 
+@@ -320,7 +328,8 @@
+ 		{
+ 			try
+ 			{
+-				DynValue[] args = new DynValue[] { DynValue.NewString(decoratedMessage) };
++				DynValue[] args = AllocateValues(1);
++				args[0] = DynValue.NewString(decoratedMessage);
+ 				DynValue ret = DynValue.Nil;
+ 
+ 				if (messageHandler.Type == DataType.Function)
+@@ -343,7 +352,8 @@
+ 			}
+ 			catch (ScriptRuntimeException innerEx)
+ 			{
+-				return innerEx.Message + "\n" + decoratedMessage;
++				return MemoryBudget.AllocateString((long)innerEx.Message.Length + 1 + decoratedMessage.Length,
++					() => innerEx.Message + "\n" + decoratedMessage);
+ 			}
+ 
+ 			return decoratedMessage;
+@@ -413,8 +423,9 @@
+ 
+ 		private void ExecClosure(Instruction i)
+ 		{
+-			Closure c = new Closure(this.m_Script, i.NumVal, i.SymbolList,
+-				i.SymbolList.Select(s => this.GetUpvalueSymbol(s)).ToList());
++			var values = AllocateValues(i.SymbolList.Length);
++			for (int index = 0; index < values.Length; index++) values[index] = GetUpvalueSymbol(i.SymbolList[index]);
++			Closure c = new Closure(this.m_Script, i.NumVal, i.SymbolList, values);
+ 
+ 			m_ValueStack.Push(DynValue.NewClosure(c));
+ 		}
+@@ -431,7 +442,7 @@
+ 
+ 		private void ExecMkTuple(Instruction i)
+ 		{
+-			Slice<DynValue> slice = new Slice<DynValue>(m_ValueStack, m_ValueStack.Count - i.NumVal, i.NumVal, false);
++			Slice<DynValue> slice = MemoryBudget.Allocate(64, () => new Slice<DynValue>(m_ValueStack, m_ValueStack.Count - i.NumVal, i.NumVal, false));
+ 
+ 			var v = Internal_AdjustTuple(slice);
+ 
+@@ -584,7 +595,7 @@
+ 			CallStackItem cur = m_ExecutionStack.Peek();
+ 
+ 			cur.Debug_Symbols = i.SymbolList;
+-			cur.LocalScope = new DynValue[i.NumVal];
++			cur.LocalScope = AllocateValues(i.NumVal);
+ 
+ 			ClearBlockData(i);
+ 		}
+@@ -608,25 +619,25 @@
+ 
+ 		private IList<DynValue> CreateArgsListForFunctionCall(int numargs, int offsFromTop)
+ 		{
+-			if (numargs == 0) return new DynValue[0];
++			if (numargs == 0) return AllocateValues(0);
+ 
+ 			DynValue lastParam = m_ValueStack.Peek(offsFromTop);
+ 
+ 			if (lastParam.Type == DataType.Tuple && lastParam.Tuple.Length > 1)
+ 			{
+-				List<DynValue> values = new List<DynValue>();
++				DynValue[] values = AllocateValues(checked(numargs - 1 + lastParam.Tuple.Length));
+ 
+ 				for (int idx = 0; idx < numargs - 1; idx++)
+-					values.Add(m_ValueStack.Peek(numargs - idx - 1 + offsFromTop));
++					values[idx] = m_ValueStack.Peek(numargs - idx - 1 + offsFromTop);
+ 
+ 				for (int idx = 0; idx < lastParam.Tuple.Length; idx++)
+-					values.Add(lastParam.Tuple[idx]);
++					values[numargs - 1 + idx] = lastParam.Tuple[idx];
+ 
+ 				return values;
+ 			}
+ 			else
+ 			{
+-				return new Slice<DynValue>(m_ValueStack, m_ValueStack.Count - numargs - offsFromTop, numargs, false);
++				return MemoryBudget.Allocate(64, () => new Slice<DynValue>(m_ValueStack, m_ValueStack.Count - numargs - offsFromTop, numargs, false));
+ 			}
+ 		}
+ 
+@@ -647,7 +658,7 @@
+ 				else if ((i == I.SymbolList.Length - 1) && (I.SymbolList[i].i_Name == WellKnownSymbols.VARARGS))
+ 				{
+ 					int len = argsList.Count - i;
+-					DynValue[] varargs = new DynValue[len];
++					DynValue[] varargs = AllocateValues(len);
+ 
+ 					for (int ii = 0; ii < len; ii++, i++)
+ 					{
+@@ -669,6 +680,9 @@
+ 		private int Internal_ExecCall(int argsCount, int instructionPtr, CallbackFunction handler = null,
+ 			CallbackFunction continuation = null, bool thisCall = false, string debugText = null, DynValue unwindHandler = null)
+ 		{
++			using var budgetScope = m_Script.ExecutionBudget?.EnterScope();
++			m_Script.ExecutionBudget?.Charge();
++			m_Script.ExecutionBudget?.CheckCallDepth(m_ExecutionStack.Count + 1);
+ 			DynValue fn = m_ValueStack.Peek(argsCount);
+ 			CallStackItemFlags flags = (thisCall ? CallStackItemFlags.MethodCall : CallStackItemFlags.None);
+ 
+@@ -710,7 +724,7 @@
+ 				// but we need the current instruction here
+ 				SourceRef sref = GetCurrentSourceRef(instructionPtr - 1);
+ 
+-				m_ExecutionStack.Push(new CallStackItem()
++				m_ExecutionStack.Push(MemoryBudget.Allocate(192, () => new CallStackItem()
+ 				{
+ 					ClrFunction = fn.Callback,
+ 					ReturnAddress = instructionPtr,
+@@ -720,7 +734,7 @@
+ 					Continuation = continuation,
+ 					ErrorHandlerBeforeUnwind = unwindHandler,
+ 					Flags = flags,
+-				});
++				}));
+ 
+ 				try
+ 				{
+@@ -741,7 +755,7 @@
+ 			else if (fn.Type == DataType.Function)
+ 			{
+ 				m_ValueStack.Push(DynValue.NewNumber(argsCount));
+-				m_ExecutionStack.Push(new CallStackItem()
++				m_ExecutionStack.Push(MemoryBudget.Allocate(192, () => new CallStackItem()
+ 				{
+ 					BasePointer = m_ValueStack.Count,
+ 					ReturnAddress = instructionPtr,
+@@ -752,7 +766,7 @@
+ 					Continuation = continuation,
+ 					ErrorHandlerBeforeUnwind = unwindHandler,
+ 					Flags = flags,
+-				});
++				}));
+ 				return fn.Function.EntryPointByteCodeLocation;
+ 			}
+ 
+@@ -761,7 +775,7 @@
+ 
+ 			if (m != null && m.IsNotNil())
+ 			{
+-				DynValue[] tmp = new DynValue[argsCount + 1];
++				DynValue[] tmp = AllocateValues(checked(argsCount + 1));
+ 				for (int i = 0; i < argsCount + 1; i++)
+ 					tmp[i] = m_ValueStack.Pop();
+ 
+@@ -778,7 +792,7 @@
+ 
+ 		private int PerformTCO(int instructionPtr, int argsCount)
+ 		{
+-			DynValue[] args = new DynValue[argsCount + 1];
++			DynValue[] args = AllocateValues(checked(argsCount + 1));
+ 
+ 			// Remove all cur args and func ptr
+ 			for (int i = 0; i <= argsCount; i++)
+@@ -829,8 +843,11 @@
+ 			}
+ 
+ 			if (csi.Continuation != null)
+-				m_ValueStack.Push(csi.Continuation.Invoke(new ScriptExecutionContext(this, csi.Continuation, i.SourceCodeRef),
+-					new DynValue[1] { m_ValueStack.Pop() }));
++			{
++				var arguments = AllocateValues(1);
++				arguments[0] = m_ValueStack.Pop();
++				m_ValueStack.Push(csi.Continuation.Invoke(new ScriptExecutionContext(this, csi.Continuation, i.SourceCodeRef), arguments));
++			}
+ 
+ 			return retpoint;
+ 		}
+@@ -1080,6 +1097,8 @@
+ 			}
+ 
+ 			// else perform standard comparison
++			if (l.Type == DataType.String && r.Type == DataType.String)
++				m_Script.ExecutionBudget?.Charge((long)l.String.Length + r.String.Length);
+ 			m_ValueStack.Push(DynValue.NewBoolean(r.Equals(l)));
+ 			return instructionPtr;
+ 		}
+@@ -1095,6 +1114,7 @@
+ 			}
+ 			else if (l.Type == DataType.String && r.Type == DataType.String)
+ 			{
++				m_Script.ExecutionBudget?.Charge((long)l.String.Length + r.String.Length);
+ 				m_ValueStack.Push(DynValue.NewBoolean(l.String.CompareTo(r.String) < 0));
+ 			}
+ 			else
+@@ -1123,6 +1143,7 @@
+ 			else if (l.Type == DataType.String && r.Type == DataType.String)
+ 			{
+ 				m_ValueStack.Push(DynValue.False);
++				m_Script.ExecutionBudget?.Charge((long)l.String.Length + r.String.Length);
+ 				m_ValueStack.Push(DynValue.NewBoolean(l.String.CompareTo(r.String) <= 0));
+ 			}
+ 			else
+@@ -1175,7 +1196,11 @@
+ 
+ 			if (rs != null && ls != null)
+ 			{
+-				m_ValueStack.Push(DynValue.NewString(ls + rs));
++				m_Script.ExecutionBudget?.Charge((long)ls.Length + rs.Length);
++				using var reservation = MemoryBudget.ReserveString((long)ls.Length + rs.Length);
++				var result = ls + rs;
++				if (!ReferenceEquals(result, ls) && !ReferenceEquals(result, rs)) reservation.Bind(result);
++				m_ValueStack.Push(DynValue.NewString(result));
+ 				return instructionPtr;
+ 			}
+ 			else
+diff --git a/src/Execution/VM/Processor/Processor_UtilityFunctions.cs b/src/Execution/VM/Processor/Processor_UtilityFunctions.cs
+--- a/src/Execution/VM/Processor/Processor_UtilityFunctions.cs
++++ b/src/Execution/VM/Processor/Processor_UtilityFunctions.cs
+@@ -6,13 +6,15 @@
+ 	{
+ 		private DynValue[] Internal_AdjustTuple(IList<DynValue> values)
+ 		{
++			using var budgetScope = m_Script.ExecutionBudget?.EnterScope();
+ 			if (values == null || values.Count == 0)
+-				return new DynValue[0];
++				return AllocateValues(0);
++			m_Script.ExecutionBudget?.Charge(values.Count);
+ 
+ 			if (values[values.Count - 1].Type == DataType.Tuple)
+ 			{
+-				int baseLen = values.Count - 1 + values[values.Count - 1].Tuple.Length;
+-				DynValue[] result = new DynValue[baseLen];
++				int baseLen = checked(values.Count - 1 + values[values.Count - 1].Tuple.Length);
++				DynValue[] result = AllocateValues(baseLen);
+ 
+ 				for (int i = 0; i < values.Count - 1; i++)
+ 				{
+@@ -31,7 +33,7 @@
+ 			}
+ 			else
+ 			{
+-				DynValue[] result = new DynValue[values.Count];
++				DynValue[] result = AllocateValues(values.Count);
+ 
+ 				for (int i = 0; i < values.Count; i++)
+ 				{
+@@ -101,7 +103,7 @@
+ 
+ 		private DynValue[] StackTopToArray(int items, bool pop)
+ 		{
+-			DynValue[] values = new DynValue[items];
++			DynValue[] values = AllocateValues(items);
+ 
+ 			if (pop)
+ 			{
+@@ -123,7 +125,7 @@
+ 
+ 		private DynValue[] StackTopToArrayReverse(int items, bool pop)
+ 		{
+-			DynValue[] values = new DynValue[items];
++			DynValue[] values = AllocateValues(items);
+ 
+ 			if (pop)
+ 			{
+diff --git a/src/Interop/LuaStateInterop/CharPtr.cs b/src/Interop/LuaStateInterop/CharPtr.cs
+--- a/src/Interop/LuaStateInterop/CharPtr.cs
++++ b/src/Interop/LuaStateInterop/CharPtr.cs
+@@ -78,43 +78,53 @@
+ 
+ 		public CharPtr()
+ 		{
++			MemoryBudget.TrackObject(this, 32);
+ 			this.chars = null;
+ 			this.index = 0;
+ 		}
+ 
+ 		public CharPtr(string str)
+ 		{
+-			this.chars = (str + '\0').ToCharArray();
++			MemoryBudget.TrackObject(this, 32);
++			long length = (str == null ? 0L : str.Length) + 1;
++			this.chars = MemoryBudget.Allocate(32L + 2L * length, () => new char[checked((int)length)]);
++			if (str != null) str.CopyTo(0, this.chars, 0, str.Length);
+ 			this.index = 0;
+ 		}
+ 
+ 		public CharPtr(CharPtr ptr)
+ 		{
++			MemoryBudget.TrackObject(this, 32);
+ 			this.chars = ptr.chars;
+ 			this.index = ptr.index;
+ 		}
+ 
+ 		public CharPtr(CharPtr ptr, int index)
+ 		{
++			MemoryBudget.TrackObject(this, 32);
+ 			this.chars = ptr.chars;
+ 			this.index = index;
+ 		}
+ 
+ 		public CharPtr(char[] chars)
+ 		{
++			MemoryBudget.TrackObject(this, 32);
+ 			this.chars = chars;
+ 			this.index = 0;
+ 		}
+ 
+ 		public CharPtr(char[] chars, int index)
+ 		{
++			MemoryBudget.TrackObject(this, 32);
+ 			this.chars = chars;
+ 			this.index = index;
+ 		}
+ 
+ 		public CharPtr(byte[] bytes)
+ 		{
+-			this.chars = new char[bytes.Length];
++			MemoryBudget.TrackObject(this, 32);
++			this.chars = bytes.Length == 0 ? Array.Empty<char>() :
++				MemoryBudget.Allocate(32L + 2L * bytes.Length, () => new char[bytes.Length]);
+ 			for (int i = 0; i < bytes.Length; i++)
+ 			{
+ 				this.chars[i] = (char)bytes[i];
+@@ -125,7 +135,8 @@
+ 
+ 		public CharPtr(IntPtr ptr)
+ 		{
+-			this.chars = new char[0];
++			MemoryBudget.TrackObject(this, 32);
++			this.chars = Array.Empty<char>();
+ 			this.index = 0;
+ 		}
+ 
+@@ -148,11 +159,13 @@
+ 
+ 		public static CharPtr operator +(CharPtr ptr1, CharPtr ptr2)
+ 		{
+-			string result = "";
+-			for (int i = 0; ptr1[i] != '\0'; i++)
+-				result += ptr1[i];
+-			for (int i = 0; ptr2[i] != '\0'; i++)
+-				result += ptr2[i];
++			int firstLength = 0, secondLength = 0;
++			while (ptr1[firstLength] != '\0') firstLength++;
++			while (ptr2[secondLength] != '\0') secondLength++;
++			long length = (long)firstLength + secondLength + 1;
++			char[] result = MemoryBudget.Allocate(32L + 2L * length, () => new char[checked((int)length)]);
++			Array.Copy(ptr1.chars, ptr1.index, result, 0, firstLength);
++			Array.Copy(ptr2.chars, ptr2.index, result, firstLength, secondLength);
+ 			return new CharPtr(result);
+ 		}
+ 		public static int operator -(CharPtr ptr1, CharPtr ptr2)
+@@ -197,19 +210,17 @@
+ 		}
+ 		public override string ToString()
+ 		{
+-			System.Text.StringBuilder result = new System.Text.StringBuilder();
+-			for (int i = index; (i < chars.Length) && (chars[i] != '\0'); i++)
+-				result.Append(chars[i]);
+-
+-			return result.ToString();
++			int length = 0;
++			while (index + length < chars.Length && chars[index + length] != '\0') length++;
++			if (length == 0) return string.Empty;
++			return MemoryBudget.AllocateString(length, () => new string(chars, index, length));
+ 		}
+ 
+ 		public string ToString(int length)
+ 		{
+-			System.Text.StringBuilder result = new System.Text.StringBuilder();
+-			for (int i = index; (i < chars.Length) && i < (length + index); i++)
+-				result.Append(chars[i]);
+-			return result.ToString();
++			int count = Math.Max(0, Math.Min(length, chars.Length - index));
++			if (count == 0) return string.Empty;
++			return MemoryBudget.AllocateString(count, () => new string(chars, index, count));
+ 		}
+ 	}
+ 
+diff --git a/src/Interop/LuaStateInterop/LuaBase.cs b/src/Interop/LuaStateInterop/LuaBase.cs
+--- a/src/Interop/LuaStateInterop/LuaBase.cs
++++ b/src/Interop/LuaStateInterop/LuaBase.cs
+@@ -106,17 +106,26 @@
+ 
+ 		protected static void LuaLAddValue(LuaLBuffer b)
+ 		{
+-			b.StringBuilder.Append(b.LuaState.Pop().ToPrintString());
++			var value = b.LuaState.Pop().ToPrintString();
++			b.LuaState.ExecutionContext.GetScript().ExecutionBudget?.Charge(value.Length);
++			b.PrepareAppend(value.Length);
++			b.StringBuilder.Append(value);
+ 		}
+ 
+ 		protected static void LuaLAddLString(LuaLBuffer b, CharPtr s, uint p)
+ 		{
+-			b.StringBuilder.Append(s.ToString((int)p));
++			b.LuaState.ExecutionContext.GetScript().ExecutionBudget?.Charge(p);
++			if (p > int.MaxValue) throw new ScriptRuntimeException("string buffer is too large");
++			var text = s.ToString((int)p);
++			b.PrepareAppend(text.Length);
++			b.StringBuilder.Append(text);
+ 		}
+ 
+ 		protected static void LuaLAddString(LuaLBuffer b, string s)
+ 		{
+-			b.StringBuilder.Append(s.ToString());
++			b.LuaState.ExecutionContext.GetScript().ExecutionBudget?.Charge(s.Length);
++			b.PrepareAppend(s.Length);
++			b.StringBuilder.Append(s);
+ 		}
+ 
+ 
+@@ -159,6 +168,8 @@
+ 
+ 		protected static void LuaLAddChar(LuaLBuffer b, char p)
+ 		{
++			b.LuaState.ExecutionContext.GetScript().ExecutionBudget?.Charge();
++			b.PrepareAppend(1);
+ 			b.StringBuilder.Append(p);
+ 		}
+ 
+@@ -173,11 +184,12 @@
+ 
+ 		protected static void LuaLPushResult(LuaLBuffer b)
+ 		{
+-			LuaPushLiteral(b.LuaState, b.StringBuilder.ToString());
++			LuaPushLiteral(b.LuaState, b.GetResult());
+ 		}
+ 
+ 		protected static void LuaPushLString(LuaState L, CharPtr s, uint len)
+ 		{
++			if (len > int.MaxValue) throw new ScriptRuntimeException("string is too large");
+ 			string ss = s.ToString((int)len);
+ 			L.Push(DynValue.NewString(ss));
+ 		}
+diff --git a/src/Interop/LuaStateInterop/LuaLBuffer.cs b/src/Interop/LuaStateInterop/LuaLBuffer.cs
+--- a/src/Interop/LuaStateInterop/LuaLBuffer.cs
++++ b/src/Interop/LuaStateInterop/LuaLBuffer.cs
+@@ -12,10 +12,29 @@
+ 
+ 		public LuaLBuffer(LuaState l)
+ 		{
+-			StringBuilder = new StringBuilder();
++			MemoryBudget.TrackObject(this, 32);
++			StringBuilder = MemoryBudget.Allocate(128, () => new StringBuilder());
+ 			LuaState = l;
+ 		}
+ 
++		internal void PrepareAppend(int characterCount)
++		{
++			long required = (long)StringBuilder.Length + characterCount;
++			if (characterCount < 0 || required > int.MaxValue)
++				throw new ScriptRuntimeException("string buffer is too large");
++			if (required <= StringBuilder.Capacity) return;
++			long capacity = System.Math.Max(required, System.Math.Min(int.MaxValue, 2L * StringBuilder.Capacity));
++			// Reserve the complete replacement backing buffer, not just its delta.
++			// Old-buffer allowances conservatively follow this builder's lifetime.
++			using var reservation = MemoryBudget.Reserve(96L + 2L * capacity);
++			StringBuilder.EnsureCapacity((int)capacity);
++			reservation.Bind(StringBuilder);
++		}
++
++		internal string GetResult()
++		{
++			return MemoryBudget.AllocateString(StringBuilder.Length, () => StringBuilder.ToString());
++		}
+ 
+ 	}
+ }
+diff --git a/src/Interop/LuaStateInterop/LuaState.cs b/src/Interop/LuaStateInterop/LuaState.cs
+--- a/src/Interop/LuaStateInterop/LuaState.cs
++++ b/src/Interop/LuaStateInterop/LuaState.cs
+@@ -49,6 +49,7 @@
+ 
+ 		public void Push(DynValue v)
+ 		{
++			ExecutionContext.GetScript().ExecutionBudget?.Charge();
+ 			m_Stack.Add(v);
+ 		}
+ 
+diff --git a/src/Interop/LuaStateInterop/Tools.cs b/src/Interop/LuaStateInterop/Tools.cs
+--- a/src/Interop/LuaStateInterop/Tools.cs
++++ b/src/Interop/LuaStateInterop/Tools.cs
+@@ -291,7 +291,7 @@
+ 		public static string sprintf(string Format, params object[] Parameters)
+ 		{
+ 			#region Variables
+-			StringBuilder f = new StringBuilder();
++			StringBuilder f = MemoryBudget.Allocate(128, () => new StringBuilder());
+ 			//Regex r = new Regex( @"\%(\d*\$)?([\'\#\-\+ ]*)(\d*)(?:\.(\d+))?([hl])?([dioxXucsfeEgGpn%])" );
+ 			//"%[parameter][flags][width][.precision][length]type"
+ 			Match m = null;
+@@ -315,8 +315,9 @@
+ 			#endregion
+ 
+ 			// find all format parameters in format string
++			PrepareBuffer(f, Format.Length);
+ 			f.Append(Format);
+-			m = r.Match(f.ToString());
++			m = MatchFormat(f, 0);
+ 			while (m.Success)
+ 			{
+ 				#region parameter index
+@@ -439,6 +440,7 @@
+ 
+ 				// convert value parameters to a string depending on the formatSpecifier
+ 				w = String.Empty;
++				using var valueReservation = MemoryBudget.ReserveString(128);
+ 				switch (formatSpecifier)
+ 				{
+ 					#region % - character
+@@ -508,13 +510,19 @@
+ 								//string t = "{0" + ( fieldLength != int.MinValue ? "," + ( flagLeft2Right ? "-" : String.Empty ) + fieldLength.ToString() : String.Empty ) + ":s}";
+ 						w = o.ToString();
+ 						if (fieldPrecision >= 0)
+-							w = w.Substring(0, fieldPrecision);
++						{
++							w = MemoryBudget.AllocateString(fieldPrecision, () => w.Substring(0, fieldPrecision));
++						}
+ 
+ 						if (fieldLength != int.MinValue)
++						{
+ 							if (flagLeft2Right)
+-								w = w.PadRight(fieldLength, paddingCharacter);
++								w = MemoryBudget.AllocateString(Math.Max((long)fieldLength, w.Length),
++									() => w.PadRight(fieldLength, paddingCharacter));
+ 							else
+-								w = w.PadLeft(fieldLength, paddingCharacter);
++								w = MemoryBudget.AllocateString(Math.Max((long)fieldLength, w.Length),
++									() => w.PadLeft(fieldLength, paddingCharacter));
++						}
+ 						defaultParamIx++;
+ 						break;
+ 					#endregion
+@@ -587,6 +595,7 @@
+ 						defaultParamIx++;
+ 						break;
+ 				}
++				if (MemoryBudget.Current != null) valueReservation.Bind(FormatScratchOwner(w));
+ 
+ 				// replace format parameter with parameter value
+ 				// and start searching for the next format parameter
+@@ -594,11 +603,51 @@
+ 				// to prohibit recursive matches if the value also
+ 				// includes a format specifier
+ 				f.Remove(m.Index, m.Length);
++				PrepareBuffer(f, w.Length);
++				// Insert may split a chunk even when aggregate capacity is sufficient.
++				using var insertReservation = MemoryBudget.Reserve(64L + 2L * Math.Max(16, w.Length));
+ 				f.Insert(m.Index, w);
+-				m = r.Match(f.ToString(), m.Index + w.Length);
++				insertReservation.Bind(f);
++				m = MatchFormat(f, m.Index + w.Length);
+ 			}
+ 
+-			return f.ToString();
++			return MemoryBudget.AllocateString(f.Length, () => f.ToString());
++		}
++
++		private static void PrepareBuffer(StringBuilder buffer, int additional)
++		{
++			long required = (long)buffer.Length + additional;
++			if (required > int.MaxValue) throw new ScriptRuntimeException("formatted string is too large");
++			if (required <= buffer.Capacity) return;
++			long capacity = Math.Max(required, Math.Min(int.MaxValue, 2L * buffer.Capacity));
++			using var reservation = MemoryBudget.Reserve(96L + 2L * capacity);
++			buffer.EnsureCapacity((int)capacity);
++			reservation.Bind(buffer);
++		}
++
++		private static Match MatchFormat(StringBuilder buffer, int start)
++		{
++			// Regex groups, capture storage and temporary group substrings have a
++			// conservative work-space allowance as well as the input string copy.
++			using var reservation = MemoryBudget.Reserve(2048L + 32L * buffer.Length);
++			string text = MemoryBudget.AllocateString(buffer.Length, () => buffer.ToString());
++			Match match = r.Match(text, start);
++			if (MemoryBudget.Current != null) reservation.Bind(match.Success ? (object)match : new object());
++			return match;
++		}
++
++		private static long NumericFormatBytes(int fieldLength, int fieldPrecision)
++		{
++			long characters = Math.Max(512L + Math.Max(0, fieldPrecision), Math.Max(0, fieldLength));
++			// Composite formats, numeric output, padding and sign/prefix copies.
++			return 2048L + 16L * characters;
++		}
++
++		private static object FormatScratchOwner(string value)
++		{
++			// Empty/literal results and failed Regex matches can be process-wide
++			// singletons. Do not pin transient formatting debt to an immortal key.
++			return value.Length == 0 || object.ReferenceEquals(string.IsInterned(value), value) ? new object() : value;
+ 		}
+ 		#endregion
+ 		#endregion
+@@ -610,6 +659,7 @@
+ 											bool Left2Right,
+ 											char Padding, object Value)
+ 		{
++			using var reservation = MemoryBudget.Reserve(NumericFormatBytes(FieldLength, FieldPrecision));
+ 			string w = String.Empty;
+ 			string lengthFormat = "{0" + (FieldLength != int.MinValue ?
+ 											"," + (Left2Right ?
+@@ -636,6 +686,7 @@
+ 				}
+ 			}
+ 
++			if (MemoryBudget.Current != null) reservation.Bind(FormatScratchOwner(w));
+ 			return w;
+ 		}
+ 		#endregion
+@@ -645,6 +696,7 @@
+ 											bool Left2Right,
+ 											char Padding, object Value)
+ 		{
++			using var reservation = MemoryBudget.Reserve(NumericFormatBytes(FieldLength, FieldPrecision));
+ 			string w = String.Empty;
+ 			string lengthFormat = "{0" + (FieldLength != int.MinValue ?
+ 											"," + (Left2Right ?
+@@ -674,6 +726,7 @@
+ 				}
+ 			}
+ 
++			if (MemoryBudget.Current != null) reservation.Bind(FormatScratchOwner(w));
+ 			return w;
+ 		}
+ 		#endregion
+@@ -684,6 +737,7 @@
+ 											bool PositiveSign, bool PositiveSpace,
+ 											char Padding, object Value)
+ 		{
++			using var reservation = MemoryBudget.Reserve(NumericFormatBytes(FieldLength, FieldPrecision));
+ 			string w = String.Empty;
+ 			string lengthFormat = "{0" + (FieldLength != int.MinValue ?
+ 											"," + (Left2Right ?
+@@ -722,6 +776,7 @@
+ 				}
+ 			}
+ 
++			if (MemoryBudget.Current != null) reservation.Bind(FormatScratchOwner(w));
+ 			return w;
+ 		}
+ 		#endregion
+diff --git a/src/Interop/StandardDescriptors/ReflectionMemberDescriptors/EventMemberDescriptor.cs b/src/Interop/StandardDescriptors/ReflectionMemberDescriptors/EventMemberDescriptor.cs
+--- a/src/Interop/StandardDescriptors/ReflectionMemberDescriptors/EventMemberDescriptor.cs
++++ b/src/Interop/StandardDescriptors/ReflectionMemberDescriptors/EventMemberDescriptor.cs
+@@ -6,6 +6,7 @@
+ using MoonSharp.Interpreter.DataStructs;
+ using MoonSharp.Interpreter.Interop.BasicDescriptors;
+ using MoonSharp.Interpreter.Interop.StandardDescriptors;
++using ReferenceEqualityComparer = MoonSharp.Interpreter.DataStructs.ReferenceEqualityComparer;
+ 
+ namespace MoonSharp.Interpreter.Interop
+ {
+diff --git a/src/Script.cs b/src/Script.cs
+--- a/src/Script.cs
++++ b/src/Script.cs
+@@ -34,10 +34,10 @@
+ 
+ 		Processor m_MainProcessor = null;
+ 		ByteCode m_ByteCode;
+-		List<SourceCode> m_Sources = new List<SourceCode>();
++		List<SourceCode> m_Sources;
+ 		Table m_GlobalTable;
+ 		IDebugger m_Debugger;
+-		Table[] m_TypeMetatables = new Table[(int)LuaTypeExtensions.MaxMetaTypes];
++		Table[] m_TypeMetatables;
+ 
+ 		/// <summary>
+ 		/// Initializes the <see cref="Script"/> class.
+@@ -69,7 +69,18 @@
+ 		/// </summary>
+ 		/// <param name="coreModules">The core modules to be pre-registered in the default global table.</param>
+ 		public Script(CoreModules coreModules)
+-		{
++			: this(coreModules, MoonSharp.Interpreter.MemoryBudget.Current)
++		{
++		}
++
++		/// <summary>Constructs a VM with host-owned allocation accounting.</summary>
++		public Script(CoreModules coreModules, MemoryBudget memoryBudget)
++		{
++			MemoryBudget = memoryBudget;
++			using var memoryScope = MemoryBudget?.EnterScope();
++			MemoryBudget?.Track(this, 2048);
++			m_Sources = new List<SourceCode>();
++			m_TypeMetatables = new Table[(int)LuaTypeExtensions.MaxMetaTypes];
+ 			Options = new ScriptOptions(DefaultOptions);
+ 			PerformanceStats = new PerformanceStatistics();
+ 			Registry = new Table(this);
+@@ -91,6 +102,12 @@
+ 		/// </summary>
+ 		public ScriptOptions Options { get; private set; }
+ 
++		/// <summary>Optional host-only cumulative limits, shared by every call and coroutine of this script.</summary>
++		public ExecutionBudget ExecutionBudget { get; set; }
++
++		/// <summary>Host-only allocation accounting; never replace after exposing a VM to Lua.</summary>
++		public MemoryBudget MemoryBudget { get; set; }
++
+ 		/// <summary>
+ 		/// Gets the global options, that is options which cannot be customized per-script.
+ 		/// </summary>
+@@ -121,11 +138,16 @@
+ 		/// </returns>
+ 		public DynValue LoadFunction(string code, Table globalTable = null, string funcFriendlyName = null)
+ 		{
++			using var memoryScope = MemoryBudget?.EnterScope();
++			// Reserve source, lexer and parser scratch overhead before compilation.
++			using var sourceMemory = MemoryBudget?.ReserveAllocation(65536L + 128L * code.Length);
++			ExecutionBudget?.Charge(code.Length);
+ 			this.CheckScriptOwnership(globalTable);
+ 
+ 			string chunkName = string.Format("libfunc_{0}", funcFriendlyName ?? m_Sources.Count.ToString());
+ 
+ 			SourceCode source = new SourceCode(chunkName, code, m_Sources.Count, this);
++			sourceMemory?.Bind(source);
+ 
+ 			m_Sources.Add(source);
+ 
+@@ -165,6 +187,9 @@
+ 		/// </returns>
+ 		public DynValue LoadString(string code, Table globalTable = null, string codeFriendlyName = null)
+ 		{
++			using var memoryScope = MemoryBudget?.EnterScope();
++			using var sourceMemory = MemoryBudget?.ReserveAllocation(65536L + 128L * code.Length);
++			ExecutionBudget?.Charge(code.Length);
+ 			this.CheckScriptOwnership(globalTable);
+ 
+ 			if (code.StartsWith(StringModule.BASE64_DUMP_HEADER))
+@@ -178,6 +203,7 @@
+ 			string chunkName = string.Format("{0}", codeFriendlyName ?? "chunk_" + m_Sources.Count.ToString());
+ 
+ 			SourceCode source = new SourceCode(codeFriendlyName ?? chunkName, code, m_Sources.Count, this);
++			sourceMemory?.Bind(source);
+ 
+ 			m_Sources.Add(source);
+ 
+@@ -454,6 +480,8 @@
+ 		/// <exception cref="System.ArgumentException">Thrown if function is not of DataType.Function</exception>
+ 		public DynValue Call(DynValue function, params DynValue[] args)
+ 		{
++			using var memoryScope = MemoryBudget?.EnterScope();
++			ExecutionBudget?.Check();
+ 			this.CheckScriptOwnership(function);
+ 			this.CheckScriptOwnership(args);
+ 
+@@ -463,7 +491,7 @@
+ 
+ 				if (metafunction != null)
+ 				{
+-					DynValue[] metaargs = new DynValue[args.Length + 1];
++					DynValue[] metaargs = MoonSharp.Interpreter.MemoryBudget.Allocate(40L + 8L * args.Length, () => new DynValue[args.Length + 1]);
+ 					metaargs[0] = function;
+ 					for (int i = 0; i < args.Length; i++)
+ 						metaargs[i + 1] = args[i];
+@@ -478,7 +506,8 @@
+ 			}
+ 			else if (function.Type == DataType.ClrFunction)
+ 			{
+-				return function.Callback.ClrCallback(this.CreateDynamicExecutionContext(function.Callback), new CallbackArguments(args, false));
++				using var scope = ExecutionBudget?.EnterScope();
++				return function.Callback.Invoke(this.CreateDynamicExecutionContext(function.Callback), args);
+ 			}
+ 
+ 			return m_MainProcessor.Call(function, args);
+@@ -495,7 +524,8 @@
+ 		/// <exception cref="System.ArgumentException">Thrown if function is not of DataType.Function</exception>
+ 		public DynValue Call(DynValue function, params object[] args)
+ 		{
+-			DynValue[] dargs = new DynValue[args.Length];
++			using var memoryScope = MemoryBudget?.EnterScope();
++			DynValue[] dargs = MoonSharp.Interpreter.MemoryBudget.Allocate(32L + 8L * args.Length, () => new DynValue[args.Length]);
+ 
+ 			for (int i = 0; i < dargs.Length; i++)
+ 				dargs[i] = DynValue.FromObject(this, args[i]);
+@@ -536,6 +566,7 @@
+ 		/// <exception cref="System.ArgumentException">Thrown if function is not of DataType.Function or DataType.ClrFunction</exception>
+ 		public DynValue CreateCoroutine(DynValue function)
+ 		{
++			using var memoryScope = MemoryBudget?.EnterScope();
+ 			this.CheckScriptOwnership(function);
+ 
+ 			if (function.Type == DataType.Function)
+@@ -556,6 +587,7 @@
+ 		/// </returns>
+ 		public DynValue RecycleCoroutine(Coroutine coroutine, DynValue function)
+ 		{
++			using var memoryScope = MemoryBudget?.EnterScope();
+ 			this.CheckScriptOwnership(coroutine);
+ 			this.CheckScriptOwnership(function);
+ 
+diff --git a/src/Tree/Expression_.cs b/src/Tree/Expression_.cs
+--- a/src/Tree/Expression_.cs
++++ b/src/Tree/Expression_.cs
+@@ -22,9 +22,9 @@
+ 			return null;
+ 		}
+ 
+-		internal static List<Expression> ExprListAfterFirstExpr(ScriptLoadingContext lcontext, Expression expr1)
+-		{
+-			List<Expression> exps = new List<Expression>();
++		internal static BudgetedList<Expression> ExprListAfterFirstExpr(ScriptLoadingContext lcontext, Expression expr1)
++		{
++			BudgetedList<Expression> exps = new BudgetedList<Expression>();
+ 
+ 			exps.Add(expr1);
+ 
+@@ -38,9 +38,9 @@
+ 		}
+ 
+ 
+-		internal static List<Expression> ExprList(ScriptLoadingContext lcontext)
+-		{
+-			List<Expression> exps = new List<Expression>();
++		internal static BudgetedList<Expression> ExprList(ScriptLoadingContext lcontext)
++		{
++			BudgetedList<Expression> exps = new BudgetedList<Expression>();
+ 
+ 			while (true)
+ 			{
+@@ -62,6 +62,8 @@
+ 
+ 		internal static Expression SubExpr(ScriptLoadingContext lcontext, bool isPrimary)
+ 		{
++			using var scope = lcontext.Script.ExecutionBudget?.EnterScope();
++			lcontext.Script.ExecutionBudget?.Charge();
+ 			Expression e = null;
+ 
+ 			Token T = lcontext.Lexer.Current;
+@@ -77,7 +79,7 @@
+ 
+ 				if (isPrimary && T.Type == TokenType.Op_Pwr)
+ 				{
+-					List<Expression> powerChain = new List<Expression>();
++					BudgetedList<Expression> powerChain = new BudgetedList<Expression>();
+ 					powerChain.Add(e);
+ 
+ 					while (isPrimary && T.Type == TokenType.Op_Pwr)
+diff --git a/src/Tree/Expressions/AdjustmentExpression.cs b/src/Tree/Expressions/AdjustmentExpression.cs
+--- a/src/Tree/Expressions/AdjustmentExpression.cs
++++ b/src/Tree/Expressions/AdjustmentExpression.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Execution;
++using MoonSharp.Interpreter.Execution;
+ 
+ 
+ namespace MoonSharp.Interpreter.Tree.Expressions
+@@ -15,6 +15,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			expression.Compile(bc);
+ 			bc.Emit_Scalar();
+ 		}
+diff --git a/src/Tree/Expressions/BinaryOperatorExpression.cs b/src/Tree/Expressions/BinaryOperatorExpression.cs
+--- a/src/Tree/Expressions/BinaryOperatorExpression.cs
++++ b/src/Tree/Expressions/BinaryOperatorExpression.cs
+@@ -1,4 +1,4 @@
+-﻿using System;
++using System;
+ using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+ 
+@@ -299,6 +299,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			m_Exp1.Compile(bc);
+ 
+ 			if (m_Operator == Operator.Or)
+diff --git a/src/Tree/Expressions/DynamicExprExpression.cs b/src/Tree/Expressions/DynamicExprExpression.cs
+--- a/src/Tree/Expressions/DynamicExprExpression.cs
++++ b/src/Tree/Expressions/DynamicExprExpression.cs
+@@ -1,4 +1,4 @@
+-﻿using System;
++using System;
+ using MoonSharp.Interpreter.Execution;
+ 
+ namespace MoonSharp.Interpreter.Tree.Expressions
+@@ -22,6 +22,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			throw new InvalidOperationException();
+ 		}
+ 
+diff --git a/src/Tree/Expressions/ExprListExpression.cs b/src/Tree/Expressions/ExprListExpression.cs
+--- a/src/Tree/Expressions/ExprListExpression.cs
++++ b/src/Tree/Expressions/ExprListExpression.cs
+@@ -1,13 +1,13 @@
+-﻿using System.Collections.Generic;
++using System.Collections.Generic;
+ using MoonSharp.Interpreter.Execution;
+ 
+ namespace MoonSharp.Interpreter.Tree.Expressions
+ {
+ 	class ExprListExpression : Expression
+ 	{
+-		List<Expression> expressions;
++		BudgetedList<Expression> expressions;
+ 
+-		public ExprListExpression(List<Expression> exps, ScriptLoadingContext lcontext)
++		public ExprListExpression(BudgetedList<Expression> exps, ScriptLoadingContext lcontext)
+ 			: base(lcontext)
+ 		{
+ 			expressions = exps;
+@@ -21,6 +21,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			foreach (var exp in expressions)
+ 				exp.Compile(bc);
+ 
+diff --git a/src/Tree/Expressions/FunctionCallExpression.cs b/src/Tree/Expressions/FunctionCallExpression.cs
+--- a/src/Tree/Expressions/FunctionCallExpression.cs
++++ b/src/Tree/Expressions/FunctionCallExpression.cs
+@@ -1,4 +1,4 @@
+-﻿using System.Collections.Generic;
++using System.Collections.Generic;
+ using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ 
+@@ -6,7 +6,7 @@
+ {
+ 	class FunctionCallExpression : Expression
+ 	{
+-		List<Expression> m_Arguments;
++		BudgetedList<Expression> m_Arguments;
+ 		Expression m_Function;
+ 		string m_Name;
+ 		string m_DebugErr;
+@@ -31,7 +31,7 @@
+ 					Token t = lcontext.Lexer.Current;
+ 					if (t.Type == TokenType.Brk_Close_Round)
+ 					{
+-						m_Arguments = new List<Expression>();
++						m_Arguments = new BudgetedList<Expression>();
+ 						SourceRef = callToken.GetSourceRef(t);
+ 						lcontext.Lexer.Next();
+ 					}
+@@ -44,7 +44,7 @@
+ 				case TokenType.String:
+ 				case TokenType.String_Long:
+ 					{
+-						m_Arguments = new List<Expression>();
++						m_Arguments = new BudgetedList<Expression>();
+ 						Expression le = new LiteralExpression(lcontext, lcontext.Lexer.Current);
+ 						m_Arguments.Add(le);
+ 						SourceRef = callToken.GetSourceRef(lcontext.Lexer.Current);
+@@ -53,7 +53,7 @@
+ 				case TokenType.Brk_Open_Curly:
+ 				case TokenType.Brk_Open_Curly_Shared:
+ 					{
+-						m_Arguments = new List<Expression>();
++						m_Arguments = new BudgetedList<Expression>();
+ 						m_Arguments.Add(new TableConstructor(lcontext, lcontext.Lexer.Current.Type == TokenType.Brk_Open_Curly_Shared));
+ 						SourceRef = callToken.GetSourceRefUpTo(lcontext.Lexer.Current);
+ 					}
+@@ -68,6 +68,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			m_Function.Compile(bc);
+ 
+ 			int argslen = m_Arguments.Count;
+diff --git a/src/Tree/Expressions/FunctionDefinitionExpression.cs b/src/Tree/Expressions/FunctionDefinitionExpression.cs
+--- a/src/Tree/Expressions/FunctionDefinitionExpression.cs
++++ b/src/Tree/Expressions/FunctionDefinitionExpression.cs
+@@ -1,4 +1,4 @@
+-﻿using System;
++using System;
+ using System.Collections.Generic;
+ using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+@@ -13,7 +13,7 @@
+ 		SymbolRef[] m_ParamNames = null;
+ 		Statement m_Statement;
+ 		RuntimeScopeFrame m_StackFrame;
+-		List<SymbolRef> m_Closure = new List<SymbolRef>();
++		BudgetedList<SymbolRef> m_Closure = new BudgetedList<SymbolRef>();
+ 		bool m_HasVarArgs = false;
+ 		Instruction m_ClosureInstruction = null;
+ 
+@@ -41,7 +41,7 @@
+ 			// here lexer should be at the '(' or at the '|'
+ 			Token openRound = CheckTokenType(lcontext, isLambda ? TokenType.Lambda : TokenType.Brk_Open_Round);
+ 
+-			List<string> paramnames = BuildParamList(lcontext, pushSelfParam, openRound, isLambda);
++			BudgetedList<string> paramnames = BuildParamList(lcontext, pushSelfParam, openRound, isLambda);
+ 			// here lexer is at first token of body
+ 
+ 			m_Begin = openRound.GetSourceRefUpTo(lcontext.Lexer.Current);
+@@ -100,11 +100,11 @@
+ 			return s;
+ 		}
+ 
+-		private List<string> BuildParamList(ScriptLoadingContext lcontext, bool pushSelfParam, Token openBracketToken, bool isLambda)
++		private BudgetedList<string> BuildParamList(ScriptLoadingContext lcontext, bool pushSelfParam, Token openBracketToken, bool isLambda)
+ 		{
+ 			TokenType closeToken = isLambda ? TokenType.Lambda : TokenType.Brk_Close_Round;
+ 
+-			List<string> paramnames = new List<string>();
++			BudgetedList<string> paramnames = new BudgetedList<string>();
+ 
+ 			// method decls with ':' must push an implicit 'self' param
+ 			if (pushSelfParam)
+@@ -147,11 +147,11 @@
+ 			return paramnames;
+ 		}
+ 
+-		private SymbolRef[] DefineArguments(List<string> paramnames, ScriptLoadingContext lcontext)
+-		{
+-			HashSet<string> names = new HashSet<string>();
+-
+-			SymbolRef[] ret = new SymbolRef[paramnames.Count];
++		private SymbolRef[] DefineArguments(BudgetedList<string> paramnames, ScriptLoadingContext lcontext)
++		{
++			BudgetedHashSet<string> names = new BudgetedHashSet<string>();
++
++			SymbolRef[] ret = MemoryBudget.Allocate(32L + 8L * paramnames.Count, () => new SymbolRef[paramnames.Count]);
+ 
+ 			for (int i = paramnames.Count - 1; i >= 0; i--)
+ 			{
+@@ -191,6 +191,7 @@
+ 
+ 		public int CompileBody(ByteCode bc, string friendlyName)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			string funcName = friendlyName ?? ("<" + this.m_Begin.FormatLocation(bc.Script, true) + ">");
+ 
+ 			bc.PushSourceRef(m_Begin);
+@@ -235,6 +236,7 @@
+ 
+ 		public int Compile(ByteCode bc, Func<int> afterDecl, string friendlyName)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			using (bc.EnterSource(m_Begin))
+ 			{
+ 				SymbolRef[] symbs = m_Closure
+@@ -253,6 +255,7 @@
+ 
+ 		public override void Compile(ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			Compile(bc, () => 0, null);
+ 		}
+ 	}
+diff --git a/src/Tree/Expressions/IndexExpression.cs b/src/Tree/Expressions/IndexExpression.cs
+--- a/src/Tree/Expressions/IndexExpression.cs
++++ b/src/Tree/Expressions/IndexExpression.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Execution;
++using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+ 
+ namespace MoonSharp.Interpreter.Tree.Expressions
+@@ -27,6 +27,7 @@
+ 
+ 		public override void Compile(ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			m_BaseExp.Compile(bc);
+ 
+ 			if (m_Name != null)
+@@ -47,6 +48,7 @@
+ 
+ 		public void CompileAssignment(ByteCode bc, int stackofs, int tupleidx)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			m_BaseExp.Compile(bc);
+ 
+ 			if (m_Name != null)
+diff --git a/src/Tree/Expressions/LiteralExpression.cs b/src/Tree/Expressions/LiteralExpression.cs
+--- a/src/Tree/Expressions/LiteralExpression.cs
++++ b/src/Tree/Expressions/LiteralExpression.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Execution;
++using MoonSharp.Interpreter.Execution;
+ 
+ namespace MoonSharp.Interpreter.Tree.Expressions
+ {
+@@ -54,6 +54,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			bc.Emit_Literal(m_Value);
+ 		}
+ 
+diff --git a/src/Tree/Expressions/SymbolRefExpression.cs b/src/Tree/Expressions/SymbolRefExpression.cs
+--- a/src/Tree/Expressions/SymbolRefExpression.cs
++++ b/src/Tree/Expressions/SymbolRefExpression.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Execution;
++using MoonSharp.Interpreter.Execution;
+ 
+ namespace MoonSharp.Interpreter.Tree.Expressions
+ {
+@@ -44,12 +44,14 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			bc.Emit_Load(m_Ref);
+ 		}
+ 
+ 
+ 		public void CompileAssignment(Execution.VM.ByteCode bc, int stackofs, int tupleidx)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			bc.Emit_Store(m_Ref, stackofs, tupleidx);
+ 		}
+ 
+diff --git a/src/Tree/Expressions/TableConstructor.cs b/src/Tree/Expressions/TableConstructor.cs
+--- a/src/Tree/Expressions/TableConstructor.cs
++++ b/src/Tree/Expressions/TableConstructor.cs
+@@ -1,4 +1,4 @@
+-﻿using System.Collections.Generic;
++using System.Collections.Generic;
+ using MoonSharp.Interpreter.Execution;
+ 
+ namespace MoonSharp.Interpreter.Tree.Expressions
+@@ -6,8 +6,8 @@
+ 	class TableConstructor : Expression
+ 	{
+ 		bool m_Shared = false;
+-		List<Expression> m_PositionalValues = new List<Expression>();
+-		List<KeyValuePair<Expression, Expression>> m_CtorArgs = new List<KeyValuePair<Expression, Expression>>();
++		BudgetedList<Expression> m_PositionalValues = new BudgetedList<Expression>();
++		BudgetedList<KeyValuePair<Expression, Expression>> m_CtorArgs = new BudgetedList<KeyValuePair<Expression, Expression>>();
+ 
+ 		public TableConstructor(ScriptLoadingContext lcontext, bool shared)
+ 			: base(lcontext)
+@@ -91,6 +91,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			bc.Emit_NewTable(m_Shared);
+ 
+ 			foreach (var kvp in m_CtorArgs)
+diff --git a/src/Tree/Expressions/UnaryOperatorExpression.cs b/src/Tree/Expressions/UnaryOperatorExpression.cs
+--- a/src/Tree/Expressions/UnaryOperatorExpression.cs
++++ b/src/Tree/Expressions/UnaryOperatorExpression.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Execution;
++using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+ 
+ namespace MoonSharp.Interpreter.Tree.Expressions
+@@ -19,6 +19,7 @@
+ 
+ 		public override void Compile(ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			m_Exp.Compile(bc);
+ 
+ 			switch (m_OpText)
+diff --git a/src/Tree/Fast_Interface/Loader_Fast.cs b/src/Tree/Fast_Interface/Loader_Fast.cs
+--- a/src/Tree/Fast_Interface/Loader_Fast.cs
++++ b/src/Tree/Fast_Interface/Loader_Fast.cs
+@@ -37,7 +37,7 @@
+ 			{
+ 				Scope = new BuildTimeScope(),
+ 				Source = source,
+-				Lexer = new Lexer(source.SourceID, source.Code, true)
++				Lexer = new Lexer(source.SourceID, source.Code, true, script.ExecutionBudget)
+ 			};
+ 		}
+ 
+@@ -58,10 +58,10 @@
+ 				using (script.PerformanceStats.StartStopwatch(Diagnostics.PerformanceCounter.Compilation))
+ 				using (bytecode.EnterSource(null))
+ 				{
+-					bytecode.Emit_Nop(string.Format("Begin chunk {0}", source.Name));
++					bytecode.Emit_Nop(DiagnosticFormatting.Format("Begin chunk {0}", source.Name));
+ 					beginIp = bytecode.GetJumpPointForLastInstruction();
+ 					stat.Compile(bytecode);
+-					bytecode.Emit_Nop(string.Format("End chunk {0}", source.Name));
++					bytecode.Emit_Nop(DiagnosticFormatting.Format("End chunk {0}", source.Name));
+ 				}
+ 
+ 				//Debug_DumpByteCode(bytecode, source.SourceID);
+@@ -94,9 +94,9 @@
+ 				using (script.PerformanceStats.StartStopwatch(Diagnostics.PerformanceCounter.Compilation))
+ 				using (bytecode.EnterSource(null))
+ 				{
+-					bytecode.Emit_Nop(string.Format("Begin function {0}", source.Name));
++					bytecode.Emit_Nop(DiagnosticFormatting.Format("Begin function {0}", source.Name));
+ 					beginIp = fnx.CompileBody(bytecode, source.Name);
+-					bytecode.Emit_Nop(string.Format("End function {0}", source.Name));
++					bytecode.Emit_Nop(DiagnosticFormatting.Format("End function {0}", source.Name));
+ 				}
+ 
+ 				//Debug_DumpByteCode(bytecode, source.SourceID);
+diff --git a/src/Tree/Lexer/Lexer.cs b/src/Tree/Lexer/Lexer.cs
+--- a/src/Tree/Lexer/Lexer.cs
++++ b/src/Tree/Lexer/Lexer.cs
+@@ -13,9 +13,11 @@
+ 		int m_Col = 0;
+ 		int m_SourceId;
+ 		bool m_AutoSkipComments = false;
+-
+-		public Lexer(int sourceID, string scriptContent, bool autoSkipComments)
+-		{
++		readonly ExecutionBudget m_Budget;
++
++		public Lexer(int sourceID, string scriptContent, bool autoSkipComments, ExecutionBudget budget = null)
++		{
++			m_Budget = budget;
+ 			m_Code = scriptContent;
+ 			m_SourceId = sourceID;
+ 
+@@ -52,6 +54,7 @@
+ 
+ 		public void Next()
+ 		{
++			m_Budget?.Check();
+ 			m_Current = FetchNewToken();
+ 		}
+ 
+@@ -76,6 +79,7 @@
+ 
+ 		private void CursorNext()
+ 		{
++			m_Budget?.Charge();
+ 			if (CursorNotEof())
+ 			{
+ 				if (CursorChar() == '\n')
+@@ -262,7 +266,7 @@
+ 		private string ReadLongString(int fromLine, int fromCol, string startpattern, string subtypeforerrors)
+ 		{
+ 			// here we are at the first '=' or second '['
+-			StringBuilder text = new StringBuilder(1024);
++			BudgetedStringBuilder text = new BudgetedStringBuilder(1024);
+ 			string end_pattern = "]";
+ 
+ 			if (startpattern == null)
+@@ -325,7 +329,7 @@
+ 
+ 		private Token ReadNumberToken(int fromLine, int fromCol, bool leadingDot)
+ 		{
+-			StringBuilder text = new StringBuilder(32);
++			BudgetedStringBuilder text = new BudgetedStringBuilder(32);
+ 
+ 			//INT : Digit+
+ 			//HEX : '0' [xX] HexDigit+
+@@ -414,7 +418,7 @@
+ 
+ 		private Token ReadHashBang(int fromLine, int fromCol)
+ 		{
+-			StringBuilder text = new StringBuilder(32);
++			BudgetedStringBuilder text = new BudgetedStringBuilder(32);
+ 
+ 			for (char c = CursorChar(); CursorNotEof(); c = CursorCharNext())
+ 			{
+@@ -435,7 +439,7 @@
+ 
+ 		private Token ReadComment(int fromLine, int fromCol)
+ 		{
+-			StringBuilder text = new StringBuilder(32);
++			BudgetedStringBuilder text = new BudgetedStringBuilder(32);
+ 
+ 			bool extraneousFound = false;
+ 
+@@ -468,7 +472,7 @@
+ 
+ 		private Token ReadSimpleStringToken(int fromLine, int fromCol)
+ 		{
+-			StringBuilder text = new StringBuilder(32);
++			BudgetedStringBuilder text = new BudgetedStringBuilder(32);
+ 			char separator = CursorChar();
+ 
+ 			for (char c = CursorCharNext(); CursorNotEof(); c = CursorCharNext())
+@@ -571,7 +575,7 @@
+ 
+ 		private string ReadNameToken()
+ 		{
+-			StringBuilder name = new StringBuilder(32);
++			BudgetedStringBuilder name = new BudgetedStringBuilder(32);
+ 
+ 			for (char c = CursorChar(); CursorNotEof(); c = CursorCharNext())
+ 			{
+diff --git a/src/Tree/Lexer/LexerUtils.cs b/src/Tree/Lexer/LexerUtils.cs
+--- a/src/Tree/Lexer/LexerUtils.cs
++++ b/src/Tree/Lexer/LexerUtils.cs
+@@ -26,7 +26,7 @@
+ 
+ 			ulong res;
+ 
+-			if (!ulong.TryParse(txt.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out res))
++			if (!ulong.TryParse(txt.AsSpan(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out res))
+ 				throw new SyntaxErrorException(T, "malformed number near '{0}'", txt);
+ 
+ 			return (double)res;
+@@ -49,7 +49,7 @@
+ 				}
+ 				else
+ 				{
+-					return s.Substring(i);
++					return MemoryBudget.AllocateString(s.Length - i, () => s.Substring(i));
+ 				}
+ 			}
+ 
+@@ -65,7 +65,7 @@
+ 				if ((s.Length < 2) || (s[0] != '0' && (char.ToUpper(s[1]) != 'X')))
+ 					throw new InternalErrorException("hex float must start with '0x' near '{0}'", s);
+ 
+-				s = s.Substring(2);
++				s = MemoryBudget.AllocateString(s.Length - 2, () => s.Substring(2));
+ 
+ 				double value = 0.0;
+ 				int dummy, exp = 0;
+@@ -74,7 +74,7 @@
+ 
+ 				if (s.Length > 0 && s[0] == '.')
+ 				{
+-					s = s.Substring(1);
++					s = MemoryBudget.AllocateString(s.Length - 1, () => s.Substring(1));
+ 					s = ReadHexProgressive(s, ref value, out exp);
+ 				}
+ 
+@@ -85,7 +85,8 @@
+ 					if (s.Length == 1)
+ 						throw new SyntaxErrorException(T, "invalid hex float format near '{0}'", s);
+ 
+-					s = s.Substring(s[1] == '+' ? 2 : 1);
++					int start = s[1] == '+' ? 2 : 1;
++					s = MemoryBudget.AllocateString(s.Length - start, () => s.Substring(start));
+ 
+ 					int exp1 = int.Parse(s, CultureInfo.InvariantCulture);
+ 
+@@ -129,9 +130,9 @@
+ 		public static string AdjustLuaLongString(string str)
+ 		{
+ 			if (str.StartsWith("\r\n"))
+-				str = str.Substring(2);
++				str = MemoryBudget.AllocateString(str.Length - 2, () => str.Substring(2));
+ 			else if (str.StartsWith("\n"))
+-				str = str.Substring(1);
++				str = MemoryBudget.AllocateString(str.Length - 1, () => str.Substring(1));
+ 
+ 			return str;
+ 		}
+@@ -141,7 +142,7 @@
+ 			if (!Framework.Do.StringContainsChar(str, '\\'))
+ 				return str;
+ 
+-			StringBuilder sb = new StringBuilder();
++			BudgetedStringBuilder sb = new BudgetedStringBuilder();
+ 
+ 			bool escape = false;
+ 			bool hex = false;
+diff --git a/src/Tree/Lexer/Token.cs b/src/Tree/Lexer/Token.cs
+--- a/src/Tree/Lexer/Token.cs
++++ b/src/Tree/Lexer/Token.cs
+@@ -12,6 +12,7 @@
+ 
+ 		public Token(TokenType type, int sourceId, int fromLine, int fromCol, int toLine, int toCol, int prevLine, int prevCol)
+ 		{
++			MemoryBudget.TrackObject(this, 96);
+ 			Type = type;
+ 
+ 			SourceId = sourceId;
+diff --git a/src/Tree/Loop.cs b/src/Tree/Loop.cs
+--- a/src/Tree/Loop.cs
++++ b/src/Tree/Loop.cs
+@@ -7,7 +7,7 @@
+ 	internal class Loop : ILoop
+ 	{
+ 		public RuntimeScopeBlock Scope;
+-		public List<Instruction> BreakJumps = new List<Instruction>();
++		public BudgetedList<Instruction> BreakJumps = new BudgetedList<Instruction>();
+ 
+ 		public void CompileBreak(ByteCode bc)
+ 		{
+diff --git a/src/Tree/NodeBase.cs b/src/Tree/NodeBase.cs
+--- a/src/Tree/NodeBase.cs
++++ b/src/Tree/NodeBase.cs
+@@ -10,6 +10,7 @@
+ 
+ 		public NodeBase(ScriptLoadingContext lcontext)
+ 		{
++			lcontext.Script.MemoryBudget?.Track(this, 256);
+ 			Script = lcontext.Script;
+ 		}
+ 
+diff --git a/src/Tree/Statement.cs b/src/Tree/Statement.cs
+--- a/src/Tree/Statement.cs
++++ b/src/Tree/Statement.cs
+@@ -13,6 +13,8 @@
+ 
+ 		protected static Statement CreateStatement(ScriptLoadingContext lcontext, out bool forceLast)
+ 		{
++			using var scope = lcontext.Script.ExecutionBudget?.EnterScope();
++			lcontext.Script.ExecutionBudget?.Charge();
+ 			Token tkn = lcontext.Lexer.Current;
+ 
+ 			forceLast = false;
+diff --git a/src/Tree/Statements/AssignmentStatement.cs b/src/Tree/Statements/AssignmentStatement.cs
+--- a/src/Tree/Statements/AssignmentStatement.cs
++++ b/src/Tree/Statements/AssignmentStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using System;
++using System;
+ using System.Collections.Generic;
+ using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+@@ -9,15 +9,15 @@
+ {
+ 	class AssignmentStatement : Statement
+ 	{
+-		List<IVariable> m_LValues = new List<IVariable>();
+-		List<Expression> m_RValues;
++		BudgetedList<IVariable> m_LValues = new BudgetedList<IVariable>();
++		BudgetedList<Expression> m_RValues;
+ 		SourceRef m_Ref;
+ 
+ 
+ 		public AssignmentStatement(ScriptLoadingContext lcontext, Token startToken)
+ 			: base(lcontext)
+ 		{
+-			List<string> names = new List<string>();
++			BudgetedList<string> names = new BudgetedList<string>();
+ 
+ 			Token first = startToken;
+ 
+@@ -39,7 +39,7 @@
+ 			}
+ 			else
+ 			{
+-				m_RValues = new List<Expression>();
++				m_RValues = new BudgetedList<Expression>();
+ 			}
+ 
+ 			foreach (string name in names)
+@@ -91,6 +91,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			using (bc.EnterSource(m_Ref))
+ 			{
+ 				foreach (var exp in m_RValues)
+diff --git a/src/Tree/Statements/BreakStatement.cs b/src/Tree/Statements/BreakStatement.cs
+--- a/src/Tree/Statements/BreakStatement.cs
++++ b/src/Tree/Statements/BreakStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Debugging;
++using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+ 
+@@ -20,6 +20,7 @@
+ 
+ 		public override void Compile(ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			using (bc.EnterSource(m_Ref))
+ 			{
+ 				if (bc.LoopTracker.Loops.Count == 0)
+diff --git a/src/Tree/Statements/ChunkStatement.cs b/src/Tree/Statements/ChunkStatement.cs
+--- a/src/Tree/Statements/ChunkStatement.cs
++++ b/src/Tree/Statements/ChunkStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Execution;
++using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+ 
+ namespace MoonSharp.Interpreter.Tree.Statements
+@@ -28,6 +28,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			Instruction meta = bc.Emit_Meta("<chunk-root>", OpCodeMetadataType.ChunkEntrypoint);
+ 			int metaip = bc.GetJumpPointForLastInstruction();
+ 
+diff --git a/src/Tree/Statements/CompositeStatement.cs b/src/Tree/Statements/CompositeStatement.cs
+--- a/src/Tree/Statements/CompositeStatement.cs
++++ b/src/Tree/Statements/CompositeStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using System.Collections.Generic;
++using System.Collections.Generic;
+ 
+ using MoonSharp.Interpreter.Execution;
+ 
+@@ -7,7 +7,7 @@
+ {
+ 	class CompositeStatement : Statement 
+ 	{
+-		List<Statement> m_Statements = new List<Statement>();
++		BudgetedList<Statement> m_Statements = new BudgetedList<Statement>();
+ 
+ 		public CompositeStatement(ScriptLoadingContext lcontext)
+ 			: base(lcontext)
+@@ -33,6 +33,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			if (m_Statements != null)
+ 			{
+ 				foreach (Statement s in m_Statements)
+diff --git a/src/Tree/Statements/EmptyStatement.cs b/src/Tree/Statements/EmptyStatement.cs
+--- a/src/Tree/Statements/EmptyStatement.cs
++++ b/src/Tree/Statements/EmptyStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Execution;
++using MoonSharp.Interpreter.Execution;
+ 
+ namespace MoonSharp.Interpreter.Tree.Statements
+ {
+@@ -12,6 +12,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 		}
+ 	}
+ }
+diff --git a/src/Tree/Statements/ForEachLoopStatement.cs b/src/Tree/Statements/ForEachLoopStatement.cs
+--- a/src/Tree/Statements/ForEachLoopStatement.cs
++++ b/src/Tree/Statements/ForEachLoopStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using System.Collections.Generic;
++using System.Collections.Generic;
+ using System.Linq;
+ using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+@@ -22,7 +22,7 @@
+ 		{
+ 			//	for namelist in explist do block end | 		
+ 
+-			List<string> names = new List<string>();
++			BudgetedList<string> names = new BudgetedList<string>();
+ 			names.Add(firstNameToken.Text);
+ 
+ 			while (lcontext.Lexer.Current.Type == TokenType.Comma)
+@@ -38,14 +38,13 @@
+ 
+ 			lcontext.Scope.PushBlock();
+ 
+-			m_Names = names
+-				.Select(n => lcontext.Scope.TryDefineLocal(n))
+-				.ToArray();
+-
+-			m_NameExps = m_Names
+-				.Select(s => new SymbolRefExpression(lcontext, s))
+-				.Cast<IVariable>()
+-				.ToArray();
++			m_Names = MemoryBudget.Allocate(32L + 8L * names.Count, () => new SymbolRef[names.Count]);
++			m_NameExps = MemoryBudget.Allocate(32L + 8L * names.Count, () => new IVariable[names.Count]);
++			for (int i = 0; i < names.Count; i++)
++			{
++				m_Names[i] = lcontext.Scope.TryDefineLocal(names[i]);
++				m_NameExps[i] = new SymbolRefExpression(lcontext, m_Names[i]);
++			}
+ 
+ 			m_RefFor = forToken.GetSourceRef(CheckTokenType(lcontext, TokenType.Do));
+ 
+@@ -62,6 +61,7 @@
+ 
+ 		public override void Compile(ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			//for var_1, ···, var_n in explist do block end
+ 
+ 			bc.PushSourceRef(m_RefFor);
+diff --git a/src/Tree/Statements/ForLoopStatement.cs b/src/Tree/Statements/ForLoopStatement.cs
+--- a/src/Tree/Statements/ForLoopStatement.cs
++++ b/src/Tree/Statements/ForLoopStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Debugging;
++using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+ 
+@@ -51,6 +51,7 @@
+ 
+ 		public override void Compile(ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			bc.PushSourceRef(m_RefFor);
+ 
+ 			Loop L = new Loop()
+diff --git a/src/Tree/Statements/FunctionCallStatement.cs b/src/Tree/Statements/FunctionCallStatement.cs
+--- a/src/Tree/Statements/FunctionCallStatement.cs
++++ b/src/Tree/Statements/FunctionCallStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using System;
++using System;
+ using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+ using MoonSharp.Interpreter.Tree.Expressions;
+@@ -19,6 +19,7 @@
+ 
+ 		public override void Compile(ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			using (bc.EnterSource(m_FunctionCallExpression.SourceRef))
+ 			{
+ 				m_FunctionCallExpression.Compile(bc);
+diff --git a/src/Tree/Statements/FunctionDefinitionStatement.cs b/src/Tree/Statements/FunctionDefinitionStatement.cs
+--- a/src/Tree/Statements/FunctionDefinitionStatement.cs
++++ b/src/Tree/Statements/FunctionDefinitionStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using System.Collections.Generic;
++using System.Collections.Generic;
+ using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ 
+@@ -16,7 +16,7 @@
+ 		string m_MethodName = null;
+ 
+ 		string m_FriendlyName;
+-		List<string> m_TableAccessors;
++		BudgetedList<string> m_TableAccessors;
+ 		FunctionDefinitionExpression m_FuncDef;
+ 
+ 		public FunctionDefinitionStatement(ScriptLoadingContext lcontext, bool local, Token localToken)
+@@ -32,7 +32,7 @@
+ 			{
+ 				Token name = CheckTokenType(lcontext, TokenType.Name);
+ 				m_FuncSymbol = lcontext.Scope.TryDefineLocal(name.Text);
+-				m_FriendlyName = string.Format("{0} (local)", name.Text);
++				m_FriendlyName = DiagnosticFormatting.Format("{0} (local)", name.Text);
+ 				m_SourceRef = funcKeyword.GetSourceRef(name);
+ 			}
+ 			else
+@@ -47,7 +47,7 @@
+ 
+ 				if (lcontext.Lexer.Current.Type != TokenType.Brk_Open_Round)
+ 				{
+-					m_TableAccessors = new List<string>();
++					m_TableAccessors = new BudgetedList<string>();
+ 
+ 					while (lcontext.Lexer.Current.Type != TokenType.Brk_Open_Round)
+ 					{
+@@ -89,6 +89,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			using (bc.EnterSource(m_SourceRef))
+ 			{
+ 				if (m_Local)
+diff --git a/src/Tree/Statements/GotoStatement.cs b/src/Tree/Statements/GotoStatement.cs
+--- a/src/Tree/Statements/GotoStatement.cs
++++ b/src/Tree/Statements/GotoStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Debugging;
++using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+ 
+@@ -31,6 +31,7 @@
+ 
+ 		public override void Compile(ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			m_Jump = bc.Emit_Jump(OpCode.Jump, m_LabelAddress);
+ 		}
+ 
+diff --git a/src/Tree/Statements/IfStatement.cs b/src/Tree/Statements/IfStatement.cs
+--- a/src/Tree/Statements/IfStatement.cs
++++ b/src/Tree/Statements/IfStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using System.Collections.Generic;
++using System.Collections.Generic;
+ using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+@@ -16,7 +16,7 @@
+ 			public SourceRef Source;
+ 		}
+ 
+-		List<IfBlock> m_Ifs = new List<IfBlock>();
++		BudgetedList<IfBlock> m_Ifs = new BudgetedList<IfBlock>();
+ 		IfBlock m_Else = null;
+ 		SourceRef m_End;
+ 
+@@ -72,7 +72,8 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
+-			List<Instruction> endJumps = new List<Instruction>();
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
++			BudgetedList<Instruction> endJumps = new BudgetedList<Instruction>();
+ 
+ 			Instruction lastIfJmp = null;
+ 
+diff --git a/src/Tree/Statements/LabelStatement.cs b/src/Tree/Statements/LabelStatement.cs
+--- a/src/Tree/Statements/LabelStatement.cs
++++ b/src/Tree/Statements/LabelStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using System.Collections.Generic;
++using System.Collections.Generic;
+ using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ 
+@@ -14,7 +14,7 @@
+ 		internal int DefinedVarsCount { get; private set; }
+ 		internal string LastDefinedVarName { get; private set; }
+ 
+-		List<GotoStatement> m_Gotos = new List<GotoStatement>();
++		BudgetedList<GotoStatement> m_Gotos = new BudgetedList<GotoStatement>();
+ 		RuntimeScopeBlock m_StackFrame;
+ 
+ 
+@@ -45,6 +45,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			bc.Emit_Clean(m_StackFrame);
+ 
+ 			Address = bc.GetJumpPointForLastInstruction();
+diff --git a/src/Tree/Statements/RepeatStatement.cs b/src/Tree/Statements/RepeatStatement.cs
+--- a/src/Tree/Statements/RepeatStatement.cs
++++ b/src/Tree/Statements/RepeatStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Debugging;
++using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+ 
+@@ -33,6 +33,7 @@
+ 
+ 		public override void Compile(ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			Loop L = new Loop()
+ 			{
+ 				Scope = m_StackFrame
+diff --git a/src/Tree/Statements/ReturnStatement.cs b/src/Tree/Statements/ReturnStatement.cs
+--- a/src/Tree/Statements/ReturnStatement.cs
++++ b/src/Tree/Statements/ReturnStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Debugging;
++using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ 
+ using MoonSharp.Interpreter.Tree.Expressions;
+@@ -47,6 +47,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			using (bc.EnterSource(m_Ref))
+ 			{
+ 				if (m_Expression != null)
+diff --git a/src/Tree/Statements/ScopeBlockStatement.cs b/src/Tree/Statements/ScopeBlockStatement.cs
+--- a/src/Tree/Statements/ScopeBlockStatement.cs
++++ b/src/Tree/Statements/ScopeBlockStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Debugging;
++using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ 
+ namespace MoonSharp.Interpreter.Tree.Statements
+@@ -29,6 +29,7 @@
+ 
+ 		public override void Compile(Execution.VM.ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			using(bc.EnterSource(m_Do))
+ 				bc.Emit_Enter(m_StackFrame);
+ 
+diff --git a/src/Tree/Statements/WhileStatement.cs b/src/Tree/Statements/WhileStatement.cs
+--- a/src/Tree/Statements/WhileStatement.cs
++++ b/src/Tree/Statements/WhileStatement.cs
+@@ -1,4 +1,4 @@
+-﻿using MoonSharp.Interpreter.Debugging;
++using MoonSharp.Interpreter.Debugging;
+ using MoonSharp.Interpreter.Execution;
+ using MoonSharp.Interpreter.Execution.VM;
+ 
+@@ -37,6 +37,7 @@
+ 
+ 		public override void Compile(ByteCode bc)
+ 		{
++			using var budgetScope = bc.Script.ExecutionBudget?.EnterScope();
+ 			Loop L = new Loop()
+ 			{
+ 				Scope = m_StackFrame

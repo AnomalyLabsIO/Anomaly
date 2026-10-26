@@ -1,5 +1,6 @@
 using Il2CppInteractables.Interobjects;
 using ElevatorDoorBase = Il2CppInteractables.Interobjects.ElevatorDoor;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -8,6 +9,7 @@ namespace Anomaly.Client.Api.Features;
 /// elevator chamber's entry/exit. Adds the chamber link and elevator group
 /// on top of the base <see cref="Door"/> surface.
 /// </summary>
+[ScriptType]
 public class ElevatorDoor : Door
 {
     internal ElevatorDoor(ElevatorDoorBase doorBase) : base(doorBase)

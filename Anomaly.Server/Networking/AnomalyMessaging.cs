@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using Anomaly.Shared.Networking;
+using Anomaly.Shared.Scripting;
 using GameCore;
 using Mirror;
 using Mirror.LiteNetLib4Mirror;
@@ -28,6 +29,7 @@ internal static class AnomalyMessaging
 
     internal static void RaiseClientReady(ReferenceHub hub)
     {
+        if (!ConnectionContentBootstrap.RequireComplete(hub?.connectionToClient)) return;
         foreach (Delegate subscriber in ClientReady?.GetInvocationList() ?? Array.Empty<Delegate>())
         {
             if (!Plugin.IsAuthenticatedAdmissionCurrent(hub))
@@ -88,6 +90,35 @@ internal static class AnomalyMessaging
         catch { return false; }
     }
 
+    internal static bool TrySendToConnection(NetworkConnectionToClient connection, IAnomalyMessage message)
+    {
+        if (!AuthenticatedTransportSessions.IsActiveConnection(connection) ||
+            !ContentBootstrapPolicy.IsServerMessage(message) ||
+            !AnomalyMessageRegistry.TryGetSendContract(message, AnomalyMessageDirection.ServerToClient,
+                out uint hash, out var channel, out var policy)) return false;
+        try
+        {
+            var data = BuildPayload(message, 0, hash, policy);
+            var replay = AuthenticatedTransportSessions.GetReplayState(connection);
+            if (data == null || replay == null) return false;
+            uint counter = replay.NextTxCounter(channel);
+            if (counter == 0 || counter == uint.MaxValue) return false;
+            BitConverter.GetBytes(counter).CopyTo(data, 1);
+            if (!AuthenticatedTransportSessions.TryEncryptToConnection(connection, data, out byte[] envelope)) return false;
+            var transport = LiteNetLib4MirrorTransport.Singleton;
+            if (transport == null || !TransportPacketPolicy.FitsReportedChannel(channel, envelope.Length,
+                transport.GetMaxPacketSize, out _)) return false;
+            connection.Send(new EncryptedChannelManager.EncryptedMessageOutside(
+                EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, envelope), (int)channel);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            SafeLogWarning("Authenticated connection bootstrap delivery failed: " + exception.GetType().Name);
+            return false;
+        }
+    }
+
     internal static bool TrySendToClient(ReferenceHub hub, IAnomalyMessage msg) =>
         TrySendToClientCore(hub, msg, optional: false);
 
@@ -124,6 +155,10 @@ internal static class AnomalyMessaging
             return false;
         }
 
+        bool scriptTraffic = msg is IScriptMessage;
+        if (scriptTraffic && !HasOptionalQueueCapacity(hub)) return false;
+        if (!ScriptMessageGate.TryBindOutgoing(hub, msg, out msg)) return false;
+
         if (!AnomalyMessageRegistry.TryGetSendContract(
                 msg, AnomalyMessageDirection.ServerToClient, out uint hash, out var channel, out var policy))
         {
@@ -143,6 +178,7 @@ internal static class AnomalyMessaging
             data.Length - TransportPacketPolicy.AnomalyEnvelopeBytes > optionalBudget.MaxPayloadBytes ||
             !HasOptionalQueueCapacity(hub)))
             return false;
+        if (!ScriptMessageGate.IsCurrent(hub, msg) || scriptTraffic && !HasOptionalQueueCapacity(hub)) return false;
         var state = AnomalyReplayTable.GetOrCreate(hub);
         uint counter = state.NextTxCounter(channel);
         if (counter == 0 || counter == uint.MaxValue)
@@ -236,7 +272,8 @@ internal static class AnomalyMessaging
             {
                 if (!IsAnomalyTarget(hub))
                     continue;
-                SendToClient(hub, msg);
+                if (msg is IScriptMessage) TrySendToClient(hub, msg);
+                else SendToClient(hub, msg);
             }
             catch (Exception exception)
             {
@@ -256,7 +293,8 @@ internal static class AnomalyMessaging
                     continue;
                 if (hub.connectionToClient == exclude)
                     continue;
-                SendToClient(hub, msg);
+                if (msg is IScriptMessage) TrySendToClient(hub, msg);
+                else SendToClient(hub, msg);
             }
             catch (Exception exception)
             {
@@ -459,17 +497,23 @@ internal static class AnomalyMessaging
             }
         }
 
+        if (!localTransport && ConnectionContentBootstrap.HandleMessage(sender.connectionToClient, message))
+            return;
+
+        if (!ScriptMessageGate.TryAcceptIncoming(sender, message)) return;
+
         foreach (Delegate subscriber in MessageReceived?.GetInvocationList() ?? Array.Empty<Delegate>())
         {
             if (!localTransport && !Plugin.IsAuthenticatedAdmissionCurrent(sender))
                 return;
+            if (!ScriptMessageGate.IsCurrent(sender, message)) return;
             try { ((Action<ReferenceHub, IAnomalyMessage>)subscriber)(sender, message); }
             catch (Exception ex)
             {
                 SafeLogError($"AnomalyMessaging.OnReceived: Isolated handler exception for '{message.MessageName}': {ex}");
             }
         }
-        if (Plugin.IsAuthenticatedAdmissionCurrent(sender))
+        if (Plugin.IsAuthenticatedAdmissionCurrent(sender) && ScriptMessageGate.IsCurrent(sender, message))
         {
             try { Anomaly.Server.Api.Events.Handlers.ClientEvents.OnMessageReceived(sender, message); }
             catch (Exception ex) { SafeLogError($"AnomalyMessaging.MessageReceived publication failed: {ex}"); }

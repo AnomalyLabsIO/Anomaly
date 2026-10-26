@@ -1,9 +1,11 @@
 using Il2CppInventorySystem.Items.Usables.Scp1344;
 using Scp1344ItemBase = Il2CppInventorySystem.Items.Usables.Scp1344.Scp1344Item;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>SCP-1344's observed state and local use controls.</summary>
+[ScriptType]
 public class Scp1344Item : UsableItem
 {
     internal Scp1344Item(Scp1344ItemBase scp1344Base) : base(scp1344Base)

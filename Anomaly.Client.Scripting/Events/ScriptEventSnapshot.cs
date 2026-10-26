@@ -16,6 +16,9 @@ internal sealed class ScriptEventSnapshotPlan
     internal const int MaxPayloadBytes = 16 * 1024;
     private readonly Type _type;
     private readonly string? _name;
+    private ScriptBindingRegistry? _bindings;
+    private bool _nullable;
+    private ScriptEnumRegistry? _enums;
     private SnapshotMember[] _members = Array.Empty<SnapshotMember>();
 
     private ScriptEventSnapshotPlan(Type type, string? name)
@@ -30,11 +33,23 @@ internal sealed class ScriptEventSnapshotPlan
     private static ScriptEventSnapshotPlan Build(Type type, ScriptBindingRegistry bindings,
         Dictionary<Type, ScriptEventSnapshotPlan> plans, int depth)
     {
+        if (Nullable.GetUnderlyingType(type) is { } underlying)
+        {
+            var nullablePlan = Build(underlying, bindings, plans, depth);
+            // Build a separate plan: nullable use must not change a required value's plan.
+            return new ScriptEventSnapshotPlan(nullablePlan._type, nullablePlan._name)
+            { _nullable = true, _enums = nullablePlan._enums, _bindings = nullablePlan._bindings, _members = nullablePlan._members };
+        }
         if (depth > 16) throw new InvalidOperationException("Event argument metadata exceeds its depth limit.");
         if (plans.TryGetValue(type, out var existing)) return existing;
+        if (type.IsEnum)
+        {
+            if (!bindings.Enums.Contains(type)) throw new InvalidOperationException("The event enum type is not approved.");
+            return new ScriptEventSnapshotPlan(type, null) { _enums = bindings.Enums };
+        }
         if (IsScalar(type)) return new ScriptEventSnapshotPlan(type, null);
         var policy = bindings.GetTypePolicy(type);
-        var plan = new ScriptEventSnapshotPlan(type, policy.Name);
+        var plan = new ScriptEventSnapshotPlan(type, policy.Name) { _bindings = bindings };
         plans.Add(type, plan);
         var members = new List<SnapshotMember>();
         foreach (var member in policy.Members.Values.OrderBy(value => value.Name, StringComparer.Ordinal))
@@ -48,20 +63,27 @@ internal sealed class ScriptEventSnapshotPlan
         return plan;
     }
 
-    internal object? Capture(object? value)
-        => Capture(value, new CaptureBudget(), new HashSet<object>(System.Collections.Generic.ReferenceEqualityComparer.Instance), 0);
+    internal object? Capture(object? value, object? allocationOwner = null)
+        => Capture(value, new CaptureBudget(), new HashSet<object>(System.Collections.Generic.ReferenceEqualityComparer.Instance),
+            0, allocationOwner ?? new object());
 
-    private object? Capture(object? value, CaptureBudget budget, HashSet<object> path, int depth)
+    private object? Capture(object? value, CaptureBudget budget, HashSet<object> path, int depth, object allocationOwner)
     {
         budget.AddNode();
         if (depth > MaxDepth) throw new InvalidOperationException("Event argument snapshot exceeds its depth limit.");
         if (value == null)
         {
-            if (_type.IsValueType) throw new InvalidOperationException("Event argument type does not match its declaration.");
+            if (_type.IsValueType && !_nullable) throw new InvalidOperationException("Event argument type does not match its declaration.");
             return null;
         }
-        if (value.GetType() != _type)
+        if (value.GetType() != _type && _bindings?.IsApprovedValue(value.GetType(), _type) != true)
             throw new InvalidOperationException("Polymorphic event arguments are not approved.");
+        if (_enums != null)
+        {
+            var text = _enums.Format(_type, value);
+            budget.AddBytes(Encoding.UTF8.GetByteCount(text));
+            return text;
+        }
         if (_type == typeof(string))
         {
             var text = (string)value;
@@ -86,11 +108,30 @@ internal sealed class ScriptEventSnapshotPlan
         try
         {
             var fields = new Dictionary<string, object?>(StringComparer.Ordinal);
+            // Removal hooks can run after native destruction. Preserve identity
+            // supplied by the event, but never dereference dead wrapper properties.
+            var destroyedMember = _members.FirstOrDefault(member => member.Name == "IsDestroyed" && member.Property.PropertyType == typeof(bool));
+            var destroyed = destroyedMember != null && Read(destroyedMember.Property, value) is true;
             foreach (var member in _members)
-                fields.Add(member.Name, member.Plan.Capture(member.Property.GetValue(value), budget, path, depth + 1));
-            return new ScriptFrozenEventValue(_name!, new ReadOnlyDictionary<string, object?>(fields));
+            {
+                if (destroyed && member != destroyedMember)
+                {
+                    budget.AddNode();
+                    fields.Add(member.Name, null);
+                    continue;
+                }
+                var memberValue = member == destroyedMember ? destroyed : Read(member.Property, value);
+                fields.Add(member.Name, member.Plan.Capture(memberValue, budget, path, depth + 1, allocationOwner));
+            }
+            return new ScriptFrozenEventValue(_name!, new ReadOnlyDictionary<string, object?>(fields), allocationOwner);
         }
         finally { path.Remove(value); }
+    }
+
+    private static object? Read(PropertyInfo property, object value)
+    {
+        try { return property.GetValue(value); }
+        catch (Exception exception) { ScriptHostException.RethrowFatal(exception); throw; }
     }
 
     private static bool IsScalar(Type type) => type == typeof(string) || type == typeof(bool) || IsNumeric(type);
@@ -117,10 +158,11 @@ internal sealed class ScriptEventSnapshotPlan
     }
 }
 
-internal sealed record ScriptFrozenEventValue(string Name, IReadOnlyDictionary<string, object?> Fields)
+internal sealed record ScriptFrozenEventValue(string Name, IReadOnlyDictionary<string, object?> Fields, object? AllocationOwner = null)
 {
     internal static DynValue ToScriptValue(Script owner, object? value)
     {
+        using var memoryScope = owner.MemoryBudget?.EnterScope();
         owner.ExecutionBudget?.Check();
         return value switch
         {
@@ -128,7 +170,7 @@ internal sealed record ScriptFrozenEventValue(string Name, IReadOnlyDictionary<s
             string text => DynValue.NewString(text),
             bool boolean => DynValue.NewBoolean(boolean),
             double number => DynValue.NewNumber(number),
-            ScriptFrozenEventValue frozen => UserData.Create(frozen, new Descriptor(owner, frozen)),
+            ScriptFrozenEventValue frozen => UserData.Create(frozen, MemoryBudget.Allocate(384, () => new Descriptor(owner, frozen))),
             _ => throw new ScriptRuntimeException("Invalid frozen event argument.")
         };
     }
@@ -137,7 +179,11 @@ internal sealed record ScriptFrozenEventValue(string Name, IReadOnlyDictionary<s
     {
         private readonly Script _owner;
         private readonly ScriptFrozenEventValue _value;
-        internal Descriptor(Script owner, ScriptFrozenEventValue value) { _owner = owner; _value = value; }
+        internal Descriptor(Script owner, ScriptFrozenEventValue value)
+        {
+            _owner = owner;
+            _value = value;
+        }
         public string Name => _value.Name;
         public Type Type => typeof(ScriptFrozenEventValue);
         public DynValue Index(Script script, object obj, DynValue index, bool isDirectIndexing)
@@ -151,12 +197,18 @@ internal sealed record ScriptFrozenEventValue(string Name, IReadOnlyDictionary<s
             Check(script, obj);
             throw new ScriptRuntimeException("Event argument snapshots are read-only.");
         }
-        public string AsString(object obj) { Check(_owner, obj); return "[event " + Name + "]"; }
+        public string AsString(object obj)
+        {
+            Check(_owner, obj);
+            using var memoryScope = _owner.MemoryBudget?.EnterScope();
+            return MemoryBudget.AllocateString(8L + Name.Length, () => "[event " + Name + "]");
+        }
         public DynValue MetaIndex(Script script, object obj, string metaname) { Check(script, obj); return null!; }
         public bool IsTypeCompatible(Type type, object obj) => false;
         private void Check(Script script, object obj)
         {
             script.ExecutionBudget?.Check();
+            script.MemoryBudget?.Check();
             if (!ReferenceEquals(script, _owner) || !ReferenceEquals(obj, _value))
                 throw new ScriptRuntimeException("The event snapshot belongs to another script.");
         }

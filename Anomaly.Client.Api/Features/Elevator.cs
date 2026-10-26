@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Il2CppInteractables.Interobjects;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -17,6 +18,7 @@ namespace Anomaly.Client.Api.Features;
 /// lazy creation via <see cref="Get"/> against
 /// <see cref="ElevatorChamber.AllChambers"/> for enumeration.
 /// </remarks>
+[ScriptType]
 public class Elevator
 {
     private static readonly Dictionary<ElevatorChamber, Elevator> _elevators = new();
@@ -29,6 +31,7 @@ public class Elevator
     /// <summary>The underlying <see cref="ElevatorChamber"/> NetworkBehaviour.</summary>
     public ElevatorChamber Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
 
     public static bool TryGet(ElevatorChamber value, out Elevator wrapper)
@@ -38,30 +41,39 @@ public class Elevator
     }
 
     /// <summary>True if the chamber is in <see cref="ElevatorChamber.ElevatorSequence.Ready"/> phase.</summary>
+    [ScriptVisible]
     public bool IsReady => Base != null && Base.IsReady;
 
     /// <summary>True if the chamber is ready to accept user input (e.g. a button press).</summary>
+    [ScriptVisible]
     public bool IsReadyForUserInput => Base != null && Base.IsReadyForUserInput;
 
     /// <summary>The level the chamber is currently moving to (or has stopped at).</summary>
+    [ScriptVisible]
     public int DestinationLevel => Base != null ? Base.DestinationLevel : 0;
 
     /// <summary>True if the chamber is currently traveling upward.</summary>
+    [ScriptVisible]
     public bool GoingUp => Base != null && Base.GoingUp;
 
     /// <summary>The level above the current one.</summary>
+    [ScriptVisible]
     public int NextLevel => Base != null ? Base.NextLevel : 0;
 
     /// <summary>The level below the current one.</summary>
+    [ScriptVisible]
     public int PreviousLevel => Base != null ? Base.PreviousLevel : 0;
 
     /// <summary>The current sequence state (Ready / Arrived / DoorOpening / Moving / DoorClosing).</summary>
+    [ScriptVisible]
     public ElevatorChamber.ElevatorSequence CurrentSequence => Base != null ? Base.CurSequence : ElevatorChamber.ElevatorSequence.Ready;
 
     /// <summary>Seconds elapsed in the current sequence phase.</summary>
+    [ScriptVisible]
     public float SequenceElapsed => Base != null ? Base.SequenceElapsed : 0f;
 
     /// <summary>The room containing the chamber, or null.</summary>
+    [ScriptVisible]
     public Room Room
     {
         get

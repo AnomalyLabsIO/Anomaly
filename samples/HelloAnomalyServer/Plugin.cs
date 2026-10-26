@@ -4,7 +4,9 @@ using Anomaly.Server.Api.Auth;
 using Anomaly.Server.Api.Events.Arguments;
 using Anomaly.Server.Api.Events.Handlers;
 using Anomaly.Server.Api.Networking;
+using Anomaly.Server.Api.Scripting;
 using Anomaly.Shared.Networking;
+using Anomaly.Shared.Networking.Messages;
 using HelloAnomaly.Protocol;
 using LabApi.Events.Arguments.PlayerEvents;
 using LabApi.Events.Handlers;
@@ -21,6 +23,7 @@ public sealed class Plugin : Plugin<Config>
 {
     private const string ItemKey = "example.server:medkit";
     private IDisposable _clientModRequirement;
+    private IDisposable _clientScripts;
     public override string Name => "Hello Anomaly Server";
     public override string Description => "Minimal server-owned custom item using native LabAPI events.";
     public override string Author => "AnomalyLabs";
@@ -44,6 +47,9 @@ public sealed class Plugin : Plugin<Config>
         MapEvents.LayoutFinalizing += OnLayoutFinalizing;
         if (Config.RequireClientCompanion)
             _clientModRequirement = ClientModRequirements.Register("example.hello", "0.1.0", "0.2.0");
+        if (Config.EnableClientScripts)
+            _clientScripts = ClientScripts.RegisterEmbedded("example:panel", typeof(Plugin).Assembly,
+                "HelloAnomalyServer.ClientScripts", "HelloAnomalyServer.ClientScripts.messages.json");
     }
 
     public override void Disable()
@@ -54,6 +60,8 @@ public sealed class Plugin : Plugin<Config>
         MapEvents.LayoutFinalizing -= OnLayoutFinalizing;
         _clientModRequirement?.Dispose();
         _clientModRequirement = null;
+        _clientScripts?.Dispose();
+        _clientScripts = null;
     }
 
     private void OnLayoutFinalizing(FacilityLayoutFinalizingEventArgs ev)
@@ -77,6 +85,12 @@ public sealed class Plugin : Plugin<Config>
 
     private static void OnMessageReceived(ClientMessageReceivedEventArgs ev)
     {
+        if (ev.Message is ScriptToServerMessage script && script.PackId == "example:panel" &&
+            script.Name == "State" && script.TryRead<StateReply>(out var state))
+        {
+            Logger.Info($"{ev.Player.Nickname}: script reply {state.RequestId}, enabled={state.Enabled}.");
+            return;
+        }
         if (ev.Message is not HelloRequest request) return;
         // Ordinary authenticated messaging works even when content was declined.
         bool activated = CustomItems.GetPlayerReadiness(ev.Player) == ContentReadiness.Activated;
@@ -86,9 +100,14 @@ public sealed class Plugin : Plugin<Config>
 
     private void OnContentReady(ClientEventArgs ev)
     {
+        if (Config.EnableClientScripts)
+            ClientMessaging.TrySend(ev.Player, ScriptToClientMessage.Create("example:panel", "GetState", new StateQuery { RequestId = 1 }));
         if (Config.GiveOnContentReady && CustomItems.TryGiveItem(ev.Player, ItemKey, out var item))
             Logger.Info($"Granted {ItemKey}, serial {item.Serial}, to {ev.Player.Nickname}.");
     }
+
+    public sealed class StateQuery { public uint RequestId { get; set; } }
+    public sealed class StateReply { public uint RequestId { get; set; } public bool Enabled { get; set; } }
 
     private static void OnUsedItem(PlayerUsedItemEventArgs ev)
     {
@@ -100,6 +119,7 @@ public sealed class Plugin : Plugin<Config>
 public sealed class Config
 {
     public bool RequireClientCompanion { get; set; } = false;
+    public bool EnableClientScripts { get; set; } = false;
     public bool GiveOnContentReady { get; set; } = true;
     public bool EnableFacilityExample { get; set; } = false;
     public RoomName FacilityExampleRoom { get; set; } = RoomName.LczArmory;

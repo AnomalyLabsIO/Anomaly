@@ -45,6 +45,7 @@ internal static class PlayerAuthenticationManagerPatch
         if (__instance.isLocalPlayer) return;
         if (__instance._authenticationRequested) return;
         if (!__instance.connectionToClient.isReady) return;
+        if (!ConnectionContentBootstrap.RequireComplete(__instance.connectionToClient)) return;
         if (__instance.connectionToClient is DummyNetworkConnection) return;
         if (__instance._hub != null && __instance._hub.IsDummy) return;
 
@@ -525,6 +526,14 @@ internal static class PlayerAuthenticationManagerPatch
     {
         if (!NetworkServer.active)
             return false;
+
+        if (conn is NetworkConnectionToClient connection &&
+            !ConnectionContentBootstrap.IsLocal(connection) &&
+            (!ReferenceHub.TryGetHub(conn, out _) || !ConnectionContentBootstrap.IsComplete(connection)))
+        {
+            ConnectionContentBootstrap.HandlePacked(connection, packed);
+            return false;
+        }
 
         if (!ReferenceHub.TryGetHub(conn, out var hub))
         {

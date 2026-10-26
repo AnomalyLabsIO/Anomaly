@@ -10,7 +10,7 @@ helpers live in `Anomaly.Shared.Networking`. Client and server companions
 reference that same assembly. The client and server `AnomalyMessaging` entry
 points are runtime-specific.
 
-The current application/auth protocol is `8`. Older protocol peers are rejected
+The current application/auth protocol is `12`. Older protocol peers are rejected
 clearly during authentication; there is no downgrade path. Optional player poses
 use a separately versioned renderer capability and do not change that protocol.
 
@@ -135,6 +135,22 @@ publishing any registry entry.
 
 ## Sending and receiving
 
+Script packs use the two built-in `ScriptToClientMessage` and
+`ScriptToServerMessage` carriers instead of a companion DLL's custom codec.
+Remote script execution remains disabled until memory containment is qualified;
+these transport contracts do not enable execution by themselves.
+Anomaly registers these through `RegisterDefaults`. Script-pack index schema 1 declares
+the exact named primitive records, already bound by the authenticated index hash.
+Server plugins continue to use `ClientMessaging.TrySend` and
+`ClientEvents.MessageReceived`; the runtime checks the recipient's retained pack
+grant and activation before sending or publishing a received record. Lua receives
+only its pack-bound `Messages.On` / `Off` / `Send` capability and bounded records.
+See the [server author guide](../../Anomaly.Server/MODDING.md) and
+[Lua messaging guide](../../Anomaly.Client.Scripting/MESSAGING-DESIGN.md).
+
+The custom DTO registration below remains the path for compiled client/server
+companions. All peers use the current protocol.
+
 ```csharp
 // Client to server
 Anomaly.Client.Api.Networking.AnomalyMessaging.Send(
@@ -235,11 +251,10 @@ HalfHelper.WriteHalf(writer, weight);
 float weight = HalfHelper.ReadHalf(reader);
 ```
 
-Custom networking is an authenticated, bounded transport for a vetted companion
-protocol. It is not a generic remote-spawn or remote-code mechanism. Public-v1
-server content uses the built-in items-only catalog and PNG/OGG transfer flow;
-it does not use custom messages to ship AssetBundles, custom roles/effects,
-models, weights, or prefab hierarchies.
+Custom networking carries authenticated, bounded application records. Content
+delivery uses its dedicated catalog, consent, manifest and transfer flow.
+Script packs declare bounded scalar messages in their generated indexes; their
+Lua code runs only within the connection's approved sandbox capabilities.
 
 ## Project setup
 
@@ -248,4 +263,9 @@ enumerate source files explicitly. `Anomaly.Client` also disables default
 compile items. Add new `.cs` files to each affected project. The SDK-style
 `Anomaly.Client.Api` project uses default compile inclusion.
 
-Protocol 6 replaces raw media manifests with completed bundle/index file pairs, binds both hashes into content consent, and adds generation/revision-qualified decorative snapshots and updates. Typed AssetAddress values replace per-media hashes. Asset-dependent state requires the exact Activated acknowledgement after validation and native publication. See [ASSETBUNDLES.md](../../ASSETBUNDLES.md).
+The authenticated catalog binds data-only AssetBundle/index pairs and independent
+script-pack indexes/source files. Asset-dependent state requires the exact
+Activated acknowledgement after validation and native publication; scripts also
+require execution consent and successful initialization before ClientReady.
+See [AssetBundles](../../ASSETBUNDLES.md) and
+[script packs](../../Anomaly.Client.Scripting/SCRIPT-PACKS.md).

@@ -277,8 +277,11 @@ namespace Anomaly.Shared.Networking
             RegisterBuiltIn("anomaly:combat-pose:sample", () => new PlayerCombatPoseSampleMessage());
 
             RegisterBuiltIn("anomaly:content:catalog", () => new ContentCatalogMessage());
+            RegisterBuiltIn("anomaly:content:bootstrapready", () => new ContentBootstrapReadyMessage());
             RegisterBuiltIn("anomaly:content:decision", () => new ContentCatalogDecisionMessage());
             RegisterBuiltIn("anomaly:content:catalogack", () => new ContentCatalogAckMessage());
+            RegisterBuiltIn("anomaly:script:client", () => new ScriptToClientMessage());
+            RegisterBuiltIn("anomaly:script:server", () => new ScriptToServerMessage());
             RegisterBuiltIn("anomaly:identity:enrollment", () => new EnrollmentIdentityMessage());
 
             RegisterBuiltIn("anomaly:capability:challenge", () => new CapabilityChallengeMessage());

@@ -1,9 +1,11 @@
 ﻿using System.Collections.ObjectModel;
 using Il2CppAdminToys;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class AdminToy
 {
     private static readonly Dictionary<AdminToyBase, AdminToy> _toys = new();
@@ -15,6 +17,7 @@ public class AdminToy
 
     public AdminToyBase Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
 
     public T As<T>() where T : AdminToy => this as T;
@@ -26,6 +29,7 @@ public class AdminToy
         return toy != null;
     }
 
+    [ScriptVisible]
     public string CommandName => Base.CommandName;
 
     public Vector3 Position => Base.Position;
@@ -34,8 +38,10 @@ public class AdminToy
 
     public Vector3 Scale => Base.Scale;
 
+    [ScriptVisible]
     public byte MovementSmoothing => Base.MovementSmoothing;
 
+    [ScriptVisible]
     public bool IsStatic => Base.IsStatic;
 
     public GameObject GameObject => Base.gameObject;

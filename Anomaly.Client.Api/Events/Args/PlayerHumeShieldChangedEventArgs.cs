@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Args;
 
@@ -9,6 +10,7 @@ namespace Anomaly.Client.Api.Events.Args;
 /// is true on the tick where the shield drops to zero from a non-zero value
 /// (mirrors LabAPI's server-side <c>HumeShieldBroken</c> event).
 /// </summary>
+[ScriptType]
 public class PlayerHumeShieldChangedEventArgs : PlayerEventArgs
 {
     public PlayerHumeShieldChangedEventArgs(Player player, float previous, float current) : base(player)
@@ -17,12 +19,16 @@ public class PlayerHumeShieldChangedEventArgs : PlayerEventArgs
         Current = current;
     }
 
+    [ScriptVisible]
     public float Previous { get; }
 
+    [ScriptVisible]
     public float Current { get; }
 
+    [ScriptVisible]
     public float Delta => Current - Previous;
 
     /// <summary>True if the shield broke (dropped to zero) on this tick.</summary>
+    [ScriptVisible]
     public bool Broke => Previous > 0f && Current <= 0f;
 }

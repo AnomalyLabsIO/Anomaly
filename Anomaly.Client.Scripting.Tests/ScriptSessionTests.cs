@@ -6,14 +6,14 @@ namespace Anomaly.Client.Scripting.Tests;
 public sealed class ScriptSessionTests
 {
     [Fact]
-    public void RemoteGateRejectsBeforeSourceOrOptionProcessing()
+    public void Unverified_remote_source_is_rejected_before_source_or_option_processing()
     {
         using var runtime = new ScriptRuntime();
         Assert.False(ScriptingPolicy.MemoryHardeningQualified);
         Assert.False(ScriptingPolicy.RemoteExecutionEnabled);
         var invalidOptions = new ScriptExecutionOptions { InstructionLimit = -1 };
         var exception = Assert.Throws<NotSupportedException>(() => runtime.CreateRemoteSession(null, invalidOptions));
-        Assert.Contains("memory", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("approved", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Throws<NotSupportedException>(() => runtime.CreateRemoteSession("return 1"));
     }
 

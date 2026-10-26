@@ -99,6 +99,26 @@ public sealed class ProtectedMethodCatalogTests
         Assert.Equal(ProtectionScope.External, ProtectedMethodCatalog.Classify(target));
     }
 
+    [Theory]
+    [InlineData("Anomaly.Client.Scripting", "Anomaly.Client.Scripting.Bindings.ScriptBindingRegistry", "AutoDiscoverScriptTypes")]
+    [InlineData("Anomaly.MoonSharp.Interpreter", "MoonSharp.Interpreter.Script", "RegisterBindings")]
+    public void ScriptRegistrationMethodsRemainProtectedCoreWithoutPatchExemptions(string assemblyName, string typeName, string methodName)
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(assemblyName), AssemblyBuilderAccess.Run);
+        var type = assembly.DefineDynamicModule("scripting-catalog-fixture")
+            .DefineType(typeName, System.Reflection.TypeAttributes.Public);
+        var method = type.DefineMethod(methodName, System.Reflection.MethodAttributes.Public | System.Reflection.MethodAttributes.Static,
+            typeof(void), Type.EmptyTypes);
+        method.GetILGenerator().Emit(OpCodes.Ret);
+        MethodInfo registration = type.CreateType()!.GetMethod(methodName)!;
+
+        // Registration calls are ordinary managed work, not permission to patch
+        // the host or interpreter. All new registration methods inherit core
+        // protection from their assembly without a per-member catalog entry.
+        Assert.Equal(ProtectionScope.Core, ProtectedMethodCatalog.Classify(registration));
+        Assert.False(ProtectedMethodCatalog.IsTrustedPatch(registration, registration, HarmonyLib.HarmonyPatchType.Prefix));
+    }
+
     [Fact]
     public void ResolverRequiresExactOverloadsAndDoesNotFallBackToName()
     {

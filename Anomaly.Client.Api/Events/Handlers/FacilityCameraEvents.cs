@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Handlers;
 
@@ -10,9 +11,11 @@ namespace Anomaly.Client.Api.Events.Handlers;
 public static class FacilityCameraEvents
 {
     /// <summary>Fires when a CCTV camera is created (typically at scene load).</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<FacilityCameraEventArgs> Created;
 
     /// <summary>Fires when a CCTV camera is destroyed.</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<FacilityCameraEventArgs> Removed;
 
     /// <summary>
@@ -20,6 +23,7 @@ public static class FacilityCameraEvents
     /// switches the active camera). Use <see cref="Anomaly.Client.Api.Features.FacilityCamera.IsActive"/> to
     /// observe the new state.
     /// </summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<FacilityCameraEventArgs> StateChanged;
 
     /// <summary>
@@ -27,6 +31,7 @@ public static class FacilityCameraEvents
     /// command, before <c>Scp079CurrentCameraSync.ClientSendCmd</c> runs.
     /// Cancellable.
     /// </summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<Scp079SwitchingCameraEventArgs> Scp079Switching;
 
     internal static void OnCreated(FacilityCameraEventArgs args) => EventInvoker.Invoke(Created, args);

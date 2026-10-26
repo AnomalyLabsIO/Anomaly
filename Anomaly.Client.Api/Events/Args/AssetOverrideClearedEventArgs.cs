@@ -1,5 +1,8 @@
+using Anomaly.Client.Api.Scripting;
+
 namespace Anomaly.Client.Api.Events.Args;
 
+[ScriptType]
 public class AssetOverrideClearedEventArgs : EventArgs
 {
     public AssetOverrideClearedEventArgs(uint netId, string componentPath, int materialIndex)
@@ -9,7 +12,10 @@ public class AssetOverrideClearedEventArgs : EventArgs
         MaterialIndex = materialIndex;
     }
 
+    [ScriptVisible]
     public uint NetId { get; }
+    [ScriptVisible]
     public string ComponentPath { get; }
+    [ScriptVisible]
     public int MaterialIndex { get; }
 }

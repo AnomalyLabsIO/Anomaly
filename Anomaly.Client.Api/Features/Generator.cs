@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Il2CppMapGeneration.Distributors;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -18,6 +19,7 @@ namespace Anomaly.Client.Api.Features;
 /// on first access, <see cref="List"/> walks the scene's
 /// <c>FindObjectsOfType&lt;Scp079Generator&gt;</c>.
 /// </remarks>
+[ScriptType]
 public class Generator
 {
     private static readonly Dictionary<Scp079Generator, Generator> _generators = new();
@@ -30,31 +32,40 @@ public class Generator
     /// <summary>The underlying <see cref="Scp079Generator"/> NetworkBehaviour.</summary>
     public Scp079Generator Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
     public Transform Transform => IsDestroyed ? null : Base.transform;
 
     /// <summary>True if the door panel is open (lever / interior accessible).</summary>
+    [ScriptVisible]
     public bool IsOpen => Base.IsOpen;
 
     /// <summary>True if the unlock cooldown has elapsed and the generator can be engaged.</summary>
+    [ScriptVisible]
     public bool IsUnlocked => Base.IsUnlocked;
 
     /// <summary>True once the generator has finished its activation sequence.</summary>
+    [ScriptVisible]
     public bool IsEngaged => HasFlag(Base, Scp079Generator.GeneratorFlags.Engaged);
 
     /// <summary>True while the generator is in its activation countdown phase (lever pulled, not yet engaged).</summary>
+    [ScriptVisible]
     public bool IsActivating => HasFlag(Base, Scp079Generator.GeneratorFlags.Activating);
 
     /// <summary>True if the generator's activation cooldown is satisfied (matches game's <c>ActivationReady</c>).</summary>
+    [ScriptVisible]
     public bool IsActivationReady => Base.ActivationReady;
 
     /// <summary>Total seconds the activation sequence takes from lever-pull to engaged.</summary>
+    [ScriptVisible]
     public float TotalActivationTime => Base.TotalActivationTime;
 
     /// <summary>Total seconds the deactivation sequence takes.</summary>
+    [ScriptVisible]
     public float TotalDeactivationTime => Base.TotalDeactivationTime;
 
     /// <summary>The <see cref="Room"/> containing this generator, or null if the generator isn't placed in any tracked room.</summary>
+    [ScriptVisible]
     public Room Room
     {
         get

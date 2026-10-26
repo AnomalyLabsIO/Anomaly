@@ -1,9 +1,11 @@
 using Il2CppAdminToys;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>Read-only wrapper for client-observed Scp079CameraToy state.</summary>
+[ScriptType]
 public class CameraAdminToy : AdminToy
 {
     internal CameraAdminToy(Scp079CameraToy toy) : base(toy) => CameraBase = toy;

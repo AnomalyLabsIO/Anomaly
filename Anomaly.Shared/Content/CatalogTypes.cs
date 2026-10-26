@@ -5,7 +5,7 @@ using System.Text;
 namespace Anomaly.Shared.Content
 {
     /// <summary>
-    /// Strict wire helpers for the items-only content catalog. All text is
+    /// Strict wire helpers for the authenticated content catalog. All text is
     /// length-prefixed UTF-8 and all hashes are fixed-width SHA-256 values.
     /// </summary>
     internal static class CatalogIo
@@ -117,13 +117,13 @@ namespace Anomaly.Shared.Content
     }
 
     /// <summary>
-    /// Canonical items-only catalog offered by an authenticated server. The
+    /// Canonical content catalog offered by an authenticated server. The
     /// server identity is authenticated out-of-band and is intentionally not
     /// duplicated in this payload.
     /// </summary>
     public sealed class ContentCatalog
     {
-        public const byte CurrentSchemaVersion = 2;
+        public const byte CurrentSchemaVersion = 4;
         public const int Sha256Bytes = 32;
 
         public byte SchemaVersion = CurrentSchemaVersion;
@@ -131,6 +131,7 @@ namespace Anomaly.Shared.Content
         public byte[] ManifestSha256 = new byte[Sha256Bytes];
         public List<CatalogEntry> Entries = new List<CatalogEntry>();
         public List<CatalogPack> Packs = new List<CatalogPack>();
+        public List<CatalogScriptPack> ScriptPacks = new List<CatalogScriptPack>();
     }
 
     /// <summary>Both files are bound into the authenticated catalog and transfer manifest.</summary>
@@ -146,6 +147,7 @@ namespace Anomaly.Shared.Content
             CatalogIo.WriteStr(writer, PackId);
             CatalogIo.WriteRequiredHash(writer, IndexHash); writer.Write(IndexSize);
             CatalogIo.WriteRequiredHash(writer, BundleHash); writer.Write(BundleSize);
+
         }
         public static CatalogPack ReadFrom(BinaryReader reader) => new CatalogPack
         {

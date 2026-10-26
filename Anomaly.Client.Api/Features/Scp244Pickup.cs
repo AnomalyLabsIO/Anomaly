@@ -1,8 +1,10 @@
 using Il2CppInventorySystem.Items.Usables.Scp244;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>A deployed SCP-244 pickup and its replicated fog state.</summary>
+[ScriptType]
 public class Scp244Pickup : Pickup
 {
     internal Scp244Pickup(Scp244DeployablePickup scp244Base) : base(scp244Base)

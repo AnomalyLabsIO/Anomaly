@@ -14,6 +14,7 @@ dependencies; release engineering must archive those assets with each build.
 | Lib.Harmony | 2.2.2 (assembly 2.2.2.0) | Server patching; packaged server `0Harmony.dll` | MIT | https://github.com/pardeike/Harmony |
 | Newtonsoft.Json | 13.0.4 | Client/API serialization; provided by MelonLoader 0.7.3 | MIT | https://github.com/JamesNK/Newtonsoft.Json |
 | AssetsTools.NET | 3.0.4 | Client bounded AssetBundle metadata inspection; core parser only | MIT | https://github.com/nesrak1/AssetsTools.NET |
+| MoonSharp (Anomaly fork) | `3.0.0-anomaly.4`, upstream `fbd03678d5c0f731d731d099211c7f4a3a1ae8b7` | Client scripting support; privately named `Anomaly.MoonSharp.Interpreter.dll`, built for .NET 6 | BSD-3-Clause, including upstream KopiLua attribution | https://github.com/moonsharp-devs/moonsharp |
 | NVorbis | 0.10.5 | Developer asset-catalog tool only; not shipped in the client | MIT | https://github.com/NVorbis/NVorbis |
 | YamlDotNet | 11.0.1 | Client localization | MIT | https://github.com/aaubry/YamlDotNet |
 | Bouncy Castle C# | assembly 2.0.0.0 from the SCP:SL 14.2.7 reference input | Packaged client runtime and SDK compile closure; server uses the game-provided Managed copy | Bouncy Castle license (MIT-style) | https://www.bouncycastle.org/csharp/ |
@@ -34,8 +35,18 @@ covered by the accompanying `LICENSE` and `NOTICE` files.
 |---|---|---|
 | Client | `UserLibs/BouncyCastle.Cryptography.dll` | Bouncy Castle C# |
 | Client | `UserLibs/AssetsTools.NET.dll` | AssetsTools.NET; full notice in `licenses/AssetsTools.NET.md` |
+| Client | `UserLibs/Anomaly.MoonSharp.Interpreter.dll` | MoonSharp Anomaly fork; license in `licenses/MoonSharp.LICENSE`, source/modification provenance in `licenses/MoonSharp.md` |
 | Client | `UserLibs/YamlDotNet.dll` | YamlDotNet |
 | Server | `dependencies/global/0Harmony.dll` | Lib.Harmony |
+
+The MoonSharp fork retains its upstream `MoonSharp.Interpreter` namespaces but
+uses a private assembly identity to avoid binding to another mod's unmodified
+MoonSharp DLL. The local source tree in `third_party/MoonSharp/` is ignored.
+Pinned restore inputs and the reviewable patch live in `tools/MoonSharpHardening/`.
+CPU controls and experimental reclaimable allocation quotas do not qualify
+per-script memory containment. Verified bundle source can execute experimentally after
+separate approval; memory qualification remains false. No remote debugger is
+redistributed with this interpreter.
 
 The SCP: Secret Laboratory game assemblies, Unity runtime, and generated
 IL2CPP interop assemblies are external build/runtime inputs and are not

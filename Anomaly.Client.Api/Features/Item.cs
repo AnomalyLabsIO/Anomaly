@@ -5,9 +5,11 @@ using Il2Cpp;
 using Il2CppInventorySystem;
 using Il2CppInventorySystem.Items;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class Item
 {
     private static readonly Dictionary<ItemBase, Item> _items = new();
@@ -37,6 +39,7 @@ public class Item
 
     public ItemBase Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
 
     public ItemIdentifier Identifier => Base.ItemId;
@@ -45,18 +48,21 @@ public class Item
 
     public string TypeName => Base.ItemTypeId.ToString();
 
+    [ScriptVisible]
     public ItemType Type => Base.ItemTypeId;
 
     public byte CategoryId => (byte)Base.Category;
 
     public string CategoryName => Base.Category.ToString();
 
+    [ScriptVisible]
     public ItemCategory Category => Base.Category;
 
     public byte TierFlagsValue => (byte)Base.TierFlags;
 
     public string TierFlagsName => Base.TierFlags.ToString();
 
+    [ScriptVisible]
     public ushort Serial => Base.ItemSerial;
 
     public Player Owner => Player.Get(Base.Owner);
@@ -64,18 +70,24 @@ public class Item
     /// <summary>The current owner, or null if the item has been destroyed.</summary>
     public Player CurrentOwner => IsDestroyed ? null : Owner;
 
+    [ScriptVisible]
     public bool IsEquipped => Base.IsEquipped;
 
+    [ScriptVisible]
     public bool IsLocalPlayerItem => Base.IsLocalPlayer;
 
     public bool IsDummyItem => Base.IsDummy;
 
+    [ScriptVisible]
     public bool CanEquip => Base.AllowEquip;
 
+    [ScriptVisible]
     public bool CanHolster => Base.AllowHolster;
 
+    [ScriptVisible]
     public bool CanDrop => Base.AllowDropping;
 
+    [ScriptVisible]
     public float Weight => Base.Weight;
 
     public Texture Icon => Base.Icon;

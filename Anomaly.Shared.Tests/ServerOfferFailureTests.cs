@@ -50,9 +50,7 @@ public sealed class ServerOfferFailureTests : IDisposable
             using (var snapshot = ServerAssetManager.AcquireSnapshot())
             {
                 int references = SnapshotReferences(snapshot);
-                FileTransferSession.StartForPlayer(hub,
-                    (digest, captured) => ContentCatalogBridge.OfferForPlayer(hub, digest, captured));
-                MEC.Timing.RunPendingStarts();
+                ServerBootstrapFixture.Start(hub);
 
                 Assert.Equal(1, Anomaly.Server.Plugin.QuarantineCount);
                 Assert.Same(hub, Anomaly.Server.Plugin.LastQuarantinedHub);
@@ -65,7 +63,6 @@ public sealed class ServerOfferFailureTests : IDisposable
                 Assert.Empty(ServerMessaging.Sent.OfType<FileManifestMessage>());
                 Assert.Empty(State("ActiveSessions"));
                 Assert.Empty(State("ApprovedManifests"));
-                Assert.Empty(State("PendingStarts"));
                 Assert.Equal(references, SnapshotReferences(snapshot));
                 FileTransferSession.CleanupPlayer(hub);
                 Assert.Equal(1, Anomaly.Server.Plugin.QuarantineCount);

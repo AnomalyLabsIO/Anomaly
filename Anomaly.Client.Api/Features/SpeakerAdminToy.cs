@@ -1,7 +1,9 @@
 ﻿using Il2CppAdminToys;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class SpeakerAdminToy : AdminToy
 {
     internal SpeakerAdminToy(SpeakerToy toyBase) : base(toyBase)

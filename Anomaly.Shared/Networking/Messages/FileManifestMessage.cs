@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Anomaly.Shared.Assets;
+using Anomaly.Shared.Scripting;
 
 namespace Anomaly.Shared.Networking.Messages
 {
@@ -54,7 +55,7 @@ namespace Anomaly.Shared.Networking.Messages
                 if (!hashes.Add(BitConverter.ToString(file.Hash)))
                     throw new InvalidDataException("Manifest contained a duplicate content hash.");
                 ValidateKind(file.Kind);
-                ValidateKindPath(file.Kind, file.Path);
+                ValidateKindPath(file.Kind, file.Path, file.Hash, file.Size);
                 writer.Write((byte)pathBytes.Length);
                 writer.Write(pathBytes);
                 writer.Write(file.Hash);
@@ -102,7 +103,7 @@ namespace Anomaly.Shared.Networking.Messages
                     throw new InvalidDataException($"Manifest aggregate size exceeded {MaxAggregateBytes} bytes.");
                 FileContentKind kind = (FileContentKind)reader.ReadByte();
                 ValidateKind(kind);
-                ValidateKindPath(kind, path);
+                ValidateKindPath(kind, path, hash, size);
                 Files.Add(new FileEntry(path, hash, size, kind));
             }
             if (!HashesEqual(ManifestSha256, ComputeManifestSha256(Files)))
@@ -133,11 +134,11 @@ namespace Anomaly.Shared.Networking.Messages
 
         private static void ValidateKind(FileContentKind kind)
         {
-            if (kind != FileContentKind.Bundle && kind != FileContentKind.PackIndex)
+            if (kind != FileContentKind.Bundle && kind != FileContentKind.PackIndex && kind != FileContentKind.ScriptIndex && kind != FileContentKind.LuaSource)
                 throw new InvalidDataException("Manifest contained an unsupported asset kind.");
         }
 
-        private static void ValidateKindPath(FileContentKind kind, string path)
+        private static void ValidateKindPath(FileContentKind kind, string path, byte[] hash, uint size)
         {
             string extension = Path.GetExtension(path);
             if (kind == FileContentKind.Bundle &&
@@ -146,6 +147,15 @@ namespace Anomaly.Shared.Networking.Messages
             if (kind == FileContentKind.PackIndex &&
                 !string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Pack indexes must use JSON.");
+            if (kind == FileContentKind.ScriptIndex || kind == FileContentKind.LuaSource)
+            {
+                if (hash == null || hash.Length != 32 || size == 0 || size > ScriptPackLimits.MaxScriptBytesPerFile)
+                    throw new InvalidDataException("Script transfer size or hash is invalid.");
+                string suffix = kind == FileContentKind.ScriptIndex ? ".scripts.json" : ".lua";
+                string canonicalName = BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant() + suffix;
+                if (path.IndexOf('\\') >= 0 || Path.GetFileName(path) != canonicalName)
+                    throw new InvalidDataException("Script transfer paths require their canonical content-hash filename.");
+            }
         }
 
         public static byte[] ComputeManifestSha256(IEnumerable<FileEntry> files)
@@ -157,7 +167,7 @@ namespace Anomaly.Shared.Networking.Messages
             using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
             using (var sha256 = SHA256.Create())
             {
-                writer.Write(Encoding.ASCII.GetBytes("ANOMALY-FILE-MANIFEST-V2"));
+                writer.Write(Encoding.ASCII.GetBytes("ANOMALY-FILE-MANIFEST-V3"));
                 var ordered = files.OrderBy(file => file.Path, StringComparer.Ordinal)
                     .ThenBy(file => BitConverter.ToString(file.Hash ?? Array.Empty<byte>()), StringComparer.Ordinal)
                     .ToList();
@@ -166,7 +176,7 @@ namespace Anomaly.Shared.Networking.Messages
                 {
                     ValidateRelativePath(file.Path);
                     ValidateKind(file.Kind);
-                    ValidateKindPath(file.Kind, file.Path);
+                    ValidateKindPath(file.Kind, file.Path, file.Hash, file.Size);
                     byte[] path = Utf8.GetBytes(file.Path);
                     if (path.Length == 0 || path.Length > MaxPathBytes ||
                         file.Hash == null || file.Hash.Length != 32 ||

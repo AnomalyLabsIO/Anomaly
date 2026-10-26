@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>Anomaly.MoonSharp.Interpreter</AssemblyName>
+    <RootNamespace>MoonSharp.Interpreter</RootNamespace>
+    <Version>3.0.0-anomaly.4</Version>
+    <AssemblyVersion>3.0.0.0</AssemblyVersion>
+    <InformationalVersion>3.0.0-anomaly.4+upstream.fbd03678d5c0f731d731d099211c7f4a3a1ae8b7</InformationalVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <DefineConstants>$(DefineConstants);DOTNET_CORE;HASDYNAMIC</DefineConstants>
+    <SignAssembly>false</SignAssembly>
+    <IsPackable>false</IsPackable>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <!-- Retain upstream's unused catch variable in DispatchingUserDataDescriptor.cs;
+         suppress its CS0168 only within this vendored project. -->
+    <NoWarn>$(NoWarn);1591;3021;0168</NoWarn>
+    <PackageLicenseExpression>BSD-3-Clause</PackageLicenseExpression>
+    <Authors>MoonSharp contributors; AnomalyLabs contributors</Authors>
+    <Copyright>Copyright MoonSharp contributors; Anomaly modifications 2026</Copyright>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+    <None Include="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

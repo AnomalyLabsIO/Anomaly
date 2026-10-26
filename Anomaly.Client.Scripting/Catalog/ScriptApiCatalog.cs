@@ -6,11 +6,15 @@ namespace Anomaly.Client.Scripting.Catalog;
 /// <summary>Immutable approved schema shared by descriptor policy, baseline and tooling exports.</summary>
 internal sealed class ScriptApiCatalog
 {
-    internal ScriptApiCatalog(IEnumerable<ScriptTypeCatalog> types, IEnumerable<ScriptEventCatalogEntry>? events = null)
+    internal ScriptApiCatalog(IEnumerable<ScriptTypeCatalog> types, IEnumerable<ScriptEventCatalogEntry>? events = null,
+        bool hasMessagesGlobal = false, IEnumerable<ScriptEnumCatalog>? enums = null)
     {
+        HasMessagesGlobal = hasMessagesGlobal;
         Types = Array.AsReadOnly(types.OrderBy(type => type.Name, StringComparer.Ordinal).ToArray());
         Events = Array.AsReadOnly((events ?? Array.Empty<ScriptEventCatalogEntry>())
             .OrderBy(value => value.Category, StringComparer.Ordinal).ThenBy(value => value.Name, StringComparer.Ordinal).ToArray());
+        Enums = Array.AsReadOnly((enums ?? Array.Empty<ScriptEnumCatalog>())
+            .OrderBy(value => value.ClrType, StringComparer.Ordinal).ToArray());
         foreach (var type in Types)
         {
             ScriptNameRules.ValidateIdentifier(type.Name);
@@ -21,6 +25,28 @@ internal sealed class ScriptApiCatalog
             ScriptNameRules.ValidateIdentifier(entry.Category);
             ScriptNameRules.ValidateIdentifier(entry.Name);
         }
+        var enumKeys = new Dictionary<string, ScriptEnumCatalog>(StringComparer.Ordinal);
+        var enumGlobals = new HashSet<string>(StringComparer.Ordinal) { "Enums", "Events", "Messages", "Game" };
+        foreach (var entry in Enums)
+        {
+            if (string.IsNullOrEmpty(entry.ClrType) || !enumKeys.TryAdd(entry.ClrType, entry))
+                throw new InvalidOperationException("Catalog enum identities must be unique and nonempty.");
+            if (entry.Alias != null)
+            {
+                ScriptNameRules.ValidateIdentifier(entry.Alias);
+                if (enumKeys.TryGetValue(entry.Alias, out var existing) && !ReferenceEquals(existing, entry))
+                    throw new InvalidOperationException("Catalog enum aliases must be unique.");
+                enumKeys[entry.Alias] = entry;
+            }
+            if (entry.GlobalName != null)
+            {
+                ScriptNameRules.ValidateIdentifier(entry.GlobalName);
+                if (!enumGlobals.Add(entry.GlobalName))
+                    throw new InvalidOperationException("Catalog enum globals must be unique and non-reserved.");
+            }
+            if (entry.Members.GroupBy(value => value.Name, StringComparer.Ordinal).Any(group => group.Count() > 1))
+                throw new InvalidOperationException("Catalog enum member names must be unique.");
+        }
         if (Types.GroupBy(value => value.Name, StringComparer.Ordinal).Any(group => group.Count() > 1) ||
             Events.GroupBy(value => value.Path, StringComparer.Ordinal).Any(group => group.Count() > 1))
             throw new InvalidOperationException("Catalog names must be unique.");
@@ -28,9 +54,13 @@ internal sealed class ScriptApiCatalog
 
     public IReadOnlyList<ScriptTypeCatalog> Types { get; }
     public IReadOnlyList<ScriptEventCatalogEntry> Events { get; }
+    public IReadOnlyList<ScriptEnumCatalog> Enums { get; }
     public bool HasEventsGlobal => Events.Count != 0;
+    public bool HasMessagesGlobal { get; }
+    public bool HasGameGlobal => Types.Any(type => type.ClrType == typeof(Bindings.ScriptGameContext).FullName);
 
-    internal ScriptApiCatalog WithEvents(IEnumerable<ScriptEventCatalogEntry> events) => new(Types, events);
+    internal ScriptApiCatalog WithEvents(IEnumerable<ScriptEventCatalogEntry> events) => new(Types, events, HasMessagesGlobal, Enums);
+    internal ScriptApiCatalog WithMessages() => new(Types, Events, hasMessagesGlobal: true, enums: Enums);
 
     internal string DescribeSurface()
     {
@@ -46,6 +76,16 @@ internal sealed class ScriptApiCatalog
                     lines.Add($"  method {member.Name}({string.Join(",", member.Parameters.Select(value => value.ClrType))}): {member.ReturnType}");
             }
         }
+        if (HasGameGlobal) lines.Add("global Game: GameContext");
+        if (Enums.Count != 0) lines.Add("global Enums: readonly-enum-registry");
+        foreach (var entry in Enums)
+        {
+            lines.Add($"enum {EnumPath(entry)} -> {entry.ClrType} string{(entry.IsFlags ? " flags" : "")} case-insensitive-input");
+            if (entry.Alias != null && entry.Alias != entry.ClrType) lines.Add($"  alias Enums.{entry.Alias}");
+            if (entry.GlobalName != null) lines.Add($"  global {entry.GlobalName}: readonly-enum-constants");
+            foreach (var member in entry.Members)
+                lines.Add($"  constant {LuaString(member.Name)}: {LuaString(member.Value)} = {member.NumericValue}");
+        }
         if (HasEventsGlobal) lines.Add("global Events: event-registry");
         foreach (var entry in Events)
         {
@@ -53,15 +93,29 @@ internal sealed class ScriptApiCatalog
             lines.Add("  method Add(callback:function): System.String");
             lines.Add("  method Remove(callbackOrToken:function|string): System.Boolean");
         }
+        if (HasMessagesGlobal)
+        {
+            lines.Add("global Messages: pack-message-registry");
+            lines.Add("  method On(name:string,callback:function): System.String");
+            lines.Add("  method Off(subscriptionToken:string): System.Boolean");
+            lines.Add("  method Send(name:string,payload:record): boolean,string|nil");
+        }
         return string.Join("\n", lines) + (lines.Count == 0 ? "" : "\n");
     }
 
     internal string ToJson(IReadOnlyDictionary<string, string>? documentation = null)
     {
+        var globals = new List<object>();
+        if (HasGameGlobal) globals.Add(new { name = "Game", kind = "GameContext" });
+        if (HasEventsGlobal) globals.Add(new { name = "Events", kind = "event-registry" });
+        if (HasMessagesGlobal) globals.Add(new { name = "Messages", kind = "pack-message-registry" });
+        if (Enums.Count != 0) globals.Add(new { name = "Enums", kind = "readonly-enum-registry" });
+        foreach (var entry in Enums.Where(value => value.GlobalName != null))
+            globals.Add(new { name = entry.GlobalName, kind = "readonly-enum-constants", clrType = entry.ClrType });
         var manifest = new
         {
             schemaVersion = 1,
-            globals = HasEventsGlobal ? new[] { new { name = "Events", kind = "event-registry" } } : Array.Empty<object>(),
+            globals,
             types = Types.Select(type => new
             {
                 name = type.Name, clrType = type.ClrType, documentationId = type.DocumentationId,
@@ -74,6 +128,14 @@ internal sealed class ScriptApiCatalog
                     documentationId = member.DocumentationId,
                     documentation = Documentation(documentation, member.DocumentationId)
                 })
+            }),
+            enums = Enums.Select(entry => new
+            {
+                clrType = entry.ClrType, path = EnumPath(entry), alias = entry.Alias, globalName = entry.GlobalName,
+                isFlags = entry.IsFlags, representation = "string", caseInsensitiveInput = true,
+                documentationId = entry.DocumentationId, documentation = Documentation(documentation, entry.DocumentationId),
+                members = entry.Members.Select(member => new
+                { name = member.Name, value = member.Value, numericValue = member.NumericValue })
             }),
             events = Events.Select(entry => new
             {
@@ -93,6 +155,25 @@ internal sealed class ScriptApiCatalog
     internal string ToLuaDefinitions(IReadOnlyDictionary<string, string>? documentation = null)
     {
         var output = new StringBuilder("---@meta\n-- Generated from the approved script catalog. Definitions only; no host objects are constructed.\n");
+        if (Enums.Count != 0)
+        {
+            output.AppendLine("\n-- Host enum registries are read-only. Values are canonical names; enum inputs also accept case-insensitive names.");
+            output.AppendLine("-- Flags inputs accept comma-separated declared names and the unnamed zero string '0'; other numeric inputs are rejected.");
+            output.AppendLine("Enums = {}");
+            foreach (var entry in Enums)
+            {
+                output.AppendLine();
+                AppendDocumentation(output, Documentation(documentation, entry.DocumentationId));
+                output.AppendLine("---@enum " + EnumDefinitionName(entry.ClrType));
+                output.AppendLine(EnumPath(entry) + " = {");
+                foreach (var member in entry.Members)
+                    output.AppendLine("    [" + LuaString(member.Name) + "] = " + LuaString(member.Value) + ",");
+                output.AppendLine("}");
+                if (entry.Alias != null && entry.Alias != entry.ClrType)
+                    output.AppendLine("Enums." + entry.Alias + " = " + EnumPath(entry));
+                if (entry.GlobalName != null) output.AppendLine(entry.GlobalName + " = " + EnumPath(entry));
+            }
+        }
         foreach (var type in Types)
         {
             output.AppendLine();
@@ -118,6 +199,7 @@ internal sealed class ScriptApiCatalog
                 output.AppendLine("function _type_" + type.Name + ":" + member.Name + "(" + string.Join(", ", parameterNames) + ") end");
             }
         }
+        if (HasGameGlobal) output.AppendLine("\n---@type GameContext\nGame = nil -- Host-installed read-only local queries; no constructor is exposed.");
         if (HasEventsGlobal)
         {
             output.AppendLine("\n-- Host-installed subscription registry; callbacks receive frozen event data.\nEvents = {}");
@@ -139,16 +221,40 @@ internal sealed class ScriptApiCatalog
                 }
             }
         }
+        if (HasMessagesGlobal)
+        {
+            output.AppendLine("\n-- Installed for approved pack scripts. Message names and flat primitive record fields come from that pack index.");
+            output.AppendLine("Messages = {}");
+            output.AppendLine("---@param Name string # Approved server-to-client message name.");
+            output.AppendLine("---@param Callback fun(Message: table<string, boolean|number|string>)");
+            output.AppendLine("---@return string SubscriptionToken");
+            output.AppendLine("function Messages.On(Name, Callback) end");
+            output.AppendLine("---@param SubscriptionToken string");
+            output.AppendLine("---@return boolean Removed");
+            output.AppendLine("function Messages.Off(SubscriptionToken) end");
+            output.AppendLine("---@param Name string # Approved client-to-server message name.");
+            output.AppendLine("---@param Payload table<string, boolean|number|string> # Exact required fields; no nested tables or metatable.");
+            output.AppendLine("---@return boolean Accepted");
+            output.AppendLine("---@return string|nil ErrorCode # NotReady, UnknownMessage, WrongDirection, or InvalidPayload.");
+            output.AppendLine("function Messages.Send(Name, Payload) end");
+        }
         return output.ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
     private string LuaType(string clrType)
     {
+        const string nullablePrefix = "System.Nullable`1[[";
+        if (clrType.StartsWith(nullablePrefix, StringComparison.Ordinal))
+        {
+            var valueType = LuaType(clrType[nullablePrefix.Length..].Split(',')[0]);
+            return valueType.EndsWith("|nil", StringComparison.Ordinal) ? valueType : valueType + "|nil";
+        }
         if (clrType == "System.String") return "string|nil";
         if (clrType == "System.Boolean") return "boolean";
         if (clrType == "System.Void") return "nil";
         if (clrType is "System.Double" or "System.Single") return "number";
         if (clrType is "System.Byte" or "System.SByte" or "System.Int16" or "System.UInt16" or "System.Int32" or "System.UInt32" or "System.Int64" or "System.UInt64") return "integer";
+        if (Enums.Any(value => value.ClrType == clrType)) return "string";
         var type = Types.FirstOrDefault(value => value.ClrType == clrType);
         if (type == null) throw new InvalidOperationException("The catalog contains an unapproved value type.");
         return type.Name + "|nil";
@@ -158,6 +264,32 @@ internal sealed class ScriptApiCatalog
         => documentation != null && documentation.TryGetValue(id, out var text) ? text : null;
 
     private static string OneLine(string text) => string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private static string EnumPath(ScriptEnumCatalog entry) => "Enums[" + LuaString(entry.ClrType) + "]";
+
+    private static string EnumDefinitionName(string clrType)
+    {
+        var name = new StringBuilder("Enum_");
+        foreach (var value in clrType)
+        {
+            if (value is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9') name.Append(value);
+            else name.Append('_').Append(((int)value).ToString("x4", System.Globalization.CultureInfo.InvariantCulture)).Append('_');
+        }
+        return name.ToString();
+    }
+
+    private static string LuaString(string text)
+    {
+        var quoted = new StringBuilder("\"");
+        foreach (var value in text)
+        {
+            if (value is '\\' or '"') quoted.Append('\\').Append(value);
+            else if (char.IsControl(value))
+                quoted.Append('\\').Append(((int)value).ToString("D3", System.Globalization.CultureInfo.InvariantCulture));
+            else quoted.Append(value);
+        }
+        return quoted.Append('"').ToString();
+    }
 
     private static string[] ParameterNames(IReadOnlyList<ScriptParameterCatalog> parameters)
     {

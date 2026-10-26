@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Args;
 
@@ -7,6 +8,7 @@ namespace Anomaly.Client.Api.Events.Args;
 /// a polling tick boundary. Delta is signed — negative for stamina drain,
 /// positive for regeneration.
 /// </summary>
+[ScriptType]
 public class PlayerStaminaChangedEventArgs : PlayerEventArgs
 {
     public PlayerStaminaChangedEventArgs(Player player, float previous, float current) : base(player)
@@ -15,9 +17,12 @@ public class PlayerStaminaChangedEventArgs : PlayerEventArgs
         Current = current;
     }
 
+    [ScriptVisible]
     public float Previous { get; }
 
+    [ScriptVisible]
     public float Current { get; }
 
+    [ScriptVisible]
     public float Delta => Current - Previous;
 }

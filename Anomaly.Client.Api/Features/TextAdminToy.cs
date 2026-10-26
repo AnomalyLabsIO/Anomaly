@@ -1,9 +1,11 @@
 using Il2CppAdminToys;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>Read-only wrapper for client-observed TextToy state.</summary>
+[ScriptType]
 public class TextAdminToy : AdminToy
 {
     internal TextAdminToy(TextToy toy) : base(toy) => TextBase = toy;

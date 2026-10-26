@@ -1,4 +1,5 @@
 using Il2CppCameraShaking;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Args;
 
@@ -7,6 +8,7 @@ namespace Anomaly.Client.Api.Events.Args;
 /// (<c>CameraShakeController.AddEffect</c>). Cancelling drops the effect on
 /// the floor; nothing about the server or other clients changes.
 /// </summary>
+[ScriptType]
 public class CameraShakingEventArgs : EventArgs, ICancellableEvent
 {
     public CameraShakingEventArgs(IShakeEffect effect)
@@ -17,5 +19,6 @@ public class CameraShakingEventArgs : EventArgs, ICancellableEvent
     /// <summary>The shake effect about to be enqueued.</summary>
     public IShakeEffect Effect { get; }
 
+    [ScriptVisible]
     public bool IsAllowed { get; set; } = true;
 }

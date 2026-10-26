@@ -10,7 +10,7 @@ namespace Anomaly.Shared.Content
     /// <summary>Deterministic assignment and SHA-256 canonicalization for item catalogs.</summary>
     public static class CatalogBuilder
     {
-        private static readonly byte[] Domain = Encoding.ASCII.GetBytes("ANOMALY-CONTENT-CATALOG-V2");
+        private static readonly byte[] Domain = Encoding.ASCII.GetBytes("ANOMALY-CONTENT-CATALOG-V4");
 
         public static int ComputeIdBase(int maxDefinedEnumValue)
         {
@@ -28,7 +28,8 @@ namespace Anomaly.Shared.Content
             int itemIdBase,
             int itemIdCeiling,
             byte[] manifestSha256,
-            IEnumerable<CatalogPack> packs = null)
+            IEnumerable<CatalogPack> packs = null,
+            IEnumerable<CatalogScriptPack> scriptPacks = null)
         {
             if (entries == null)
                 throw new ArgumentNullException(nameof(entries));
@@ -53,6 +54,7 @@ namespace Anomaly.Shared.Content
                 ManifestSha256 = (byte[])manifestSha256.Clone(),
                 Entries = sorted,
                 Packs = (packs ?? Enumerable.Empty<CatalogPack>()).OrderBy(pack => pack.PackId, StringComparer.Ordinal).ToList(),
+                ScriptPacks = (scriptPacks ?? Enumerable.Empty<CatalogScriptPack>()).OrderBy(pack => pack.PackId, StringComparer.Ordinal).ToList(),
             };
             catalog.CatalogSha256 = ComputeCatalogHash(catalog);
             return catalog;
@@ -89,6 +91,16 @@ namespace Anomaly.Shared.Content
                 foreach (CatalogPack pack in packs)
                 {
                     if (pack == null) throw new InvalidDataException("Catalog contained a null pack.");
+                    pack.WriteTo(writer);
+                }
+                var scriptPacks = (catalog.ScriptPacks ?? throw new InvalidDataException("Catalog script pack list is missing."))
+                    .OrderBy(pack => pack?.PackId, StringComparer.Ordinal).ToList();
+                if (scriptPacks.Count > Scripting.ScriptPackLimits.MaxScripts)
+                    throw new InvalidDataException("Catalog script pack count exceeded its limit.");
+                writer.Write(scriptPacks.Count);
+                foreach (CatalogScriptPack pack in scriptPacks)
+                {
+                    if (pack == null) throw new InvalidDataException("Catalog contained a null script pack.");
                     pack.WriteTo(writer);
                 }
                 writer.Flush();

@@ -1,0 +1,1 @@
+{"Messages":[{"Name":"GetState","Direction":"ServerToClient","Version":1,"Fields":[{"Name":"RequestId","Type":"UInt32"}]},{"Name":"State","Direction":"ClientToServer","Version":1,"Fields":[{"Name":"RequestId","Type":"UInt32"},{"Name":"Enabled","Type":"Boolean"}]}]}

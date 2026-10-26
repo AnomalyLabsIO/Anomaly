@@ -6,6 +6,8 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="ScriptResources\Main.lua" />
+    <EmbeddedResource Include="ScriptResources\Messages.json" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
     <PackageReference Include="xunit" Version="2.7.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7">
@@ -18,13 +20,19 @@
     <Compile Include="..\Anomaly.Server\Api\Auth\ClientModRequirements.cs" Link="Production\ClientModRequirements.cs" />
     <Compile Include="..\Anomaly.Server\Auth\ClientModAdmissionPolicy.cs" Link="Production\ClientModAdmissionPolicy.cs" />
     <Compile Include="..\Anomaly.Server\Networking\AnomalyMessaging.cs" Link="Production\AnomalyMessaging.cs" />
+    <Compile Include="..\Anomaly.Server\Networking\ScriptMessageGate.cs" Link="Production\ScriptMessageGate.cs" />
     <Compile Include="..\Anomaly.Server\Networking\ConnectionBootstrap.cs" Link="Production\ConnectionBootstrap.cs" />
+    <Compile Include="..\Anomaly.Server\Networking\ConnectionContentBootstrap.cs" Link="Production\ConnectionContentBootstrap.cs" />
+    <Compile Include="..\Anomaly.Server\Networking\ConnectionContentState.cs" Link="Production\ConnectionContentState.cs" />
+    <Compile Include="..\Anomaly.Server\Networking\ContentReadinessPatches.cs" Link="Production\ContentReadinessPatches.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\FileTransferSession.cs" Link="Production\FileTransferSession.cs" />
     <Compile Include="..\Anomaly.Server\Networking\AuthenticatedTransportSessions.cs" Link="Production\AuthenticatedTransportSessions.cs" />
     <Compile Include="..\Anomaly.Server\Networking\AnomalyReplayTable.cs" Link="Production\AnomalyReplayTable.cs" />
     <Compile Include="..\Anomaly.Server\Auth\PlayerStorage.cs" Link="Production\PlayerStorage.cs" />
     <Compile Include="..\Anomaly.Server\Auth\EnrollmentSessionRegistry.cs" Link="Production\EnrollmentSessionRegistry.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\ServerAssetManager.cs" Link="Production\ServerAssetManager.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\AssetPackSnapshot.cs" Link="Production\AssetPackSnapshot.cs" />
+    <Compile Include="..\Anomaly.Server\Api\Scripting\ClientScripts.cs" Link="Production\ClientScripts.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\AssetChunkReader.cs" Link="Production\AssetChunkReader.cs" />
     <Compile Include="..\Anomaly.Server\Assets\DecorativeVisualState.cs" Link="Production\DecorativeVisualState.cs" />
     <Compile Include="..\Anomaly.Server\Poses\PlayerPoseState.cs" Link="Production\PlayerPoseState.cs" />

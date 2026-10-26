@@ -181,6 +181,7 @@ internal static class ClientRuntime
 
             (string serverIp, ushort serverPort) = GetServerEndpoint();
             Anomaly.Client.Internal.Map.FacilityRecipeClient.BeginConnection();
+            Anomaly.Client.Content.ConnectionContentBootstrap.BeginConnection();
             ClientEvents.OnConnected(new ClientConnectedEventArgs(serverIp, serverPort));
         }, nameof(HandleClientConnected));
     }
@@ -196,6 +197,7 @@ internal static class ClientRuntime
 
             ClientApi.IsClientReady = false;
             ScriptingBootstrap.RevokeAll();
+            Anomaly.Client.Content.ConnectionContentBootstrap.Revoke();
             // Dispatch disconnect before clearing so subscribers see the final state.
             ClientEvents.OnDisconnected(new ClientDisconnectedEventArgs(serverIp, serverPort));
 
@@ -228,11 +230,13 @@ internal static class ClientRuntime
 
     internal static void HandleClientReady(CustomNetworkManager manager)
     {
+        if (Anomaly.Client.Content.ConnectionContentBootstrap.DeferClientReady(manager)) return;
         if (!LifecycleGate.TryReady(NetworkManagerId(manager)))
             return;
 
         RunRequiredLifecycleSafely(() =>
         {
+            ScriptingBootstrap.PrepareLocalHostConnection();
             ClientApi.IsClientReady = true;
             PlayerRegistry.Resync();
             FacilityEventsRuntime.Resync();
@@ -281,6 +285,7 @@ internal static class ClientRuntime
         ScriptingBootstrap.Tick();
         Anomaly.Client.Api.Internal.Poses.PoseCaptureCache.Tick();
         Anomaly.Client.Internal.Map.FacilityRecipeClient.Tick();
+        Anomaly.Client.Content.ConnectionContentBootstrap.Tick();
         InputPoller.Update();
         VirtualInputs.TickProviders();
         EffectStateTracker.Update();
@@ -573,7 +578,8 @@ internal static class ClientRuntime
 
     private static void ClearRuntimeCaches()
     {
-        ScriptingBootstrap.RevokeAll();
+        // Scripts belong to the connection/content generation. A scene cache
+        // refresh may follow approved initialization and must not discard it.
         PlayerObservationBridge.Reset();
         ItemStateRuntime.ResetSession();
         FacilityEventsRuntime.Clear();

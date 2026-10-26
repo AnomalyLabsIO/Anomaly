@@ -330,7 +330,7 @@ public sealed class MessageContainmentTests
 
         byte[] payload = Serialize(new ContentCatalogMessage { Catalog = catalog });
 
-        Assert.Equal(259853, payload.Length);
+        Assert.Equal(259855, payload.Length);
         Assert.True(payload.Length <= ContentCatalogMessage.MaxCatalogPayloadBytes);
     }
 

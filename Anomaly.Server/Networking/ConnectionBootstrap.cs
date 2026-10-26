@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Runtime.CompilerServices;
 using Anomaly.Server.Auth;
 using Anomaly.Server.Internal.Map;
 using Anomaly.Server.Utils;
@@ -19,11 +19,13 @@ internal static class ConnectionBootstrap
     private static readonly Dictionary<NetworkConnectionToClient, ulong> SentGenerations =
         new Dictionary<NetworkConnectionToClient, ulong>();
     private static bool _initialized;
+    private static ConditionalWeakTable<NetworkConnectionToClient, object> Rejected = new ConditionalWeakTable<NetworkConnectionToClient, object>();
 
     internal static void Init()
     {
         if (_initialized) return;
         FacilityLayoutRuntime.SnapshotFrozen += OnSnapshotFrozen;
+        FacilityLayoutRuntime.GenerationStarted += ConnectionContentBootstrap.OnGenerationStarted;
         FacilityLayoutRuntime.GenerationRejected += OnGenerationRejected;
         _initialized = true;
     }
@@ -31,9 +33,12 @@ internal static class ConnectionBootstrap
     internal static void Disable()
     {
         if (_initialized) FacilityLayoutRuntime.SnapshotFrozen -= OnSnapshotFrozen;
+        if (_initialized) FacilityLayoutRuntime.GenerationStarted -= ConnectionContentBootstrap.OnGenerationStarted;
         if (_initialized) FacilityLayoutRuntime.GenerationRejected -= OnGenerationRejected;
         _initialized = false;
         SentGenerations.Clear();
+        ConnectionContentBootstrap.Reset();
+        Rejected = new ConditionalWeakTable<NetworkConnectionToClient, object>();
     }
 
     private static void OnSnapshotFrozen(FacilitySnapshotMessage snapshot)
@@ -63,38 +68,11 @@ internal static class ConnectionBootstrap
             return true;
         try
         {
-            if (!AnomalyMessageRegistry.TryGetSendContract(snapshot, AnomalyMessageDirection.ServerToClient,
-                    out uint hash, out var channel, out var policy))
-                throw new InvalidOperationException("Facility snapshot did not match its registered contract.");
-            byte[] bytes;
-            using (var stream = new MemoryStream())
-            using (var writer = new BinaryWriter(stream))
-            {
-                writer.Write(AnomalyChannel.ChannelId);
-                writer.Write(0U);
-                writer.Write(hash);
-                snapshot.Serialize(writer);
-                writer.Flush();
-                if (stream.Length - 9 > policy.MaxPayloadBytes)
-                    throw new InvalidDataException("Facility snapshot exceeded its payload ceiling.");
-                bytes = stream.ToArray();
-            }
-            var replay = AuthenticatedTransportSessions.GetReplayState(connection) ??
-                throw new InvalidOperationException("Facility transport lost its replay state.");
-            uint counter = replay.NextTxCounter(channel);
-            if (counter == 0 || counter == uint.MaxValue)
-                throw new InvalidOperationException("Facility transport counter exhausted.");
-            Array.Copy(BitConverter.GetBytes(counter), 0, bytes, 1, sizeof(uint));
-            if (!AuthenticatedTransportSessions.TryEncryptToConnection(connection, bytes, out var envelope))
-                throw new InvalidOperationException("Facility transport lost its authentication keys.");
-            var transport = LiteNetLib4MirrorTransport.Singleton;
-            if (transport == null || !TransportPacketPolicy.FitsReportedChannel(channel, envelope.Length,
-                    transport.GetMaxPacketSize, out _))
-                throw new InvalidOperationException("Facility snapshot exceeded the deployed transport ceiling.");
-            connection.Send(new EncryptedChannelManager.EncryptedMessageOutside(
-                EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, envelope), (int)channel);
+            if (!AnomalyMessaging.TrySendToConnection(connection, snapshot))
+                throw new InvalidOperationException("Facility transport delivery was unavailable.");
             SentGenerations[connection] = snapshot.GenerationId;
-            return true;
+            ConnectionContentBootstrap.OnSnapshotDelivered(connection, snapshot.GenerationId);
+            return AuthenticatedTransportSessions.IsActiveConnection(connection);
         }
         catch (Exception exception)
         {
@@ -122,6 +100,7 @@ internal static class ConnectionBootstrap
                 AuthenticatedTransportSessions.RegisterConnection(connection, player);
             });
             if (!admitted) throw new InvalidOperationException("Authenticated admission is closed.");
+            ConnectionContentBootstrap.Begin(connection);
             return TrySendCurrentSnapshot(connection);
         }
         catch (Exception exception)
@@ -136,10 +115,19 @@ internal static class ConnectionBootstrap
         }
     }
 
-    private static void Reject(NetworkConnectionToClient connection, string reason)
+    internal static void Reject(NetworkConnectionToClient connection, string reason)
     {
+        if (connection == null) return;
+        lock (Rejected)
+        {
+            if (Rejected.TryGetValue(connection, out _)) return;
+            Rejected.Add(connection, new object());
+        }
+        ConnectionContentBootstrap.MarkRejected(connection);
         AuthenticatedTransportSessions.QuarantineConnection(connection);
         SentGenerations.Remove(connection);
+        try { ConnectionContentBootstrap.Cleanup(connection); }
+        catch (Exception exception) { try { OffThreadLogger.Error("Rejected content cleanup failed: " + exception.Message); } catch { } }
         try
         {
             connection?.Disconnect();
@@ -158,7 +146,22 @@ internal static class ConnectionBootstrap
     {
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
-        private static bool Prefix(NetworkConnectionToClient conn) => Claim(conn);
+        private static bool Prefix(NetworkConnectionToClient conn)
+        {
+            try
+            {
+                // Native registration normally waits for the host hub's Start().
+                // Bootstrap traffic must already have its patched receive boundary before any remote hub exists.
+                NetworkServer.ReplaceHandler<EncryptedChannelManager.EncryptedMessageOutside>(
+                    EncryptedChannelManager.ServerReceivePackedMessage);
+                return Claim(conn);
+            }
+            catch (Exception exception)
+            {
+                Reject(conn, "Connection receive bootstrap failed: " + exception.Message);
+                return false;
+            }
+        }
     }
 
     [HarmonyPatch(typeof(CustomNetworkManager), nameof(CustomNetworkManager.OnServerDisconnect))]
@@ -169,6 +172,7 @@ internal static class ConnectionBootstrap
         {
             SentGenerations.Remove(conn);
             AuthenticatedTransportSessions.RemoveConnection(conn);
+            ConnectionContentBootstrap.Cleanup(conn);
         }
     }
 }

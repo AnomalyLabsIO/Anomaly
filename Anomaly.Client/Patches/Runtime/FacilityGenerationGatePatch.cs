@@ -1,5 +1,6 @@
 using Anomaly.Client.Internal.Map;
 using Anomaly.Client.Auth;
+using Anomaly.Client.Content;
 using HarmonyLib;
 using Il2CppMapGeneration;
 using Il2CppMirror;
@@ -46,7 +47,7 @@ internal static class FacilityReadyGatePatch
 {
     private static bool Prefix(ref bool __result)
     {
-        if (!AuthHandler.UsingAnomalyAuth || NetworkServer.active || !FacilityRecipeClient.DeferReady()) return true;
+        if (!ConnectionContentBootstrap.DeferReady()) return true;
         __result = false;
         return false;
     }
@@ -57,7 +58,7 @@ internal static class FacilityAddPlayerGatePatch
 {
     private static bool Prefix(ref bool __result)
     {
-        if (!AuthHandler.UsingAnomalyAuth || NetworkServer.active || !FacilityRecipeClient.DeferPlayer()) return true;
+        if (!ConnectionContentBootstrap.DeferPlayer()) return true;
         __result = false;
         return false;
     }

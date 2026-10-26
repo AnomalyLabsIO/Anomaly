@@ -2,9 +2,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Il2CppInventorySystem.Items.ThrowableProjectiles;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class Projectile : Pickup
 {
     private static readonly Dictionary<ThrownProjectile, Projectile> _projectiles = new();

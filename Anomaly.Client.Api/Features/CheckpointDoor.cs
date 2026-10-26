@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Il2CppInteractables.Interobjects.DoorUtils;
 using CheckpointDoorBase = Il2CppInteractables.Interobjects.CheckpointDoor;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -11,6 +12,7 @@ namespace Anomaly.Client.Api.Features;
 /// in sequence. Adds the sub-door list and current sequence state on top of
 /// the base <see cref="Door"/> surface.
 /// </summary>
+[ScriptType]
 public class CheckpointDoor : Door
 {
     internal CheckpointDoor(CheckpointDoorBase doorBase) : base(doorBase)

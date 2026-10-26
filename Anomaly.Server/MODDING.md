@@ -21,15 +21,20 @@ registrations intact; asset/template materialization is validated transactionall
 when the catalog freezes.
 Subscribe to `Api.Events.Handlers.ClientEvents` during `Enable` and remove the
 same handlers during `Disable`. These use native LabAPI event-handler conventions
-and `IPlayerEvent` arguments. Connected means the authenticated client completed
-initial Anomaly setup; ContentReady separately means its exact optional catalog
-is activated. Notifications are not replayed to late subscribers.
+and `IPlayerEvent` arguments. Protocol 12 acquires and activates the exact required
+catalog before Mirror Ready/AddPlayer or initial Anomaly setup can complete.
+ContentReady publishes the adopted player's activated grant and may precede Connected
+during adoption. Notifications are not replayed to late subscribers.
 
 Content activation belongs to the current player instance. A native round restart
 can keep the authenticated connection while replacing that instance; the new
 player receives a fresh offer and raises ContentReady after activation again.
 Previously approved matching server/catalog/manifest consent is reused with
-cached files. An undecided or declined offer may prompt again for the new player.
+cached files. Declining closes the connection. Consent, transfer, activation and
+facility readiness share a fixed 120-second admission deadline; duplicate traffic or
+unfinished generation replacement cannot extend it. Both peers must support protocol 12.
+Declared Lua scripts require separate execution approval and finish top-level
+initialization before the client can acknowledge activation or publish ClientReady.
 
 Use LabAPI's existing gameplay events for item use, death, round changes, and
 other normal game behavior. Custom items retain the stock template's behavior;
@@ -42,7 +47,8 @@ server process, so restart after changing or removing registrations.
 | --- | --- |
 | `Api.Content.CustomItems` | Register definitions, resolve stable keys, inspect readiness, and grant activated items through `TryGiveItem(Player, string, out Item)`. |
 | `Api.Auth.ClientModRequirements` | Require a companion client mod ID within a version range before connection admission. |
-| `Api.Networking.ClientMessaging` | Send bounded authenticated messages to native LabAPI players. Register identical shared message contracts in both runtimes. |
+| `Api.Scripting.ClientScripts` | Publish embedded Lua sources with `RegisterEmbedded` and dispose their registration during plugin shutdown. |
+| `Api.Networking.ClientMessaging` | Send bounded authenticated messages to native LabAPI players. Register identical shared C# contracts in both runtimes, or use built-in pack-bound Lua carriers. |
 | `Api.Events.Handlers.ClientEvents` | Connected, MessageReceived, CapabilitiesChanged, ContentReady, and MotionApplied notifications. |
 | `Api.Features.ClientCapabilities` | Inspect the current client capability snapshot. |
 | `Api.Features.PlayerMotion` | Apply an owned position/look/momentum discontinuity with increasing sequence values; reset only your owner ID. |
@@ -57,10 +63,175 @@ server process, so restart after changing or removing registrations.
 
 Call game-facing APIs on the server game thread. Asset-dependent state requires
 the client's matching catalog activation; possession in its cache grants no access.
-Players may leave consent pending indefinitely without occupying transfer slots
-or bytes. Approval begins the transfer inactivity deadline even before a file
-request arrives. Decline keeps the connection; transfer/activation failure
-revokes the grant and disconnects.
+Pending consent does not reserve transfer slots or transfer bytes. The fixed
+connection admission deadline still applies. Decline, timeout, or
+transfer/activation failure revokes the grant and closes the connection.
+
+## Client Lua sources
+
+Owners place `.lua` files below `Config.ScriptDirectory`, which defaults to
+`ClientScripts` relative to the server working directory:
+
+```text
+ClientScripts/
+  example/
+    panel/
+      start.lua
+      widgets/
+        status.lua
+      messages.json
+```
+
+The namespace and pack directory determine `example:panel`. Anomaly generates
+the script index, hashes and source inventory; no authoring tool is required.
+Source addresses are lowercase, for example `mods/example/panel/start.lua`.
+Files with colliding normalized addresses are rejected. `messages.json` is
+optional and contains `{"Messages":[...]}` using the message declarations below.
+Other files are ignored. Scripts are bounded strict UTF-8 text, at most eight
+files, 64 KiB each and 256 KiB total across all owner and plugin packs. Empty
+sources are valid. Filesystem links and excessive directory nesting are rejected.
+
+Plugin developers embed their sources as ordinary assembly resources and opt in
+during their normal LabAPI lifecycle:
+
+```csharp
+using Anomaly.Server.Api.Scripting;
+
+private IDisposable _scripts;
+
+public override void Enable()
+{
+    _scripts = ClientScripts.RegisterEmbedded(
+        "example:panel", typeof(Plugin).Assembly,
+        "MyPlugin.ClientScripts",
+        "MyPlugin.ClientScripts.Messages.json");
+}
+
+public override void Disable()
+{
+    _scripts?.Dispose();
+    _scripts = null;
+}
+```
+
+Use `<EmbeddedResource Include="ClientScripts\**\*.lua" />` and an explicit
+resource for the optional descriptor in your project. The prefix is the exact
+dotted CLR resource-name prefix, normally the project's root namespace followed
+by `ClientScripts`. Relative resource dots become directory separators:
+`MyPlugin.ClientScripts.Widgets.Status.lua` becomes
+`mods/example/panel/widgets/status.lua`. Omit the final argument when no message
+schemas are needed. Registering captures and validates immutable bytes; Anomaly
+does not scan unrelated plugin resources automatically.
+
+Owner edits and registration changes publish complete snapshots for future
+connections through the existing authenticated transfer, cache and consent
+flow. Active clients retain their exact approved snapshot until disconnect or
+connection activation replacement. Disposing a registration does not hot-unload
+already approved clients. Conflicts, invalid files and incomplete writes reject
+the candidate generation and retain the previous complete snapshot. Publish
+owner changes atomically where possible. Script indexes and source files are
+transferred directly and scripts initialize before ClientReady after separate
+execution approval. Asset packs continue to use their independent validation.
+An initial indexing failure holds admission closed. Registration changes also
+hold new offers until their exact inventory is published, so a failed owner
+scan cannot keep offering a plugin whose registration was removed.
+
+## Pack-bound Lua messages
+
+Remote script execution is currently disabled until client memory containment is
+qualified. Clients decline offers requiring scripts before consent or download;
+the authoring and messaging interfaces below do not bypass that gate.
+
+Use the existing `ClientMessaging` and `ClientEvents.MessageReceived` APIs. The
+built-in `ScriptToClientMessage` and `ScriptToServerMessage` carriers are already
+registered by Anomaly; a plugin does not register another network contract or
+ship a client C# companion for these messages. Declare their case-sensitive
+names, directions and primitive fields in the source pack's `Messages`
+list. See the [script authoring guide](../Anomaly.Client.Scripting/SCRIPT-PACKS.md)
+and [message contract guide](../Anomaly.Client.Scripting/MESSAGING-DESIGN.md).
+
+For a pack named `example:panel`, declare `GetState` as server-to-client with
+`RequestId: UInt32`, and `State` as client-to-server with `RequestId: UInt32` and
+`Enabled: Boolean`. Then subscribe and unsubscribe using normal LabAPI plugin
+lifecycle methods:
+
+```csharp
+using Anomaly.Server.Api.Events.Arguments;
+using Anomaly.Server.Api.Events.Handlers;
+using Anomaly.Server.Api.Networking;
+using Anomaly.Shared.Networking.Messages;
+
+public override void Enable()
+{
+    ClientEvents.ContentReady += OnContentReady;
+    ClientEvents.MessageReceived += OnMessageReceived;
+}
+
+public override void Disable()
+{
+    ClientEvents.ContentReady -= OnContentReady;
+    ClientEvents.MessageReceived -= OnMessageReceived;
+}
+
+private static void OnContentReady(ClientEventArgs ev)
+{
+    ClientMessaging.TrySend(ev.Player,
+        ScriptToClientMessage.Create("example:panel", "GetState",
+            new StateQuery { RequestId = 1 }));
+}
+
+private static void OnMessageReceived(ClientMessageReceivedEventArgs ev)
+{
+    if (ev.Message is not ScriptToServerMessage message ||
+        message.PackId != "example:panel" || message.Name != "State" ||
+        !message.TryRead<StateReply>(out var reply))
+        return;
+
+    // ev.Player is the authenticated sender. Validate application meaning here.
+    LabApi.Features.Console.Logger.Info($"{ev.Player.Nickname}: {reply.RequestId}, enabled={reply.Enabled}");
+}
+
+public sealed class StateQuery { public uint RequestId { get; set; } }
+public sealed class StateReply
+{
+    public uint RequestId { get; set; }
+    public bool Enabled { get; set; }
+}
+```
+
+The receiving Lua registers before ClientReady:
+
+```lua
+Messages.On("GetState", function(Message)
+    Messages.Send("State", {
+        RequestId = Message.RequestId,
+        Enabled = true
+    })
+end)
+```
+
+Each send is checked against that recipient's retained approved pack, schema
+and activation, then bound to the exact index hash and transfer session. A
+server rescan cannot silently change an existing client's message contract.
+`TrySend` returns false for an unavailable pack, invalid payload, wrong direction
+or exhausted budget. `SendToAll` skips recipients without the matching grant.
+Replies reach the existing public event only after the same checks. Anomaly
+also rechecks approval between its internal handlers before publishing through
+LabAPI's ordinary event dispatcher.
+
+Messages use the existing reliable ordered authenticated transport. Each
+direction has a per-activation aggregate limit of 20 messages/second (burst 40),
+32 KiB/second (burst 64 KiB), plus 5 messages/second (burst 10) per pack/name.
+Sends also stop when the recipient's native reliable queues contain 128 packets;
+backpressure returns false without disconnecting the recipient.
+Payloads, schemas and queued Lua delivery are bounded. Activation and disconnect
+discard queued work and handler registrations. Local-only scripts without an
+adopted server pack grant cannot use this bridge.
+
+`RequestId` is ordinary application data, so track pending requests in your
+normal plugin state and clear them when the player leaves. A valid schema does
+not make a client claim authoritative: plugins must still check ownership,
+permissions, distance, cooldowns and other gameplay rules.
 
 ## Client mod admission
 

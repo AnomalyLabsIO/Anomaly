@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Security.Cryptography;
 using Anomaly.Server.Networking;
 using Anomaly.Server.Content;
@@ -8,6 +7,7 @@ using Anomaly.Server.Api.Content;
 using Anomaly.Shared.Assets;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
+using Anomaly.Shared.Scripting;
 using MEC;
 using Mirror;
 using Logger = LabApi.Features.Console.Logger;
@@ -26,8 +26,8 @@ internal class FileTransferSession
         Aborted
     }
 
-    private static readonly Dictionary<ReferenceHub, FileTransferSession> ActiveSessions =
-        new Dictionary<ReferenceHub, FileTransferSession>();
+    private static readonly Dictionary<NetworkConnectionToClient, FileTransferSession> ActiveSessions =
+        new Dictionary<NetworkConnectionToClient, FileTransferSession>();
     private static readonly Dictionary<ReferenceHub, AssetPackSnapshot> ApprovedManifests =
         new Dictionary<ReferenceHub, AssetPackSnapshot>();
     private static readonly object BudgetLock = new object();
@@ -43,22 +43,21 @@ internal class FileTransferSession
 
     public static event Action<ReferenceHub> SessionCompleted;
 
-    private readonly ReferenceHub _hub;
+    private readonly NetworkConnectionToClient _connection;
+    private readonly Action _completed;
+    private readonly Action<string> _failed;
+    private bool _disposed;
     private readonly ulong _sessionId;
     private readonly FileManifestMessage _manifestMessage;
     private readonly Dictionary<string, ServerAssetManager.AssetInfo> _manifest;
     private readonly AssetPackSnapshot _assetSnapshot;
     private AssetChunkReader _chunkReader;
-    private bool _snapshotTransferred;
-    private sealed class PendingStart { internal CoroutineHandle Handle; }
-    private static readonly Dictionary<ReferenceHub, PendingStart> PendingStarts = new Dictionary<ReferenceHub, PendingStart>();
     private readonly Queue<ServerAssetManager.AssetInfo> _pendingFiles =
         new Queue<ServerAssetManager.AssetInfo>();
 
     private State _state = State.AwaitingConsent;
     private ServerAssetManager.AssetInfo _currentFile;
     private bool _hasCurrentFile;
-    private bool _failureClosed;
     private int _retryCount;
     private long _reservedBytes;
     private bool _budgetReserved;
@@ -66,9 +65,11 @@ internal class FileTransferSession
     private CoroutineHandle _sendHandle;
     private CoroutineHandle _watchdogHandle;
 
-    private FileTransferSession(ReferenceHub hub, AssetPackSnapshot snapshot)
+    private FileTransferSession(NetworkConnectionToClient connection, AssetPackSnapshot snapshot, Action completed, Action<string> failed)
     {
-        _hub = hub;
+        _connection = connection;
+        _completed = completed;
+        _failed = failed;
         _sessionId = CreateSessionId();
         _assetSnapshot = snapshot;
         _manifestMessage = snapshot.BuildManifest(_sessionId);
@@ -76,100 +77,64 @@ internal class FileTransferSession
         _lastActivityUtc = DateTime.UtcNow;
     }
 
-    public static void StartForPlayer(ReferenceHub hub, Action<byte[], AssetPackSnapshot> beforeManifestSend = null)
+    internal FileManifestMessage Manifest => _manifestMessage;
+    internal AssetPackSnapshot Snapshot => _assetSnapshot;
+    internal bool IsComplete => _state == State.Complete && !_disposed;
+
+    internal static FileTransferSession StartForConnection(NetworkConnectionToClient connection,
+        AssetPackSnapshot snapshot, Action completed, Action<string> failed)
     {
-        if (hub == null) return;
-        CleanupPlayer(hub);
-        var pending = new PendingStart();
-        PendingStarts[hub] = pending;
-        try { pending.Handle = Timing.RunCoroutine(StartWhenReady(hub, pending, beforeManifestSend)); }
-        catch
-        {
-            PendingStarts.Remove(hub);
-            ContentGrantGate.Remove(hub.netId);
-            Plugin.QuarantineAuthenticatedPlayer(hub, "asset-offer-scheduler-failure");
-            hub.connectionToClient?.Disconnect();
-        }
+        CleanupConnection(connection);
+        var session = new FileTransferSession(connection, snapshot, completed, failed);
+        ActiveSessions.Add(connection, session);
+        return session;
     }
 
-    private static IEnumerator<float> StartWhenReady(ReferenceHub hub, PendingStart pending, Action<byte[], AssetPackSnapshot> beforeManifestSend)
+    internal bool Approve()
     {
-        // Yield before publication so the pending handle is installed before this coroutine removes it.
-        yield return Timing.WaitForOneFrame;
-        var deadline = DateTime.UtcNow.AddSeconds(60);
-        while (!ServerAssetManager.IsReady && DateTime.UtcNow < deadline)
-        {
-            if (!PendingStarts.TryGetValue(hub, out var current) || !ReferenceEquals(current, pending)) yield break;
-            yield return Timing.WaitForOneFrame;
-        }
-        if (!PendingStarts.TryGetValue(hub, out var owner) || !ReferenceEquals(owner, pending)) yield break;
-        PendingStarts.Remove(hub);
-        if (hub == null || hub.connectionToClient == null || !hub.connectionToClient.isReady) yield break;
-        var snapshot = ServerAssetManager.AcquireSnapshot();
-        FileTransferSession session = null;
-        try
-        {
-            if (!ServerAssetManager.IsReady) throw new TimeoutException("Initial pack indexing did not complete.");
-            session = new FileTransferSession(hub, snapshot);
-            ActiveSessions[hub] = session;
-            beforeManifestSend?.Invoke((byte[])session._manifestMessage.ManifestSha256.Clone(), snapshot);
-            session.SendManifest();
-        }
-        catch (Exception exception)
-        {
-            if (session != null)
-            {
-                try { session.EndSession(false, "content offer preparation failed: " + exception.Message); }
-                finally
-                {
-                    // The catalog callback may already have aborted and removed this
-                    // session. That cleanup must not suppress admission revocation.
-                    session.FailClosedAuthenticatedPlayer("asset-offer-failure");
-                }
-            }
-            else { snapshot.Dispose(); Plugin.QuarantineAuthenticatedPlayer(hub, "asset-index-failure"); hub.connectionToClient?.Disconnect(); }
-        }
+        if (_disposed || _state != State.AwaitingConsent) return false;
+        _state = State.AwaitingRequest;
+        _lastActivityUtc = DateTime.UtcNow;
+        _watchdogHandle = Timing.RunCoroutine(Watchdog());
+        return true;
     }
+
+    internal static bool AdoptForPlayer(ReferenceHub hub)
+    {
+        if (hub?.connectionToClient == null ||
+            !ActiveSessions.TryGetValue(hub.connectionToClient, out var session) || !session.IsComplete)
+            return false;
+        CleanupPlayer(hub);
+        ApprovedManifests.Add(hub, session._assetSnapshot.Retain());
+        foreach (Delegate subscriber in SessionCompleted?.GetInvocationList() ?? Array.Empty<Delegate>())
+        {
+            try { ((Action<ReferenceHub>)subscriber)(hub); }
+            catch (Exception exception) { try { Logger.Error("FileTransfer completion observer failed: " + exception); } catch { } }
+        }
+        return true;
+    }
+
     public static void CleanupPlayer(ReferenceHub hub)
     {
-        if (hub == null)
-            return;
-        if (PendingStarts.TryGetValue(hub, out var pending))
-        {
-            PendingStarts.Remove(hub);
-            StopPendingBestEffort(pending);
-        }
+        if (hub == null) return;
+        ScriptMessageGate.Remove(hub);
         if (ApprovedManifests.TryGetValue(hub, out var approved))
         {
             ApprovedManifests.Remove(hub);
             approved.Dispose();
         }
-        if (ActiveSessions.TryGetValue(hub, out var session))
-            session.EndSession(
-                false,
-                "player disconnected or session was replaced",
-                failClosed: false);
     }
 
-    internal static bool ApproveForPlayer(ReferenceHub hub)
+    internal static void CleanupConnection(NetworkConnectionToClient connection)
     {
-        if (hub == null || !ActiveSessions.TryGetValue(hub, out var session) ||
-            session._state != State.AwaitingConsent ||
-            ContentGrantGate.GetReadiness(hub.netId) != ContentReadiness.Approved)
-            return false;
-
-        session._state = State.AwaitingRequest;
-        session._lastActivityUtc = DateTime.UtcNow;
-        try
+        if (connection == null) return;
+        if (ActiveSessions.TryGetValue(connection, out var session))
         {
-            session._watchdogHandle = Timing.RunCoroutine(session.Watchdog());
-            return true;
+            ActiveSessions.Remove(connection);
+            session.Dispose();
         }
-        catch (Exception exception)
-        {
-            session.EndSession(false, "approved transfer watchdog could not start: " + exception.Message);
-            return false;
-        }
+        foreach (var hub in new List<ReferenceHub>(ApprovedManifests.Keys))
+            if (ReferenceEquals(hub.connectionToClient, connection)) CleanupPlayer(hub);
     }
 
     internal static bool IsAssetApproved(ReferenceHub hub, AssetAddress address, AssetKind kind) =>
@@ -180,62 +145,52 @@ internal class FileTransferSession
         IsAssetApproved(hub, address, kind) && ApprovedManifests[hub].TryGetAsset(address, out var record) &&
         HashesEqual(record.IndexHash, indexHash);
 
-    internal static IEnumerable<string> OfferedFailureKeys(ReferenceHub hub)
+    internal static bool TryGetScriptMessageScope(ReferenceHub hub, string packId, string name,
+        AnomalyMessageDirection direction, out ScriptMessageSchema schema, out string indexHash, out ulong activationId)
     {
-        AssetPackSnapshot snapshot = ActiveSessions.TryGetValue(hub, out var session) ? session._assetSnapshot :
-            ApprovedManifests.TryGetValue(hub, out var approved) ? approved : null;
-        if (snapshot == null) yield break;
-        foreach (var pack in snapshot.CopyPacks()) yield return pack.PackId;
-        foreach (var asset in snapshot.Assets) yield return asset.Address.Value;
+        schema = null;
+        indexHash = null;
+        activationId = 0;
+        if (hub?.connectionToClient == null || ContentGrantGate.GetReadiness(hub.netId) != ContentReadiness.Activated ||
+            !ApprovedManifests.TryGetValue(hub, out var approved) ||
+            !ActiveSessions.TryGetValue(hub.connectionToClient, out var session) || !session.IsComplete ||
+            !ReferenceEquals(approved, session._assetSnapshot) || !ConnectionContentBootstrap.IsComplete(hub.connectionToClient) ||
+            !approved.TryGetScriptSchema(packId, name, direction, out schema, out indexHash))
+            return false;
+        activationId = session._sessionId;
+        return true;
     }
+
     public static void Reset()
     {
-        var sessions = new List<FileTransferSession>(ActiveSessions.Values);
-        foreach (var session in sessions)
-            session.EndSession(false, "server reset", failClosed: false);
-
-        ActiveSessions.Clear();
-        foreach (var snapshot in ApprovedManifests.Values) snapshot.Dispose();
-        ApprovedManifests.Clear();
-        var pendingStarts = new List<PendingStart>(PendingStarts.Values);
-        PendingStarts.Clear();
-        foreach (var pending in pendingStarts) StopPendingBestEffort(pending);
-        lock (BudgetLock)
-        {
-            _reservedTransferCount = 0;
-            _globalReservedBytes = 0;
-        }
+        foreach (var connection in new List<NetworkConnectionToClient>(ActiveSessions.Keys)) CleanupConnection(connection);
+        foreach (var hub in new List<ReferenceHub>(ApprovedManifests.Keys)) CleanupPlayer(hub);
+        lock (BudgetLock) { _reservedTransferCount = 0; _globalReservedBytes = 0; }
     }
 
-    public static void HandleMessage(ReferenceHub sender, IAnomalyMessage msg)
+    internal void HandleMessage(IAnomalyMessage message)
     {
-        if (sender == null || !ActiveSessions.TryGetValue(sender, out var session))
-            return;
-
-        switch (msg)
+        if (_disposed) return;
+        switch (message)
         {
-            case FileRequestMessage request:
-                session.HandleFileRequest(request);
-                break;
-            case FileAckMessage ack:
-                session.HandleFileAck(ack);
-                break;
+            case FileRequestMessage request: HandleFileRequest(request); break;
+            case FileAckMessage acknowledgement: HandleFileAck(acknowledgement); break;
+            default: EndSession(false, "unsupported file-transfer message"); break;
         }
     }
 
-    private void SendManifest()
+    internal void SendManifest()
     {
         try
         {
-            if (!AnomalyMessaging.TrySendToClient(_hub, _manifestMessage))
+            if (!AnomalyMessaging.TrySendToConnection(_connection, _manifestMessage))
                 throw new InvalidOperationException("the authenticated manifest could not be delivered");
-            // One bounded manifest is retained per connected player. Reading the
-            // consent prompt has no deadline and reserves no active-transfer budget.
+            // The connection bootstrap owns the fixed consent/transfer/activation deadline.
             try
             {
                 Logger.Info(
                     $"FileTransfer: Sent bounded manifest ({_manifestMessage.Files.Count} files, session={_sessionId:x16}) " +
-                    $"to {_hub.LoggedNameFromRefHub()}.");
+                    $"to {_connection.connectionId.ToString()}.");
             }
             catch { }
         }
@@ -255,7 +210,7 @@ internal class FileTransferSession
         }
         if (_state != State.AwaitingRequest)
         {
-            Logger.Warn($"FileTransfer: Rejected duplicate/out-of-state request from {_hub.LoggedNameFromRefHub()}.");
+            EndSession(false, "duplicate or out-of-state file request");
             return;
         }
         if (request.SessionId != _sessionId)
@@ -263,12 +218,6 @@ internal class FileTransferSession
             EndSession(false, "request session id did not match the advertised manifest");
             return;
         }
-        if (!ContentGrantGate.TryBeginTransfer(_hub.netId))
-        {
-            EndSession(false, "file request arrived without matching user consent");
-            return;
-        }
-
         var seen = new HashSet<string>(StringComparer.Ordinal);
         long requestedBytes = 0;
         foreach (var hash in request.RequestedHashes)
@@ -311,7 +260,7 @@ internal class FileTransferSession
         {
             Logger.Info(
                 $"FileTransfer: Accepted {_pendingFiles.Count} files ({requestedBytes} bytes, session={_sessionId:x16}) " +
-                $"for {_hub.LoggedNameFromRefHub()}.");
+                $"for {_connection.connectionId.ToString()}.");
         }
         catch { }
         SendNextFile();
@@ -358,44 +307,54 @@ internal class FileTransferSession
 
     private IEnumerator<float> SendFileChunks(ServerAssetManager.AssetInfo asset)
     {
+        if (_disposed || _state != State.Sending) yield break;
         int total = checked((int)((asset.Size + FileChunkMessage.MaxChunkBytes - 1) / FileChunkMessage.MaxChunkBytes));
         if (total <= 0 || total > FileChunkMessage.MaxChunksPerFile) { EndSession(false, "chunk budget exceeded", false); yield break; }
         _chunkReader?.Dispose();
-        var reader = _chunkReader = new AssetChunkReader(_assetSnapshot, asset);
-        int index = 0;
-        while (!reader.IsCompleted)
+        var reader = _chunkReader = OpenReader(asset);
+        if (reader == null) yield break;
+        try
         {
-            if (_state != State.Sending) yield break;
-            if (_hub.connectionToClient == null || !_hub.connectionToClient.isReady) { EndSession(false, "connection lost", false); yield break; }
-            if (!reader.TryRead(out byte[] data)) { yield return Timing.WaitForOneFrame; continue; }
-            bool sent = false;
-            try { sent = AnomalyMessaging.TrySendToClient(_hub, new FileChunkMessage { SessionId = _sessionId, Hash = (byte[])asset.Hash.Clone(), ChunkIndex = checked((ushort)index++), TotalChunks = checked((ushort)total), Data = data }); }
-            catch (Exception exception) { EndSession(false, "chunk send failed: " + exception.Message, false); }
-            if (!sent) { EndSession(false, "chunk send failed", false); yield break; }
+            int index = 0;
+            while (!reader.IsCompleted)
+            {
+                if (_disposed || _state != State.Sending) yield break;
+                if (!AuthenticatedTransportSessions.IsActiveConnection(_connection)) { EndSession(false, "connection lost", false); yield break; }
+                if (!reader.TryRead(out byte[] data)) { yield return Timing.WaitForOneFrame; continue; }
+                bool sent = false;
+                try { sent = AnomalyMessaging.TrySendToConnection(_connection, new FileChunkMessage { SessionId = _sessionId, Hash = (byte[])asset.Hash.Clone(), ChunkIndex = checked((ushort)index++), TotalChunks = checked((ushort)total), Data = data }); }
+                catch (Exception exception) { EndSession(false, "chunk send failed: " + exception.Message, false); }
+                if (!sent) { EndSession(false, "chunk send failed", false); yield break; }
+                _lastActivityUtc = DateTime.UtcNow;
+                yield return Timing.WaitForSeconds(DefaultChunkIntervalMs / 1000f);
+            }
+            if (_disposed || _state != State.Sending) yield break;
+            if (reader.Error != null || index != total) { EndSession(false, reader.Error ?? "incomplete spool read", false); yield break; }
+            bool completeSent = false;
+            try { completeSent = AnomalyMessaging.TrySendToConnection(_connection, new FileTransferCompleteMessage { SessionId = _sessionId, Hash = (byte[])asset.Hash.Clone() }); }
+            catch (Exception exception) { EndSession(false, "completion send failed: " + exception.Message, false); }
+            if (!completeSent) { EndSession(false, "completion send failed", false); yield break; }
+            _state = State.AwaitingAck;
             _lastActivityUtc = DateTime.UtcNow;
-            yield return Timing.WaitForSeconds(DefaultChunkIntervalMs / 1000f);
         }
-        reader.Dispose();
-        _chunkReader = null;
-        if (reader.Error != null || index != total) { EndSession(false, reader.Error ?? "incomplete spool read", false); yield break; }
-        bool completeSent = false;
-        try { completeSent = AnomalyMessaging.TrySendToClient(_hub, new FileTransferCompleteMessage { SessionId = _sessionId, Hash = (byte[])asset.Hash.Clone() }); }
-        catch (Exception exception) { EndSession(false, "completion send failed: " + exception.Message, false); }
-        if (!completeSent) { EndSession(false, "completion send failed", false); yield break; }
-        _state = State.AwaitingAck;
-        _lastActivityUtc = DateTime.UtcNow;
+        finally
+        {
+            reader.Dispose();
+            if (ReferenceEquals(_chunkReader, reader)) _chunkReader = null;
+        }
     }
 
-    private static void StopPendingBestEffort(PendingStart pending)
+    private AssetChunkReader OpenReader(ServerAssetManager.AssetInfo asset)
     {
-        try { if (pending.Handle.IsRunning) Timing.KillCoroutines(pending.Handle); }
-        catch (Exception exception) { try { Logger.Warn("FileTransfer: pending offer cancellation failed after ownership was revoked: " + exception.Message); } catch { } }
+        try { return new AssetChunkReader(_assetSnapshot, asset); }
+        catch (Exception exception) { EndSession(false, "spool reader could not start: " + exception.Message, false); return null; }
     }
+
     private void HandleFileAck(FileAckMessage ack)
     {
         if (_state != State.AwaitingAck || !_hasCurrentFile)
         {
-            Logger.Warn($"FileTransfer: Rejected unsolicited/out-of-state ACK from {_hub.LoggedNameFromRefHub()}.");
+            EndSession(false, "unsolicited or out-of-state file ACK");
             return;
         }
         if (ack.SessionId != _sessionId || !HashesEqual(ack.Hash, _currentFile.Hash))
@@ -473,105 +432,30 @@ internal class FileTransferSession
         }
     }
 
-    private void EndSession(
-        bool completed,
-        string reason,
-        bool stopSend = true,
-        bool failClosed = true)
+    private void EndSession(bool completed, string reason, bool stopSend = true)
     {
-        if (_state == State.Complete || _state == State.Aborted)
-            return;
-
+        if (_state == State.Complete || _state == State.Aborted || _disposed) return;
         _state = completed ? State.Complete : State.Aborted;
-
-        // Revoke logical ownership and release the global budget before
-        // touching the external scheduler. A failed coroutine cancellation
-        // cannot retain an active/approved transfer or exhaust future slots.
         ReleaseBudget();
         _chunkReader?.Dispose();
         _chunkReader = null;
-
-        bool ownedActiveSession = false;
-        if (ActiveSessions.TryGetValue(_hub, out var current) && ReferenceEquals(current, this))
-        {
-            ownedActiveSession = true;
-            ActiveSessions.Remove(_hub);
-        }
-
-        if (!completed && !_snapshotTransferred) _assetSnapshot.Dispose();
-
-        if (!completed && failClosed && ownedActiveSession)
-        {
-            ContentGrantGate.Remove(_hub.netId);
-            FailClosedAuthenticatedPlayer("file-transfer-failure");
-        }
-
-        if (stopSend)
-            StopCoroutineBestEffort(_sendHandle, "send");
+        if (stopSend) StopCoroutineBestEffort(_sendHandle, "send");
         StopCoroutineBestEffort(_watchdogHandle, "watchdog");
+        if (completed) _completed();
+        else _failed(reason);
+    }
 
-        if (!completed)
-        {
-            try
-            {
-                Logger.Warn(
-                    $"FileTransfer: Aborted session {_sessionId:x16} for {_hub.LoggedNameFromRefHub()}: {reason}.");
-            }
-            catch { }
-            return;
-        }
-
-        if (!ContentGrantGate.TryCompleteTransfer(_hub.netId))
-        {
-            _assetSnapshot.Dispose();
-            if (ownedActiveSession)
-            {
-                ContentGrantGate.Remove(_hub.netId);
-                FailClosedAuthenticatedPlayer("file-transfer-completion-state-mismatch");
-            }
-            try
-            {
-                Logger.Error(
-                    $"FileTransfer: Completed session {_sessionId:x16} without an approved transfer state for " +
-                    $"{_hub.LoggedNameFromRefHub()}; activation remains closed.");
-            }
-            catch { }
-            return;
-        }
-
-        try { ApprovedManifests[_hub] = _assetSnapshot; _snapshotTransferred = true; }
-        catch (Exception exception)
-        {
-            if (!_snapshotTransferred) _assetSnapshot.Dispose();
-            if (ownedActiveSession)
-            {
-                ContentGrantGate.Remove(_hub.netId);
-                FailClosedAuthenticatedPlayer("approved-manifest-publication-failure");
-            }
-            try { Logger.Error($"FileTransfer: Approved manifest publication failed: {exception}"); }
-            catch { }
-            return;
-        }
-
-        Delegate[] subscribers = SessionCompleted?.GetInvocationList() ?? Array.Empty<Delegate>();
-        foreach (Delegate subscriber in subscribers)
-        {
-            try
-            {
-                ((Action<ReferenceHub>)subscriber)(_hub);
-            }
-            catch (Exception ex)
-            {
-                try { Logger.Error($"FileTransfer: SessionCompleted subscriber threw: {ex}"); }
-                catch { }
-            }
-        }
-        try
-        {
-            Logger.Info(
-                $"FileTransfer: Completed session {_sessionId:x16} for {_hub.LoggedNameFromRefHub()}: {reason}.");
-        }
-        catch { }
+    private void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _state = State.Aborted;
+        ReleaseBudget();
+        _chunkReader?.Dispose();
+        _chunkReader = null;
+        StopCoroutineBestEffort(_sendHandle, "send");
+        StopCoroutineBestEffort(_watchdogHandle, "watchdog");
+        _assetSnapshot.Dispose();
     }
 
     private void StopCoroutineBestEffort(CoroutineHandle handle, string name)
@@ -586,29 +470,6 @@ internal class FileTransferSession
                 Logger.Error(
                     $"FileTransfer: Failed to stop {name} coroutine for session {_sessionId:x16}: {exception}");
             }
-            catch { }
-        }
-    }
-
-    private void FailClosedAuthenticatedPlayer(string context)
-    {
-        if (_failureClosed) return;
-        _failureClosed = true;
-        Exception quarantineFailure = null;
-        Exception disconnectFailure = null;
-        try { Plugin.QuarantineAuthenticatedPlayer(_hub, context); }
-        catch (Exception exception) { quarantineFailure = exception; }
-        try { _hub?.connectionToClient?.Disconnect(); }
-        catch (Exception exception) { disconnectFailure = exception; }
-
-        if (quarantineFailure != null)
-        {
-            try { Logger.Error($"FileTransfer: Failed to quarantine after {context}: {quarantineFailure}"); }
-            catch { }
-        }
-        if (disconnectFailure != null)
-        {
-            try { Logger.Error($"FileTransfer: Failed to disconnect after {context}: {disconnectFailure}"); }
             catch { }
         }
     }

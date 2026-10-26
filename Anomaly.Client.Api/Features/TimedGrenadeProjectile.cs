@@ -1,8 +1,10 @@
 using NativeProjectile = Il2CppInventorySystem.Items.ThrowableProjectiles.TimeGrenade;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>Read-only client wrapper for TimeGrenade.</summary>
+[ScriptType]
 public class TimedGrenadeProjectile : Projectile
 {
     internal TimedGrenadeProjectile(NativeProjectile projectile) : base(projectile) => TimedGrenadeBase = projectile;

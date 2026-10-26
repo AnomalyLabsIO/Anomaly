@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Args;
 
@@ -6,6 +7,7 @@ namespace Anomaly.Client.Api.Events.Args;
 /// Fires when an <see cref="Il2CppMapGeneration.Distributors.Scp079Generator"/>
 /// reaches the engaged state.
 /// </summary>
+[ScriptType]
 public class GeneratorEngagedEventArgs : EventArgs
 {
     public GeneratorEngagedEventArgs(Generator generator)
@@ -14,5 +16,6 @@ public class GeneratorEngagedEventArgs : EventArgs
     }
 
     /// <summary>The generator that just engaged.</summary>
+    [ScriptVisible]
     public Generator Generator { get; }
 }

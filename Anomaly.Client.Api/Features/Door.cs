@@ -2,9 +2,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Il2CppInteractables.Interobjects.DoorUtils;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class Door
 {
     private static readonly Dictionary<DoorVariant, Door> _doors = new();
@@ -16,21 +18,28 @@ public class Door
 
     public DoorVariant Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
     public GameObject GameObject => IsDestroyed ? null : Base.gameObject;
     public Transform Transform => IsDestroyed ? null : Base.transform;
     public Vector3 Position => IsDestroyed ? Vector3.zero : Base.transform.position;
 
+    [ScriptVisible]
     public string Name => Base.DoorName;
 
+    [ScriptVisible]
     public byte Id => Base.DoorId;
 
+    [ScriptVisible]
     public bool IsOpen => Base.TargetState;
 
+    [ScriptVisible]
     public bool IsMoving => Base.IsMoving;
 
+    [ScriptVisible]
     public bool CanSeeThrough => Base.CanSeeThrough;
 
+    [ScriptVisible]
     public ushort ActiveLocks => Base.ActiveLocks;
 
     public DoorPermissionsPolicy RequiredPermissions => Base.RequiredPermissions;

@@ -1,5 +1,6 @@
 using Il2CppInteractables.Interobjects.DoorUtils;
 using BreakableDoorBase = Il2CppInteractables.Interobjects.BreakableDoor;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -9,6 +10,7 @@ namespace Anomaly.Client.Api.Features;
 /// (door HP bars, "this door is about to break" warnings, faction-specific
 /// damage indicators).
 /// </summary>
+[ScriptType]
 public class BreakableDoor : Door
 {
     internal BreakableDoor(BreakableDoorBase doorBase) : base(doorBase)

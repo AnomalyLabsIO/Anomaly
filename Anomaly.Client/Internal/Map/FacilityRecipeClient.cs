@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using Anomaly.Client.Auth;
+using Anomaly.Client.Content;
 using Anomaly.Client.Api.Networking;
 using Anomaly.Shared.Networking;
 using Anomaly.Shared.Networking.Messages;
@@ -16,8 +17,6 @@ internal static class FacilityRecipeClient
     private static readonly FacilityGenerationGate Gate = new();
     private static bool _sceneAvailable;
     private static bool _failed;
-    private static bool _readyPending;
-    private static bool _playerPending;
     internal static FacilitySnapshotMessage CurrentSnapshot => Gate.Snapshot;
     internal static bool IsGenerating => Gate.Generating && !_failed;
     internal static bool IsReady => Gate.Completed && !_failed && _sceneAvailable && SeedSynchronizer.MapGenerated;
@@ -37,6 +36,7 @@ internal static class FacilityRecipeClient
     {
         try
         {
+            ConnectionContentBootstrap.BeginFacilityGeneration(snapshot.GenerationId);
             Gate.ReceiveSnapshot(snapshot);
             if (!Gate.Completed) Gate.BeginWaiting(Now);
             TryGenerate();
@@ -77,22 +77,6 @@ internal static class FacilityRecipeClient
         if (Gate.HasTimedOut(Now)) FailGeneration(new TimeoutException("Authenticated facility bootstrap was not available within 30 seconds."));
     }
 
-    internal static bool DeferReady()
-    {
-        if (IsReady) return false;
-        _readyPending = true;
-        if (_sceneAvailable) Gate.BeginWaiting(Now);
-        return true;
-    }
-
-    internal static bool DeferPlayer()
-    {
-        if (IsReady) return false;
-        _playerPending = true;
-        if (_sceneAvailable) Gate.BeginWaiting(Now);
-        return true;
-    }
-
     private static void TryGenerate()
     {
         if (_failed || !_sceneAvailable || SeedSynchronizer._singleton == null || SeedSynchronizer.MapGenerated || !Gate.TryBegin()) return;
@@ -107,8 +91,7 @@ internal static class FacilityRecipeClient
                 throw new InvalidOperationException("Generated facility room/child identity digest differs from the server.");
             Gate.Complete();
             MelonLogger.Msg($"Facility bootstrap accepted: generation={Gate.Snapshot.GenerationId}, seed={Gate.Snapshot.Seed}, digest={Convert.ToBase64String(Gate.Snapshot.Digest)}.");
-            if (_readyPending) { _readyPending = false; NetworkClient.Ready(); }
-            if (_playerPending) { _playerPending = false; NetworkClient.AddPlayer(); }
+            ConnectionContentBootstrap.TryRelease();
         }
         catch (Exception exception) { FailGeneration(exception); }
     }
@@ -116,7 +99,6 @@ internal static class FacilityRecipeClient
     internal static void FailGeneration(Exception exception)
     {
         _failed = true;
-        _readyPending = _playerPending = false;
         AnomalyMessaging.FailClosedTransport("Facility bootstrap/generation failed: " + exception.Message);
         MelonLogger.Error("Facility generation rejected: " + exception);
     }
@@ -127,6 +109,6 @@ internal static class FacilityRecipeClient
         FacilityGenerationDiagnostics.Clear();
         FacilityStructureRotation.Clear();
         _sceneAvailable = false;
-        _failed = _readyPending = _playerPending = false;
+        _failed = false;
     }
 }

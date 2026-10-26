@@ -12,10 +12,12 @@ using Anomaly.Client.Api.FileTransfer;
 using Anomaly.Client.Api.Internal;
 using Anomaly.Client.Api.Modding;
 using Anomaly.Client.Api.Networking;
+using Anomaly.Client.Api.Scripting;
 using Anomaly.Client.Auth;
 using Anomaly.Client.Components;
 using Anomaly.Client.FileTransfer;
 using Anomaly.Client.Internal.Audio;
+using Anomaly.Client.Internal.Bootstrap;
 using Anomaly.Client.Patches.Audio;
 using Anomaly.Shared.Assets;
 using Anomaly.Shared.Content;
@@ -30,6 +32,7 @@ namespace Anomaly.Client.Content;
 internal static class ContentCatalogClient
 {
     private const string PromptOwner = "content-catalog";
+    private const string ScriptPromptOwner = "script-execution";
     private static readonly TransactionalInitializer Initializer = new();
     private static ContentCatalog _catalog;
     private static FileManifestMessage _manifest;
@@ -37,12 +40,14 @@ internal static class ContentCatalogClient
     private static bool _declined;
     private static bool _failureLatched;
     private static bool _activationSent;
+    private static bool _activationPending;
     private static long _offerGeneration;
     internal static bool IsActivated { get; private set; }
 
     internal static void Init()
     {
         Initializer.Initialize(
+            new InitializationStep(ConnectionContentBootstrap.Initialize, ConnectionContentBootstrap.Shutdown),
             new InitializationStep(ContentConsentStore.Init, () => { }),
             new InitializationStep(
                 () => AnomalyMessaging.MessageReceived += HandleMessage,
@@ -63,6 +68,7 @@ internal static class ContentCatalogClient
     /// <summary>Starts the replacement player hub's content offer without replacing its transport session.</summary>
     internal static void BeginFacilityScene()
     {
+        if (ConnectionContentBootstrap.IsAcquiring) return;
         FileTransferClient.Reset();
         Reset(throwOnCleanupFailure: true);
         OverrideRegistry.Clear();
@@ -83,7 +89,11 @@ internal static class ContentCatalogClient
         _declined = false;
         _failureLatched = false;
         _activationSent = false;
+        _activationPending = false;
         Exception cleanupFailure = null;
+        try { ScriptingBootstrap.RevokeAll(); }
+        catch (Exception exception) { cleanupFailure = exception; }
+        ScriptPackManager.Reset();
         bool addressLayerRevoked = false;
         try { AssetBundleManager.RevokeRemote(); addressLayerRevoked = true; }
         catch (Exception exception)
@@ -97,6 +107,8 @@ internal static class ContentCatalogClient
             cleanupFailure ??= exception;
             SafeLogError("Content prompt cleanup failed after logical state was revoked: " + exception);
         }
+        try { PasswordPrompt.Hide(ScriptPromptOwner); }
+        catch (Exception exception) { cleanupFailure ??= exception; }
         try { if (addressLayerRevoked) ReleaseAssetBindings(); }
         catch (Exception exception)
         {
@@ -138,6 +150,8 @@ internal static class ContentCatalogClient
         }
     }
 
+    internal static void ReceiveBootstrap(IAnomalyMessage message) => HandleMessage(message);
+
     private static void HandleManifest(FileManifestMessage manifest)
     {
         if (_failureLatched) return;
@@ -169,7 +183,10 @@ internal static class ContentCatalogClient
 
         try
         {
-            ValidateCatalogAssets(_catalog, _manifest);
+            ValidateCatalogFiles(_catalog, _manifest);
+            if (_catalog.ScriptPacks.Count != 0 && !ScriptingPolicy.RemoteExecutionEnabled)
+                throw new NotSupportedException(ScriptingPolicy.RemoteExecutionDisabledReason);
+            ConnectionContentBootstrap.BindOffer(_manifest.SessionId, _catalog.CatalogSha256, _catalog.ManifestSha256);
         }
         catch (Exception exception)
         {
@@ -229,6 +246,7 @@ internal static class ContentCatalogClient
         if (_decisionSent || _catalog == null)
             return;
         _decisionSent = true;
+        ConnectionContentBootstrap.Consent(_manifest.SessionId, _catalog.CatalogSha256, _catalog.ManifestSha256);
         if (!AnomalyMessaging.TrySend(new ContentCatalogDecisionMessage
         {
             CatalogSha256 = (byte[])_catalog.CatalogSha256.Clone(),
@@ -251,14 +269,9 @@ internal static class ContentCatalogClient
         if (_declined)
             return;
         _declined = true;
-        bool delivered = SendDecline();
-        if (!delivered)
-        {
-            const string failure = "The content decline could not be delivered over the authenticated transport.";
-            AnomalyMessaging.FailClosedTransport(failure);
-            ReportHealth(FeatureHealthStatus.Failed, failure);
-            return;
-        }
+        bool delivered = _decisionSent && _activationPending
+            ? SendActivation(false, Array.Empty<string>()) : SendDecline();
+        DisconnectAfterFailedAcknowledgement("Required server assets declined: " + reason, delivered);
         ReportHealth(FeatureHealthStatus.Disabled, reason);
         SafeLogWarning("Custom content declined: " + reason);
     }
@@ -313,9 +326,10 @@ internal static class ContentCatalogClient
 
     private static void HandleTransferFinished(bool successful)
     {
-        if (_declined || _activationSent || _catalog == null)
+        if (_declined || _activationSent || _activationPending || _catalog == null)
             return;
-        string[] catalogKeys = _catalog.Packs.Select(pack => pack.PackId)
+        _activationPending = true;
+        string[] catalogKeys = _catalog.Packs.Select(pack => pack.PackId).Concat(_catalog.ScriptPacks.Select(pack => pack.PackId))
             .Concat(_catalog.Entries.Select(entry => entry.Key)).Distinct(StringComparer.Ordinal).Take(128).ToArray();
         try
         {
@@ -337,22 +351,40 @@ internal static class ContentCatalogClient
                         FailActivation("bundle validation or loading failed: " + validationError, catalogKeys);
                         return;
                     }
-                    if (!ClientContentRegistrar.TryActivate(catalog, out List<string> failedKeys, out string error))
+                    ScriptPackManager.PrepareRemote(catalog);
+                    void Complete(bool executionApproved)
                     {
-                        FailActivation("custom item activation rolled back: " + error, failedKeys);
-                        return;
+                        if (generation != _offerGeneration || _declined || _activationSent || _failureLatched) return;
+                        try
+                        {
+                            ConnectionContentBootstrap.EnsureInitializing();
+                            if (!ClientContentRegistrar.TryActivate(catalog, out List<string> failedKeys, out string error))
+                            {
+                                FailActivation("custom item activation rolled back: " + error, failedKeys);
+                                return;
+                            }
+                            ConnectionContentBootstrap.Loaded(_manifest.SessionId, catalog.CatalogSha256,
+                                catalog.ManifestSha256, ScriptingBootstrap.PrepareConnection(catalog, executionApproved, _manifest.SessionId));
+                            if (!SendActivation(true, Array.Empty<string>()))
+                                throw new InvalidOperationException("The exact activation acknowledgement could not be delivered.");
+                            IsActivated = true;
+                            ReportHealth(FeatureHealthStatus.Healthy,
+                                "The authenticated bundles, item catalog and approved scripts were initialized.");
+                        }
+                        catch (Exception exception) { FailActivation(exception.Message, catalogKeys); }
                     }
-                    if (!SendActivation(true, Array.Empty<string>()))
-                    {
-                        const string failure = "The exact activation acknowledgement could not be delivered.";
-                        RevokeMaterializedContent();
-                        AnomalyMessaging.FailClosedTransport(failure);
-                        ReportHealth(FeatureHealthStatus.Failed, failure);
-                        return;
-                    }
-                    IsActivated = true;
-                    ReportHealth(FeatureHealthStatus.Healthy,
-                        "The authenticated bundles and item catalog were activated transactionally.");
+                    int scriptCount = catalog.ScriptPacks.Sum(pack => pack.Sources.Count);
+                    if (scriptCount == 0) { Complete(false); return; }
+                    PasswordPrompt.ShowConfirmation(ScriptPromptOwner,
+                        Tr.Get(TrKeys.Content_ScriptApprovalTitle),
+                        Tr.Get(TrKeys.Content_ScriptApprovalDetails, scriptCount,
+                            catalog.ScriptPacks.Sum(pack => pack.Sources.Sum(source => (long)source.Size)), ServerTrustStore.FormatFingerprint(AuthHandler.CurrentServerFingerprint)),
+                        Tr.Get(TrKeys.Content_RunScripts), Tr.Get(TrKeys.Prompt_SkipContent),
+                        () => Complete(true),
+                        () =>
+                        {
+                            if (generation == _offerGeneration) DeclineByUser("user declined script execution");
+                        });
                 }
                 catch (Exception exception) { FailActivation(exception.Message, catalogKeys); }
             });
@@ -394,8 +426,8 @@ internal static class ContentCatalogClient
             // Revoke authentication now, then give that existing worker a bounded
             // opportunity to send the failure before closing this same connection.
             connection.Update();
-            AnomalyMessaging.ClearTransportSession();
-            if (MelonCoroutines.Start(DisconnectAfterAckFlush(connection, reason)) == null)
+            long transportGeneration = AnomalyMessaging.ClearTransportSession();
+            if (MelonCoroutines.Start(DisconnectAfterAckFlush(connection, transportGeneration, reason)) == null)
                 throw new InvalidOperationException("Could not schedule failure acknowledgement shutdown.");
         }
         catch (Exception exception)
@@ -405,17 +437,19 @@ internal static class ContentCatalogClient
         }
     }
 
-    private static IEnumerator DisconnectAfterAckFlush(NetworkConnection connection, string reason)
+    private static IEnumerator DisconnectAfterAckFlush(NetworkConnection connection, long transportGeneration, string reason)
     {
         IntPtr connectionPointer = connection.Pointer; // Keep the original IL2CPP connection alive for the complete grace interval.
         double deadline = UnityEngine.Time.realtimeSinceStartupAsDouble + 0.25;
         while (UnityEngine.Time.realtimeSinceStartupAsDouble < deadline)
         {
-            if (NetworkClient.connection == null || NetworkClient.connection.Pointer != connectionPointer)
+            if (NetworkClient.connection == null || NetworkClient.connection.Pointer != connectionPointer ||
+                AnomalyMessaging.TransportGeneration != transportGeneration)
                 yield break;
             yield return null;
         }
-        if (NetworkClient.connection != null && NetworkClient.connection.Pointer == connectionPointer)
+        if (NetworkClient.connection != null && NetworkClient.connection.Pointer == connectionPointer &&
+            AnomalyMessaging.TransportGeneration == transportGeneration)
             AnomalyMessaging.FailClosedTransport(reason);
         GC.KeepAlive(connection);
     }
@@ -446,7 +480,7 @@ internal static class ContentCatalogClient
         });
     }
 
-    private static void ValidateCatalogAssets(ContentCatalog catalog, FileManifestMessage manifest)
+    private static void ValidateCatalogFiles(ContentCatalog catalog, FileManifestMessage manifest)
     {
         var byHash = new Dictionary<string, FileManifestMessage.FileEntry>(StringComparer.Ordinal);
         foreach (FileManifestMessage.FileEntry file in manifest.Files)
@@ -462,12 +496,29 @@ internal static class ContentCatalogClient
                 !byHash.TryGetValue(bundleHash, out var bundle) || bundle.Kind != FileContentKind.Bundle || bundle.Size != pack.BundleSize)
                 throw new InvalidDataException($"Pack '{pack.PackId}' was not an exact advertised index/bundle pair.");
         }
+        foreach (CatalogScriptPack pack in catalog.ScriptPacks)
+        {
+            Require(pack.IndexHash, FileContentKind.ScriptIndex, pack.IndexSize);
+            foreach (CatalogScriptSource source in pack.Sources)
+                if (source.Size != 0) Require(source.Hash, FileContentKind.LuaSource, source.Size);
+        }
         if (advertised.Count != byHash.Count) throw new InvalidDataException("The manifest contained files outside the catalog's packs.");
+
+        void Require(byte[] hash, FileContentKind kind, uint size)
+        {
+            string key = FileCache.ToHex(hash);
+            if (!byHash.TryGetValue(key, out var file) || file.Kind != kind || file.Size != size)
+                throw new InvalidDataException("Script pack was not an exact advertised index/source inventory.");
+            advertised.Add(key); // Identical source bytes share one physical transfer file.
+        }
     }
 
     private static void RevokeMaterializedContent()
     {
         IsActivated = false;
+        try { ScriptingBootstrap.RevokeAll(); }
+        catch (Exception exception) { SafeLogError("Script revocation failed: " + exception); }
+        ScriptPackManager.Reset();
         try { AssetBundleManager.RevokeRemote(); ReleaseAssetBindings(); }
         catch (Exception exception) { SafeLogError("Content registrar cleanup failed: " + exception); }
     }

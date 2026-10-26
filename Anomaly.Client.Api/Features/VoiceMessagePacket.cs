@@ -1,9 +1,11 @@
 ﻿using Il2Cpp;
 using Il2CppVoiceChat;
 using Il2CppVoiceChat.Networking;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class VoiceMessagePacket
 {
     private VoiceMessagePacket(ReferenceHub speakerHub, VoiceChatChannel channel, byte[] data, int dataLength, bool speakerNull, bool isOutgoing)
@@ -17,20 +19,26 @@ public class VoiceMessagePacket
         IsOutgoing = isOutgoing;
     }
 
+    [ScriptVisible]
     public Player Speaker { get; }
 
     public ReferenceHub SpeakerHub { get; }
 
+    [ScriptVisible]
     public VoiceChatChannel Channel { get; }
 
     public byte[] Data { get; }
 
+    [ScriptVisible]
     public int DataLength { get; }
 
+    [ScriptVisible]
     public bool SpeakerNull { get; }
 
+    [ScriptVisible]
     public bool IsOutgoing { get; }
 
+    [ScriptVisible]
     public bool IsIncoming => !IsOutgoing;
 
     internal static VoiceMessagePacket FromMessage(VoiceMessage message, bool isOutgoing)

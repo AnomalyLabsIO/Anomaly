@@ -1,8 +1,10 @@
 using ArmorPickupBase = Il2CppInventorySystem.Items.Armor.BodyArmorPickup;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>A typed world armor pickup. Inventory armor configuration is exposed by <see cref="BodyArmorItem"/>.</summary>
+[ScriptType]
 public class BodyArmorPickup : Pickup
 {
     internal BodyArmorPickup(ArmorPickupBase armorBase) : base(armorBase)

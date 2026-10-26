@@ -1,8 +1,10 @@
 using NativeProjectile = Il2CppInventorySystem.Items.ThrowableProjectiles.Scp018Projectile;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>Read-only client wrapper for Scp018Projectile.</summary>
+[ScriptType]
 public class Scp018Projectile : TimedGrenadeProjectile
 {
     internal Scp018Projectile(NativeProjectile projectile) : base(projectile) => Scp018Base = projectile;

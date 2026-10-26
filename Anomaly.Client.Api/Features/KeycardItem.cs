@@ -1,5 +1,6 @@
 using Il2CppInteractables.Interobjects.DoorUtils;
 using KeycardItemBase = Il2CppInventorySystem.Items.Keycards.KeycardItem;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -16,6 +17,7 @@ namespace Anomaly.Client.Api.Features;
 /// exposes both a "what permissions does this card carry" generic accessor and
 /// a per-door <see cref="GetPermissionsFor"/> for the precise resolution.
 /// </remarks>
+[ScriptType]
 public class KeycardItem : Item
 {
     internal KeycardItem(KeycardItemBase keycardBase) : base(keycardBase)

@@ -1,9 +1,11 @@
 using Il2CppInventorySystem.Items.Radio;
 using RadioItemBase = Il2CppInventorySystem.Items.Radio.RadioItem;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>A radio with owning-client battery and range information.</summary>
+[ScriptType]
 public class RadioItem : Item
 {
     internal RadioItem(RadioItemBase radioBase) : base(radioBase)

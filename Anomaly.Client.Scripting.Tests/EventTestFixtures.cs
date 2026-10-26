@@ -7,7 +7,17 @@ namespace Anomaly.Client.Scripting.Tests.EventFixtures.Valid
     {
         private string _text = "original";
         public static int GetterCalls;
-        [ScriptVisible] public string Text { get { Interlocked.Increment(ref GetterCalls); return _text; } set => _text = value; }
+        public static bool ThrowOnRead;
+        [ScriptVisible] public string Text
+        {
+            get
+            {
+                Interlocked.Increment(ref GetterCalls);
+                if (ThrowOnRead) throw new OutOfMemoryException("synthetic event getter failure");
+                return _text;
+            }
+            set => _text = value;
+        }
         [ScriptVisible] public string Second { get; set; } = "";
         [ScriptVisible] public string Third { get; set; } = "";
         [ScriptVisible] public string Fourth { get; set; } = "";
@@ -42,6 +52,7 @@ namespace Anomaly.Client.Scripting.Tests.EventFixtures.Valid
         {
             _changed = null; _ping = null; Hidden = null; Ignored = null;
             Adds = Removes = Payload.GetterCalls = 0;
+            Payload.ThrowOnRead = false;
             ThrowOnAdd = ThrowOnRemove = false; DuringAdd = null;
         }
         public static void PublishHidden(Payload value) { Hidden?.Invoke(value); Ignored?.Invoke(); }

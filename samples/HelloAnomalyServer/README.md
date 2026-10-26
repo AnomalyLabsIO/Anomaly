@@ -42,6 +42,15 @@ The companion does not initiate custom traffic to clients without a request.
 Install the matching companion before using the client command. Its message
 subscriptions, like native item handlers, are removed during `Disable()`.
 
+Set `EnableClientScripts: true` to offer the sample's embedded Lua pack. The
+ordinary `ClientScripts.RegisterEmbedded` registration captures `ClientScripts/start.lua`
+and its message descriptor. Anomaly generates the index, transfers the source
+with the normal content offer and asks the player for execution approval. The
+sample sends `GetState` through `ClientMessaging` at ContentReady; Lua replies
+with `State` through the same authenticated channel. This example requires no
+client companion mod. Disabling the plugin removes the pack from future offers;
+already connected clients keep their approved snapshot until disconnect.
+
 Register all custom definitions before the first catalog is offered. Registration
 copies the definition. The catalog's IDs remain fixed for that server session;
 restart the server after changing item definitions or the participating plugins.

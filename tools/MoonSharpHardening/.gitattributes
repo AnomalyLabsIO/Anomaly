@@ -1,0 +1,2 @@
+# Unified patch context preserves upstream whitespace; Git must keep the patch LF.
+anomaly-hardening.patch text eol=lf -whitespace

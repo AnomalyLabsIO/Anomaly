@@ -84,6 +84,20 @@ internal static class AuthenticatedTransportSessions
             return connection != null && Connections.TryGetValue(connection, out var session) ? session.Replay : null;
     }
 
+    internal static AnomalyInboundRateLimiter GetRateLimiter(ReferenceHub hub, bool raw)
+    {
+        lock (Sync)
+            return hub != null && Sessions.TryGetValue(hub, out var session)
+                ? raw ? session.RawLimiter : session.MessageLimiter : null;
+    }
+
+    internal static AnomalyInboundRateLimiter GetRateLimiter(NetworkConnectionToClient connection, bool raw)
+    {
+        lock (Sync)
+            return connection != null && Connections.TryGetValue(connection, out var session)
+                ? raw ? session.RawLimiter : session.MessageLimiter : null;
+    }
+
     internal static bool TryEncryptToConnection(NetworkConnectionToClient connection, byte[] plaintext, out byte[] envelope)
     {
         lock (Sync)
@@ -188,6 +202,21 @@ internal static class AuthenticatedTransportSessions
                 session.TranscriptHash,
                 AuthTransportDirection.ServerToClient,
                 plaintext);
+            return true;
+        }
+    }
+
+    internal static bool TryDecryptFromClient(NetworkConnectionToClient connection, byte[] envelope, out byte[] plaintext)
+    {
+        lock (Sync)
+        {
+            if (connection == null || !Connections.TryGetValue(connection, out var session))
+            {
+                plaintext = null;
+                return false;
+            }
+            plaintext = AuthTransportCrypto.Decrypt(session.ClientToServerKey, session.SessionId,
+                session.TranscriptHash, AuthTransportDirection.ClientToServer, envelope);
             return true;
         }
     }
@@ -309,6 +338,8 @@ internal static class AuthenticatedTransportSessions
         internal ReferenceHub Hub { get; set; }
         internal NetworkConnectionToClient Connection { get; set; }
         internal AnomalyReplayState Replay { get; } = new AnomalyReplayState();
+        internal AnomalyInboundRateLimiter RawLimiter { get; } = new AnomalyInboundRateLimiter();
+        internal AnomalyInboundRateLimiter MessageLimiter { get; } = new AnomalyInboundRateLimiter();
         public byte[] ClientToServerKey { get; }
         public byte[] ServerToClientKey { get; }
         public byte[] SessionId { get; }

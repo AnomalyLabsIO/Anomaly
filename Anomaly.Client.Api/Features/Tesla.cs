@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Il2Cpp;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -17,6 +18,7 @@ namespace Anomaly.Client.Api.Features;
 /// the wrapper uses lazy creation via <see cref="Get"/> to stay in sync
 /// without a dedicated patch.
 /// </remarks>
+[ScriptType]
 public class Tesla
 {
     private static readonly Dictionary<TeslaGate, Tesla> _teslas = new();
@@ -29,6 +31,7 @@ public class Tesla
     /// <summary>The underlying <see cref="TeslaGate"/> NetworkBehaviour.</summary>
     public TeslaGate Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
 
     public static bool TryGet(TeslaGate value, out Tesla wrapper)
@@ -38,12 +41,15 @@ public class Tesla
     }
 
     /// <summary>True while the tesla is in its shock animation.</summary>
+    [ScriptVisible]
     public bool InProgress => Base != null && Base.InProgress;
 
     /// <summary>Seconds the gate has been idle since the last burst.</summary>
+    [ScriptVisible]
     public float InactiveTime => Base != null ? Base.InactiveTime : 0f;
 
     /// <summary>The <see cref="Room"/> the tesla is mounted in, or null if not placed in any tracked room.</summary>
+    [ScriptVisible]
     public Room Room
     {
         get

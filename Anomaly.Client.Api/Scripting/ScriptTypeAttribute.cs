@@ -2,9 +2,9 @@ using System;
 
 namespace Anomaly.Client.Api.Scripting;
 
-/// <summary>Names a reference type whose explicitly selected members may be bound to a script.</summary>
+/// <summary>Names a type whose explicitly selected members may be bound to a script.</summary>
 /// <remarks>This annotation does not register the type or grant a script any capabilities.</remarks>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
 public sealed class ScriptTypeAttribute : Attribute
 {
     public ScriptTypeAttribute(string name = null)

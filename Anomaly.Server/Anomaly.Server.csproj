@@ -43,6 +43,14 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <ItemGroup>
+        <Reference Include="Assembly-CSharp">
+          <HintPath>$(AnomalyServerPublicizedAssembly)</HintPath>
+          <Private>false</Private>
+        </Reference>
+        <Reference Include="LabApi">
+          <HintPath>$(AnomalyLabApiDir)\LabApi.dll</HintPath>
+          <Private>false</Private>
+        </Reference>
         <Reference Include="0Harmony">
           <HintPath>$(PkgLib_Harmony)\lib\net48\0Harmony.dll</HintPath>
           <Private>true</Private>
@@ -210,8 +218,12 @@
         <Compile Include="Patches\Poses\PlayerPoseLifecyclePatches.cs" />
         <Compile Include="Properties\AssemblyInfo.cs"/>
         <Compile Include="Networking\AnomalyMessaging.cs" />
+        <Compile Include="Networking\ScriptMessageGate.cs" />
         <Compile Include="Networking\AuthenticatedTransportSessions.cs" />
         <Compile Include="Networking\ConnectionBootstrap.cs" />
+        <Compile Include="Networking\ConnectionContentBootstrap.cs" />
+        <Compile Include="Networking\ConnectionContentState.cs" />
+        <Compile Include="Networking\ContentReadinessPatches.cs" />
         <Compile Include="Networking\EncryptedTransportCounterGuard.cs" />
         <Compile Include="Networking\AnomalyReplayTable.cs" />
         <Compile Include="Assets\AssetFileWatcher.cs" />
@@ -233,6 +245,7 @@
         <Compile Include="FileTransfer\FileTransferSession.cs" />
         <Compile Include="FileTransfer\ServerAssetManager.cs" />
         <Compile Include="FileTransfer\AssetPackSnapshot.cs" />
+        <Compile Include="Api\Scripting\ClientScripts.cs" />
         <Compile Include="FileTransfer\AssetChunkReader.cs" />
         <Compile Include="Assets\DecorativeVisualState.cs" />
         <Compile Include="Api\Assets\DecorativeVisualScope.cs" />

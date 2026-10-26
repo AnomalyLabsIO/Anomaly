@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Args;
 
@@ -8,6 +9,7 @@ namespace Anomaly.Client.Api.Events.Args;
 /// the SCP-079 on the current camera locally; the server never receives the
 /// switch request.
 /// </summary>
+[ScriptType]
 public class Scp079SwitchingCameraEventArgs : PlayerEventArgs, ICancellableEvent
 {
     public Scp079SwitchingCameraEventArgs(Player player, FacilityCamera targetCamera) : base(player)
@@ -16,7 +18,9 @@ public class Scp079SwitchingCameraEventArgs : PlayerEventArgs, ICancellableEvent
     }
 
     /// <summary>The camera the local SCP-079 is switching to.</summary>
+    [ScriptVisible]
     public FacilityCamera TargetCamera { get; }
 
+    [ScriptVisible]
     public bool IsAllowed { get; set; } = true;
 }

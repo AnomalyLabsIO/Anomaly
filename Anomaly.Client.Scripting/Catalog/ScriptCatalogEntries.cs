@@ -52,6 +52,40 @@ internal sealed class ScriptTypeCatalog
     public string DocumentationId => "T:" + ClrType.Replace('+', '.');
 }
 
+internal sealed class ScriptEnumMemberCatalog
+{
+    internal ScriptEnumMemberCatalog(string name, string value, string numericValue)
+    {
+        Name = name;
+        Value = value;
+        NumericValue = numericValue;
+    }
+
+    public string Name { get; }
+    public string Value { get; }
+    public string NumericValue { get; }
+}
+
+internal sealed class ScriptEnumCatalog
+{
+    internal ScriptEnumCatalog(string clrType, string? alias, string? globalName, bool isFlags,
+        IEnumerable<ScriptEnumMemberCatalog> members)
+    {
+        ClrType = clrType;
+        Alias = alias;
+        GlobalName = globalName;
+        IsFlags = isFlags;
+        Members = Array.AsReadOnly(members.OrderBy(member => member.Name, StringComparer.Ordinal).ToArray());
+    }
+
+    public string ClrType { get; }
+    public string? Alias { get; }
+    public string? GlobalName { get; }
+    public bool IsFlags { get; }
+    public IReadOnlyList<ScriptEnumMemberCatalog> Members { get; }
+    public string DocumentationId => "T:" + ClrType.Replace('+', '.');
+}
+
 internal sealed class ScriptEventCatalogEntry
 {
     internal ScriptEventCatalogEntry(string category, string name, string clrDeclaringType, string clrEventName,

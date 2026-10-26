@@ -5,9 +5,11 @@ using Il2Cpp;
 using Il2CppInventorySystem.Items;
 using Il2CppInventorySystem.Items.Pickups;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class Pickup
 {
     private static readonly Dictionary<ItemPickupBase, Pickup> _pickups = new();
@@ -36,22 +38,29 @@ public class Pickup
 
     public ItemPickupBase Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
 
-    public ushort Serial => Base.Info.Serial;
+    [ScriptVisible]
+    public ushort Serial => SafeSerial();
 
     public int TypeId => (int)Base.Info.ItemId;
 
     public string TypeName => Base.Info.ItemId.ToString();
 
+    [ScriptVisible]
     public ItemType Type => Base.Info.ItemId;
 
+    [ScriptVisible]
     public float Weight => Base.Info.WeightKg;
 
+    [ScriptVisible]
     public bool CanSearch => Base.CanSearch;
 
+    [ScriptVisible]
     public bool IsLocked => Base.Info.Locked;
 
+    [ScriptVisible]
     public bool IsInUse => Base.Info.InUse;
 
     public Vector3 Position => Base.Position;

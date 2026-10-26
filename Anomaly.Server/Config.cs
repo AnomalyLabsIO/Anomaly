@@ -11,6 +11,12 @@ public class Config
     public string AssetDirectory { get; set; } = "";
 
     /// <summary>
+    /// Lua sources below namespace/pack directories, with optional pack messages.json declarations.
+    /// Sources and indexes are captured automatically for future connection offers. Empty disables owner sources.
+    /// </summary>
+    public string ScriptDirectory { get; set; } = "ClientScripts";
+
+    /// <summary>
     /// Requests password-gated admission. Public/remote password authentication is
     /// deliberately unavailable until a vetted OPAQUE implementation supports both
     /// target runtimes, so enabling this rejects remote clients. The only current

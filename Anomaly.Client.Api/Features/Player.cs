@@ -53,10 +53,12 @@ public class Player
     public string Nickname => !IsDestroyed && NicknameSync != null ? NicknameSync.MyNick ?? string.Empty : string.Empty;
 
     /// <summary>The game's display name, including a server-provided custom name when present.</summary>
+    [ScriptVisible]
     public string DisplayName => !IsDestroyed && NicknameSync != null ? NicknameSync.DisplayName ?? string.Empty : string.Empty;
 
     public GameObject GameObject => ReferenceHub.gameObject;
 
+    [ScriptVisible]
     public bool IsLocal => this is LocalPlayer;
 
     public Vector3 Position => Transform.position;
@@ -69,19 +71,25 @@ public class Player
     public PlayerRoleBase RoleBase => IsDestroyed || RoleManager == null ? null : CurrentRole;
 
     /// <summary>The current role ID, or <see cref="RoleTypeId.None"/> when unavailable.</summary>
+    [ScriptVisible]
     public RoleTypeId RoleType => RoleBase != null ? RoleBase.RoleTypeId : RoleTypeId.None;
 
     /// <summary>The current team, or <see cref="Il2CppPlayerRoles.Team.Dead"/> when no role is available.</summary>
+    [ScriptVisible]
     public Team Team => RoleBase != null ? RoleBase.Team : Team.Dead;
 
+    [ScriptVisible]
     public bool IsAlive => RoleBase != null && Team != Team.Dead;
+    [ScriptVisible]
     public bool IsHuman => IsAlive && Team != Team.SCPs;
+    [ScriptVisible]
     public bool IsScp => RoleBase != null && Team == Team.SCPs;
 
     /// <summary>Alias of <see cref="IsScp"/> using LabAPI's capitalization.</summary>
     public bool IsSCP => IsScp;
 
     /// <summary>The current role's life identifier, or -1 when no role is available.</summary>
+    [ScriptVisible]
     public int LifeId => RoleBase != null ? RoleBase.UniqueLifeIdentifier : -1;
 
     public Role Role => Role.Get(CurrentRole);
@@ -175,6 +183,7 @@ public class Player
     }
 
     /// <summary>True if the player is in the crouching or sneaking state.</summary>
+    [ScriptVisible]
     public bool IsCrouching
     {
         get
@@ -185,6 +194,7 @@ public class Player
     }
 
     /// <summary>True if the player is in the sprinting state.</summary>
+    [ScriptVisible]
     public bool IsSprinting => MovementState == PlayerMovementState.Sprinting;
 
     /// <summary>True if the player is in the walking state (the default ground state).</summary>
@@ -194,6 +204,7 @@ public class Player
     /// True if the player's FPC module reports being grounded. Returns false
     /// when the module is unavailable (non-FPC roles).
     /// </summary>
+    [ScriptVisible]
     public bool IsGrounded
     {
         get
@@ -207,6 +218,7 @@ public class Player
     /// The facility zone the player is currently in. Returns
     /// <see cref="FacilityZone.None"/> if the player isn't in any tracked room.
     /// </summary>
+    [ScriptVisible]
     public FacilityZone Zone
     {
         get

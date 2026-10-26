@@ -2,10 +2,12 @@ using System.Collections.ObjectModel;
 using Il2Cpp;
 using Il2CppInventorySystem.Items;
 using ArmorBase = Il2CppInventorySystem.Items.Armor.BodyArmor;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>Body armor configuration and owning-client wear state.</summary>
+[ScriptType]
 public class BodyArmorItem : Item
 {
     internal BodyArmorItem(ArmorBase armorBase) : base(armorBase)

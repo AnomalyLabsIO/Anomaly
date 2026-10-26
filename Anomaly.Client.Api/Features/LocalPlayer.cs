@@ -4,9 +4,11 @@ using Il2CppCentralAuth;
 using Il2CppHints;
 using Il2CppRemoteAdmin;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class LocalPlayer : Player
 {
     internal LocalPlayer(ReferenceHub hub) : base(hub) { }

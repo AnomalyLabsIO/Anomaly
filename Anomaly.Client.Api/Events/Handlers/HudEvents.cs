@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Handlers;
 
@@ -9,9 +10,11 @@ namespace Anomaly.Client.Api.Events.Handlers;
 public static class HudEvents
 {
     /// <summary>Fires before a server-sent hint is rendered on the local HUD. Mutate text/duration or cancel to suppress.</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<HintDisplayingEventArgs> HintDisplaying;
 
     /// <summary>Fires before a server-sent broadcast is rendered on the local HUD. Cancel to suppress.</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<BroadcastShowingEventArgs> BroadcastShowing;
 
     internal static void OnHintDisplaying(HintDisplayingEventArgs args) => EventInvoker.Invoke(HintDisplaying, args);

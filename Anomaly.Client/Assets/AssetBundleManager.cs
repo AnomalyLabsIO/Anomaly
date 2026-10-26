@@ -475,7 +475,8 @@ internal static class AssetBundleManager
                     {
                         pack.Handle = NativeAssetBundle.LoadFromFile(candidate.Copy.Path)
                             ?? throw new InvalidDataException("Unity rejected a validated bundle.");
-                        foreach (var entry in candidate.Index.Assets) pack.Assets.Add(entry.Address, LoadAsset(pack.Handle, entry));
+                        foreach (var entry in candidate.Index.Assets)
+                            pack.Assets.Add(entry.Address, LoadAsset(pack.Handle, entry));
                         NativePacks.Add(hash, pack);
                         prepared.Packs.Remove(candidate);
                     }

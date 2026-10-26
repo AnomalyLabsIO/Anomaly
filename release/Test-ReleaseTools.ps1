@@ -26,8 +26,12 @@ try {
             [Text.UTF8Encoding]::new($false).GetBytes(('test:' + $artifactName)))
     }
 
-    & dotnet build (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj') -c Release --nologo
+    & dotnet build (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj') `
+        -c Release -p:DeployLocal=false --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Release manifest tool build failed.' }
+    & dotnet build (Join-Path $toolRepositoryRoot 'tools/ReleasePackaging/ReleasePackaging.csproj') `
+        -c Release -p:DeployLocal=false --nologo
+    if ($LASTEXITCODE -ne 0) { throw 'Release packaging tool build failed.' }
     & dotnet run --project (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj') `
         -c Release --no-build -- generate-key $privateKey $publicKey
     if ($LASTEXITCODE -ne 0) { throw 'Test key generation failed.' }
@@ -81,8 +85,83 @@ try {
         $toolTempDirectory $inventory
     if ($LASTEXITCODE -eq 0) { throw 'Tampered artifact verification unexpectedly succeeded.' }
 
+    # Exercise packaging preflight with an isolated layout. These failures occur
+    # before runtime assemblies or game references are read.
+    $fixtureRepository = Join-Path $toolTempDirectory 'layout-repository'
+    $fixtureReferences = Join-Path $toolTempDirectory 'layout-references'
+    $fixtureOutput = Join-Path $toolTempDirectory 'layout-output'
+    [void][IO.Directory]::CreateDirectory((Join-Path $fixtureRepository 'release'))
+    [void][IO.Directory]::CreateDirectory($fixtureReferences)
+    $fixtureLayout = Join-Path $fixtureRepository 'release/package-layout.json'
+    $originalLayout = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'package-layout.json')
+    $packagerAssembly = Join-Path $toolRepositoryRoot 'tools/ReleasePackaging/bin/Release/net8.0/Anomaly.ReleasePackaging.dll'
+    $fixtureArguments = @(
+        $packagerAssembly, 'create-runtime', $fixtureRepository, $fixtureOutput,
+        '1.0.0', $fixtureReferences, (Join-Path $fixtureRepository 'unused.index.json')
+    )
+    foreach ($project in @(
+        'Anomaly.Bootstrap', 'Anomaly.Client', 'Anomaly.Client.Api',
+        'Anomaly.AssetValidation', 'Anomaly.Server', 'Anomaly.Shared'
+    )) {
+        [IO.File]::WriteAllText((Join-Path $fixtureReferences ($project + '.refs')), $packagerAssembly)
+    }
+    [IO.File]::WriteAllText($fixtureLayout, $originalLayout, [Text.UTF8Encoding]::new($false))
+    $failure = @(& dotnet @fixtureArguments 2>&1)
+    if ($LASTEXITCODE -eq 0 -or
+        ($failure -join "`n") -notlike '*Resolved-reference list for Anomaly.Client.Scripting is missing.*') {
+        throw ("Reviewed scripting layout was rejected or its resolved references were not required: {0}" -f ($failure -join "`n"))
+    }
+
+    foreach ($requiredPath in @(
+        'UserLibs/Anomaly.Client.Scripting.dll', 'UserLibs/Anomaly.MoonSharp.Interpreter.dll',
+        'licenses/MoonSharp.LICENSE', 'licenses/MoonSharp.md'
+    )) {
+        $layout = $originalLayout | ConvertFrom-Json
+        $client = $layout.packages | Where-Object packageId -eq 'anomaly-client'
+        $client.entries = @($client.entries | Where-Object path -ne $requiredPath)
+        [IO.File]::WriteAllText($fixtureLayout, ($layout | ConvertTo-Json -Depth 16), [Text.UTF8Encoding]::new($false))
+        $failure = @(& dotnet @fixtureArguments 2>&1)
+        if ($LASTEXITCODE -eq 0 -or
+            ($failure -join "`n") -notlike "*Package 'anomaly-client' is missing a required runtime or SDK entry.*") {
+            throw ("Missing scripting payload or redistribution notice was not rejected: {0}: {1}" -f $requiredPath,($failure -join "`n"))
+        }
+    }
+
+    $sdkFixtureArguments = @($fixtureArguments)
+    $sdkFixtureArguments[1] = 'create-local'
+    foreach ($requiredPath in @(
+        'reference/Anomaly.Client.Scripting.ScriptAPI.Shipped.txt',
+        'reference/Anomaly.Client.Scripting.ScriptAPI.json',
+        'reference/Anomaly.Client.Api.d.lua'
+    )) {
+        $layout = $originalLayout | ConvertFrom-Json
+        $sdk = $layout.packages | Where-Object packageId -eq 'anomaly-sdk'
+        $sdk.entries = @($sdk.entries | Where-Object path -ne $requiredPath)
+        [IO.File]::WriteAllText($fixtureLayout, ($layout | ConvertTo-Json -Depth 16), [Text.UTF8Encoding]::new($false))
+        $failure = @(& dotnet @sdkFixtureArguments 2>&1)
+        if ($LASTEXITCODE -eq 0 -or
+            ($failure -join "`n") -notlike "*Package 'anomaly-sdk' is missing a required runtime or SDK entry.*") {
+            throw ("Missing SDK script export was not rejected at preflight: {0}: {1}" -f $requiredPath,($failure -join "`n"))
+        }
+    }
+
+    # A local runtime archive must read its BSD notice, rather than silently
+    # dropping non-DLL manifest entries. Put the absent notice first to isolate it.
+    [IO.File]::WriteAllText((Join-Path $fixtureReferences 'Anomaly.Client.Scripting.refs'), $packagerAssembly)
+    $layout = $originalLayout | ConvertFrom-Json
+    $client = $layout.packages | Where-Object packageId -eq 'anomaly-client'
+    $notice = $client.entries | Where-Object path -eq 'licenses/MoonSharp.LICENSE'
+    $client.entries = @($notice) + @($client.entries | Where-Object path -ne 'licenses/MoonSharp.LICENSE')
+    [IO.File]::WriteAllText($fixtureLayout, ($layout | ConvertTo-Json -Depth 16), [Text.UTF8Encoding]::new($false))
+    $failure = @(& dotnet @fixtureArguments 2>&1)
+    $missingNotice = Join-Path $fixtureRepository 'third_party/MoonSharp/LICENSE'
+    if ($LASTEXITCODE -eq 0 -or
+        -not ($failure -join "`n").Contains("Runtime source '$missingNotice' is missing.")) {
+        throw ("Local runtime staging did not require the declared MoonSharp BSD notice: {0}" -f ($failure -join "`n"))
+    }
+
     $global:LASTEXITCODE = 0
-    Write-Host 'Release manifest schema, signing, wrong-key, missing-file, and tamper gates passed.'
+    Write-Host 'Release manifest signing/tamper gates and scripting payload, reference, BSD notice, and SDK export gates passed.'
 }
 finally {
     $env:SOURCE_DATE_EPOCH = $previousSourceDateEpoch

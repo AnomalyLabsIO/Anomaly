@@ -1,8 +1,10 @@
 using UnityEngine;
 using Anomaly.Client.Api.Events;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public readonly struct MotionDiscontinuity
 {
     public MotionDiscontinuity(
@@ -22,7 +24,9 @@ public readonly struct MotionDiscontinuity
     public Vector3 Position { get; }
     public Vector3 Velocity { get; }
     public Vector3 Forward { get; }
+    [ScriptVisible]
     public uint Sequence { get; }
+    [ScriptVisible]
     public bool Grounded { get; }
 }
 
@@ -59,6 +63,7 @@ public static class LocalPlayerMotion
     private static RuntimeApply _runtimeApply;
     private static RuntimeReset _runtimeReset;
 
+    [ScriptEvent]
     public static event Action<MotionDiscontinuity> Applied;
 
     public static bool TryApply(MotionDiscontinuity motion, out MotionFailure failure)

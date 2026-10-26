@@ -1,9 +1,11 @@
 using UsableItemBase = Il2CppInventorySystem.Items.Usables.UsableItem;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>A usable item, including consumables and wearable SCP items.</summary>
 /// <remarks>Runtime use and cooldown fields are maintained for the owning client. Null values below mean unavailable, not idle or ready.</remarks>
+[ScriptType]
 public class UsableItem : Item
 {
     internal UsableItem(UsableItemBase usableBase) : base(usableBase)

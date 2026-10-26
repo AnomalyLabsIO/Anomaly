@@ -1,9 +1,12 @@
+using Anomaly.Client.Api.Scripting;
+
 namespace Anomaly.Client.Api.Events.Args;
 
 /// <summary>
 /// Fires when a server-sent broadcast is about to be rendered on the local
 /// HUD. Cancelling suppresses the local render; the server's view is unaffected.
 /// </summary>
+[ScriptType]
 public class BroadcastShowingEventArgs : EventArgs, ICancellableEvent
 {
     public BroadcastShowingEventArgs(string text, ushort durationSeconds, byte flags)
@@ -14,13 +17,17 @@ public class BroadcastShowingEventArgs : EventArgs, ICancellableEvent
     }
 
     /// <summary>The broadcast text the server sent.</summary>
+    [ScriptVisible]
     public string Text { get; }
 
     /// <summary>How long the broadcast was intended to display, in seconds.</summary>
+    [ScriptVisible]
     public ushort DurationSeconds { get; }
 
     /// <summary>Raw <c>Broadcast.BroadcastFlags</c> byte (Truncated, AdminChat, etc.).</summary>
+    [ScriptVisible]
     public byte Flags { get; }
 
+    [ScriptVisible]
     public bool IsAllowed { get; set; } = true;
 }

@@ -5,6 +5,7 @@ namespace Anomaly.Client.Api.Events.Handlers;
 
 public static class ClientEvents
 {
+    [ScriptEvent]
     public static event AnomalyEventHandler<SceneLoadedEventArgs> SceneLoaded;
     [ScriptEvent]
     public static event AnomalyEventHandler<ClientConnectedEventArgs> Connected;
@@ -14,6 +15,7 @@ public static class ClientEvents
     /// attempts that never reached <see cref="Ready"/>. Cleanup handlers must be
     /// idempotent; do not count this as one event per completed gameplay session.
     /// </summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<ClientDisconnectedEventArgs> Disconnected;
 
     /// <summary>
@@ -29,9 +31,11 @@ public static class ClientEvents
     /// </remarks>
     [ScriptEvent]
     public static event AnomalyEventHandler<ClientReadyEventArgs> Ready;
+    [ScriptEvent]
     public static event AnomalyEventHandler<CanvasReadyEventArgs> CanvasReady;
 
     /// <summary>Enrollment was disclosed or cleared. This does not replace transport or scene readiness.</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<EnrollmentChangedEventArgs> EnrollmentChanged;
 
     internal static void OnEnrollmentChanged(EnrollmentChangedEventArgs args) => EventInvoker.Invoke(EnrollmentChanged, args);

@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Handlers;
 
@@ -10,15 +11,18 @@ namespace Anomaly.Client.Api.Events.Handlers;
 public static class ElevatorEvents
 {
     /// <summary>Fires when a new elevator chamber spawns into the scene.</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<ElevatorEventArgs> Spawned;
 
     /// <summary>Fires when an elevator chamber is removed from the scene.</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<ElevatorEventArgs> Removed;
 
     /// <summary>
     /// Fires when an elevator chamber starts a movement sequence (door close →
     /// travel → door open at destination).
     /// </summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<ElevatorEventArgs> Moved;
 
     internal static void OnSpawned(ElevatorEventArgs args) => EventInvoker.Invoke(Spawned, args);

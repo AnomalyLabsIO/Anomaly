@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Handlers;
 
@@ -15,7 +16,9 @@ namespace Anomaly.Client.Api.Events.Handlers;
 /// </remarks>
 public static class AnnouncerEvents
 {
+    [ScriptEvent]
     public static event AnomalyEventHandler<AnnouncerLineScheduledEventArgs> LineScheduled;
+    [ScriptEvent]
     public static event AnomalyEventHandler<AnnouncerLineStartedEventArgs> LineStarted;
 
     internal static void OnLineScheduled(AnnouncerLineScheduledEventArgs args) =>

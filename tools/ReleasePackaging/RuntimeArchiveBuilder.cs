@@ -49,9 +49,9 @@ internal static partial class ReleasePackageBuilder
             var entries = new Dictionary<string, PackageInventoryEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (var definition in package.Entries)
             {
-                // Installation ZIPs carry runtime DLLs and the selected skin pair only.
-                if (package.Target != "developer-sdk" &&
-                    !definition.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                // The selected skin pair is staged below; all other declared files include their notices.
+                if (package.Target == "client-runtime" &&
+                    definition.Path.StartsWith(SkinPackDirectory + "/", StringComparison.Ordinal))
                     continue;
                 StageRuntimeFile(
                     ResolveUnderRoot(repository, definition.Source), definition.Path, packageRoot, entries);

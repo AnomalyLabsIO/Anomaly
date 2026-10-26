@@ -4,6 +4,7 @@ using Il2Cpp;
 using Il2CppPlayerRoles;
 using Il2CppPlayerRoles.Ragdolls;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -18,6 +19,7 @@ namespace Anomaly.Client.Api.Features;
 /// (<c>RagdollEvents.Spawned</c> / <c>RagdollEvents.Removed</c>) live in the
 /// new <see cref="Anomaly.Client.Api.Events.Handlers.RagdollEvents"/> handler.
 /// </remarks>
+[ScriptType]
 public class Ragdoll
 {
     private static readonly Dictionary<BasicRagdoll, Ragdoll> _ragdolls = new();
@@ -30,6 +32,7 @@ public class Ragdoll
     /// <summary>The underlying <see cref="BasicRagdoll"/>.</summary>
     public BasicRagdoll Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
 
     public static bool TryGet(BasicRagdoll value, out Ragdoll wrapper)
@@ -39,9 +42,11 @@ public class Ragdoll
     }
 
     /// <summary>The role the dead player was when the ragdoll was created.</summary>
+    [ScriptVisible]
     public RoleTypeId RoleType => Base != null ? Base.NetworkInfo.RoleType : RoleTypeId.None;
 
     /// <summary>The nickname of the dead player at time of death.</summary>
+    [ScriptVisible]
     public string Nickname => Base != null ? Base.NetworkInfo.Nickname : null;
 
     /// <summary>The <see cref="ReferenceHub"/> that owned this ragdoll, or null.</summary>
@@ -61,12 +66,14 @@ public class Ragdoll
     public Il2CppPlayerStatsSystem.DamageHandlerBase DamageHandler => Base?.NetworkInfo.Handler;
 
     /// <summary>Engine creation timestamp (DSP-time-style double).</summary>
+    [ScriptVisible]
     public double CreationTime => Base != null ? Base.NetworkInfo.CreationTime : 0d;
 
     /// <summary>Seconds elapsed since the ragdoll was created.</summary>
     public float ExistenceTime => Base != null ? Base.NetworkInfo.ExistenceTime : 0f;
 
     /// <summary>True if the ragdoll has been frozen (no further physics).</summary>
+    [ScriptVisible]
     public bool IsFrozen => Base != null && Base.Frozen;
 
     /// <summary>The ragdoll's center-of-mass transform.</summary>

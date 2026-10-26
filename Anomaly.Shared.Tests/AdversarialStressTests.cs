@@ -265,87 +265,21 @@ public sealed class AdversarialStressTests : IDisposable
     }
 
     [Fact]
-    public void ServerTransferIgnoresUnsolicitedAndDuplicateAcknowledgements()
+    public void ServerTransferRejectsUnsolicitedAcknowledgementBeforeFileRequest()
     {
-        byte[] bytes = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-        string path = Path.GetTempFileName();
-        File.WriteAllBytes(path, bytes);
-        byte[] hash;
-        using (var sha = System.Security.Cryptography.SHA256.Create())
-            hash = sha.ComputeHash(bytes);
-
-        ServerAssetManager.SetAssets(new ServerAssetManager.AssetInfo
-        {
-            FullPath = path,
-            RelativePath = "audio/test.bundle",
-            Hash = hash,
-            Size = (uint)bytes.Length,
-            Kind = FileContentKind.Bundle,
-        });
         var hub = new ReferenceHub();
-        int completions = 0;
-        Action<ReferenceHub> completed = _ => completions++;
-        FileTransferSession.SessionCompleted += completed;
-
         try
         {
-            FileTransferSession.StartForPlayer(hub);
-            MEC.Timing.RunPendingStarts();
-            FileManifestMessage manifest = Assert.IsType<FileManifestMessage>(
-                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
-            ApproveServerTransfer(hub, manifest);
-
-            FileTransferSession.HandleMessage(hub, new FileAckMessage
-            {
-                SessionId = manifest.SessionId,
-                Hash = hash,
-                Status = 0,
-            });
-            Assert.Equal(1, ActiveTransferCount());
-            Assert.Equal(0, completions);
-
-            FileTransferSession.HandleMessage(hub, new FileRequestMessage
-            {
-                SessionId = manifest.SessionId,
-                RequestedHashes = { hash },
-            });
-            Assert.Equal(1, ReservedTransferCount());
-
-            object session = ActiveTransferFor(hub);
-            SetTransferState(session, "AwaitingAck");
-            FileTransferSession.HandleMessage(hub, new FileAckMessage
-            {
-                SessionId = manifest.SessionId,
-                Hash = hash,
-                Status = 0,
-            });
-            FileTransferSession.HandleMessage(hub, new FileAckMessage
-            {
-                SessionId = manifest.SessionId,
-                Hash = hash,
-                Status = 0,
-            });
-
+            ServerBootstrapFixture.Start(hub);
+            var manifest = ServerBootstrapFixture.Manifest;
+            ServerBootstrapFixture.Approve(hub);
+            ServerBootstrapFixture.Handle(hub, new FileAckMessage { SessionId = manifest.SessionId, Hash = new byte[32], Status = 0 });
             Assert.Equal(0, ActiveTransferCount());
             Assert.Equal(0, ReservedTransferCount());
-            Assert.Equal(1, completions);
-            Assert.False(FileTransferSession.IsAssetApproved(hub, AssetAddress.Parse("mods/fixture/audio/test"), AssetKind.AudioClip));
-            var activatedCatalog = CatalogBuilder.Build(Array.Empty<CatalogEntry>(), 128, 127, manifest.ManifestSha256);
-            Assert.True(ContentGrantGate.TryRecordActivation(hub.netId, activatedCatalog.CatalogSha256, manifest.ManifestSha256, activated: true));
-            Assert.True(FileTransferSession.IsAssetApproved(hub, AssetAddress.Parse("mods/fixture/audio/test"), AssetKind.AudioClip));
-            Assert.False(FileTransferSession.IsAssetApproved(hub, AssetAddress.Parse("mods/fixture/audio/test"), AssetKind.Texture2D));
-
-            FileTransferSession.CleanupPlayer(hub);
-            Assert.False(FileTransferSession.IsAssetApproved(hub, AssetAddress.Parse("mods/fixture/audio/test"), AssetKind.AudioClip));
+            Assert.False(AuthenticatedTransportSessions.IsActiveConnection(hub.connectionToClient));
+            Assert.Equal(1, hub.connectionToClient.DisconnectCount);
         }
-        finally
-        {
-            FileTransferSession.SessionCompleted -= completed;
-            FileTransferSession.Reset();
-            Anomaly.Server.Networking.AnomalyMessaging.ResetForTests();
-            ServerAssetManager.SetAssets();
-            File.Delete(path);
-        }
+        finally { FileTransferSession.Reset(); Anomaly.Server.Networking.AnomalyMessaging.ResetForTests(); }
     }
 
     [Theory]
@@ -375,12 +309,11 @@ public sealed class AdversarialStressTests : IDisposable
 
         try
         {
-            FileTransferSession.StartForPlayer(hub);
-            MEC.Timing.RunPendingStarts();
+            ServerBootstrapFixture.Start(hub);
             var manifest = Assert.IsType<FileManifestMessage>(
-                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.OfType<FileManifestMessage>().Single());
             ApproveServerTransfer(hub, manifest);
-            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            ServerBootstrapFixture.Handle(hub, new FileRequestMessage
             {
                 SessionId = manifest.SessionId,
                 RequestedHashes = { hash },
@@ -446,12 +379,11 @@ public sealed class AdversarialStressTests : IDisposable
 
         try
         {
-            FileTransferSession.StartForPlayer(hub);
-            MEC.Timing.RunPendingStarts();
+            ServerBootstrapFixture.Start(hub);
             var manifest = Assert.IsType<FileManifestMessage>(
-                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.OfType<FileManifestMessage>().Single());
             ApproveServerTransfer(hub, manifest);
-            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            ServerBootstrapFixture.Handle(hub, new FileRequestMessage
             {
                 SessionId = manifest.SessionId,
                 RequestedHashes = { hash },
@@ -460,7 +392,7 @@ public sealed class AdversarialStressTests : IDisposable
             Assert.Equal(1, ReservedTransferCount());
 
             MEC.Timing.ThrowOnKill = true;
-            FileTransferSession.CleanupPlayer(hub);
+            ConnectionContentBootstrap.Cleanup(hub.connectionToClient);
 
             Assert.Equal(0, ActiveTransferCount());
             Assert.Equal(0, ReservedTransferCount());
@@ -500,18 +432,17 @@ public sealed class AdversarialStressTests : IDisposable
 
         try
         {
-            FileTransferSession.StartForPlayer(hub);
-            MEC.Timing.RunPendingStarts();
+            ServerBootstrapFixture.Start(hub);
             var manifest = Assert.IsType<FileManifestMessage>(
-                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.OfType<FileManifestMessage>().Single());
             ApproveServerTransfer(hub, manifest);
-            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            ServerBootstrapFixture.Handle(hub, new FileRequestMessage
             {
                 SessionId = manifest.SessionId,
                 RequestedHashes = { hash },
             });
             Assert.Equal(1, ReservedTransferCount());
-            FileTransferSession.CleanupPlayer(hub);
+            ConnectionContentBootstrap.Cleanup(hub.connectionToClient);
             Assert.Equal(0, ActiveTransferCount());
             Assert.Equal(0, ReservedTransferCount());
             Assert.Equal(0L, ReservedTransferBytes());
@@ -561,14 +492,13 @@ public sealed class AdversarialStressTests : IDisposable
 
         try
         {
-            FileTransferSession.StartForPlayer(hub);
-            MEC.Timing.RunPendingStarts();
+            ServerBootstrapFixture.Start(hub);
             var manifest = Assert.IsType<FileManifestMessage>(
-                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.OfType<FileManifestMessage>().Single());
             ApproveServerTransfer(hub, manifest);
             MEC.Timing.ThrowOnRun = true;
 
-            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            ServerBootstrapFixture.Handle(hub, new FileRequestMessage
             {
                 SessionId = manifest.SessionId,
                 RequestedHashes = { hash },
@@ -614,12 +544,11 @@ public sealed class AdversarialStressTests : IDisposable
 
         try
         {
-            FileTransferSession.StartForPlayer(hub);
-            MEC.Timing.RunPendingStarts();
+            ServerBootstrapFixture.Start(hub);
             var manifest = Assert.IsType<FileManifestMessage>(
-                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.OfType<FileManifestMessage>().Single());
             ApproveServerTransfer(hub, manifest);
-            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            ServerBootstrapFixture.Handle(hub, new FileRequestMessage
             {
                 SessionId = manifest.SessionId,
                 RequestedHashes = { hash },
@@ -628,7 +557,7 @@ public sealed class AdversarialStressTests : IDisposable
 
             SetTransferState(ActiveTransferFor(hub), "AwaitingAck");
             MEC.Timing.ThrowOnKill = true;
-            FileTransferSession.HandleMessage(hub, new FileAckMessage
+            ServerBootstrapFixture.Handle(hub, new FileAckMessage
             {
                 SessionId = manifest.SessionId,
                 Hash = hash,
@@ -675,12 +604,11 @@ public sealed class AdversarialStressTests : IDisposable
 
         try
         {
-            FileTransferSession.StartForPlayer(hub);
-            MEC.Timing.RunPendingStarts();
+            ServerBootstrapFixture.Start(hub);
             var manifest = Assert.IsType<FileManifestMessage>(
-                Anomaly.Server.Networking.AnomalyMessaging.Sent.Single());
+                Anomaly.Server.Networking.AnomalyMessaging.Sent.OfType<FileManifestMessage>().Single());
             ApproveServerTransfer(hub, manifest);
-            FileTransferSession.HandleMessage(hub, new FileRequestMessage
+            ServerBootstrapFixture.Handle(hub, new FileRequestMessage
             {
                 SessionId = manifest.SessionId,
                 RequestedHashes = { hash },
@@ -689,8 +617,8 @@ public sealed class AdversarialStressTests : IDisposable
 
             object session = ActiveTransferFor(hub);
             SetTransferState(session, "AwaitingAck");
-            ContentGrantGate.Remove(hub.netId);
-            FileTransferSession.HandleMessage(hub, new FileAckMessage
+            ConnectionContentBootstrap.OnGenerationStarted();
+            ServerBootstrapFixture.Handle(hub, new FileAckMessage
             {
                 SessionId = manifest.SessionId,
                 Hash = hash,
@@ -1157,7 +1085,7 @@ public sealed class AdversarialStressTests : IDisposable
         object sessions = typeof(FileTransferSession)
             .GetField("ActiveSessions", BindingFlags.NonPublic | BindingFlags.Static)
             ?.GetValue(null) ?? throw new InvalidOperationException("Missing active transfer map.");
-        return sessions.GetType().GetProperty("Item")?.GetValue(sessions, new object[] { hub })
+        return sessions.GetType().GetProperty("Item")?.GetValue(sessions, new object[] { hub.connectionToClient })
             ?? throw new InvalidOperationException("Missing transfer session.");
     }
 
@@ -1191,18 +1119,8 @@ public sealed class AdversarialStressTests : IDisposable
 
     private static void ApproveServerTransfer(ReferenceHub hub, FileManifestMessage manifest)
     {
-        ContentCatalog catalog = CatalogBuilder.Build(
-            Array.Empty<CatalogEntry>(),
-            itemIdBase: 128,
-            itemIdCeiling: 127,
-            manifest.ManifestSha256);
-        ContentGrantGate.RecordOffer(hub.netId, catalog);
-        Assert.True(ContentGrantGate.TryRecordDecision(
-            hub.netId,
-            catalog.CatalogSha256,
-            catalog.ManifestSha256,
-            approved: true));
-        Assert.True(FileTransferSession.ApproveForPlayer(hub));
+        ServerBootstrapFixture.Approve(hub);
+        Assert.True(AuthenticatedTransportSessions.IsActiveConnection(hub.connectionToClient));
     }
 
     private static int ReservedTransferCount()

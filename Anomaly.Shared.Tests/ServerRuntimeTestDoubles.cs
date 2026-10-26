@@ -13,8 +13,13 @@ using Anomaly.Shared.Networking.Messages;
 public sealed class ReferenceHub
 {
     public uint netId { get; set; }
-    public Mirror.NetworkConnectionToClient connectionToClient { get; set; } =
-        new Mirror.NetworkConnectionToClient { isReady = true };
+    private Mirror.NetworkConnectionToClient _connection;
+    public ReferenceHub() { connectionToClient = new Mirror.NetworkConnectionToClient { isReady = true }; }
+    public Mirror.NetworkConnectionToClient connectionToClient
+    {
+        get => _connection;
+        set { _connection = value; if (value != null) value.Owner = this; }
+    }
 }
 
 namespace Anomaly.Server.Content
@@ -66,6 +71,8 @@ namespace Anomaly.Server
 {
     internal static class Plugin
     {
+        internal static bool IsAuthenticatedAdmissionCurrent(ReferenceHub hub) =>
+            Anomaly.Server.Networking.AuthenticatedTransportSessions.IsActive(hub);
         public static int QuarantineCount { get; private set; }
         public static ReferenceHub LastQuarantinedHub { get; private set; }
         public static string LastQuarantineContext { get; private set; }
@@ -75,6 +82,7 @@ namespace Anomaly.Server
             QuarantineCount++;
             LastQuarantinedHub = hub;
             LastQuarantineContext = context;
+            Anomaly.Server.Networking.AuthenticatedTransportSessions.Quarantine(hub);
         }
 
         public static void ResetForTests()
@@ -88,8 +96,11 @@ namespace Anomaly.Server
 
 namespace Mirror
 {
-    public sealed class NetworkConnectionToClient
+    public class NetworkConnectionToClient
     {
+        public int connectionId;
+        internal ReferenceHub Owner;
+        internal bool Rejected;
         public bool isReady;
         public int DisconnectCount { get; private set; }
 
@@ -99,7 +110,20 @@ namespace Mirror
             isReady = false;
         }
     }
+    public sealed class LocalConnectionToClient : NetworkConnectionToClient { }
 }
+
+public sealed class EncryptedChannelManager
+{
+    public enum SecurityLevel { Unsecured, EncryptedAndAuthenticated }
+    public readonly struct EncryptedMessageOutside
+    {
+        public EncryptedMessageOutside(SecurityLevel level, byte[] data) { Level = level; Data = data; }
+        public SecurityLevel Level { get; }
+        public byte[] Data { get; }
+    }
+}
+namespace NetworkManagerUtils.Dummies { public sealed class DummyNetworkConnection : Mirror.NetworkConnectionToClient { } }
 
 namespace MEC
 {
@@ -130,7 +154,7 @@ namespace MEC
         {
             foreach (var entry in Routines.ToArray())
             {
-                if (!entry.Value.GetType().Name.Contains("StartWhenReady")) continue;
+                if (!entry.Value.GetType().Name.Contains("StartWhenReady") && !entry.Value.GetType().Name.Contains("Watch")) continue;
                 for (int step = 0; step < 4 && entry.Value.MoveNext(); step++) { }
                 Routines.Remove(entry.Key);
             }
@@ -182,6 +206,21 @@ namespace Anomaly.Server.Auth
 
 namespace Anomaly.Server.Networking
 {
+    internal static class ConnectionBootstrap
+    {
+        internal static void Reject(Mirror.NetworkConnectionToClient connection, string reason)
+        {
+            if (connection == null || connection.Rejected) return;
+            connection.Rejected = true;
+            ConnectionContentBootstrap.MarkRejected(connection);
+            AuthenticatedTransportSessions.QuarantineConnection(connection);
+            ConnectionContentBootstrap.Cleanup(connection);
+            Anomaly.Server.Plugin.QuarantineAuthenticatedPlayer(connection.Owner, reason);
+            connection.Disconnect();
+            AuthenticatedTransportSessions.RemoveConnection(connection);
+        }
+    }
+
     internal static class AnomalyMessaging
     {
         public static event Action<ReferenceHub, IAnomalyMessage> MessageReceived;
@@ -194,6 +233,8 @@ namespace Anomaly.Server.Networking
 
         public static void SendToClient(ReferenceHub hub, IAnomalyMessage message)
             => Sent.Add(message);
+        public static bool TrySendToConnection(Mirror.NetworkConnectionToClient connection, IAnomalyMessage message) =>
+            TrySendToClient(connection.Owner, message);
 
         public static bool TrySendToClient(ReferenceHub hub, IAnomalyMessage message)
         {
@@ -208,6 +249,8 @@ namespace Anomaly.Server.Networking
 
         public static void ResetForTests()
         {
+            ConnectionContentBootstrap.Reset();
+            AuthenticatedTransportSessions.Reset();
             Sent.Clear();
             TrySendResult = _ => true;
             TrySendException = _ => null;
@@ -223,6 +266,8 @@ namespace Anomaly.Server.FileTransfer
         private static AssetPackSnapshot _snapshot = AssetPackSnapshot.Empty();
         private static string _sourceRoot;
         public static bool IsReady => true;
+        public static void Rescan() { }
+        internal static void InvalidateScriptRegistrations() { }
         public static void SetAssets(params AssetInfo[] assets)
         {
             _snapshot.Dispose();
@@ -263,6 +308,7 @@ namespace Anomaly.Server.FileTransfer
             _snapshot = AssetPackSnapshot.Build(_sourceRoot);
         }
         public static AssetPackSnapshot AcquireSnapshot() => _snapshot.Retain();
+        public static bool TryAcquireOfferSnapshot(out AssetPackSnapshot snapshot) { snapshot = _snapshot.Retain(); return true; }
         public static bool TryGetAsset(AssetAddress address, out AssetPackSnapshot.AssetRecord asset) => _snapshot.TryGetAsset(address, out asset);
         public static byte[] ComputeCurrentManifestSha256() => _snapshot.BuildManifest(1).ManifestSha256;
         public static string ToHex(byte[] hash) => BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
@@ -425,6 +471,9 @@ namespace Anomaly.Client.Api.Networking
 {
     internal static class AnomalyMessaging
     {
+        internal static Action<IAnomalyMessage> ContentBootstrapMessageReceived;
+        internal static Action TransportSessionRevoked;
+        internal static long TransportGeneration { get; private set; }
         public static event Action<IAnomalyMessage> MessageReceived
         {
             add { }
@@ -459,7 +508,14 @@ namespace Anomaly.Client.Api.Networking
         }
 
         public static int TransportFailures { get; set; }
-        public static void ClearTransportSession() { SessionRevocations++; TransportEvents.Add("revoke"); }
+        public static long ClearTransportSession()
+        {
+            TransportGeneration = checked(TransportGeneration + 1);
+            long generation = TransportGeneration;
+            SessionRevocations++; TransportEvents.Add("revoke");
+            if (Anomaly.Client.Auth.AuthHandler.UsingAnomalyAuth) TransportSessionRevoked?.Invoke();
+            return generation;
+        }
         public static void FailClosedTransport(string reason)
         {
             TransportFailures++;
@@ -521,10 +577,17 @@ namespace Il2CppMirror
             Anomaly.Client.Api.Networking.AnomalyMessaging.TransportEvents.Add("disconnect");
         }
     }
-    internal static class NetworkClient { internal static NetworkConnection connection; }
+    internal static class NetworkClient
+    {
+        internal static NetworkConnection connection;
+        internal static bool activeHost;
+        internal static int ReadyCalls, AddPlayerCalls;
+        internal static bool Ready() { ReadyCalls++; return true; }
+        internal static bool AddPlayer() { AddPlayerCalls++; return true; }
+    }
     internal static class NetworkServer
     {
-        public static bool active => false;
+        public static bool active;
     }
 }
 

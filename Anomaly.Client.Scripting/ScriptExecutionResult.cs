@@ -8,6 +8,7 @@ internal enum ScriptExecutionStatus
     CpuLimit,
     Deadline,
     DepthLimit,
+    MemoryLimit,
     Cancelled,
     InvalidResult,
     Retired

@@ -12,6 +12,8 @@
     <DeployLocal Condition="'$(DeployLocal)' == ''">false</DeployLocal>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Assembly-CSharp" HintPath="$(AnomalyClientInteropDir)\Assembly-CSharp.dll" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(AnomalyClientInteropDir)\UnityEngine.CoreModule.dll" Aliases="UnityInterop" />
     <ProjectReference Include="..\Anomaly.Client.Api\Anomaly.Client.Api.csproj" AdditionalProperties="DeployLocal=$(DeployLocal)" />
     <ProjectReference Include="..\third_party\MoonSharp\Anomaly.MoonSharp.Interpreter.csproj" />
   </ItemGroup>

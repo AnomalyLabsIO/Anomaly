@@ -1,4 +1,5 @@
 using FirearmPickupBase = Il2CppInventorySystem.Items.Firearms.FirearmPickup;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -13,6 +14,7 @@ namespace Anomaly.Client.Api.Features;
 /// inventory. This wrapper is mainly an ergonomic downcast so consumers can
 /// branch on "is this a firearm pickup?" without raw <c>is</c> checks.
 /// </remarks>
+[ScriptType]
 public class FirearmPickup : Pickup
 {
     internal FirearmPickup(FirearmPickupBase firearmPickupBase) : base(firearmPickupBase)

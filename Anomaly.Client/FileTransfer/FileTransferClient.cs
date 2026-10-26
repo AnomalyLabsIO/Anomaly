@@ -135,6 +135,8 @@ public static class FileTransferClient
         }
     }
 
+    internal static void ReceiveBootstrap(IAnomalyMessage message) => OnMessageReceived(message);
+
     private static void HandleManifest(FileManifestMessage manifest)
     {
         if (_state != State.Idle)
@@ -163,9 +165,10 @@ public static class FileTransferClient
         _completedFiles = 0;
         foreach (var file in manifest.Files)
         {
-            if (file.Kind != FileContentKind.Bundle && file.Kind != FileContentKind.PackIndex)
+            if (file.Kind != FileContentKind.Bundle && file.Kind != FileContentKind.PackIndex &&
+                file.Kind != FileContentKind.ScriptIndex && file.Kind != FileContentKind.LuaSource)
             {
-                Abort("manifest contained a file outside the bundle/index allowlist");
+                Abort("manifest contained an unsupported content kind");
                 return;
             }
 

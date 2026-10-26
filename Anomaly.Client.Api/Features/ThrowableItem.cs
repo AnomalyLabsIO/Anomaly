@@ -1,5 +1,6 @@
 using ThrowableItemBase = Il2CppInventorySystem.Items.ThrowableProjectiles.ThrowableItem;
 using ProjectileSettings = Il2CppInventorySystem.Items.ThrowableProjectiles.ThrowableItem.ProjectileSettings;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -8,6 +9,7 @@ namespace Anomaly.Client.Api.Features;
 /// settings (force, fuse) for HUD overlays (throw-strength indicator,
 /// fuse-time tooltips, custom telemetry).
 /// </summary>
+[ScriptType]
 public class ThrowableItem : Item
 {
     internal ThrowableItem(ThrowableItemBase throwableBase) : base(throwableBase)

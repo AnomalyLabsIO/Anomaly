@@ -23,6 +23,8 @@
     <ProjectReference Include="..\Anomaly.Client.Api\Anomaly.Client.Api.csproj" AdditionalProperties="DeployLocal=false" />
     <Compile Include="..\Anomaly.Client\Internal\Modding\ModContext.cs" Link="Runtime\ModContext.cs" />
     <Compile Include="..\Anomaly.Client\Internal\Hosting\LocalHostGrantCoordinator.cs" Link="Runtime\LocalHostGrantCoordinator.cs" />
+    <Compile Include="..\Anomaly.Client\Internal\Hosting\LocalScriptHostGate.cs" Link="Runtime\LocalScriptHostGate.cs" />
+    <Compile Include="..\Anomaly.Client\Internal\Networking\ScriptMessageConnection.cs" Link="Runtime\ScriptMessageConnection.cs" />
     <Compile Include="..\Anomaly.Client\Diagnostics\News\NewsDiagnosticModels.cs" Link="Runtime\News\NewsDiagnosticModels.cs" />
     <Compile Include="..\Anomaly.Client\Diagnostics\News\NewsDiagnosticPolicy.cs" Link="Runtime\News\NewsDiagnosticPolicy.cs" />
     <Compile Include="..\Anomaly.Client\Diagnostics\News\NewsLogParser.cs" Link="Runtime\News\NewsLogParser.cs" />

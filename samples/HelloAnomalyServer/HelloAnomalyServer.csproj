@@ -8,5 +8,7 @@
   <Import Project="..\Anomaly.Server.Sample.props" />
   <ItemGroup>
     <Compile Include="..\HelloMessages.cs" Link="HelloMessages.cs" />
+    <EmbeddedResource Include="ClientScripts\**\*.lua" />
+    <EmbeddedResource Include="ClientScripts\messages.json" />
   </ItemGroup>
 </Project>

@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using Il2Cpp;
 using Il2CppMapGeneration.Distributors;
 using UnityEngine;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -17,6 +18,7 @@ namespace Anomaly.Client.Api.Features;
 /// Chamber state is replicated through the locker's <c>OpenedChambers</c>
 /// SyncVar (a flag bitmask).</para>
 /// </remarks>
+[ScriptType]
 public class Locker
 {
     private static readonly Dictionary<Il2CppMapGeneration.Distributors.Locker, Locker> _lockers = new();
@@ -31,10 +33,12 @@ public class Locker
     /// <summary>The underlying <see cref="Il2CppMapGeneration.Distributors.Locker"/>.</summary>
     public Il2CppMapGeneration.Distributors.Locker Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null;
     public Transform Transform => IsDestroyed ? null : Base.transform;
 
     /// <summary>Bitmask of currently-opened chambers (bit N set ⇒ chamber N is open).</summary>
+    [ScriptVisible]
     public ushort OpenedChambersMask => Base != null ? Base.NetworkOpenedChambers : (ushort)0;
 
     /// <summary>Wrapped chamber views. Cached on first access.</summary>
@@ -62,6 +66,7 @@ public class Locker
     }
 
     /// <summary>The room containing the locker, or null if not in any tracked room.</summary>
+    [ScriptVisible]
     public Room Room
     {
         get

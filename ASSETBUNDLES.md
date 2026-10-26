@@ -25,6 +25,9 @@ Approved server content takes precedence over matching local addresses for that 
 
 ## Supported authoring subset
 
+Lua source delivery uses independent [script packs](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
+AssetBundles remain restricted to the data types below.
+
 - Textures: RGBA32, one mip, at most 4096 on each axis and 16 million pixels. Keep alpha for skin images. The initial logo/background conversion preserves source dimensions and pixel appearance.
 - Sprites: standalone full-rectangle sprites with one texture dependency. Atlases, secondary textures, physics shapes, skinning and scriptable-object references are unsupported.
 - Audio: Vorbis compressed in memory, mono/stereo, 8–96 kHz, at most 30 seconds. The exporter and validator must agree on native sample frames, sample rate and channels. Supported stock CASSIE replacements match the stock clip length within one sample and retain the original CASSIE scheduling duration; those two durations are often different. New words use `mods/` addresses and separate compiled registration.

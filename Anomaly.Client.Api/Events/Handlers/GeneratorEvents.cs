@@ -1,4 +1,5 @@
 using Anomaly.Client.Api.Events.Args;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Events.Handlers;
 
@@ -8,8 +9,10 @@ namespace Anomaly.Client.Api.Events.Handlers;
 public static class GeneratorEvents
 {
     /// <summary>Fires once per generator the moment it transitions to <c>Engaged</c>.</summary>
+    [ScriptEvent]
     public static event AnomalyEventHandler<GeneratorEngagedEventArgs> Engaged;
 
+    [ScriptEvent]
     public static event AnomalyEventHandler<GeneratorStateChangedEventArgs> StateChanged;
 
     internal static void OnStateChanged(GeneratorStateChangedEventArgs args) => EventInvoker.Invoke(StateChanged, args);

@@ -3,25 +3,31 @@ using MoonSharp.Interpreter;
 namespace Anomaly.Client.Scripting.Events;
 
 /// <summary>A queued registration generation; removing it invalidates pending deliveries.</summary>
-internal sealed class ScriptEventInvocation
+internal sealed class ScriptEventInvocation : IQueuedScriptInvocation
 {
     private readonly ScriptEventRegistration _registration;
     private readonly object?[] _arguments;
-    internal ScriptEventInvocation(ScriptEventRegistration registration, object?[] arguments)
+    private readonly object? _allocationOwner;
+    internal ScriptEventInvocation(ScriptEventRegistration registration, object?[] arguments, object? allocationOwner = null)
     {
         _registration = registration;
         _arguments = (object?[])arguments.Clone();
+        _allocationOwner = allocationOwner;
     }
-    internal bool IsActive => _registration.IsActive;
-    internal DynValue Callback => _registration.Callback;
+    public bool IsActive => _registration.IsActive;
+    public DynValue Callback => _registration.Callback;
     internal string Name => _registration.Source.QualifiedName;
     internal object?[] Arguments => (object?[])_arguments.Clone();
 
-    internal DynValue[] ResolveArguments(Script script)
+    public DynValue[] ResolveArguments(Script script)
     {
         _registration.Owner.EnsureOwner(script);
         if (!IsActive) throw new ScriptRuntimeException("The event subscription is no longer active.");
-        return _arguments.Select(value => ScriptFrozenEventValue.ToScriptValue(script, value)).ToArray();
+        using var memoryScope = script.MemoryBudget?.EnterScope();
+        var converted = MemoryBudget.Allocate(32L + 8L * _arguments.Length, () => new DynValue[_arguments.Length]);
+        for (var index = 0; index < _arguments.Length; index++)
+            converted[index] = ScriptFrozenEventValue.ToScriptValue(script, _arguments[index]);
+        return converted;
     }
 }
 

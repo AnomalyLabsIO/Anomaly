@@ -17,17 +17,17 @@ internal sealed class ScriptEventCatalog : IDisposable
         => _categories = categories;
 
     internal static ScriptEventCatalog DiscoverApi(ScriptBindingRegistry bindings)
-        => Discover(bindings, typeof(ScriptTypeAttribute).Assembly, "Anomaly.Client.Api.Events.Handlers");
+        => Discover(bindings, typeof(ScriptTypeAttribute).Assembly, handlerNamespace: null);
 
-    internal static ScriptEventCatalog Discover(ScriptBindingRegistry bindings, Assembly trustedAssembly, string handlerNamespace)
+    internal static ScriptEventCatalog Discover(ScriptBindingRegistry bindings, Assembly trustedAssembly, string? handlerNamespace)
     {
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(trustedAssembly);
-        if (string.IsNullOrWhiteSpace(handlerNamespace)) throw new ArgumentException("An exact event namespace is required.");
+        if (handlerNamespace != null && string.IsNullOrWhiteSpace(handlerNamespace)) throw new ArgumentException("An exact event namespace is required.");
         var categories = new Dictionary<string, IReadOnlyDictionary<string, ScriptEventSource>>(StringComparer.Ordinal);
         var count = 0;
         foreach (var type in trustedAssembly.GetTypes().Where(type => type.Assembly == trustedAssembly &&
-            type.Namespace == handlerNamespace && type.IsVisible && type.IsClass && type.IsAbstract && type.IsSealed &&
+            (handlerNamespace == null || type.Namespace == handlerNamespace) && type.IsVisible && type.IsClass && type.IsAbstract && type.IsSealed &&
             !type.IsGenericType && !type.IsDefined(typeof(ScriptIgnoreAttribute), inherit: false))
             .OrderBy(type => type.FullName, StringComparer.Ordinal))
         {
@@ -57,7 +57,7 @@ internal sealed class ScriptEventCatalog : IDisposable
                 if (parameters.Length == 1)
                 {
                     // Validation is atomic for this entire annotated value graph.
-                    bindings.RegisterType(parameters[0].ParameterType);
+                    bindings.RegisterEventArgument(parameters[0].ParameterType);
                     plan = ScriptEventSnapshotPlan.Create(parameters[0].ParameterType, bindings);
                 }
                 if (!events.TryAdd(name, new ScriptEventSource(category, name, eventInfo, parameters, plan)))

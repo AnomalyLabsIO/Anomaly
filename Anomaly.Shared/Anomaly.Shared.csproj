@@ -55,6 +55,19 @@
     <ItemGroup>
         <Compile Include="Auth\AuthCrypto.cs" />
         <Compile Include="Networking\MessagePayloadBudget.cs" />
+        <Compile Include="Scripting\IScriptMessage.cs" />
+        <Compile Include="Scripting\ScriptPackLimits.cs" />
+        <Compile Include="Scripting\ScriptPackIndex.cs" />
+        <Compile Include="Scripting\ScriptPackIndexCodec.cs" />
+        <Compile Include="Scripting\ScriptSourceValidator.cs" />
+        <Compile Include="Scripting\ScriptMessageLimits.cs" />
+        <Compile Include="Scripting\ScriptMessageField.cs" />
+        <Compile Include="Scripting\ScriptMessageSchema.cs" />
+        <Compile Include="Scripting\ScriptMessagePayload.cs" />
+        <Compile Include="Scripting\ScriptMessageWire.cs" />
+        <Compile Include="Scripting\ScriptMessageRateLimiter.cs" />
+        <Compile Include="Networking\Messages\ScriptToClientMessage.cs" />
+        <Compile Include="Networking\Messages\ScriptToServerMessage.cs" />
         <Compile Include="Poses\PoseFrame.cs" />
         <Compile Include="Poses\PoseRigCatalog.cs" />
     <Compile Include="Poses\PoseRigidAnchorCatalog.cs" />
@@ -94,11 +107,13 @@
         <Compile Include="Assets\StockAssetProfile.cs" />
         <Compile Include="Assets\AssetManifestSnapshot.cs" />
         <Compile Include="Content\CatalogTypes.cs" />
+        <Compile Include="Content\CatalogScriptPack.cs" />
         <Compile Include="Content\CatalogBuilder.cs" />
         <Compile Include="Content\ModNamespace.cs" />
         <Compile Include="Capabilities\CapabilityDescriptor.cs" />
         <Compile Include="Networking\AnomalyChannel.cs" />
         <Compile Include="Networking\AnomalyMessagePolicy.cs" />
+        <Compile Include="Networking\AnomalyMessageDirection.cs" />
         <Compile Include="Networking\AnomalyMessageRegistry.cs" />
         <Compile Include="Networking\AnomalyReplayState.cs" />
         <Compile Include="Networking\AnomalySequenceState.cs" />
@@ -111,6 +126,9 @@
         <Compile Include="Networking\Messages\AssetClearOverrideMessage.cs" />
         <Compile Include="Networking\Messages\AssetOverrideTextureMessage.cs" />
         <Compile Include="Networking\Messages\ContentCatalogMessage.cs" />
+        <Compile Include="Networking\Messages\ContentBootstrapReadyMessage.cs" />
+        <Compile Include="Networking\ContentBootstrapPolicy.cs" />
+        <Compile Include="Networking\ConnectionContentGate.cs" />
         <Compile Include="Networking\Messages\DecorativeVisualSnapshotMessage.cs" />
         <Compile Include="Networking\Messages\DecorativeVisualUpdateMessage.cs" />
         <Compile Include="Networking\Messages\ContentCatalogDecisionMessage.cs" />

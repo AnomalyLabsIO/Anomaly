@@ -20,7 +20,10 @@
 "anomaly.prompt.dismiss": "Dismiss"
 "anomaly.prompt.trust_connect": "Trust and connect"
 "anomaly.prompt.allow_content": "Allow content"
-"anomaly.prompt.skip_content": "Skip content"
+"anomaly.prompt.skip_content": "Decline and disconnect"
+"anomaly.content.script_approval_title": "Allow server scripts?"
+"anomaly.content.script_approval_details": "This server requests {0:N0} Lua scripts ({1:N0} source bytes).\nServer fingerprint:\n{2}\n\nThey can use the approved in-game scripting API for this connection. The sandbox's memory accounting is experimental. This approval applies only to the current connection and exact validated scripts. Declining closes the connection."
+"anomaly.content.run_scripts": "Run scripts"
 "anomaly.prompt.save_error": "Could not save. Check that Anomaly's UserData folder is writable, then try again. Your input is still here."
 "anomaly.prompt.nickname_title": "Choose your Anomaly nickname"
 "anomaly.prompt.nickname_details": "This will be your in-game name when connecting to servers. Enter 1–32 visible characters."
@@ -270,7 +273,7 @@
 # ===== Server content consent and failures =====
 "anomaly.content.approval_title": "Approve this server's custom content?"
 # {0} = fingerprint, {1} = item count, {2} = file count, {3} = download MiB, {4} = download bytes
-"anomaly.content.approval_details": "Server fingerprint:\n{0}\n\nItems: {1:N0}\nFiles: {2:N0}\nDownload: {3:N2} MiB ({4:N0} bytes)\n\nApproval is saved for this exact server and content version. Skipping may prevent joining servers that require this content."
+"anomaly.content.approval_details": "Server fingerprint:\n{0}\n\nItems: {1:N0}\nFiles: {2:N0}\nDownload: {3:N2} MiB ({4:N0} bytes)\n\nApproval is saved for this exact server and content version. Declining closes this connection."
 "anomaly.content.validation_failed": "The server's custom content could not be validated."
 "anomaly.content.activation_failed": "The approved custom content could not be activated."
 "anomaly.content.failure_action": "Check the game log for the content error, then reconnect. If this repeats, ask the server operator to check the catalog and files."

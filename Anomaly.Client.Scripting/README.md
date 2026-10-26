@@ -2,16 +2,28 @@
 
 `Anomaly.Client.Scripting` is the client-owned MoonSharp host. It references
 `Anomaly.Client.Api` and the source-pinned, privately named
-[`Anomaly.MoonSharp.Interpreter`](../third_party/MoonSharp/README.md) fork.
+[`Anomaly.MoonSharp.Interpreter`](../tools/MoonSharpHardening/Fork-README.md) fork.
+The upstream tree remains ignored; pinned restore inputs and the hardening patch
+are kept in [`tools/MoonSharpHardening`](../tools/MoonSharpHardening/README.md).
 The API project has no interpreter dependency. Runtime entry points are internal
 to the client and its tests; this is not yet a public mod scripting service.
 
-**Server-supplied execution is disabled.** `ScriptingPolicy.MemoryHardeningQualified`
-and `RemoteExecutionEnabled` are unconditional `false` getters. `CreateRemoteSession`
-rejects before validating source, allocating a VM, or loading a package. No setting,
-server trust, signature, consent record, event, AssetBundle or file-transfer message
-can enable execution. Client startup installs an inert host with no script sessions.
-AssetBundle validation and its transfer/consent path are unchanged.
+**Remote execution is disabled until memory containment is qualified.** Both
+`MemoryHardeningQualified` and `RemoteExecutionEnabled` are false. Exact content
+and execution consent cannot bypass that gate. Verified local hosted sources and
+isolated development tests use a separate internal entry point.
+Raw `CreateRemoteSession(string)` rejects before VM creation. Startup discovers
+metadata but runs no scripts. The authenticated content catalog binds generated
+script-pack indexes and exact source files; execution approval applies only to the
+current connection and offer. See [`SCRIPT-PACKS.md`](SCRIPT-PACKS.md) for owner
+directories, embedded plugin resources, generated metadata, and initialization order.
+
+Schema-1 script-pack indexes also declare named, typed messages. The host installs
+pack-bound `Messages.On`, `Messages.Off`, and `Messages.Send` before initialization,
+using the existing authenticated transport and server plugin
+`ClientMessaging`/`ClientEvents` APIs. Callbacks share Events' subscription, queue,
+and execution limits; outbound transport requires current content admission and
+player readiness. See [MESSAGING-DESIGN.md](MESSAGING-DESIGN.md) for schemas and Lua.
 
 ## Opt-in object bindings
 
@@ -33,9 +45,10 @@ public sealed class Example
 }
 ```
 
-`DiscoverApi` automatically collects `[ScriptType]` declarations from the known
-`Anomaly.Client.Api` assembly. Bootstrap does not maintain a list of individual
-types. It never scans arbitrary loaded assemblies or loads assemblies supplied by
+`DiscoverApi` collects only `[ScriptType]` declarations from the known
+`Anomaly.Client.Api` assembly. Each exposed property or method needs `[ScriptVisible]`
+on its declaration. There is no separate type/property allowlist, automatic subclass
+registration, or public-member registration fallback. It never scans arbitrary loaded assemblies or loads assemblies supplied by
 a server. Trusted development code can explicitly register fixture types separately.
 Discovery validates the complete batch before committing it and does not construct
 host objects, run their static constructors, or invoke property getters.
@@ -47,13 +60,20 @@ example `[ScriptVisible("LegacyName")]`. Explicit invalid/empty names, Lua keywo
 ambiguous overloads and duplicate aliases are rejected. Renaming C# declarations
 changes the script contract and requires a reviewed baseline update.
 
-Only annotated, declared instance properties/methods are bound. `AllowWrite = true`
-opts a selected public setter in; `ScriptIgnore` takes precedence. Constructors,
-static members, inherited members, fields, indexers, raw events, generic methods,
+Only annotated instance properties/methods are bound. Each concrete subclass needs
+its own `[ScriptType]`; that attribute is not inherited. Shared `[ScriptVisible]`
+members are included only through a chain of explicitly annotated, non-ignored base
+types. Members on unannotated bases remain hidden. `AllowWrite = true` opts a selected
+public setter in; `ScriptIgnore` takes precedence. Constructors,
+static members, fields, indexers, raw events, generic methods,
 `GetType`, reflection objects, delegates and arbitrary collections are unavailable.
-Arguments/results must be finite scalars, bounded UTF-8 strings or explicitly approved
-reference types. Exact runtime types are checked, including returned values; unapproved
-subclasses are rejected. A returned object cannot broaden the approved type graph.
+Arguments/results must be finite scalars, bounded UTF-8 strings, registered game enums or explicitly approved
+annotated classes or structs. Nullable observations preserve `nil` rather than
+inventing zero/false; `FirearmState` and motion snapshots use the same attributes.
+Exact runtime types must be registered. A registered subclass returned through a base
+declaration uses **only the declared base policy**, never its extra runtime members;
+unknown subclasses still fail closed. Removing `[ScriptType]` prevents that exact
+type from registering, and removing `[ScriptVisible]` hides the selected member.
 
 Descriptors belong to one script and registry. They do not use MoonSharp's global
 type registration or automatic CLR binding. Property access and callbacks check the
@@ -61,11 +81,72 @@ current execution budget before and after C# work. A C# method must itself have 
 work and inputs: the interpreter cannot interrupt a blocking managed/native method
 while that method is running.
 
-The initial surface in [`ScriptAPI.Shipped.txt`](ScriptAPI.Shipped.txt) exposes only
-three read-only Player properties and the selected read-only connection/ready data.
-Type discovery does not create a global instance, constructor, or static API. Host
+The surface in [`ScriptAPI.Shipped.txt`](ScriptAPI.Shipped.txt) includes read-only
+player, item/pickup/projectile, door, room, role, toy, hazard, generator, locker,
+workstation, elevator, camera, ragdoll, tesla, effect, stat and voice metadata.
+Native objects, encoded voice bytes, raw messages, collections and setters stay hidden.
+Type discovery does not create a constructor or arbitrary static API. Host
 instance globals are separate from type names; an object named `player` is accessed
 as `player.PlayerId`. Tests pin this surface separately from the managed API baseline.
+
+API-discovered sessions also receive `Game`, an annotated read-only local query object:
+
+```lua
+Events.Client.Ready.Add(function(args)
+    local player = Game.LocalPlayer -- May still be nil at Ready.
+    if player == nil or player.IsDestroyed then return end
+    local item = Game:GetCurrentItem(player.PlayerId)
+    local position = Game:GetPosition(player.PlayerId) -- Detached X/Y/Z.
+    local health = Game:GetHealth(player.PlayerId) -- nil when not observable.
+end)
+```
+
+`Game.GetPlayer(id)` resolves a player ID; `Game.GetPlayerAt(index)` uses a zero-based
+index below `Game.PlayerCount`. `GetRoom`, `GetFirearmState`, `GetHumeShield` and
+`GetStamina` query current client-known state. `SpectatedPlayer`, `RoundPhase`,
+`IsRoundStarted` and `IsRoundEnded` are also available. Re-resolve objects after
+role/despawn changes and check `IsDestroyed` before live reads. Native getters and
+query bodies remain trusted CLR/IL2CPP work, not a hard interruptible boundary.
+See [capabilities and next bindings](CAPABILITIES.md) for what scripts can change.
+
+## Base-game enums
+
+`DiscoverApi` also reads public enums from the known client `Assembly-CSharp` interop
+assembly, including publicly reachable nested enums, plus the explicitly selected
+shared `RoundPhase` contract. It exposes constants only;
+enum owner classes, constructors and static methods remain unavailable. Discovery
+does not scan other mods, Unity assemblies or server-provided assemblies.
+
+```lua
+local item = ItemType.KeycardJanitor
+assert(item == Enums.ItemType.KeycardJanitor)
+assert(RoleTypeId.ClassD == Enums["Il2CppPlayerRoles.RoleTypeId"].ClassD)
+-- Nested/ambiguous names always have an exact CLR identity lookup:
+local attack = Enums["Il2CppPlayerStatsSystem.Scp049DamageHandler+AttackType"]
+```
+
+Every enum has an `Enums["Full.Clr.Name"]` entry. A unique simple name also gets an
+`Enums.Name` alias; public top-level enums get a bare `Name` global when the name is
+unambiguous and unreserved. Nested enums do not expose their owner classes. All
+registry nodes and constants are read-only. Duplicate short names have no short
+alias, and their exact identities remain available. IL2CPP prefixes and `+` nested
+separators in canonical keys match the loaded interop metadata.
+
+Constants and enum-valued host results are canonical name strings, preserving
+64-bit values without Lua number rounding. Annotated methods and writable properties
+with registered enum types automatically accept those constants or case-insensitive
+declared names, with surrounding whitespace allowed. Only already registered enum
+types are admitted into an annotated type graph; enum registration does not expose
+additional methods or properties. Multiple CLR names for the same value share one
+canonical string (the first name in ordinal order), while input accepts every alias.
+
+`[Flags]` inputs also accept comma-separated declared names, for example `"Read, Write"`,
+up to 64 names and the existing 4096-byte string limit. Results use a deterministic
+comma-separated combination of declared masks. Unnamed zero flags round-trip as
+`"0"`; all other numeric strings, Lua numbers, unknown names and unknown flag bits
+are rejected. Undefined non-flags results are rejected. Separate limits allow up to
+1024 enum types, 2048 members per enum and 32768 members in total. Enum conversion
+stays within the runtime's own bindings and does not install global MoonSharp converters.
 
 The immutable catalog is the shared source for binding names and permissions, the
 reviewed surface baseline, [`ScriptAPI.json`](ScriptAPI.json), and the
@@ -95,12 +176,21 @@ Lua calls methods as `example:SetLabel("hello")`. C# calls named Lua functions t
 argument conversion. Source parsing/loading uses the same budgeted path. Failures
 retire the VM rather than resuming a partially unwound interpreter.
 
-The event registry follows SCriPt's category discovery and lazy subscription model.
-Public static events marked `[ScriptEvent]` in the API's exact event-handler namespace
-are collected automatically. Their names retain C# casing; `ClientEvents` supplies
-the `Client` category. An optional event alias is supported and `[ScriptIgnore]` wins.
+The event registry uses category discovery and lazy subscriptions. Production discovery
+inspects only the known API assembly and registers only public static events marked
+`[ScriptEvent]`; an event's namespace or public visibility alone never opts it in.
+`[ScriptIgnore]` wins. The coverage test compares discovery to the annotations, not
+to all public events. Separate trusted fixture discovery can additionally restrict
+the exact namespace. No arbitrary loaded assembly is scanned.
+Names retain C# casing; `ClientEvents` supplies `Client`, `AssetEvents` supplies `Asset`,
+and non-`Events` owner names stay unchanged: `Events.InputRegistry.Pressed` and
+`Events.LocalPlayerMotion.Applied`. The optional event-name alias remains supported.
 Only void zero/one-argument delegates and validated read-only data graphs are admitted.
-The initial profile includes `Events.Client.Connected` and `Events.Client.Ready`.
+`CameraManager.Changed` and `AnomalyMessaging.MessageReceived` are explicitly ignored:
+their native camera/untyped message payloads are not annotated script data. There are
+no owner-specific notification bypasses. `CanvasReady`, camera-shake and raw-network
+event data intentionally omit unsafe native handles. Warhead detonation uses the
+annotated `WarheadDetonatedEventArgs`, not unannotated `System.EventArgs`.
 
 Lua subscribes with `Add(callback)` and removes by closure or opaque returned token.
 Dot and colon calls are supported. The first subscription attaches one CLR delegate,
@@ -122,10 +212,16 @@ local token = Events.Client.Ready.Add(OnReady)
 -- Events.Client.Ready.Remove(OnReady) or Events.Client.Ready.Remove(token)
 ```
 
+Events are not replayed: initialization precedes Ready, but an earlier Connected,
+CanvasReady or download event is not delivered retroactively. Disconnect and offer
+replacement revoke queued work; do not rely on a Lua disconnect/unload callback.
+
 Event data is copied before the publisher can mutate or reuse it. Snapshots allow
 only approved read-only properties, exact runtime types, depth 8, 64 nodes, 4 KiB per
 string and 16 KiB of accounted payload. They expose no methods, writes, reflection or
-conversion back to live CLR arguments. These are transport bounds, not a VM heap quota.
+conversion back to live CLR arguments. Destroyed wrappers publish `IsDestroyed = true`
+and `nil` for other properties instead of dereferencing dead native objects.
+These are transport bounds, not a VM heap quota.
 Foreign-thread publication or invalid snapshots request owner-thread retirement
 without running Lua or reading game properties on the publishing thread. Queued
 events are notifications; they cannot synchronously cancel or modify a native hook.
@@ -152,22 +248,77 @@ functions. Filesystem, OS, networking, debug, module loading, bytecode dumping/l
 coroutine creation and automatic CLR interop are absent. Source and returned strings
 have byte limits. Only host-approved bounded object operations can add capabilities.
 
-## Memory qualification still required
+## Experimental allocation hardening
 
-There is no per-script managed heap quota. Lua tables, strings, closures, coroutine
-stacks and compiler objects still allocate in the game's process. CPU fuel and source
-limits reduce some allocations but do not establish a memory boundary. An out-of-memory
-exception, task timeout or process watchdog is not successful VM containment.
+Each development session owns a reclaimable allocation quota, defaulting to
+16 MiB (`AllocationLimitBytes`). It is installed before VM construction and retained
+across parsing, invocation, event delivery, host argument conversion and coroutine
+creation. Fresh CPU budgets do not reset it. Preflight reservations cover tables and
+index growth, dynamic VM stack arrays, values, closures, argument arrays, source and
+compiler overhead, string operations and audited temporary library buffers. Stacks
+start at 64 slots and grow under the allowance up to their existing capacity limit.
+Frozen event publications reserve a conservative 64 KiB per recipient before capture;
+subscriptions, binding wrappers and queued work are accounted separately.
+All sessions also charge one runtime-wide quota (64 MiB by default). A reservation
+is charged before allocation and bound to the actual backing storage or a shared
+retention owner. Bounded sweeps credit it only after the CLR has collected that owner.
+Long weak references prevent early credits during finalization/resurrection. Retained
+strings, aliases, nested event values, table capacity and escaped results remain charged.
+Disposing/recreating sessions or revoking them does not refund still-live storage.
+An aggregate denial retires the requesting session; healthy siblings can continue
+using capacity that later becomes available.
 
-Before any future remote enablement, implement and review allocation accounting and
-pre-allocation limits across those paths, including transient builtin/host buffers,
-and make memory termination sticky across protected calls and callbacks. Regression
-probes must reject growing tables, repeated strings, closure/coroutine growth and
-allocation-error loops inside the VM, without process termination, and verify cleanup
-and repeated session churn. Capability-scoped object ownership, a reviewed script
-transport/manifest/consent contract and live Unity validation also remain required.
-Enabling remote execution requires a deliberate code change after qualification;
-this implementation adds no dormant switch for servers to activate.
+Exhaustion produces terminal `MemoryLimit`, which bypasses Lua protected calls and
+cannot be swallowed by an ordinary host callback. The session retires, drops queued
+work and detaches its subscriptions without calling Lua. Failed reservations precede
+large backing-array/string allocations. Source admission also reserves conservative
+scratch overhead before parsing; this is an estimate, not a precise AST size model.
+
+The registry reserves 256 bytes per tracked owner and caps tracking at 131,072 records
+across the runtime. Pending reservations roll back if allocation fails; committed
+reservations cannot be refunded by disposing their ticket. Unknown-lifetime charges
+remain permanent. `MemoryChargedBytes` reports outstanding estimates, while
+`MemoryTotalAllocatedBytes` records cumulative reservations and does not limit lifetime
+work. Entry points and ticks sweep bounded batches; quota pressure can scan the bounded
+registry. Production code never forces game-wide GC. Delayed collection or conservative
+capacity/source estimates can therefore still reject a valid session. Small quotas
+may reject VM setup. Neither counter measures actual live CLR heap or process RSS.
+
+The host opts into reclaimable mode; direct engine callers retain the explicit
+cumulative default. Isolated workers exercise 10,000 bounded engine calls and 10,000
+actual host invocations with collection between batches, exceeding a lifetime allowance
+while keeping outstanding charges bounded. Retention and resurrection fixtures check
+that live storage cannot regain quota. Forced GC is confined to these test workers.
+These checks do not qualify remote execution or guarantee natural GC timing in Unity.
+
+Qualification still needs a complete allocation-path review, validation of aggregate
+and session-churn behavior, trusted C#/IL2CPP operation budgets, framework diagnostics
+and GC/runtime overhead analysis, and live Unity validation. Arbitrary CLR allocations
+inside an approved method cannot be intercepted by a VM allowance; those operations
+must be bounded and reserve before allocating. No managed OOM recovery is claimed.
+Reflection-wrapped fatal CLR failures escape the Lua error boundary and signal session
+retirement; event snapshot failures also invalidate the other selected recipients.
+An out-of-memory exception, task timeout or process watchdog always fails a probe.
+Capability-scoped object ownership and a reviewed transport/manifest/consent contract
+remain necessary before claiming a qualified memory boundary. The remote gate
+remains closed while those boundaries are unqualified.
+
+[`ALLOCATION-AUDIT.md`](ALLOCATION-AUDIT.md) records the reviewed CLR/compiler/error
+and host allocation paths, new preflight/retention regressions, and remaining trusted
+C#/runtime/native boundaries. In particular, an approved C# method body can allocate
+outside VM instrumentation; a finite regression demonstrates that limitation.
+
+## Connection readiness and execution
+
+[`CONNECTION-LIFECYCLE.md`](CONNECTION-LIFECYCLE.md) records the authenticated connection
+bootstrap, exact consent before bytes, fixed admission deadline, native/public readiness
+barriers, generation replacement and revocation order. Download/validation no longer
+depends on a player hub. Declining required assets closes the connection. Readiness
+requires both initialized content and the authenticated server confirmation, plus the
+facility. Script-pack validation accepts only declared, bounded strict UTF-8 `.lua` sources
+with exact hashes and byte counts. AssetBundle validation remains data-only.
+Script top-level initialization finishes before the client sends Activated. Failed or
+declined script initialization closes the connection and revokes the entire set.
 
 ## Verification
 

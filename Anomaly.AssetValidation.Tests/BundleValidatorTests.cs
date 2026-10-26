@@ -71,6 +71,17 @@ public sealed class BundleValidatorTests {
     }
 
     [Fact]
+    public void TextAssetExpectationRejectsBeforeReadingBundleInput() {
+        using var source = new OversizedStream();
+        var request = new BundleValidationRequest(new string('0', 64), new[] {
+            new BundleAssetExpectation("mods/fixture/start.lua", "fixture/start.lua", 49),
+        });
+        var failure = Assert.Throws<BundleValidationException>(() => BundleValidator.Validate(source, request));
+        Assert.Contains("Unsupported expected asset class", failure.Message);
+        Assert.DoesNotContain(49, CanonicalProfile.Types.Keys);
+    }
+
+    [Fact]
     public void RawBlocksAndIndependentRepackingRemainValid() {
         using var result = Validate(new FixtureMutator(Fixture()).Pack());
         Assert.Equal(4, result.Assets.Count);
@@ -82,6 +93,7 @@ public sealed class BundleValidatorTests {
     [InlineData("changed-type-hash")]
     [InlineData("managed-field-tag")]
     [InlineData("unsupported-class")]
+    [InlineData("text-asset-class")]
     [InlineData("script-index")]
     [InlineData("stripped-trees")]
     [InlineData("duplicate-path")]
@@ -248,6 +260,7 @@ internal sealed class FixtureMutator {
             case "changed-type-hash": _envelope.Expanded[typeStart + 7] ^= 1; break;
             case "managed-field-tag": _envelope.Expanded[typeStart + 31 + 3] = 4; break;
             case "unsupported-class": Int(typeStart, 114); break;
+            case "text-asset-class": Int(typeStart, 49); break;
             case "script-index": _envelope.Expanded[typeStart + 5] = 0; break;
             case "stripped-trees": _envelope.Expanded[treeFlag] = 0; break;
             case "duplicate-path": Long(objects + 24, BitConverter.ToInt64(_envelope.Expanded, objects)); break;

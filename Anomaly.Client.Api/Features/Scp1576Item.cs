@@ -1,8 +1,10 @@
 using Scp1576ItemBase = Il2CppInventorySystem.Items.Usables.Scp1576.Scp1576Item;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>SCP-1576 with the common usable-item facade and transmission configuration.</summary>
+[ScriptType]
 public class Scp1576Item : UsableItem
 {
     internal Scp1576Item(Scp1576ItemBase scp1576Base) : base(scp1576Base)

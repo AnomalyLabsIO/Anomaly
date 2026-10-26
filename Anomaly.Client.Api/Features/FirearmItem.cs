@@ -1,5 +1,6 @@
 using Il2CppInventorySystem.Items.Firearms;
 using Il2CppInventorySystem.Items.Firearms.Modules;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -15,6 +16,7 @@ namespace Anomaly.Client.Api.Features;
 /// the firearm itself. The wrapper exposes the most-used modules directly
 /// and provides <see cref="TryGetModule{T}"/> as the escape hatch.
 /// </remarks>
+[ScriptType]
 public class FirearmItem : Item
 {
     internal FirearmItem(Firearm firearmBase) : base(firearmBase)

@@ -4,14 +4,15 @@ using System.IO;
 using System.Text;
 using Anomaly.Shared.Content;
 using Anomaly.Shared.Assets;
+using Anomaly.Shared.Scripting;
 
 namespace Anomaly.Shared.Networking.Messages
 {
-    /// <summary>Authenticated server offer for one immutable items-only catalog.</summary>
+    /// <summary>Authenticated server offer for one immutable content catalog.</summary>
     public class ContentCatalogMessage : AuthenticatedServerToClientMessage, IAnomalyMessage
     {
         private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
-        private const int FixedPayloadBytes = 1 + ContentCatalog.Sha256Bytes + ContentCatalog.Sha256Bytes + 2 + 2;
+        private const int FixedPayloadBytes = 1 + ContentCatalog.Sha256Bytes + ContentCatalog.Sha256Bytes + 2 + 2 + 2;
 
         public const int MaxEntries = 127;
         public const int MaxPacks = FileManifestMessage.MaxFiles / 2;
@@ -36,6 +37,8 @@ namespace Anomaly.Shared.Networking.Messages
                 entry.WriteTo(writer);
             writer.Write((ushort)Catalog.Packs.Count);
             foreach (CatalogPack pack in Catalog.Packs) pack.WriteTo(writer);
+            writer.Write((ushort)Catalog.ScriptPacks.Count);
+            foreach (CatalogScriptPack pack in Catalog.ScriptPacks) pack.WriteTo(writer);
         }
 
         public void Deserialize(BinaryReader reader)
@@ -56,20 +59,24 @@ namespace Anomaly.Shared.Networking.Messages
             if (packCount > MaxPacks) throw new InvalidDataException("Catalog pack count exceeded its limit.");
             catalog.Packs = new List<CatalogPack>(packCount);
             for (int index = 0; index < packCount; index++) catalog.Packs.Add(CatalogPack.ReadFrom(reader));
+            int scriptPackCount = reader.ReadUInt16();
+            if (scriptPackCount > ScriptPackLimits.MaxScripts) throw new InvalidDataException("Catalog script pack count exceeded its limit.");
+            catalog.ScriptPacks = new List<CatalogScriptPack>(scriptPackCount);
+            for (int index = 0; index < scriptPackCount; index++) catalog.ScriptPacks.Add(CatalogScriptPack.ReadFrom(reader));
             ValidateCatalog(catalog, validateDeclaredHash: true);
             Catalog = catalog;
         }
 
         public static void ValidateCatalog(ContentCatalog catalog, bool validateDeclaredHash)
         {
-            if (catalog == null || catalog.Entries == null || catalog.Packs == null)
+            if (catalog == null || catalog.Entries == null || catalog.Packs == null || catalog.ScriptPacks == null)
                 throw new InvalidDataException("Content catalog was null.");
             if (catalog.SchemaVersion != ContentCatalog.CurrentSchemaVersion)
                 throw new InvalidDataException($"Unsupported content catalog schema {catalog.SchemaVersion}.");
             if (catalog.CatalogSha256 == null || catalog.CatalogSha256.Length != ContentCatalog.Sha256Bytes ||
                 catalog.ManifestSha256 == null || catalog.ManifestSha256.Length != ContentCatalog.Sha256Bytes)
                 throw new InvalidDataException("Content catalog hashes must be 32-byte SHA-256 values.");
-            if (catalog.Entries.Count > MaxEntries || catalog.Packs.Count > MaxPacks)
+            if (catalog.Entries.Count > MaxEntries || catalog.Packs.Count > MaxPacks || catalog.ScriptPacks.Count > ScriptPackLimits.MaxScripts)
                 throw new InvalidDataException($"Content catalog count exceeded {MaxEntries}.");
 
             long encodedPayloadBytes = FixedPayloadBytes;
@@ -122,26 +129,72 @@ namespace Anomaly.Shared.Networking.Messages
 
             string previousPack = null;
             long transferBytes = 0;
-            var hashes = new HashSet<string>(StringComparer.Ordinal);
+            var packIds = new HashSet<string>(StringComparer.Ordinal);
+            var physical = new Dictionary<string, Tuple<FileContentKind, uint>>(StringComparer.Ordinal);
             foreach (CatalogPack pack in catalog.Packs)
             {
-                if (pack == null || !AssetPackIndexCodec.IsPackId(pack.PackId) ||
+                if (pack == null || !AssetPackIndexCodec.IsPackId(pack.PackId) || !packIds.Add(pack.PackId) ||
                     (previousPack != null && StringComparer.Ordinal.Compare(previousPack, pack.PackId) >= 0) ||
-                    pack.IndexHash == null || pack.IndexHash.Length != 32 || pack.BundleHash == null || pack.BundleHash.Length != 32 ||
+                    !ValidHash(pack.IndexHash) || !ValidHash(pack.BundleHash) ||
                     pack.IndexSize == 0 || pack.IndexSize > AssetPackIndexCodec.MaxIndexBytes ||
-                    pack.BundleSize == 0 || pack.BundleSize > FileManifestMessage.MaxFileBytes ||
-                    !hashes.Add(BitConverter.ToString(pack.IndexHash)) || !hashes.Add(BitConverter.ToString(pack.BundleHash)))
+                    pack.BundleSize == 0 || pack.BundleSize > FileManifestMessage.MaxFileBytes)
                     throw new InvalidDataException("Catalog contained an invalid, duplicate or noncanonical pack.");
+                AddPhysical(physical, pack.IndexHash, FileContentKind.PackIndex, pack.IndexSize, false, ref transferBytes);
+                AddPhysical(physical, pack.BundleHash, FileContentKind.Bundle, pack.BundleSize, false, ref transferBytes);
                 previousPack = pack.PackId;
-                transferBytes += (long)pack.IndexSize + pack.BundleSize;
                 encodedPayloadBytes += 2 + pack.PackId.Length + 32 + 4 + 32 + 4;
-                if (transferBytes > FileManifestMessage.MaxAggregateBytes || encodedPayloadBytes > MaxCatalogPayloadBytes)
-                    throw new InvalidDataException("Catalog exceeded its transfer or encoded metadata budget.");
             }
+            previousPack = null;
+            int scriptCount = 0;
+            long sourceBytes = 0;
+            var addresses = new HashSet<string>(StringComparer.Ordinal);
+            foreach (CatalogScriptPack pack in catalog.ScriptPacks)
+            {
+                if (pack == null || !AssetPackIndexCodec.IsPackId(pack.PackId) || !packIds.Add(pack.PackId) ||
+                    (previousPack != null && StringComparer.Ordinal.Compare(previousPack, pack.PackId) >= 0) ||
+                    !ValidHash(pack.IndexHash) || pack.IndexSize == 0 || pack.IndexSize > ScriptPackLimits.MaxIndexBytes ||
+                    pack.Sources == null || pack.Sources.Count < 1 || pack.Sources.Count > ScriptPackLimits.MaxScripts)
+                    throw new InvalidDataException("Catalog contained an invalid, duplicate or noncanonical script pack.");
+                previousPack = pack.PackId;
+                AddPhysical(physical, pack.IndexHash, FileContentKind.ScriptIndex, pack.IndexSize, false, ref transferBytes);
+                encodedPayloadBytes += 2 + pack.PackId.Length + 32 + 4 + 1;
+                string previousAddress = null;
+                foreach (CatalogScriptSource source in pack.Sources)
+                {
+                    if (source == null || !ScriptPackIndexCodec.IsSourceAddress(source.Address, pack.PackId) || !addresses.Add(source.Address) ||
+                        (previousAddress != null && StringComparer.Ordinal.Compare(previousAddress, source.Address) >= 0) ||
+                        !ValidHash(source.Hash) || source.Size > ScriptPackLimits.MaxScriptBytesPerFile ||
+                        ((source.Size == 0) != (Hex(source.Hash) == ScriptSourceValidator.EmptySha256Hex)))
+                        throw new InvalidDataException("Catalog contained an invalid, duplicate or noncanonical Lua source.");
+                    previousAddress = source.Address;
+                    if (++scriptCount > ScriptPackLimits.MaxScripts || (sourceBytes += source.Size) > ScriptPackLimits.MaxScriptBytes)
+                        throw new InvalidDataException("Catalog source inventory exceeded connection limits.");
+                    if (source.Size != 0) AddPhysical(physical, source.Hash, FileContentKind.LuaSource, source.Size, true, ref transferBytes);
+                    encodedPayloadBytes += 2 + source.Address.Length + 32 + 4;
+                }
+            }
+            if (physical.Count > FileManifestMessage.MaxFiles || transferBytes > FileManifestMessage.MaxAggregateBytes || encodedPayloadBytes > MaxCatalogPayloadBytes)
+                throw new InvalidDataException("Catalog exceeded its transfer or encoded metadata budget.");
 
             if (validateDeclaredHash &&
                 !CatalogBuilder.HashesEqual(catalog.CatalogSha256, CatalogBuilder.ComputeCatalogHash(catalog)))
                 throw new InvalidDataException("Content catalog SHA-256 did not match its canonical entries.");
+        }
+
+        private static bool ValidHash(byte[] hash) => hash != null && hash.Length == 32;
+        private static string Hex(byte[] hash) => BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+        private static void AddPhysical(Dictionary<string, Tuple<FileContentKind, uint>> files, byte[] hash, FileContentKind kind,
+            uint size, bool allowSharedSource, ref long transferBytes)
+        {
+            string key = Hex(hash);
+            if (files.TryGetValue(key, out Tuple<FileContentKind, uint> previous))
+            {
+                if (!allowSharedSource || previous.Item1 != kind || previous.Item2 != size)
+                    throw new InvalidDataException("Catalog reused a content hash with conflicting kind or size.");
+                return;
+            }
+            files.Add(key, Tuple.Create(kind, size));
+            transferBytes += size;
         }
 
         private static int GetUtf8ByteCount(string value, string field)

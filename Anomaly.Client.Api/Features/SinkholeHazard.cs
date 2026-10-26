@@ -1,8 +1,10 @@
 using Il2CppHazards;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>A static sinkhole visible in the local scene.</summary>
+[ScriptType]
 public sealed class SinkholeHazard : Hazard
 {
     internal SinkholeHazard(SinkholeEnvironmentalHazard value) : base(value) => SinkholeBase = value;

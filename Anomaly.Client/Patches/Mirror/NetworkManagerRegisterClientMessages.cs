@@ -134,7 +134,7 @@ public static class NetworkManagerRegisterClientMessages
             // Revoke authentication and bounded logical state first. Unity object
             // restoration below is best effort and cannot suppress these resets.
             new CleanupStep("encrypted-channel bridge", EncryptedChannelHandlerFix.ResetConnectionState),
-            new CleanupStep("transport session", AnomalyMessaging.ClearTransportSession),
+            new CleanupStep("transport session", () => AnomalyMessaging.ClearTransportSession()),
             new CleanupStep("content catalog", ContentCatalogClient.Reset),
             new CleanupStep("file transfer authorization", FileTransferClient.Reset),
             new CleanupStep("replay and rate limits", AnomalyReplayTable.Reset),

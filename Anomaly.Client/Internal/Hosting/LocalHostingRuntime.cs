@@ -13,6 +13,20 @@ internal static class LocalHostingRuntime
     private static readonly LocalHostGrantCoordinator Grants = new();
     private static bool _starting;
 
+    internal static bool IsVerifiedScriptHost
+    {
+        get
+        {
+            if (ServerStatic.IsDedicated || !NetworkServer.active || !NetworkClient.activeHost) return false;
+            var server = NetworkServer.localConnection;
+            var client = NetworkClient.connection;
+            var paired = server?.connectionToServer;
+            return LocalScriptHostGate.IsVerified(ServerStatic.IsDedicated, NetworkServer.active, NetworkClient.activeHost,
+                server?.Pointer ?? IntPtr.Zero, client?.Pointer ?? IntPtr.Zero, paired?.Pointer ?? IntPtr.Zero,
+                paired?.connectionToClient?.Pointer ?? IntPtr.Zero);
+        }
+    }
+
     // Return true only when the original warning flow should handle the request.
     internal static bool StartLocalHost()
     {

@@ -1,10 +1,12 @@
 using Il2CppInventorySystem.Items.MicroHID;
 using Il2CppInventorySystem.Items.MicroHID.Modules;
 using MicroHIDItemBase = Il2CppInventorySystem.Items.MicroHID.MicroHIDItem;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
 /// <summary>The Micro H.I.D.'s client-observed energy and firing cycle.</summary>
+[ScriptType]
 public class MicroHIDItem : Item
 {
     internal MicroHIDItem(MicroHIDItemBase microHidBase) : base(microHidBase)

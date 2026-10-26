@@ -1,9 +1,11 @@
 ﻿using Il2CppPlayerStatsSystem;
 
 using Anomaly.Client.Api.Internal;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
+[ScriptType]
 public class PlayerStat
 {
     private static readonly Dictionary<StatBase, PlayerStat> _stats = new();
@@ -15,6 +17,7 @@ public class PlayerStat
 
     public StatBase Base { get; }
 
+    [ScriptVisible]
     public bool IsDestroyed => Base == null || Base.Hub == null;
 
     /// <summary>
@@ -22,6 +25,7 @@ public class PlayerStat
     /// current local player. This is not a receipt or freshness guarantee. Server
     /// plugins can customize synchronization; raw values remain the last local values.
     /// </summary>
+    [ScriptVisible]
     public bool IsObservable
     {
         get
@@ -65,6 +69,7 @@ public class PlayerStat
 
     public float NormalizedValue => Base.NormalizedValue;
 
+    [ScriptVisible]
     public string Name => Base.GetType().Name;
 
     public static PlayerStat Get(StatBase statBase)

@@ -25,6 +25,7 @@ internal static class FacilityLayoutRuntime
     private static bool _prepared;
     private static bool _published;
     internal static event Action<FacilitySnapshotMessage> SnapshotFrozen;
+    internal static event Action GenerationStarted;
     internal static event Action<Exception> GenerationRejected;
     internal static bool GenerationFailed { get; private set; }
     internal static FacilitySnapshotMessage CurrentSnapshot => _snapshot;
@@ -49,6 +50,7 @@ internal static class FacilityLayoutRuntime
 
     internal static void BeginAuthoring()
     {
+        GenerationStarted?.Invoke();
         FacilityGenerationDiagnostics.Clear();
         GenerationFailed = false;
         _prepared = _published = false;

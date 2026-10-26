@@ -93,8 +93,8 @@ E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.VoiceMessageReceivingEventArgs> Anomaly.Client.Api.Events.Handlers.VoiceEvents::Receiving|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.VoiceMessageSendingEventArgs> Anomaly.Client.Api.Events.Handlers.VoiceEvents::Sending|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.VoiceMessageSentEventArgs> Anomaly.Client.Api.Events.Handlers.VoiceEvents::Sent|add=public|remove=public
+E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.WarheadDetonatedEventArgs> Anomaly.Client.Api.Events.Handlers.WarheadEvents::Detonated|add=public|remove=public
 E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.WarheadProgressChangedEventArgs> Anomaly.Client.Api.Events.Handlers.WarheadEvents::ProgressChanged|add=public|remove=public
-E|Anomaly.Client.Api.Events.AnomalyEventHandler`1<System.EventArgs> Anomaly.Client.Api.Events.Handlers.WarheadEvents::Detonated|add=public|remove=public
 E|System.Action`1<Anomaly.Client.Api.Features.MotionDiscontinuity> Anomaly.Client.Api.Features.LocalPlayerMotion::Applied|add=public|remove=public
 E|System.Action`1<Anomaly.Shared.Networking.IAnomalyMessage> Anomaly.Client.Api.Networking.AnomalyMessaging::MessageReceived|add=public|remove=public
 E|System.Action`1<System.String> Anomaly.Client.Api.Config.IConfigSource::KeyChanged|add=public|remove=public
@@ -370,6 +370,8 @@ M|Il2Cpp.CharacterClassManager Anomaly.Client.Api.Features.Player::get_Character
 M|Il2Cpp.EncryptedChannelManager Anomaly.Client.Api.Features.LocalPlayer::get_EncryptedChannelManager()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|Il2Cpp.GameConsoleTransmission Anomaly.Client.Api.Features.LocalPlayer::get_GameConsoleTransmission()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|Il2Cpp.ItemCategory Anomaly.Client.Api.Features.Item::get_Category()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|Il2Cpp.ItemType Anomaly.Client.Api.Events.Args.CurrentItemChangedEventArgs::get_CurrentType()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|Il2Cpp.ItemType Anomaly.Client.Api.Events.Args.CurrentItemChangedEventArgs::get_PreviousType()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|Il2Cpp.ItemType Anomaly.Client.Api.Events.Args.FirearmShotEventArgs::get_Firearm()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|Il2Cpp.ItemType Anomaly.Client.Api.Features.Item::get_Type()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|Il2Cpp.ItemType Anomaly.Client.Api.Features.Pickup::get_Type()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
@@ -1082,6 +1084,7 @@ M|System.String Anomaly.Client.Api.Events.Args.AnnouncerLineScheduledEventArgs::
 M|System.String Anomaly.Client.Api.Events.Args.AnnouncerLineStartedEventArgs::get_ApiName()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::get_ComponentPath()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs::get_ComponentPath()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|System.String Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs::get_ClipName()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs::get_Text()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs::get_ServerIp()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Events.Args.ClientDisconnectedEventArgs::get_ServerIp()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
@@ -1090,6 +1093,7 @@ M|System.String Anomaly.Client.Api.Events.Args.EnrollmentChangedEventArgs::get_C
 M|System.String Anomaly.Client.Api.Events.Args.EnrollmentChangedEventArgs::get_Previous()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::get_FileName()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs::get_Text()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|System.String Anomaly.Client.Api.Events.Args.SceneLoadedEventArgs::get_SceneName()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Features.AdminToy::ToString()|static=False|virtual=True|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Features.AdminToy::get_CommandName()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Features.AnnouncerWord::get_ApiName()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
@@ -1194,6 +1198,9 @@ M|System.TimeSpan Anomaly.Client.Api.Scheduling.Scheduler::GetCooldownRemaining(
 M|System.UInt16 Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs::get_DurationSeconds()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.UInt16 Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs::get_ServerPort()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.UInt16 Anomaly.Client.Api.Events.Args.ClientDisconnectedEventArgs::get_ServerPort()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|System.UInt16 Anomaly.Client.Api.Events.Args.CurrentItemChangedEventArgs::get_CurrentSerial()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|System.UInt16 Anomaly.Client.Api.Events.Args.CurrentItemChangedEventArgs::get_PreviousSerial()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|System.UInt16 Anomaly.Client.Api.Events.Args.CurrentItemChangingEventArgs::get_PreviousSerial()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.UInt16 Anomaly.Client.Api.Events.Args.CurrentItemChangingEventArgs::get_TargetSerial()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.UInt16 Anomaly.Client.Api.Events.Args.DoorLocksChangedEventArgs::get_ActiveLocks()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.UInt16 Anomaly.Client.Api.Events.Args.DoorLocksChangedEventArgs::get_PreviousLocks()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
@@ -1324,6 +1331,7 @@ M|System.Void Anomaly.Client.Api.Events.Args.VoiceMessageReceivingEventArgs::set
 M|System.Void Anomaly.Client.Api.Events.Args.VoiceMessageSendingEventArgs::.ctor(Anomaly.Client.Api.Features.VoiceMessagePacket)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="packet":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Events.Args.VoiceMessageSendingEventArgs::set_IsAllowed(System.Boolean)|static=False|virtual=True|abstract=False|gp=|access=public|final=True|newslot=True|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Events.Args.VoiceMessageSentEventArgs::.ctor(Anomaly.Client.Api.Features.VoiceMessagePacket)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="packet":in=False:out=False:optional=False:default=none:params=False
+M|System.Void Anomaly.Client.Api.Events.Args.WarheadDetonatedEventArgs::.ctor()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Void Anomaly.Client.Api.Events.Args.WarheadProgressChangedEventArgs::.ctor(System.Boolean)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="inProgress":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Events.Handlers.AdminToyEvents::add_Added(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AdminToyAddedEventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Events.Handlers.AdminToyEvents::add_Removed(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.AdminToyRemovedEventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
@@ -1507,9 +1515,9 @@ M|System.Void Anomaly.Client.Api.Events.Handlers.VoiceEvents::remove_Received(An
 M|System.Void Anomaly.Client.Api.Events.Handlers.VoiceEvents::remove_Receiving(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.VoiceMessageReceivingEventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Events.Handlers.VoiceEvents::remove_Sending(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.VoiceMessageSendingEventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Events.Handlers.VoiceEvents::remove_Sent(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.VoiceMessageSentEventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
-M|System.Void Anomaly.Client.Api.Events.Handlers.WarheadEvents::add_Detonated(Anomaly.Client.Api.Events.AnomalyEventHandler`1<System.EventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
+M|System.Void Anomaly.Client.Api.Events.Handlers.WarheadEvents::add_Detonated(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.WarheadDetonatedEventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Events.Handlers.WarheadEvents::add_ProgressChanged(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.WarheadProgressChangedEventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
-M|System.Void Anomaly.Client.Api.Events.Handlers.WarheadEvents::remove_Detonated(Anomaly.Client.Api.Events.AnomalyEventHandler`1<System.EventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
+M|System.Void Anomaly.Client.Api.Events.Handlers.WarheadEvents::remove_Detonated(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.WarheadDetonatedEventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Events.Handlers.WarheadEvents::remove_ProgressChanged(Anomaly.Client.Api.Events.AnomalyEventHandler`1<Anomaly.Client.Api.Events.Args.WarheadProgressChangedEventArgs>)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Events.ICancellableEvent::set_IsAllowed(System.Boolean)|static=False|virtual=True|abstract=True|gp=|access=public|final=False|newslot=True|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Features.AdminToy::.ctor(Il2CppAdminToys.AdminToyBase)|static=False|virtual=False|abstract=False|gp=|access=protected|final=False|newslot=False|params="toyBase":in=False:out=False:optional=False:default=none:params=False
@@ -1833,6 +1841,8 @@ P|Il2Cpp.CharacterClassManager Anomaly.Client.Api.Features.Player::CharacterClas
 P|Il2Cpp.EncryptedChannelManager Anomaly.Client.Api.Features.LocalPlayer::EncryptedChannelManager()|get=public|set=none|params=
 P|Il2Cpp.GameConsoleTransmission Anomaly.Client.Api.Features.LocalPlayer::GameConsoleTransmission()|get=public|set=none|params=
 P|Il2Cpp.ItemCategory Anomaly.Client.Api.Features.Item::Category()|get=public|set=none|params=
+P|Il2Cpp.ItemType Anomaly.Client.Api.Events.Args.CurrentItemChangedEventArgs::CurrentType()|get=public|set=none|params=
+P|Il2Cpp.ItemType Anomaly.Client.Api.Events.Args.CurrentItemChangedEventArgs::PreviousType()|get=public|set=none|params=
 P|Il2Cpp.ItemType Anomaly.Client.Api.Events.Args.FirearmShotEventArgs::Firearm()|get=public|set=none|params=
 P|Il2Cpp.ItemType Anomaly.Client.Api.Features.Item::Type()|get=public|set=none|params=
 P|Il2Cpp.ItemType Anomaly.Client.Api.Features.Pickup::Type()|get=public|set=none|params=
@@ -2381,6 +2391,7 @@ P|System.String Anomaly.Client.Api.Events.Args.AnnouncerLineScheduledEventArgs::
 P|System.String Anomaly.Client.Api.Events.Args.AnnouncerLineStartedEventArgs::ApiName()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs::ComponentPath()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs::ComponentPath()|get=public|set=none|params=
+P|System.String Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs::ClipName()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs::Text()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs::ServerIp()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Events.Args.ClientDisconnectedEventArgs::ServerIp()|get=public|set=none|params=
@@ -2389,6 +2400,7 @@ P|System.String Anomaly.Client.Api.Events.Args.EnrollmentChangedEventArgs::Curre
 P|System.String Anomaly.Client.Api.Events.Args.EnrollmentChangedEventArgs::Previous()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs::FileName()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs::Text()|get=public|set=public|params=
+P|System.String Anomaly.Client.Api.Events.Args.SceneLoadedEventArgs::SceneName()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Features.AdminToy::CommandName()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Features.AnnouncerWord::ApiName()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Features.CameraAdminToy::Label()|get=public|set=none|params=
@@ -2461,6 +2473,9 @@ P|System.Threading.CancellationToken Anomaly.Client.Api.Modding.IModContext::Can
 P|System.UInt16 Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs::DurationSeconds()|get=public|set=none|params=
 P|System.UInt16 Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs::ServerPort()|get=public|set=none|params=
 P|System.UInt16 Anomaly.Client.Api.Events.Args.ClientDisconnectedEventArgs::ServerPort()|get=public|set=none|params=
+P|System.UInt16 Anomaly.Client.Api.Events.Args.CurrentItemChangedEventArgs::CurrentSerial()|get=public|set=none|params=
+P|System.UInt16 Anomaly.Client.Api.Events.Args.CurrentItemChangedEventArgs::PreviousSerial()|get=public|set=none|params=
+P|System.UInt16 Anomaly.Client.Api.Events.Args.CurrentItemChangingEventArgs::PreviousSerial()|get=public|set=none|params=
 P|System.UInt16 Anomaly.Client.Api.Events.Args.CurrentItemChangingEventArgs::TargetSerial()|get=public|set=none|params=
 P|System.UInt16 Anomaly.Client.Api.Events.Args.DoorLocksChangedEventArgs::ActiveLocks()|get=public|set=none|params=
 P|System.UInt16 Anomaly.Client.Api.Events.Args.DoorLocksChangedEventArgs::PreviousLocks()|get=public|set=none|params=
@@ -2656,6 +2671,7 @@ T|Anomaly.Client.Api.Events.Args.VoiceMessageReceivedEventArgs|class|base=Anomal
 T|Anomaly.Client.Api.Events.Args.VoiceMessageReceivingEventArgs|class|base=Anomaly.Client.Api.Events.Args.VoiceMessageEventArgs|ifaces=Anomaly.Client.Api.Events.ICancellableEvent|gp=|access=public|abstract=False|sealed=False
 T|Anomaly.Client.Api.Events.Args.VoiceMessageSendingEventArgs|class|base=Anomaly.Client.Api.Events.Args.VoiceMessageEventArgs|ifaces=Anomaly.Client.Api.Events.ICancellableEvent|gp=|access=public|abstract=False|sealed=False
 T|Anomaly.Client.Api.Events.Args.VoiceMessageSentEventArgs|class|base=Anomaly.Client.Api.Events.Args.VoiceMessageEventArgs|ifaces=|gp=|access=public|abstract=False|sealed=False
+T|Anomaly.Client.Api.Events.Args.WarheadDetonatedEventArgs|class|base=System.EventArgs|ifaces=|gp=|access=public|abstract=False|sealed=True
 T|Anomaly.Client.Api.Events.Args.WarheadProgressChangedEventArgs|class|base=System.EventArgs|ifaces=|gp=|access=public|abstract=False|sealed=False
 T|Anomaly.Client.Api.Events.Handlers.AdminToyEvents|class|base=System.Object|ifaces=|gp=|access=public|abstract=True|sealed=True
 T|Anomaly.Client.Api.Events.Handlers.AnnouncerEvents|class|base=System.Object|ifaces=|gp=|access=public|abstract=True|sealed=True

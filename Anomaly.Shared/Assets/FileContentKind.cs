@@ -1,8 +1,10 @@
 namespace Anomaly.Shared.Assets;
 
-/// <summary>Protocol 6 transfers complete containers and their authenticated indexes.</summary>
+/// <summary>Authenticated transfer payloads with distinct validation policies.</summary>
 public enum FileContentKind : byte
 {
     Bundle = 1,
     PackIndex = 2,
+    ScriptIndex = 3,
+    LuaSource = 4,
 }
