@@ -50,14 +50,27 @@ raw-image decoders are unnecessary at runtime.
 Extract the SDK ZIP into a separate developer directory. It includes the client
 and server API DLLs, Shared and its public Bouncy Castle compile dependency,
 adjacent XML IntelliSense docs, shipped API baselines, reference metadata,
-developer guides, four starter projects, and their supporting sources. Its
-`reference/` directory also contains the approved script surface baseline,
+developer guides, four starter projects, and their supporting sources. The server
+starter includes both `samples/HelloAnomalyServer/ClientScripts/start.lua` and
+`ClientScripts/messages.json`; retain them beside its project when building.
+Scripting guides are under `Anomaly.Client.Scripting/`: start with `README.md`,
+`SCRIPT-PACKS.md`, `MESSAGING-DESIGN.md`, and `CAPABILITIES.md`; lifecycle and
+allocation-audit companions are also included. Source-relative guide paths and
+adjacent script exports are preserved so their links work in the extracted SDK.
+The server author guide is `Anomaly.Server/MODDING.md`.
+Its `reference/` directory also contains the approved script surface baseline,
 `Anomaly.Client.Scripting.ScriptAPI.json`, and the generated LuaLS definitions
 `Anomaly.Client.Api.d.lua`. These describe the same approved types, members,
-and queued events as the runtime catalog. SDK
-documentation and license files stay in that archive, separate from game
-installation files. Its entries come from the complete `anomaly-sdk` definition
-in `package-layout.json`.
+and queued events as the runtime catalog. SDK documentation and license files
+stay in that archive, separate from game installation files. Its entries come
+from the complete `anomaly-sdk` definition in `package-layout.json`.
+
+The starter's `EnableClientScripts` defaults to `false`. Do not enable it for
+normal remote connections: remote script offers fail closed before content or
+execution approval while `MemoryHardeningQualified` / `RemoteExecutionEnabled`
+are false. Consent cannot override this gate. The embedded pack is an authoring
+and development example, not a claim that remote Lua is ready; verified local-host
+sources use the guide's separate local owner directory and execution path.
 
 The script uses the entries in `package-layout.json` as its allowlist and audits the emitted
 assembly references against packaged DLLs and the actual resolved host inputs.
@@ -68,7 +81,10 @@ production bundle validator, then checks every ZIP entry's path, length, and
 SHA-256. All three ZIPs are validated, and the SDK's four starters and its
 positive/negative compile-dependency probes are built using the same host
 references as the runtime projects, before any artifacts reach the output
-directory. `DeployLocal=false` applies throughout.
+directory. The staged server starter's emitted PE metadata must contain both
+exact embedded names `HelloAnomalyServer.ClientScripts.start.lua` and
+`HelloAnomalyServer.ClientScripts.messages.json`; a successful build alone is
+not enough. `DeployLocal=false` applies throughout.
 This command creates unsigned local packages; the complete release gate below
 provides the additional core tests, reproducibility, and signing evidence for
 publication.
@@ -84,9 +100,25 @@ skin pair, and license notices, verify every archive's source hashes and `SHA256
 corrupt or incomplete skin packs, and prove an existing output directory is
 rejected without changing its artifacts. They do not start the game or server.
 
-Building requires the .NET 8 SDK (or a newer SDK plus the .NET 8 runtime) and the
-configured local game/loader references in `Directory.Build.props`. Override
-reference locations or supply a different exported skin pair when needed:
+Building runtime releases from a source checkout requires the .NET 8 SDK (or a
+newer SDK plus the .NET 8 runtime), configured local game/loader references in
+`Directory.Build.props`, and the restored private MoonSharp fork. `third_party/`
+is ignored and a fresh clone does not contain that fork. Obtain the upstream
+MoonSharp commit `fbd03678d5c0f731d731d099211c7f4a3a1ae8b7` separately, then from the
+full source checkout run:
+
+```powershell
+pwsh -File tools/MoonSharpHardening/Restore-MoonSharp.ps1 `
+  -UpstreamSourceDirectory 'X:\Sources\moonsharp\src\MoonSharp.Interpreter'
+```
+
+The restore verifies pinned source hashes, applies the tracked hardening patch,
+and refuses an existing destination; it does not fetch upstream sources or
+replace an existing local fork. See the [restore prerequisites](../tools/MoonSharpHardening/README.md).
+The extracted SDK includes that guidance and the fork's limits for reference,
+not the runtime source tree or restore toolchain. Building its starter plugins
+does not require restoring MoonSharp. Override host reference locations or supply
+a different exported skin pair when needed:
 
 ```powershell
 ./release/Build-RuntimeRelease.ps1 -Version 1.0.0 `

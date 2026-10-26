@@ -5,13 +5,13 @@ namespace Anomaly.Client.Api.Events.Handlers;
 
 public static class VoiceEvents
 {
-    [ScriptEvent]
+    [ScriptEvent(CoalesceLatest = true)]
     public static event AnomalyEventHandler<VoiceMessageSendingEventArgs> Sending;
-    [ScriptEvent]
+    [ScriptEvent(CoalesceLatest = true)]
     public static event AnomalyEventHandler<VoiceMessageReceivingEventArgs> Receiving;
-    [ScriptEvent]
+    [ScriptEvent(CoalesceLatest = true)]
     public static event AnomalyEventHandler<VoiceMessageSentEventArgs> Sent;
-    [ScriptEvent]
+    [ScriptEvent(CoalesceLatest = true)]
     public static event AnomalyEventHandler<VoiceMessageReceivedEventArgs> Received;
 
     internal static void OnSending(VoiceMessageSendingEventArgs args) => EventInvoker.Invoke(Sending, args);

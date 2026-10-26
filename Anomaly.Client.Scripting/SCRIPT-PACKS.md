@@ -37,7 +37,8 @@ not executable sources. Keep names canonical and use the lowercase `.lua` extens
 
 The server watches owner files and publishes immutable snapshots. A completed edit
 affects subsequent offers; existing connections retain their exact approved
-snapshot. Do not use a file edit as an immediate hot-reload or revocation mechanism.
+snapshot until offer replacement or disconnect. Do not use a file edit as an
+immediate hot-reload or revocation mechanism.
 Invalid input cannot replace the current valid snapshot.
 
 ## Embedded plugin resources
@@ -83,8 +84,8 @@ argument means the pack declares no custom messages.
 
 A registration owns the pack until disposed. Pack IDs must be unique across owner
 and plugin sources. Disposing changes subsequent snapshots; active connections
-keep their approved snapshot until their connection ends. Registration or disposal
-blocks new offers until a snapshot reflecting that registry revision is published.
+keep their approved snapshot until offer replacement or disconnect. Registration
+or disposal blocks new offers until a snapshot reflecting that registry revision is published.
 If invalid owner files prevent publication, new admissions wait and fail closed at
 the normal deadline while existing leases continue. A plugin requiring immediate
 gameplay revocation must enforce that policy in its authoritative server code.
@@ -117,6 +118,8 @@ bytes and still count as sources.
 
 ## Approval and initialization
 
+The following approval sequence applies only after the execution gate permits
+the source path; required remote script offers currently fail before this step.
 The client first approves the exact authenticated content offer before requesting
 missing files. After source/index validation it presents a separate execution
 approval with the server identity, source count, and byte count. Remembered content

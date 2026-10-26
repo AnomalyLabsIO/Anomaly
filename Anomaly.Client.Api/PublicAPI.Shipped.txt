@@ -793,6 +793,7 @@ M|System.Boolean Anomaly.Client.Api.Rendering.ModelAttachment::Attach(UnityEngin
 M|System.Boolean Anomaly.Client.Api.Rendering.ModelAttachment::AttachToTransform(UnityEngine.GameObject,UnityEngine.Transform,UnityEngine.Vector3,UnityEngine.Quaternion)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="model":in=False:out=False:optional=False:default=none:params=False;"anchor":in=False:out=False:optional=False:default=none:params=False;"localPosition":in=False:out=False:optional=True:default=null:params=False;"localRotation":in=False:out=False:optional=True:default=null:params=False
 M|System.Boolean Anomaly.Client.Api.Scheduling.ScheduledTask::get_IsActive()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Boolean Anomaly.Client.Api.Scheduling.Scheduler::IsOnCooldown(System.String)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="key":in=False:out=False:optional=False:default=none:params=False
+M|System.Boolean Anomaly.Client.Api.Scripting.ScriptEventAttribute::get_CoalesceLatest()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Boolean Anomaly.Client.Api.Scripting.ScriptVisibleAttribute::get_AllowWrite()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Boolean Anomaly.Client.Api.Scripting.ScriptingPolicy::get_MemoryHardeningQualified()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Boolean Anomaly.Client.Api.Scripting.ScriptingPolicy::get_RemoteExecutionEnabled()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
@@ -1600,6 +1601,7 @@ M|System.Void Anomaly.Client.Api.Scheduling.ScheduledTask::Cancel()|static=False
 M|System.Void Anomaly.Client.Api.Scheduling.Scheduler::ClearCooldown(System.String)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="key":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Scheduling.Scheduler::StartCooldown(System.String,System.TimeSpan)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="key":in=False:out=False:optional=False:default=none:params=False;"duration":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Scripting.ScriptEventAttribute::.ctor(System.String)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="name":in=False:out=False:optional=True:default=null:params=False
+M|System.Void Anomaly.Client.Api.Scripting.ScriptEventAttribute::set_CoalesceLatest(System.Boolean)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Client.Api.Scripting.ScriptIgnoreAttribute::.ctor()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Void Anomaly.Client.Api.Scripting.ScriptTypeAttribute::.ctor(System.String)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="name":in=False:out=False:optional=True:default=null:params=False
 M|System.Void Anomaly.Client.Api.Scripting.ScriptVisibleAttribute::.ctor(System.String)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="name":in=False:out=False:optional=True:default=null:params=False
@@ -2137,6 +2139,7 @@ P|System.Boolean Anomaly.Client.Api.Features.Workstation::IsDestroyed()|get=publ
 P|System.Boolean Anomaly.Client.Api.Modding.ModDependency::Optional()|get=public|set=public|params=
 P|System.Boolean Anomaly.Client.Api.Modding.ModResolutionResult::Success()|get=public|set=none|params=
 P|System.Boolean Anomaly.Client.Api.Scheduling.ScheduledTask::IsActive()|get=public|set=none|params=
+P|System.Boolean Anomaly.Client.Api.Scripting.ScriptEventAttribute::CoalesceLatest()|get=public|set=public|params=
 P|System.Boolean Anomaly.Client.Api.Scripting.ScriptVisibleAttribute::AllowWrite()|get=public|set=public|params=
 P|System.Boolean Anomaly.Client.Api.Scripting.ScriptingPolicy::MemoryHardeningQualified()|get=public|set=none|params=
 P|System.Boolean Anomaly.Client.Api.Scripting.ScriptingPolicy::RemoteExecutionEnabled()|get=public|set=none|params=

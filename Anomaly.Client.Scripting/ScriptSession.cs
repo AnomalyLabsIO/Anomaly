@@ -3,6 +3,7 @@ using Anomaly.Client.Scripting.Bindings;
 using Anomaly.Client.Scripting.Events;
 using Anomaly.Client.Scripting.Messaging;
 using Anomaly.Shared.Networking.Messages;
+using Anomaly.Client.Scripting.Output;
 using MoonSharp.Interpreter;
 using MoonSharp.Interpreter.Interop;
 using MoonSharp.Interpreter.Loaders;
@@ -27,6 +28,16 @@ internal sealed class ScriptSession : IDisposable
     private readonly MemoryBudget _memory;
     private readonly Action<string>? _diagnostic;
     private const int MaxResources = 32;
+    // Initialization/direct host calls retain their configured deadline. Queued
+    // callbacks get a fresh independent limit, never the tick's leftover 2 ms.
+    // Cooperative checks cannot preempt a running CLR method or a GC pause.
+    internal static readonly TimeSpan CallbackWallLimit = TimeSpan.FromMilliseconds(10);
+    private const int MaxDiagnostics = 4;
+    private string _sourceIdentity = "development-script";
+    private bool _hasSourceIdentity;
+    private int _diagnostics;
+    private string? _faultEvent;
+    private string? _faultReason;
     private static readonly ScriptExecutionResult CompletedResult = new(ScriptExecutionStatus.Completed, "Completed.");
     private static readonly ScriptExecutionResult RetiredResult = new(ScriptExecutionStatus.Retired, "The script session has been retired.");
     private static readonly ScriptExecutionResult InvalidResult = new(ScriptExecutionStatus.InvalidResult, "Entry points may return only bounded primitive values.");
@@ -53,6 +64,8 @@ internal sealed class ScriptSession : IDisposable
     private bool _retired;
     private int _retirementRequested;
     private ExecutionBudget? _activeBudget;
+    private bool _outputInstalled;
+    private ScriptOutput? _output;
 
     internal ScriptSession(ScriptBindingRegistry bindings, ScriptExecutionOptions options, Action<string>? diagnostic,
         ScriptEventCatalog? eventCatalog = null, MemoryBudget? runtimeMemory = null)
@@ -63,6 +76,11 @@ internal sealed class ScriptSession : IDisposable
         _diagnostic = diagnostic;
         _memory = new MemoryBudget(options.AllocationLimitBytes, runtimeMemory, reclaimable: true);
         using var memoryScope = _memory.EnterScope();
+        // A bounded diagnostic reserve remains charged to this session so that
+        // terminal paths can emit at most four bounded strings without reentry
+        // into an already exhausted allocation budget.
+        using var diagnosticMemory = _diagnostic == null ? default : MemoryBudget.Reserve(16 * 1024);
+        if (_diagnostic != null) diagnosticMemory.Bind(this);
         // Preallocate bounded backing stores. Clear/Dequeue cannot refund storage
         // that the live collection still retains.
         _resources = MemoryBudget.Allocate(64L + MaxResources * 8L, () => new List<IDisposable>(MaxResources));
@@ -90,7 +108,7 @@ internal sealed class ScriptSession : IDisposable
         {
             var subscriptions = MemoryBudget.Allocate(512, () => new ScriptEventSubscriptions(eventCatalog, script,
                 invocation => QueueCallback(invocation), requestRetirement: SignalRetirement,
-                subscriptionBudget: _subscriptionBudget));
+                subscriptionBudget: _subscriptionBudget, publicationFault: SignalEventRetirement));
             _resources.Add(subscriptions);
             try { subscriptions.InstallGlobal(); }
             catch
@@ -107,6 +125,59 @@ internal sealed class ScriptSession : IDisposable
     internal long MemoryUnboundBytes => _memory.UnboundBytes;
     internal int QueuedMessageBytes => _queuedMessageBytes;
     internal int QueuedCount => _events.Count;
+    internal string SourceIdentity => _sourceIdentity;
+
+    internal void SetSourceIdentity(string identity)
+    {
+        EnsureAvailable();
+        if (_loaded || _executing) throw new InvalidOperationException("Set source identity before loading the script.");
+        ArgumentNullException.ThrowIfNull(identity);
+        using var scope = _memory.EnterScope();
+        var length = Math.Min(identity.Length, 384);
+        _sourceIdentity = MemoryBudget.AllocateString(length, () => new string(identity.AsSpan(0, length)));
+        _hasSourceIdentity = true;
+        _output?.SetSourceIdentity(_sourceIdentity);
+    }
+
+    internal void SetSourceIdentity(ScriptSource source)
+    {
+        EnsureAvailable();
+        if (_loaded || _executing) throw new InvalidOperationException("Set source identity before loading the script.");
+        using var scope = _memory.EnterScope();
+        var length = Math.Min(source.PackId.Length + 1 + source.Address.Length, 384);
+        _sourceIdentity = MemoryBudget.AllocateString(length, () =>
+            string.Create(length, source, static (span, value) =>
+            {
+                var packLength = Math.Min(span.Length, value.PackId.Length);
+                value.PackId.AsSpan(0, packLength).CopyTo(span);
+                if (packLength == span.Length) return;
+                span[packLength] = ' ';
+                value.Address.AsSpan(0, span.Length - packLength - 1).CopyTo(span[(packLength + 1)..]);
+            }));
+        _hasSourceIdentity = true;
+        _output?.SetSourceIdentity(_sourceIdentity);
+    }
+
+    internal void InstallOutput(ScriptOutputHost host)
+    {
+        EnsureAvailable();
+        if (_loaded || _executing || _outputInstalled)
+            throw new InvalidOperationException("Install output before loading the script.");
+        using var scope = _memory.EnterScope();
+        var output = host.CreateOutput(_script!, SourceIdentity);
+        try
+        {
+            TrackResource(output);
+            output.InstallGlobal();
+            _outputInstalled = true;
+            _output = output;
+        }
+        catch
+        {
+            output.Dispose();
+            throw;
+        }
+    }
 
     internal void InstallMessages(ScriptMessageContext context)
     {
@@ -147,7 +218,7 @@ internal sealed class ScriptSession : IDisposable
         if (_executing) throw new InvalidOperationException("Cannot change script globals during execution.");
         if (string.IsNullOrEmpty(name) || name.Length > 64 || name.StartsWith('_') || char.IsDigit(name[0]) ||
             !name.All(c => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '_') ||
-            AllowedGlobals.Contains(name) || _bindings.Enums.IsGlobalName(name) || name is "Game" or "Events" or "Messages" or "io" or "os" or "package" or "debug" or "require" or "load" or "loadfile" or "dofile")
+            AllowedGlobals.Contains(name) || _bindings.Enums.IsGlobalName(name) || name is "Game" or "Events" or "Messages" or "Output" or "io" or "os" or "package" or "debug" or "require" or "load" or "loadfile" or "dofile")
             throw new ArgumentException("A host global must use a non-reserved simple name.", nameof(name));
         try
         {
@@ -182,15 +253,16 @@ internal sealed class ScriptSession : IDisposable
         ApplyRetirementRequest();
         if (_retired) return Retired();
         if (_loaded) throw new InvalidOperationException("A session loads exactly one source package.");
+        if (sourceFriendlyName != null && (sourceFriendlyName.Length == 0 || sourceFriendlyName.Length > 255 ||
+            sourceFriendlyName.Any(character => char.IsControl(character))))
+            throw new ArgumentException("Invalid script source diagnostic name.", nameof(sourceFriendlyName));
+        if (!_hasSourceIdentity && sourceFriendlyName != null) SetSourceIdentity(sourceFriendlyName);
         var rejection = ScriptSourcePolicy.Reject(source, _options);
         if (rejection != null)
         {
             Retire();
             return new ScriptExecutionResult(ScriptExecutionStatus.SourceRejected, rejection);
         }
-        if (sourceFriendlyName != null && (sourceFriendlyName.Length == 0 || sourceFriendlyName.Length > 255 ||
-            sourceFriendlyName.Any(character => char.IsControl(character))))
-            throw new ArgumentException("Invalid script source diagnostic name.", nameof(sourceFriendlyName));
         var result = Execute(() => _script!.LoadString(source!, codeFriendlyName: sourceFriendlyName ?? "anomaly-script"));
         _loaded = result.Succeeded;
         return result;
@@ -246,6 +318,13 @@ internal sealed class ScriptSession : IDisposable
         Volatile.Read(ref _activeBudget)?.Cancel();
     }
 
+    private void SignalEventRetirement(string eventName, string reason)
+    {
+        Interlocked.CompareExchange(ref _faultEvent, eventName, null);
+        Interlocked.CompareExchange(ref _faultReason, reason, null);
+        SignalRetirement();
+    }
+
     private bool QueueMessage(Func<IQueuedScriptInvocation> createInvocation, int bytes)
     {
         EnsureOwner();
@@ -282,7 +361,7 @@ internal sealed class ScriptSession : IDisposable
         if (_events.Count >= 64)
         {
             Retire();
-            Report("Script event queue exceeded its limit; session retired.");
+            Report("Script event queue exceeded its limit; session retired.", callback is ScriptEventInvocation invocation ? invocation.Name : function);
             return false;
         }
         QueuedScriptEvent queued;
@@ -305,7 +384,7 @@ internal sealed class ScriptSession : IDisposable
         catch (ScriptExecutionAbortedException)
         {
             Retire();
-            Report("Script allocation allowance exhausted while queuing an event; session retired.");
+            Report("Script allocation allowance exhausted while queuing an event; session retired.", callback is ScriptEventInvocation invocation ? invocation.Name : function);
             return false;
         }
         _events.Enqueue(queued);
@@ -317,20 +396,23 @@ internal sealed class ScriptSession : IDisposable
         EnsureOwner();
         ApplyRetirementRequest();
         if (_retired || _events.Count == 0) return false;
+        if (timeout > CallbackWallLimit) timeout = CallbackWallLimit;
         var queued = _events.Dequeue();
         _queuedMessageBytes -= queued.MessageBytes;
         if (queued.Callback != null)
         {
             if (!queued.Callback.IsActive) return true;
+            if (queued.Callback is ScriptEventInvocation invocation) invocation.BeginDispatch();
             var callbackResult = Execute(() => queued.Callback.Callback,
                 () => queued.Callback.ResolveArguments(_script!), timeout, discardResult: true);
-            if (!callbackResult.Succeeded) Report(callbackResult.Message);
+            if (!callbackResult.Succeeded) Report(callbackResult.Message,
+                queued.Callback is ScriptEventInvocation eventInvocation ? eventInvocation.Name : "Messages");
             return true;
         }
         // Optional handlers are allowed. Looking up a global does not execute Lua.
         if (_script!.Globals.Get(queued.Function!).Type != DataType.Function) return true;
         var result = InvokeWithin(queued.Function!, queued.Arguments, timeout);
-        if (!result.Succeeded) Report(result.Message);
+        if (!result.Succeeded) Report(result.Message, queued.Function);
         return true;
     }
 
@@ -447,7 +529,12 @@ internal sealed class ScriptSession : IDisposable
 
     private void ApplyRetirementRequest()
     {
-        if (Volatile.Read(ref _retirementRequested) != 0 || _memory.IsTerminated) Retire();
+        if (Volatile.Read(ref _retirementRequested) != 0 || _memory.IsTerminated)
+        {
+            Retire();
+            var reason = Interlocked.Exchange(ref _faultReason, null);
+            if (reason != null) Report(reason, Interlocked.Exchange(ref _faultEvent, null));
+        }
     }
 
     private void EnsureOwner()
@@ -471,21 +558,42 @@ internal sealed class ScriptSession : IDisposable
             _script.Globals.Clear();
             _script = null;
         }
+        var cleanupFailed = false;
         for (var i = _resources.Count - 1; i >= 0; i--)
         {
             try { _resources[i].Dispose(); }
-            catch (Exception) { Report("Script resource cleanup failed."); }
+            catch (Exception) { cleanupFailed = true; }
         }
         _resources.Clear();
         // The capability retains its owner VM. Clearing the resource list alone
         // is insufficient when a host still holds this retired session wrapper.
         _messages = null;
+        _output = null;
+        if (cleanupFailed) Report("Script resource cleanup failed.");
     }
 
-    private void Report(string message)
+    private void Report(string message, string? eventName = null)
     {
-        // Diagnostics are an observer; a failing logger must not interrupt teardown.
-        try { _diagnostic?.Invoke(message); }
+        // This terminal-safe path allocates only within the constructor's fixed
+        // diagnostic reserve. Observer work is outside the scripting boundary.
+        if (_diagnostic == null || _diagnostics >= MaxDiagnostics) return;
+        _diagnostics++;
+        var source = _sourceIdentity;
+        var name = eventName ?? "session";
+        var eventLength = Math.Min(name.Length, 128);
+        var reasonLength = Math.Min(message.Length, 768);
+        var bounded = string.Create(source.Length + eventLength + reasonLength + 6,
+            (Source: source, Event: name, Message: message, EventLength: eventLength, ReasonLength: reasonLength),
+            static (buffer, state) =>
+            {
+                state.Source.AsSpan().CopyTo(buffer);
+                var offset = state.Source.Length;
+                " | ".AsSpan().CopyTo(buffer.Slice(offset)); offset += 3;
+                state.Event.AsSpan(0, state.EventLength).CopyTo(buffer.Slice(offset)); offset += state.EventLength;
+                " | ".AsSpan().CopyTo(buffer.Slice(offset)); offset += 3;
+                state.Message.AsSpan(0, state.ReasonLength).CopyTo(buffer.Slice(offset));
+            });
+        try { _diagnostic.Invoke(bounded); }
         catch (Exception) { }
     }
 

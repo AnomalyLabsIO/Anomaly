@@ -10,6 +10,7 @@ internal sealed class ScriptEventSubscriptions : IDisposable
     private readonly Script _owner;
     private readonly Action<ScriptEventInvocation> _enqueue;
     private readonly Action? _requestRetirement;
+    private readonly Action<string, string>? _publicationFault;
     private readonly int _maxSubscriptions;
     private readonly ScriptSubscriptionBudget? _subscriptionBudget;
     private readonly Dictionary<string, ScriptEventRegistration> _registrations;
@@ -18,7 +19,8 @@ internal sealed class ScriptEventSubscriptions : IDisposable
     private int _faulted;
 
     internal ScriptEventSubscriptions(ScriptEventCatalog catalog, Script owner, Action<ScriptEventInvocation> enqueue,
-        int maxSubscriptions = 32, Action? requestRetirement = null, ScriptSubscriptionBudget? subscriptionBudget = null)
+        int maxSubscriptions = 32, Action? requestRetirement = null, ScriptSubscriptionBudget? subscriptionBudget = null,
+        Action<string, string>? publicationFault = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(owner);
@@ -30,6 +32,7 @@ internal sealed class ScriptEventSubscriptions : IDisposable
         _enqueue = enqueue;
         _maxSubscriptions = maxSubscriptions;
         _requestRetirement = requestRetirement;
+        _publicationFault = publicationFault;
         _subscriptionBudget = subscriptionBudget;
         // Dictionary storage survives Remove/Clear. Reserve its bounded maximum
         // separately from registrations, whose callbacks can be collected earlier.
@@ -100,41 +103,59 @@ internal sealed class ScriptEventSubscriptions : IDisposable
             try { source.Remove(registration); }
             catch (Exception exception) when (exception is not OutOfMemoryException && exception is not StackOverflowException)
             {
-                RequestRetirement();
+                RequestRetirement("The approved event could not be detached; session retired.", source.QualifiedName);
                 throw new ScriptRuntimeException("The approved event could not be detached.");
             }
         }
         return count > 0;
     }
 
-    internal void Enqueue(ScriptEventInvocation invocation)
+    internal void Publish(ScriptEventRegistration registration, object?[] arguments, object allocationOwner)
     {
         EnsureOwner(_owner);
-        if (invocation.IsActive) _enqueue(invocation);
+        if (!registration.IsActive) return;
+        if (registration.Pending != null)
+        {
+            // The key is the registration object, never a callback/event name.
+            // Replacement drops old snapshot roots; its accounting ticket stays
+            // charged until the old backing owner is actually collected.
+            registration.Pending.Replace(arguments, allocationOwner);
+            return;
+        }
+        using var memoryScope = _owner.MemoryBudget?.EnterScope();
+        var invocation = MemoryBudget.Allocate(256,
+            () => new ScriptEventInvocation(registration, arguments, allocationOwner));
+        if (registration.Source.CoalesceLatest) registration.Pending = invocation;
+        _enqueue(invocation);
     }
 
     // Reserve the maximum bounded snapshot and delivery bookkeeping before a
     // publisher captures it. Each recipient pays even when the copy is shared.
-    internal bool TryReservePublication(out MemoryBudget.AllocationReservation reservation)
+    internal bool TryReservePublication(ScriptEventRegistration registration, out MemoryBudget.AllocationReservation reservation)
     {
         reservation = default;
         try
         {
+            if (registration.Source.CoalesceLatest) registration.Pending?.ReleaseSnapshot();
             reservation = _owner.MemoryBudget?.ReserveAllocation(64 * 1024) ?? default;
             return true;
         }
         catch (ScriptExecutionAbortedException)
         {
-            RequestRetirement();
+            RequestRetirement("Script allocation allowance exhausted while snapshotting an event; session retired.",
+                registration.Source.QualifiedName);
             return false;
         }
     }
 
     // Callable from a CLR publishing thread. Only signal; teardown and Lua access
     // remain on the session owner thread, even when the source fires off-thread.
-    internal void RequestRetirement()
+    internal void RequestRetirement(string reason = "The event publisher violated its owner-thread contract; session retired.",
+        string? eventName = null)
     {
         if (Interlocked.Exchange(ref _faulted, 1) != 0) return;
+        try { _publicationFault?.Invoke(eventName ?? "Events", reason); }
+        catch (Exception) { }
         try { _requestRetirement?.Invoke(); }
         catch (Exception) { }
     }

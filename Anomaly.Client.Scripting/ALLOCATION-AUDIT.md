@@ -25,6 +25,8 @@ after the client proves the current nondedicated host connection.
 | Source validation and capability installation | Canonical identity and schema checks avoid scratch collections. Empty-source validation allocates no identity strings or closure state. Failed message installation retires and removes the unpublished VM; retiring a session drops its message capability reference. |
 | Messaging control plane | The connection bridge has a conservative 2 MiB parent-budget reservation bound to its lifetime, covering up to 8 packs, 256 schemas/8,192 field descriptors and bounded rate buckets. Grouping scratch is separately prepaid. Session copies discard producer schema lists, cache three capability wrappers, and use allocation-free frozen schema checks. |
 | Annotated gameplay queries | Metadata discovery installs only annotated types/members/events before VM construction. Nullable and the annotated firearm/motion structs retain the existing snapshot node/payload bounds. Reflection reserves conservative primitive/struct result boxing allowances; detached position values are charged before construction. Game-context descriptors belong to each session. |
+| Owned output | Primitive-only output validates borrowed strings/durations and rates before copying. Logs are single-line/bounded; display strings reserve a conservative 256 KiB native workspace plus their copied storage before entering the sink. Runtime/session rate caps, eight lazy owner slots, fixed geometry and host expiry bound creation/churn; disposal clears only the owner. Native Unity/TMP internals remain a trusted boundary, not an intercepted allocator. |
+| Observation scheduling and diagnostics | Repeated fair rounds admit up to four callbacks within a 2 ms no-new-start window; each gets an independent at-most-10 ms terminal wall allowance. Explicit latest observations retain one pending snapshot per registration generation. Replacing roots never refunds live storage. Session source/event diagnostics use a fixed prepaid allowance and at most four bounded emissions. |
 
 Reclaimable accounting follows collection, including finalization/resurrection. Neither
 Remove/Clear, entry completion, disposal, reconnect nor abandoned child-budget wrappers
@@ -69,8 +71,10 @@ resources. An annotation alone is not a memory boundary.
 The annotated gameplay surface does not qualify those native getters. Player/room/item
 resolution, wrapper cache misses, stat queries, IL2CPP strings and firearm/module reads
 can allocate in trusted API/Unity code outside the VM allowance. Native cache/population
-and teardown behavior still require live review. No mutation or native resource creation
-capability is added; [future mutation bindings](CAPABILITIES.md) need their own budgets.
+and teardown behavior still require live review. The bounded owned-text capability
+now creates native TMP labels, but its 256 KiB workspace reservation is conservative;
+native font/material/geometry/GC use is not a qualified allocator ceiling.
+Other [future mutation bindings](CAPABILITIES.md) need their own budgets.
 
 CLR-private exception trace/diagnostic internals, JIT/type/reflection/culture caches,
 GC metadata/fragmentation and native/IL2CPP/Unity allocations are not exact script-owned
@@ -101,3 +105,26 @@ finite uncooperative-host regression demonstrates that limitation. Production
 capabilities need audited, bounded bodies with reservations before allocations,
 including native resources; a hard process-wide ceiling requires an external
 boundary. Current tests do not qualify live Unity/IL2CPP GC behavior or native use.
+
+## Local-host acceptance evidence (2026-10-26)
+
+The opt-in `EarlyAccessUiSmoke -UseModLaunch -LocalHosting -ClientScripting`
+scenario passed against the supported game/loader through both console `host`
+and Create Server. Evidence is retained locally under
+`artifacts/scripting-readiness/local-output-20261026-b/`: native Mirror readiness,
+the reciprocal host proof and prepared script set were all true; the real sample
+rendered player/round text. Each hosted connection exercised 120 frames with two
+queued native-query callbacks per frame, literal/noninteractive owner labels,
+independent clear/expiry and disconnect cleanup. Returning to the menu and rehosting
+created fresh sessions. No production GC was forced. The reversible deployment was
+restored and its protected native/unrelated hashes matched.
+
+This closes the previously unexercised local readiness/output path, not the
+hostile remote containment decision. It covers one local player in the lobby,
+not multiplayer role/despawn churn, long-running GC behavior or the complete native
+getter graph. Runtime counters in the evidence are outstanding conservative
+charges and cumulative reservations, not measured CLR/native heap ceilings.
+The experimental allowance still cannot intercept arbitrary allocations or stop a
+blocking native body. Remote qualification therefore remains false; a hard
+availability boundary still requires qualified bounded host operations and,
+where hard isolation is required, an external execution boundary.

@@ -9,6 +9,7 @@ using Anomaly.Client.Api.Scheduling;
 using Anomaly.Client.Api.Events.Args;
 using Anomaly.Client.Api.Events.Handlers;
 using Anomaly.Client.Internal.Effects;
+using Anomaly.Client.Internal.Hosting;
 using Anomaly.Client.Internal.Round;
 using Anomaly.Client.Api.Internal.Input;
 using Anomaly.Client.Api.Internal.Scheduling;
@@ -278,6 +279,20 @@ internal static class ClientRuntime
         if (!Initializer.IsInitialized)
             return;
 
+        // Starting an in-process host in an already loaded scene need not invoke
+        // OnClientSceneChanged. Derive that missing readiness transition only
+        // from Mirror's current ready bit and a verified reciprocal local pair.
+        // Existing lifecycle gates make the normal-hook and this path idempotent.
+        if (!ClientApi.IsClientReady && NetworkClient.ready && LocalHostingRuntime.IsVerifiedScriptHost)
+        {
+            var manager = CustomNetworkManager.TypedSingleton;
+            if (manager != null)
+            {
+                HandleClientStarted(manager);
+                HandleClientConnected(manager);
+                HandleClientReady(manager);
+            }
+        }
         // Let a required per-frame service failure reach Core.UpdateFeature so
         // feature health flips to Failed and the authenticated session is torn
         // down instead of continuing in a partially-wired state.

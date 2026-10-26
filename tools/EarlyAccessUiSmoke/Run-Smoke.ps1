@@ -11,6 +11,7 @@ param(
     [switch] $ServerApi,
     [string] $ServerApiMode = 'full',
     [switch] $LocalHosting,
+    [switch] $ClientScripting,
     [switch] $DummyVisibility,
     [switch] $DedicatedDummyControl,
     [switch] $NewsOnly,
@@ -47,6 +48,16 @@ if ($AdmissionExpect -and ($ConnectionOnly -or $ServerApi -or $LocalHosting -or 
 if ($LocalHosting -and ($ConnectionOnly -or $ServerApi)) { throw 'LocalHosting runs its own scenario and cannot be combined with ConnectionOnly or ServerApi.' }
 if ($DummyVisibility -and !$LocalHosting) { throw 'DummyVisibility requires LocalHosting.' }
 if ($DedicatedDummyControl -and !$LoopbackServer) { throw 'DedicatedDummyControl requires a loopback test server.' }
+if ($ClientScripting -and (!$LocalHosting -or $LoopbackServer -or $DummyVisibility)) {
+    throw 'ClientScripting requires LocalHosting and runs without a remote server or dummy fixture.'
+}
+if ($ClientScripting) {
+    $scriptRoot = Join-Path $game 'UserData/Anomaly/ClientScripts'
+    if (Test-Path -LiteralPath $scriptRoot) {
+        $existingSources = @(Get-ChildItem -LiteralPath $scriptRoot -Recurse -File -Filter '*.lua')
+        if ($existingSources.Count -ne 0) { throw 'ClientScripting requires an empty local script source tree; existing owner scripts are never replaced.' }
+    }
+}
 if ($DedicatedDummyControl -and ($ConnectionOnly -or $ServerApi -or $LocalHosting -or $DummyVisibility)) {
     throw 'DedicatedDummyControl runs its own scenario and cannot be combined with other smoke modes.'
 }
@@ -71,6 +82,11 @@ $backupPaths = @((($layout.packages | Where-Object packageId -eq 'anomaly-client
     @('Mods/HelloAnomalyMod.dll','Mods/Anomaly.EarlyAccessUiSmoke.dll','UserData/Anomaly/mod-trust.json',
       'UserData/Anomaly/user.json','UserData/Anomaly/server-trust.json','UserData/Anomaly/content-consent.json',
       'UserData/Loader.cfg','UserData/MelonPreferences.cfg')
+if ($ClientScripting) {
+    $backupPaths += @('start.lua','messages.json','owner-a.lua','owner-b.lua' | ForEach-Object {
+        'UserData/Anomaly/ClientScripts/anomaly_smoke/output/' + $_
+    })
+}
 $backupPaths += @(Get-ChildItem -LiteralPath (Join-Path $repository 'Anomaly.Client/Resources/i18n') -File -Filter '*.yaml' |
     ForEach-Object { 'UserData/Anomaly/i18n/anomaly/' + $_.Name })
 if (!$BackupDirectory) { $BackupDirectory = Join-Path $repository ('artifacts/news-ui-smoke/modlaunch-backup-' + [IO.Path]::GetFileName($evidence)) }
@@ -83,6 +99,26 @@ foreach ($entry in ($layout.packages | Where-Object packageId -eq 'anomaly-clien
 }
 foreach ($mod in @('samples/HelloAnomalyMod/bin/Release/net6.0/HelloAnomalyMod.dll','tools/EarlyAccessUiSmoke/bin/Release/net6.0/Anomaly.EarlyAccessUiSmoke.dll')) {
     Copy-Item -LiteralPath (Join-Path $repository $mod) -Destination (Join-Path $game 'Mods')
+}
+if ($ClientScripting) {
+    $scriptPack = Join-Path $game 'UserData/Anomaly/ClientScripts/anomaly_smoke/output'
+    [void](New-Item -ItemType Directory -Force -Path $scriptPack)
+    foreach ($file in @('start.lua','messages.json')) {
+        Copy-Item -LiteralPath (Join-Path $repository "samples/HelloAnomalyServer/ClientScripts/$file") -Destination (Join-Path $scriptPack $file)
+    }
+    $ownedFixture = @'
+Output:Log("Owned output fixture initialized.")
+function ShowOwner(text, duration) return Output:ShowText(text, duration) end
+function ClearOwner() Output:ClearText() end
+function ReadGame()
+    local player = Game.LocalPlayer
+    return player ~= nil and not player.IsDestroyed and player.PlayerId >= 0
+        and Game:GetPosition(player.PlayerId) ~= nil
+end
+'@
+    foreach ($file in @('owner-a.lua','owner-b.lua')) {
+        [IO.File]::WriteAllText((Join-Path $scriptPack $file), $ownedFixture, [Text.UTF8Encoding]::new($false))
+    }
 }
 # Approve only the three artifacts staged by this runner. Preserve prior approvals;
 # never implicitly approve unrelated mods in an explicitly selected installation.
@@ -128,7 +164,7 @@ $startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Normal
 $startInfo.Environment['ANOMALY_UI_SMOKE_DIR'] = $evidence
 $startInfo.Environment.Remove('ANOMALY_INTEGRITY_SMOKE_MODE') | Out-Null
 if ($IntegrityMode) { $startInfo.Environment['ANOMALY_INTEGRITY_SMOKE_MODE'] = $IntegrityMode }
-foreach ($name in @('ANOMALY_SMOKE_SERVER','ANOMALY_UI_SMOKE_CONNECTION_ONLY','ANOMALY_MOD_ADMISSION_EXPECT','ANOMALY_SERVER_API_SMOKE','ANOMALY_SERVER_API_SMOKE_MODE','ANOMALY_LOCAL_HOSTING_SMOKE','ANOMALY_DUMMY_VISIBILITY_SMOKE','ANOMALY_DEDICATED_DUMMY_SMOKE','ANOMALY_DUMMY_SCREEN_WIDTH','ANOMALY_DUMMY_SCREEN_HEIGHT','ANOMALY_UI_SMOKE_NEWS_ONLY')) {
+foreach ($name in @('ANOMALY_SMOKE_SERVER','ANOMALY_UI_SMOKE_CONNECTION_ONLY','ANOMALY_MOD_ADMISSION_EXPECT','ANOMALY_SERVER_API_SMOKE','ANOMALY_SERVER_API_SMOKE_MODE','ANOMALY_LOCAL_HOSTING_SMOKE','ANOMALY_CLIENT_SCRIPTING_SMOKE','ANOMALY_DUMMY_VISIBILITY_SMOKE','ANOMALY_DEDICATED_DUMMY_SMOKE','ANOMALY_DUMMY_SCREEN_WIDTH','ANOMALY_DUMMY_SCREEN_HEIGHT','ANOMALY_UI_SMOKE_NEWS_ONLY')) {
     $startInfo.Environment.Remove($name) | Out-Null
 }
 if ($NewsOnly) { $startInfo.Environment['ANOMALY_UI_SMOKE_NEWS_ONLY'] = '1' }
@@ -141,6 +177,7 @@ if ($ServerApi) {
 }
 if ($LocalHosting) {
     $startInfo.Environment['ANOMALY_LOCAL_HOSTING_SMOKE'] = '1'
+    if ($ClientScripting) { $startInfo.Environment['ANOMALY_CLIENT_SCRIPTING_SMOKE'] = '1' }
     if ($DummyVisibility) {
         $startInfo.Environment['ANOMALY_DUMMY_VISIBILITY_SMOKE'] = '1'
         $startInfo.Environment['ANOMALY_DUMMY_SCREEN_WIDTH'] = [string]$screenWidth

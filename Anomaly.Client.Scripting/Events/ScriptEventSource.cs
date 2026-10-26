@@ -15,13 +15,14 @@ internal sealed class ScriptEventSource : IDisposable
     private bool _disposed;
 
     internal ScriptEventSource(string category, string name, EventInfo eventInfo, ParameterInfo[] parameters,
-        ScriptEventSnapshotPlan? snapshot)
+        ScriptEventSnapshotPlan? snapshot, bool coalesceLatest = false)
     {
         Category = category;
         Name = name;
         EventInfo = eventInfo;
         Parameters = parameters;
         _snapshot = snapshot;
+        CoalesceLatest = coalesceLatest;
         QualifiedName = "Events." + category + "." + name;
         AddName = QualifiedName + ".Add";
         RemoveName = QualifiedName + ".Remove";
@@ -34,6 +35,7 @@ internal sealed class ScriptEventSource : IDisposable
     internal string RemoveName { get; }
     internal EventInfo EventInfo { get; }
     internal ParameterInfo[] Parameters { get; }
+    internal bool CoalesceLatest { get; }
 
     internal void Add(ScriptEventRegistration registration)
     {
@@ -95,7 +97,7 @@ internal sealed class ScriptEventSource : IDisposable
         {
             lock (_sync)
                 foreach (var registration in _registrations)
-                    if (registration.IsActive) registration.Owner.RequestRetirement();
+                    if (registration.IsActive) registration.Owner.RequestRetirement(eventName: QualifiedName);
             return;
         }
         _publishing = true;
@@ -107,7 +109,7 @@ internal sealed class ScriptEventSource : IDisposable
             ScriptEventRegistration? first = null;
             lock (_sync)
                 foreach (var registration in _registrations)
-                    if (registration.IsActive && registration.Owner.TryReservePublication(out firstMemory))
+                    if (registration.IsActive && registration.Owner.TryReservePublication(registration, out firstMemory))
                     { first = registration; break; }
             if (first == null) return;
             // No publication array/list/anchor is allocated until a recipient
@@ -120,7 +122,7 @@ internal sealed class ScriptEventSource : IDisposable
                 deliveries[count++] = new Delivery(first, firstMemory);
                 foreach (var registration in _registrations)
                     if (!ReferenceEquals(registration, first) && registration.IsActive &&
-                        registration.Owner.TryReservePublication(out var reservation))
+                        registration.Owner.TryReservePublication(registration, out var reservation))
                     {
                         reservation.Bind(allocationOwner);
                         deliveries[count++] = new Delivery(registration, reservation);
@@ -130,7 +132,9 @@ internal sealed class ScriptEventSource : IDisposable
             try { arguments = _snapshot == null ? Array.Empty<object?>() : new[] { _snapshot.Capture(value, allocationOwner) }; }
             catch (Exception exception)
             {
-                for (var index = 0; index < count; index++) deliveries[index].Registration.Owner.RequestRetirement();
+                for (var index = 0; index < count; index++) deliveries[index].Registration.Owner.RequestRetirement(
+                    exception is InvalidOperationException ? exception.Message : "The approved event snapshot getter failed; session retired.",
+                    QualifiedName);
                 ScriptHostException.RethrowFatal(exception);
                 return;
             }
@@ -138,11 +142,12 @@ internal sealed class ScriptEventSource : IDisposable
             {
                 var registration = deliveries[index].Registration;
                 if (!registration.IsActive) continue;
-                try { registration.Owner.Enqueue(new ScriptEventInvocation(registration, arguments, allocationOwner)); }
+                try { registration.Owner.Publish(registration, arguments, allocationOwner); }
                 catch (Exception exception)
                 {
                     for (var recipient = 0; recipient < count; recipient++)
-                        deliveries[recipient].Registration.Owner.RequestRetirement();
+                        deliveries[recipient].Registration.Owner.RequestRetirement(
+                            "The approved event delivery failed; session retired.", QualifiedName);
                     ScriptHostException.RethrowFatal(exception);
                 }
             }
@@ -154,7 +159,7 @@ internal sealed class ScriptEventSource : IDisposable
             // Retire existing registrations without allocating a recovery array.
             lock (_sync)
                 foreach (var registration in _registrations)
-                    registration.Owner.RequestRetirement();
+                    registration.Owner.RequestRetirement("The approved event publication failed; session retired.", QualifiedName);
             ScriptHostException.RethrowFatal(exception);
         }
         finally

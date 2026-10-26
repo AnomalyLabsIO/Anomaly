@@ -53,6 +53,8 @@ public sealed partial class Core
                 CheckHostingWarning();
             });
             AddWait("local-host-connected-" + entry, HasLocalHostAdmin, 150);
+            if (Environment.GetEnvironmentVariable("ANOMALY_CLIENT_SCRIPTING_SMOKE") == "1")
+                EnqueueClientScriptingSmoke(entry);
             if (_dummyVisibilitySmoke) AddWait("dummy-host-resolution-" + entry, IsDummyResolutionReady, 20);
             Add("local-host-admin-" + entry, () =>
             {
@@ -102,6 +104,8 @@ public sealed partial class Core
             {
                 _watchHostingWarning = false;
                 Require(NetworkServer.localConnection == null, "Disconnect clears the in-process server connection: " + entry);
+                if (Environment.GetEnvironmentVariable("ANOMALY_CLIENT_SCRIPTING_SMOKE") == "1")
+                    Require(ScriptOutputLabels().Length == 0, "Disconnect destroys every script-owned text label: " + entry);
                 AssertCanvasLifetime();
                 if (_dummyVisibilitySmoke) MuteDummyMenuMusic("returned-" + entry);
                 Capture("local-host-returned-menu-" + entry);

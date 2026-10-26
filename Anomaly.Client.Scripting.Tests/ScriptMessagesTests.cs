@@ -39,6 +39,21 @@ public sealed class ScriptMessagesTests
         Assert.Equal(true, reply.Payload.Values["Enabled"]);
     }
 
+    [Fact]
+    public void MessagesRemainReliableAndOrderedRatherThanLatestValueCoalesced()
+    {
+        using var session = Session();
+        Assert.True(session.Load("seen=''; Messages.On('GetState',function(message) seen=seen..message.RequestId..',' end); " +
+            "function Read() return seen end").Succeeded);
+        for (uint index = 1; index <= 8; index++) Assert.True(session.ReceiveMessage(Query(index)));
+        Assert.Equal(8, session.QueuedCount);
+        Assert.Equal("", session.Invoke("Read").Value);
+        for (var index = 0; index < 8; index++) Assert.True(session.DispatchQueuedEvent(DispatchTimeout));
+        Assert.False(session.IsRetired);
+        Assert.Equal("1,2,3,4,5,6,7,8,", session.Invoke("Read").Value);
+        Assert.Equal(0, session.QueuedMessageBytes);
+    }
+
     [Theory]
     [InlineData("pack")]
     [InlineData("index")]
@@ -277,12 +292,15 @@ public sealed class ScriptMessagesTests
 
     [Theory]
     [InlineData("for i=1,100000 do end", "CpuLimit")]
-    [InlineData("local Retained={}; for i=1,20000 do Retained[i]={} end", "MemoryLimit")]
+    [InlineData("local Retained=string.rep('x',1048576)", "MemoryLimit")]
     public void Message_callbacks_use_the_same_cpu_and_memory_execution_boundary(string body, string expected)
     {
         string? diagnostic = null;
+        // A single oversized reservation isolates memory containment from the
+        // independent callback deadline; an allocation loop races both limits.
         var options = new ScriptExecutionOptions { Timeout = DispatchTimeout,
-            InstructionLimit = expected == "CpuLimit" ? 2000 : 200000 };
+            InstructionLimit = expected == "CpuLimit" ? 2000 : 2_000_000,
+            AllocationLimitBytes = expected == "MemoryLimit" ? 2 * 1024 * 1024 : 16 * 1024 * 1024 };
         using var session = Session(options: options, diagnostic: message => diagnostic = message);
         Assert.True(session.Load("Messages.On('GetState',function() " + body + " end)").Succeeded);
         Assert.True(session.ReceiveMessage(Query(1)));

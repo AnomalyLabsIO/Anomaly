@@ -60,7 +60,7 @@ internal sealed class ScriptEventCatalog : IDisposable
                     bindings.RegisterEventArgument(parameters[0].ParameterType);
                     plan = ScriptEventSnapshotPlan.Create(parameters[0].ParameterType, bindings);
                 }
-                if (!events.TryAdd(name, new ScriptEventSource(category, name, eventInfo, parameters, plan)))
+                if (!events.TryAdd(name, new ScriptEventSource(category, name, eventInfo, parameters, plan, annotation.CoalesceLatest)))
                     throw new InvalidOperationException("Approved event aliases must be unique within their category.");
             }
             if (events.Count > 0 && !categories.TryAdd(category, events))
@@ -76,7 +76,7 @@ internal sealed class ScriptEventCatalog : IDisposable
         .OrderBy(value => value.Category, StringComparer.Ordinal).ThenBy(value => value.Name, StringComparer.Ordinal)
         .Select(value => new ScriptEventCatalogEntry(value.Category, value.Name, value.EventInfo.DeclaringType!.FullName!,
             value.EventInfo.Name, value.Parameters.Select(parameter => new ScriptParameterCatalog(
-                parameter.Name ?? "argument", parameter.ParameterType.FullName ?? parameter.ParameterType.Name))))
+                parameter.Name ?? "argument", parameter.ParameterType.FullName ?? parameter.ParameterType.Name)), value.CoalesceLatest))
         .ToArray();
 
     internal bool Owns(ScriptEventSource source) => _categories.TryGetValue(source.Category, out var category) &&

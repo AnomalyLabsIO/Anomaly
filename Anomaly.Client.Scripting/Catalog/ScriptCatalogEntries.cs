@@ -89,13 +89,14 @@ internal sealed class ScriptEnumCatalog
 internal sealed class ScriptEventCatalogEntry
 {
     internal ScriptEventCatalogEntry(string category, string name, string clrDeclaringType, string clrEventName,
-        IEnumerable<ScriptParameterCatalog> parameters)
+        IEnumerable<ScriptParameterCatalog> parameters, bool coalesceLatest = false)
     {
         Category = category;
         Name = name;
         ClrDeclaringType = clrDeclaringType;
         ClrEventName = clrEventName;
         Parameters = Array.AsReadOnly(parameters.ToArray());
+        CoalesceLatest = coalesceLatest;
     }
 
     public string Category { get; }
@@ -103,6 +104,7 @@ internal sealed class ScriptEventCatalogEntry
     public string ClrDeclaringType { get; }
     public string ClrEventName { get; }
     public IReadOnlyList<ScriptParameterCatalog> Parameters { get; }
+    public bool CoalesceLatest { get; }
     public string Path => "Events." + Category + "." + Name;
     public string DocumentationId => "E:" + ClrDeclaringType.Replace('+', '.') + "." + ClrEventName;
     public IReadOnlyList<ScriptParameterCatalog> AddParameters { get; } =

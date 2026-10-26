@@ -6,6 +6,10 @@
       "kind": "GameContext"
     },
     {
+      "name": "Output",
+      "kind": "ScriptOutput"
+    },
+    {
       "name": "Events",
       "kind": "event-registry"
     },
@@ -1325,7 +1329,7 @@
       "name": "AudioPlayingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs",
-      "documentation": "Fires when AudioSourcePoolManager is about to play a sound on this client. Cancelling silences the playback locally; nothing about the server or other clients changes. Subscribers should filter by identity early to avoid per-frame overhead \u2014 this fires for footsteps, gunshot tails, ambient SFX, etc.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -1355,7 +1359,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -1637,7 +1641,7 @@
       "name": "BroadcastShowingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs",
-      "documentation": "Fires when a server-sent broadcast is about to be rendered on the local HUD. Cancelling suppresses the local render; the server\u0027s view is unaffected.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -1667,7 +1671,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -1733,7 +1737,7 @@
       "name": "CameraShakingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.CameraShakingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.CameraShakingEventArgs",
-      "documentation": "Fires when a camera shake effect is about to be applied to the local view (CameraShakeController.AddEffect). Cancelling drops the effect on the floor; nothing about the server or other clients changes.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -1743,7 +1747,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.CameraShakingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         }
       ]
     },
@@ -2124,7 +2128,7 @@
       "name": "CurrentItemChangingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.CurrentItemChangingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.CurrentItemChangingEventArgs",
-      "documentation": "Fires when the local player initiates a held-item switch via Inventory.ClientSelectItem (mouse wheel / number keys), before the CmdSelectItem RPC is sent. Cancelling keeps the current held item; the server never sees the switch request. Note: server-forced switches (e.g., death holster) arrive via the NetworkCurItem SyncVar hook and fire CurrentItemChanged (post-action) instead \u2014 they do not pass through this path.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -2134,7 +2138,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.CurrentItemChangingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -3819,7 +3823,7 @@
       "name": "HintDisplayingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs",
-      "documentation": "Fires when a server-sent hint is about to be displayed on the local HUD. Cancelling suppresses the hint render; the server\u0027s view is unaffected.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -3839,7 +3843,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -3923,7 +3927,7 @@
       "name": "InventoryUiClosingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.InventoryUiClosingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.InventoryUiClosingEventArgs",
-      "documentation": "Fires when the local inventory panel is about to be hidden (InventoryGuiController.IsEnabled transitioning true \u2192 false). Cancelling keeps the panel visible; no network state is touched.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -3933,7 +3937,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.InventoryUiClosingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         }
       ]
     },
@@ -3941,7 +3945,7 @@
       "name": "InventoryUiOpeningEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.InventoryUiOpeningEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.InventoryUiOpeningEventArgs",
-      "documentation": "Fires when the local inventory panel is about to become visible (InventoryGuiController.IsEnabled transitioning false \u2192 true). Cancelling keeps the panel hidden; no network state is touched.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -3951,7 +3955,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.InventoryUiOpeningEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         }
       ]
     },
@@ -5079,7 +5083,7 @@
       "name": "PlayerDroppingItemEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.PlayerDroppingItemEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.PlayerDroppingItemEventArgs",
-      "documentation": "Fires when the local player initiates a drop via Inventory.ClientDropItem, before the CmdDropItem RPC is sent. Cancelling keeps the item in the local inventory; the server never sees the drop request.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -5089,7 +5093,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.PlayerDroppingItemEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -5437,7 +5441,7 @@
       "name": "PlayerInteractingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.PlayerInteractingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.PlayerInteractingEventArgs",
-      "documentation": "Fires when the local player presses the interact key, before the raycast and CmdServerInteract RPC run. Cancelling skips both the local IClientInteractable.ClientInteract callback and the server command.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -5447,7 +5451,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.PlayerInteractingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -5465,7 +5469,7 @@
       "name": "PlayerJumpingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.PlayerJumpingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.PlayerJumpingEventArgs",
-      "documentation": "Fires when the local player\u0027s FpcJumpController.ProcessJump is about to apply a jump. Cancelling suppresses the jump motor application; the server observes a continuous ground state instead of a jump.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -5475,7 +5479,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.PlayerJumpingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -5503,7 +5507,7 @@
       "name": "PlayerNoclipTogglingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.PlayerNoclipTogglingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.PlayerNoclipTogglingEventArgs",
-      "documentation": "Fires when the local player presses the noclip toggle key, before the FpcNoclipToggleMessage is sent to the server. Server permission gating still applies; this event lets local mods (e.g., admin tooling) suppress the toggle attempt entirely.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -5513,7 +5517,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.PlayerNoclipTogglingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -5587,7 +5591,7 @@
       "name": "PlayerShootingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.PlayerShootingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.PlayerShootingEventArgs",
-      "documentation": "Fires on the rising edge of the local player\u0027s trigger press, immediately before SimpleTriggerModule would send the trigger-held command to the server. Cancelling suppresses the local fire and the wire message.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -5597,7 +5601,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.PlayerShootingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -5615,7 +5619,7 @@
       "name": "PlayerSprintingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.PlayerSprintingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.PlayerSprintingEventArgs",
-      "documentation": "Fires when the local player transitions into the sprinting movement state. Cancelling keeps the movement state at walking; the server only observes movement state changes, so suppressing this is desync-safe.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -5625,7 +5629,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.PlayerSprintingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -5827,7 +5831,7 @@
       "name": "PlayerThrowingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.PlayerThrowingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.PlayerThrowingEventArgs",
-      "documentation": "Fires when the local player initiates a throw (primary or secondary fire on a held throwable) before the BeginThrow network message is sent. Cancelling stops the throw stopwatch from starting and skips the request.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -5837,7 +5841,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.PlayerThrowingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -6693,7 +6697,7 @@
       "name": "Scp079SwitchingCameraEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.Scp079SwitchingCameraEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.Scp079SwitchingCameraEventArgs",
-      "documentation": "Fires when the local SCP-079 player is about to send a camera-switch command, before Scp079CurrentCameraSync.ClientSendCmd runs. Cancelling keeps the SCP-079 on the current camera locally; the server never receives the switch request.",
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -6703,7 +6707,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.Scp079SwitchingCameraEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -7407,6 +7411,58 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Features.Pickup.Weight",
+          "documentation": null
+        }
+      ]
+    },
+    {
+      "name": "ScriptOutput",
+      "clrType": "Anomaly.Client.Scripting.Output.ScriptOutput",
+      "documentationId": "T:Anomaly.Client.Scripting.Output.ScriptOutput",
+      "documentation": null,
+      "members": [
+        {
+          "kind": "Method",
+          "name": "ClearText",
+          "clrName": "ClearText",
+          "returnType": "System.Void",
+          "allowWrite": false,
+          "parameters": [],
+          "documentationId": "M:Anomaly.Client.Scripting.Output.ScriptOutput.ClearText",
+          "documentation": null
+        },
+        {
+          "kind": "Method",
+          "name": "Log",
+          "clrName": "Log",
+          "returnType": "System.Boolean",
+          "allowWrite": false,
+          "parameters": [
+            {
+              "name": "text",
+              "clrType": "System.String"
+            }
+          ],
+          "documentationId": "M:Anomaly.Client.Scripting.Output.ScriptOutput.Log(System.String)",
+          "documentation": null
+        },
+        {
+          "kind": "Method",
+          "name": "ShowText",
+          "clrName": "ShowText",
+          "returnType": "System.Boolean",
+          "allowWrite": false,
+          "parameters": [
+            {
+              "name": "text",
+              "clrType": "System.String"
+            },
+            {
+              "name": "durationSeconds",
+              "clrType": "System.Double"
+            }
+          ],
+          "documentationId": "M:Anomaly.Client.Scripting.Output.ScriptOutput.ShowText(System.String,System.Double)",
           "documentation": null
         }
       ]
@@ -8341,7 +8397,7 @@
       "name": "VoiceMessageReceivingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.VoiceMessageReceivingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.VoiceMessageReceivingEventArgs",
-      "documentation": null,
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -8351,7 +8407,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.VoiceMessageReceivingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -8369,7 +8425,7 @@
       "name": "VoiceMessageSendingEventArgs",
       "clrType": "Anomaly.Client.Api.Events.Args.VoiceMessageSendingEventArgs",
       "documentationId": "T:Anomaly.Client.Api.Events.Args.VoiceMessageSendingEventArgs",
-      "documentation": null,
+      "documentation": "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.",
       "members": [
         {
           "kind": "Property",
@@ -8379,7 +8435,7 @@
           "allowWrite": false,
           "parameters": [],
           "documentationId": "P:Anomaly.Client.Api.Events.Args.VoiceMessageSendingEventArgs.IsAllowed",
-          "documentation": null
+          "documentation": "Observed permission at capture time, not a cancellation control."
         },
         {
           "kind": "Property",
@@ -25739,6 +25795,8 @@
       "path": "Events.AdminToy.Added",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.AdminToyEvents",
       "clrEventName": "Added",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -25764,7 +25822,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.AdminToyEvents.Added",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "AdminToy",
@@ -25772,6 +25830,8 @@
       "path": "Events.AdminToy.Removed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.AdminToyEvents",
       "clrEventName": "Removed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -25797,7 +25857,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.AdminToyEvents.Removed",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Announcer",
@@ -25805,6 +25865,8 @@
       "path": "Events.Announcer.LineScheduled",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.AnnouncerEvents",
       "clrEventName": "LineScheduled",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -25830,7 +25892,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.AnnouncerEvents.LineScheduled",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Announcer",
@@ -25838,6 +25900,8 @@
       "path": "Events.Announcer.LineStarted",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.AnnouncerEvents",
       "clrEventName": "LineStarted",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -25863,7 +25927,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.AnnouncerEvents.LineStarted",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Asset",
@@ -25871,6 +25935,8 @@
       "path": "Events.Asset.OverrideApplied",
       "clrDeclaringType": "Anomaly.Client.Api.Assets.AssetEvents",
       "clrEventName": "OverrideApplied",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -25896,7 +25962,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Assets.AssetEvents.OverrideApplied",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Asset",
@@ -25904,6 +25970,8 @@
       "path": "Events.Asset.OverrideCleared",
       "clrDeclaringType": "Anomaly.Client.Api.Assets.AssetEvents",
       "clrEventName": "OverrideCleared",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -25929,7 +25997,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Assets.AssetEvents.OverrideCleared",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Audio",
@@ -25937,6 +26005,8 @@
       "path": "Events.Audio.Playing",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.AudioEvents",
       "clrEventName": "Playing",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -25962,7 +26032,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.AudioEvents.Playing",
-      "documentation": "Fires before a pooled audio source plays on this client. Cancel to silence."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Camera",
@@ -25970,6 +26040,8 @@
       "path": "Events.Camera.Shaking",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.CameraEvents",
       "clrEventName": "Shaking",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -25995,7 +26067,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.CameraEvents.Shaking",
-      "documentation": "Fires before a shake effect is enqueued on the local camera. Cancel to skip the shake."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Client",
@@ -26003,6 +26075,8 @@
       "path": "Events.Client.CanvasReady",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ClientEvents",
       "clrEventName": "CanvasReady",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26028,7 +26102,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ClientEvents.CanvasReady",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Client",
@@ -26036,6 +26110,8 @@
       "path": "Events.Client.Connected",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ClientEvents",
       "clrEventName": "Connected",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26061,7 +26137,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ClientEvents.Connected",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Client",
@@ -26069,6 +26145,8 @@
       "path": "Events.Client.Disconnected",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ClientEvents",
       "clrEventName": "Disconnected",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26094,7 +26172,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ClientEvents.Disconnected",
-      "documentation": "Reports a transport disconnect, including unsuccessful handshake and retry attempts that never reached . Cleanup handlers must be idempotent; do not count this as one event per completed gameplay session."
+      "documentation": "Reports a transport disconnect, including unsuccessful handshake and retry attempts that never reached . Cleanup handlers must be idempotent; do not count this as one event per completed gameplay session.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Client",
@@ -26102,6 +26180,8 @@
       "path": "Events.Client.EnrollmentChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ClientEvents",
       "clrEventName": "EnrollmentChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26127,7 +26207,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ClientEvents.EnrollmentChanged",
-      "documentation": "Enrollment was disclosed or cleared. This does not replace transport or scene readiness."
+      "documentation": "Enrollment was disclosed or cleared. This does not replace transport or scene readiness.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Client",
@@ -26135,6 +26215,8 @@
       "path": "Events.Client.Ready",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ClientEvents",
       "clrEventName": "Ready",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26160,7 +26242,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ClientEvents.Ready",
-      "documentation": "Reports the client\u0027s scene-ready lifecycle callback. This can precede the local player hub, populated world collections, and server enrollment disclosure."
+      "documentation": "Reports the client\u0027s scene-ready lifecycle callback. This can precede the local player hub, populated world collections, and server enrollment disclosure.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Client",
@@ -26168,6 +26250,8 @@
       "path": "Events.Client.SceneLoaded",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ClientEvents",
       "clrEventName": "SceneLoaded",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26193,7 +26277,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ClientEvents.SceneLoaded",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Door",
@@ -26201,6 +26285,8 @@
       "path": "Events.Door.Added",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.DoorEvents",
       "clrEventName": "Added",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26226,7 +26312,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.DoorEvents.Added",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Door",
@@ -26234,6 +26320,8 @@
       "path": "Events.Door.LocksChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.DoorEvents",
       "clrEventName": "LocksChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26259,7 +26347,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.DoorEvents.LocksChanged",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Door",
@@ -26267,6 +26355,8 @@
       "path": "Events.Door.Removed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.DoorEvents",
       "clrEventName": "Removed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26292,7 +26382,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.DoorEvents.Removed",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Door",
@@ -26300,6 +26390,8 @@
       "path": "Events.Door.StateChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.DoorEvents",
       "clrEventName": "StateChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26325,7 +26417,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.DoorEvents.StateChanged",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Effect",
@@ -26333,6 +26425,8 @@
       "path": "Events.Effect.Disabled",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.EffectEvents",
       "clrEventName": "Disabled",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26358,7 +26452,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.EffectEvents.Disabled",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Effect",
@@ -26366,6 +26460,8 @@
       "path": "Events.Effect.Enabled",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.EffectEvents",
       "clrEventName": "Enabled",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26391,7 +26487,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.EffectEvents.Enabled",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Effect",
@@ -26399,6 +26495,8 @@
       "path": "Events.Effect.IntensityChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.EffectEvents",
       "clrEventName": "IntensityChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26424,7 +26522,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.EffectEvents.IntensityChanged",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Elevator",
@@ -26432,6 +26530,8 @@
       "path": "Events.Elevator.Moved",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ElevatorEvents",
       "clrEventName": "Moved",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26457,7 +26557,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ElevatorEvents.Moved",
-      "documentation": "Fires when an elevator chamber starts a movement sequence (door close \u2192 travel \u2192 door open at destination)."
+      "documentation": "Fires when an elevator chamber starts a movement sequence (door close \u2192 travel \u2192 door open at destination).\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Elevator",
@@ -26465,6 +26565,8 @@
       "path": "Events.Elevator.Removed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ElevatorEvents",
       "clrEventName": "Removed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26490,7 +26592,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ElevatorEvents.Removed",
-      "documentation": "Fires when an elevator chamber is removed from the scene."
+      "documentation": "Fires when an elevator chamber is removed from the scene.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Elevator",
@@ -26498,6 +26600,8 @@
       "path": "Events.Elevator.Spawned",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ElevatorEvents",
       "clrEventName": "Spawned",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26523,7 +26627,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ElevatorEvents.Spawned",
-      "documentation": "Fires when a new elevator chamber spawns into the scene."
+      "documentation": "Fires when a new elevator chamber spawns into the scene.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "FacilityCamera",
@@ -26531,6 +26635,8 @@
       "path": "Events.FacilityCamera.Created",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents",
       "clrEventName": "Created",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26556,7 +26662,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents.Created",
-      "documentation": "Fires when a CCTV camera is created (typically at scene load)."
+      "documentation": "Fires when a CCTV camera is created (typically at scene load).\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "FacilityCamera",
@@ -26564,6 +26670,8 @@
       "path": "Events.FacilityCamera.Removed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents",
       "clrEventName": "Removed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26589,7 +26697,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents.Removed",
-      "documentation": "Fires when a CCTV camera is destroyed."
+      "documentation": "Fires when a CCTV camera is destroyed.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "FacilityCamera",
@@ -26597,6 +26705,8 @@
       "path": "Events.FacilityCamera.Scp079Switching",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents",
       "clrEventName": "Scp079Switching",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26622,7 +26732,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents.Scp079Switching",
-      "documentation": "Fires when the local SCP-079 player is about to send a camera-switch command, before Scp079CurrentCameraSync.ClientSendCmd runs. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "FacilityCamera",
@@ -26630,6 +26740,8 @@
       "path": "Events.FacilityCamera.StateChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents",
       "clrEventName": "StateChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26655,7 +26767,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents.StateChanged",
-      "documentation": "Fires when any CCTV camera\u0027s active/inactive state changes (e.g. SCP-079 switches the active camera). Use to observe the new state."
+      "documentation": "Fires when any CCTV camera\u0027s active/inactive state changes (e.g. SCP-079 switches the active camera). Use to observe the new state.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "FileTransfer",
@@ -26663,6 +26775,8 @@
       "path": "Events.FileTransfer.Complete",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FileTransferEvents",
       "clrEventName": "Complete",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26688,7 +26802,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FileTransferEvents.Complete",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "FileTransfer",
@@ -26696,6 +26810,8 @@
       "path": "Events.FileTransfer.Progress",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FileTransferEvents",
       "clrEventName": "Progress",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26721,7 +26837,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FileTransferEvents.Progress",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Firearm",
@@ -26729,6 +26845,8 @@
       "path": "Events.Firearm.AimingChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FirearmEvents",
       "clrEventName": "AimingChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26754,7 +26872,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FirearmEvents.AimingChanged",
-      "documentation": "Local equipped ADS state changed in an observed snapshot. Remote ADS-only updates are not tracked."
+      "documentation": "Local equipped ADS state changed in an observed snapshot. Remote ADS-only updates are not tracked.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Firearm",
@@ -26762,6 +26880,8 @@
       "path": "Events.Firearm.AmmoChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FirearmEvents",
       "clrEventName": "AmmoChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26787,7 +26907,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FirearmEvents.AmmoChanged",
-      "documentation": "Magazine ammo, capacity or insertion state changed in an observed snapshot."
+      "documentation": "Magazine ammo, capacity or insertion state changed in an observed snapshot.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Firearm",
@@ -26795,6 +26915,8 @@
       "path": "Events.Firearm.ReloadStateChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FirearmEvents",
       "clrEventName": "ReloadStateChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26820,7 +26942,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FirearmEvents.ReloadStateChanged",
-      "documentation": "Local equipped reload/unload prediction changed in an observed snapshot."
+      "documentation": "Local equipped reload/unload prediction changed in an observed snapshot.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Firearm",
@@ -26828,6 +26950,8 @@
       "path": "Events.Firearm.Shooting",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FirearmEvents",
       "clrEventName": "Shooting",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26853,7 +26977,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FirearmEvents.Shooting",
-      "documentation": "Fires on the rising edge of the local player\u0027s trigger press. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Firearm",
@@ -26861,6 +26985,8 @@
       "path": "Events.Firearm.Shot",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FirearmEvents",
       "clrEventName": "Shot",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26886,7 +27012,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FirearmEvents.Shot",
-      "documentation": "Fires after a shot resolves. Observer-only."
+      "documentation": "Fires after a shot resolves. Observer-only.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Firearm",
@@ -26894,6 +27020,8 @@
       "path": "Events.Firearm.StateChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.FirearmEvents",
       "clrEventName": "StateChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26919,7 +27047,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.FirearmEvents.StateChanged",
-      "documentation": "Observer snapshot after magazine sync or a local equipped-firearm update. Includes first observation; intermediate changes between local updates can be coalesced. This is not proof that the server accepted a reload or input action."
+      "documentation": "Observer snapshot after magazine sync or a local equipped-firearm update. Includes first observation; intermediate changes between local updates can be coalesced. This is not proof that the server accepted a reload or input action.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Generator",
@@ -26927,6 +27055,8 @@
       "path": "Events.Generator.Engaged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.GeneratorEvents",
       "clrEventName": "Engaged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26952,7 +27082,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.GeneratorEvents.Engaged",
-      "documentation": "Fires once per generator the moment it transitions to Engaged."
+      "documentation": "Fires once per generator the moment it transitions to Engaged.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Generator",
@@ -26960,6 +27090,8 @@
       "path": "Events.Generator.StateChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.GeneratorEvents",
       "clrEventName": "StateChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -26985,7 +27117,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.GeneratorEvents.StateChanged",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Hazard",
@@ -26993,6 +27125,8 @@
       "path": "Events.Hazard.Added",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.HazardEvents",
       "clrEventName": "Added",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27018,7 +27152,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.HazardEvents.Added",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Hazard",
@@ -27026,6 +27160,8 @@
       "path": "Events.Hazard.Removed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.HazardEvents",
       "clrEventName": "Removed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27051,7 +27187,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.HazardEvents.Removed",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Hud",
@@ -27059,6 +27195,8 @@
       "path": "Events.Hud.BroadcastShowing",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.HudEvents",
       "clrEventName": "BroadcastShowing",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27084,7 +27222,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.HudEvents.BroadcastShowing",
-      "documentation": "Fires before a server-sent broadcast is rendered on the local HUD. Cancel to suppress."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Hud",
@@ -27092,6 +27230,8 @@
       "path": "Events.Hud.HintDisplaying",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.HudEvents",
       "clrEventName": "HintDisplaying",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27117,7 +27257,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.HudEvents.HintDisplaying",
-      "documentation": "Fires before a server-sent hint is rendered on the local HUD. Mutate text/duration or cancel to suppress."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "InputRegistry",
@@ -27125,6 +27265,8 @@
       "path": "Events.InputRegistry.Pressed",
       "clrDeclaringType": "Anomaly.Client.Api.Input.InputRegistry",
       "clrEventName": "Pressed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "obj",
@@ -27150,7 +27292,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Input.InputRegistry.Pressed",
-      "documentation": "Fires when a binding transitions from not-pressed to pressed. Dispatched by the internal ."
+      "documentation": "Fires when a binding transitions from not-pressed to pressed. Dispatched by the internal .\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "InputRegistry",
@@ -27158,6 +27300,8 @@
       "path": "Events.InputRegistry.Released",
       "clrDeclaringType": "Anomaly.Client.Api.Input.InputRegistry",
       "clrEventName": "Released",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "obj",
@@ -27183,7 +27327,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Input.InputRegistry.Released",
-      "documentation": "Fires when a binding transitions from pressed to not-pressed."
+      "documentation": "Fires when a binding transitions from pressed to not-pressed.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Inventory",
@@ -27191,6 +27335,8 @@
       "path": "Events.Inventory.CurrentItemChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.InventoryEvents",
       "clrEventName": "CurrentItemChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27216,7 +27362,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.InventoryEvents.CurrentItemChanged",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Inventory",
@@ -27224,6 +27370,8 @@
       "path": "Events.Inventory.CurrentItemChanging",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.InventoryEvents",
       "clrEventName": "CurrentItemChanging",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27249,7 +27397,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.InventoryEvents.CurrentItemChanging",
-      "documentation": "Fires when the local player initiates a held-item switch via ClientSelectItem, before CmdSelectItem. Server-forced switches do not pass through this path. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Inventory",
@@ -27257,6 +27405,8 @@
       "path": "Events.Inventory.DroppingItem",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.InventoryEvents",
       "clrEventName": "DroppingItem",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27282,7 +27432,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.InventoryEvents.DroppingItem",
-      "documentation": "Fires when the local player initiates a drop via ClientDropItem, before CmdDropItem. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Inventory",
@@ -27290,6 +27440,8 @@
       "path": "Events.Inventory.ItemsChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.InventoryEvents",
       "clrEventName": "ItemsChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27315,7 +27467,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.InventoryEvents.ItemsChanged",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Inventory",
@@ -27323,6 +27475,8 @@
       "path": "Events.Inventory.UiClosing",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.InventoryEvents",
       "clrEventName": "UiClosing",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27348,7 +27502,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.InventoryEvents.UiClosing",
-      "documentation": "Fires when the local inventory UI panel is about to be hidden. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Inventory",
@@ -27356,6 +27510,8 @@
       "path": "Events.Inventory.UiOpening",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.InventoryEvents",
       "clrEventName": "UiOpening",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27381,7 +27537,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.InventoryEvents.UiOpening",
-      "documentation": "Fires when the local inventory UI panel is about to become visible. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "LocalPlayerMotion",
@@ -27389,6 +27545,8 @@
       "path": "Events.LocalPlayerMotion.Applied",
       "clrDeclaringType": "Anomaly.Client.Api.Features.LocalPlayerMotion",
       "clrEventName": "Applied",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "obj",
@@ -27414,7 +27572,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Features.LocalPlayerMotion.Applied",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Locker",
@@ -27422,6 +27580,8 @@
       "path": "Events.Locker.StateChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.LockerEvents",
       "clrEventName": "StateChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27447,7 +27607,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.LockerEvents.StateChanged",
-      "documentation": "Fires for changed replicated chamber masks after the initial spawn snapshot."
+      "documentation": "Fires for changed replicated chamber masks after the initial spawn snapshot.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "NetworkMessage",
@@ -27455,6 +27615,8 @@
       "path": "Events.NetworkMessage.AnomalyMessageReceived",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.NetworkMessageEvents",
       "clrEventName": "AnomalyMessageReceived",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27480,7 +27642,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.NetworkMessageEvents.AnomalyMessageReceived",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Pickup",
@@ -27488,6 +27650,8 @@
       "path": "Events.Pickup.Added",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.PickupEvents",
       "clrEventName": "Added",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27513,7 +27677,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.PickupEvents.Added",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Pickup",
@@ -27521,6 +27685,8 @@
       "path": "Events.Pickup.Removed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.PickupEvents",
       "clrEventName": "Removed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27546,7 +27712,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.PickupEvents.Removed",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Player",
@@ -27554,6 +27720,8 @@
       "path": "Events.Player.Added",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.PlayerEvents",
       "clrEventName": "Added",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27579,7 +27747,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.PlayerEvents.Added",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Player",
@@ -27587,6 +27755,8 @@
       "path": "Events.Player.Interacted",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.PlayerEvents",
       "clrEventName": "Interacted",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27612,7 +27782,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.PlayerEvents.Interacted",
-      "documentation": "A resolved local interaction; carries typed targets but does not imply server acceptance."
+      "documentation": "A resolved local interaction; carries typed targets but does not imply server acceptance.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Player",
@@ -27620,6 +27790,8 @@
       "path": "Events.Player.Interacting",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.PlayerEvents",
       "clrEventName": "Interacting",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27645,7 +27817,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.PlayerEvents.Interacting",
-      "documentation": "Fires when the local player presses the interact key, before the raycast/RPC run. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Player",
@@ -27653,6 +27825,8 @@
       "path": "Events.Player.Jumping",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.PlayerEvents",
       "clrEventName": "Jumping",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27678,7 +27852,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.PlayerEvents.Jumping",
-      "documentation": "Fires when the local player\u0027s jump is about to be applied. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Player",
@@ -27686,6 +27860,8 @@
       "path": "Events.Player.NoclipToggling",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.PlayerEvents",
       "clrEventName": "NoclipToggling",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27711,7 +27887,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.PlayerEvents.NoclipToggling",
-      "documentation": "Fires when the local player presses the noclip toggle key, before the toggle message is sent. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Player",
@@ -27719,6 +27895,8 @@
       "path": "Events.Player.Removed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.PlayerEvents",
       "clrEventName": "Removed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27744,7 +27922,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.PlayerEvents.Removed",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Player",
@@ -27752,6 +27930,8 @@
       "path": "Events.Player.Sprinting",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.PlayerEvents",
       "clrEventName": "Sprinting",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27777,7 +27957,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.PlayerEvents.Sprinting",
-      "documentation": "Fires when the local player transitions into the sprinting movement state. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Projectile",
@@ -27785,6 +27965,8 @@
       "path": "Events.Projectile.Removed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ProjectileEvents",
       "clrEventName": "Removed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27810,7 +27992,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ProjectileEvents.Removed",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Projectile",
@@ -27818,6 +28000,8 @@
       "path": "Events.Projectile.Spawned",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ProjectileEvents",
       "clrEventName": "Spawned",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27843,7 +28027,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ProjectileEvents.Spawned",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Projectile",
@@ -27851,6 +28035,8 @@
       "path": "Events.Projectile.Throwing",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.ProjectileEvents",
       "clrEventName": "Throwing",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27876,7 +28062,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.ProjectileEvents.Throwing",
-      "documentation": "Fires when the local player initiates a throw, before the begin-throw network message is sent. Cancellable."
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Ragdoll",
@@ -27884,6 +28070,8 @@
       "path": "Events.Ragdoll.Removed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.RagdollEvents",
       "clrEventName": "Removed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27909,7 +28097,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.RagdollEvents.Removed",
-      "documentation": "Fires when a ragdoll is removed from the scene (cleanup, round restart)."
+      "documentation": "Fires when a ragdoll is removed from the scene (cleanup, round restart).\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Ragdoll",
@@ -27917,6 +28105,8 @@
       "path": "Events.Ragdoll.Spawned",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.RagdollEvents",
       "clrEventName": "Spawned",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27942,7 +28132,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.RagdollEvents.Spawned",
-      "documentation": "Fires when a new ragdoll spawns into the scene (someone died)."
+      "documentation": "Fires when a new ragdoll spawns into the scene (someone died).\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Role",
@@ -27950,6 +28140,8 @@
       "path": "Events.Role.Changed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.RoleEvents",
       "clrEventName": "Changed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -27975,7 +28167,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.RoleEvents.Changed",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Round",
@@ -27983,6 +28175,8 @@
       "path": "Events.Round.Ended",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.RoundEvents",
       "clrEventName": "Ended",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28008,7 +28202,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.RoundEvents.Ended",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Round",
@@ -28016,6 +28210,8 @@
       "path": "Events.Round.Ending",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.RoundEvents",
       "clrEventName": "Ending",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28041,7 +28237,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.RoundEvents.Ending",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Round",
@@ -28049,6 +28245,8 @@
       "path": "Events.Round.PhaseChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.RoundEvents",
       "clrEventName": "PhaseChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28074,7 +28272,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.RoundEvents.PhaseChanged",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Round",
@@ -28082,6 +28280,8 @@
       "path": "Events.Round.Restarted",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.RoundEvents",
       "clrEventName": "Restarted",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28107,7 +28307,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.RoundEvents.Restarted",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Round",
@@ -28115,6 +28315,8 @@
       "path": "Events.Round.Started",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.RoundEvents",
       "clrEventName": "Started",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28140,7 +28342,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.RoundEvents.Started",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Round",
@@ -28148,6 +28350,8 @@
       "path": "Events.Round.Starting",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.RoundEvents",
       "clrEventName": "Starting",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28173,7 +28377,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.RoundEvents.Starting",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Round",
@@ -28181,6 +28385,8 @@
       "path": "Events.Round.WaitingForPlayers",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.RoundEvents",
       "clrEventName": "WaitingForPlayers",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28206,7 +28412,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.RoundEvents.WaitingForPlayers",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Scp079",
@@ -28214,6 +28420,8 @@
       "path": "Events.Scp079.AuxiliaryPowerChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.Scp079Events",
       "clrEventName": "AuxiliaryPowerChanged",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28239,7 +28447,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.Scp079Events.AuxiliaryPowerChanged",
-      "documentation": "Fires for the first known or changed power value while the SCP-079 is locally controlled or spectated. This is not a per-frame prediction event."
+      "documentation": "Fires for the first known or changed power value while the SCP-079 is locally controlled or spectated. This is not a per-frame prediction event.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Scp079",
@@ -28247,6 +28455,8 @@
       "path": "Events.Scp079.ExperienceChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.Scp079Events",
       "clrEventName": "ExperienceChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28272,7 +28482,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.Scp079Events.ExperienceChanged",
-      "documentation": "Fires for the first known or changed total experience for a role life."
+      "documentation": "Fires for the first known or changed total experience for a role life.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Scp079",
@@ -28280,6 +28490,8 @@
       "path": "Events.Scp079.TierChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.Scp079Events",
       "clrEventName": "TierChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28305,7 +28517,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.Scp079Events.TierChanged",
-      "documentation": "Fires for the first known or changed one-based tier for a role life."
+      "documentation": "Fires for the first known or changed one-based tier for a role life.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Spectator",
@@ -28313,6 +28525,8 @@
       "path": "Events.Spectator.TargetChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.SpectatorEvents",
       "clrEventName": "TargetChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28338,7 +28552,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.SpectatorEvents.TargetChanged",
-      "documentation": "Fires after the stock tracker changes its player target, including when the target is cleared. This does not observe remote spectators."
+      "documentation": "Fires after the stock tracker changes its player target, including when the target is cleared. This does not observe remote spectators.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Stats",
@@ -28346,6 +28560,8 @@
       "path": "Events.Stats.ArtificialHealthChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.StatsEvents",
       "clrEventName": "ArtificialHealthChanged",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28371,7 +28587,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.StatsEvents.ArtificialHealthChanged",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Stats",
@@ -28379,6 +28595,8 @@
       "path": "Events.Stats.Changed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.StatsEvents",
       "clrEventName": "Changed",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28404,7 +28622,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.StatsEvents.Changed",
-      "documentation": "Observed value or maximum changes. First samples and visibility changes rebase silently."
+      "documentation": "Observed value or maximum changes. First samples and visibility changes rebase silently.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Stats",
@@ -28412,6 +28630,8 @@
       "path": "Events.Stats.Healed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.StatsEvents",
       "clrEventName": "Healed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28437,7 +28657,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.StatsEvents.Healed",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Stats",
@@ -28445,6 +28665,8 @@
       "path": "Events.Stats.HealthChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.StatsEvents",
       "clrEventName": "HealthChanged",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28470,7 +28692,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.StatsEvents.HealthChanged",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Stats",
@@ -28478,6 +28700,8 @@
       "path": "Events.Stats.HumeShieldChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.StatsEvents",
       "clrEventName": "HumeShieldChanged",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28503,7 +28727,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.StatsEvents.HumeShieldChanged",
-      "documentation": "Fires when a player\u0027s Hume shield value changes. Use the convenience flag to detect the shield-broken transition specifically."
+      "documentation": "Fires when a player\u0027s Hume shield value changes. Use the convenience flag to detect the shield-broken transition specifically.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Stats",
@@ -28511,6 +28735,8 @@
       "path": "Events.Stats.MaximumChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.StatsEvents",
       "clrEventName": "MaximumChanged",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28536,7 +28762,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.StatsEvents.MaximumChanged",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Stats",
@@ -28544,6 +28770,8 @@
       "path": "Events.Stats.StaminaChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.StatsEvents",
       "clrEventName": "StaminaChanged",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28569,7 +28797,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.StatsEvents.StaminaChanged",
-      "documentation": "Fires when a player\u0027s stamina value changes. Driven by the polling tracker in the loader, so deltas reflect the per-tick change rather than the underlying continuous stamina drain."
+      "documentation": "Fires when a player\u0027s stamina value changes. Driven by the polling tracker in the loader, so deltas reflect the per-tick change rather than the underlying continuous stamina drain.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Tesla",
@@ -28577,6 +28805,8 @@
       "path": "Events.Tesla.Added",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.TeslaEvents",
       "clrEventName": "Added",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28602,7 +28832,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.TeslaEvents.Added",
-      "documentation": "Fires when a tesla gate spawns into the scene."
+      "documentation": "Fires when a tesla gate spawns into the scene.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Tesla",
@@ -28610,6 +28840,8 @@
       "path": "Events.Tesla.Bursted",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.TeslaEvents",
       "clrEventName": "Bursted",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28635,7 +28867,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.TeslaEvents.Bursted",
-      "documentation": "Fires when a tesla gate completes its shock burst."
+      "documentation": "Fires when a tesla gate completes its shock burst.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Tesla",
@@ -28643,6 +28875,8 @@
       "path": "Events.Tesla.Removed",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.TeslaEvents",
       "clrEventName": "Removed",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28668,7 +28902,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.TeslaEvents.Removed",
-      "documentation": "Fires when a tesla gate is removed from the scene."
+      "documentation": "Fires when a tesla gate is removed from the scene.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "UsableItem",
@@ -28676,6 +28910,8 @@
       "path": "Events.UsableItem.Cancelled",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.UsableItemEvents",
       "clrEventName": "Cancelled",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28701,7 +28937,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.UsableItemEvents.Cancelled",
-      "documentation": "An explicit cancel notification, not normal completion or removal."
+      "documentation": "An explicit cancel notification, not normal completion or removal.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "UsableItem",
@@ -28709,6 +28945,8 @@
       "path": "Events.UsableItem.CooldownChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.UsableItemEvents",
       "clrEventName": "CooldownChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28734,7 +28972,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.UsableItemEvents.CooldownChanged",
-      "documentation": "A received cooldown applied to a usable item in the local inventory."
+      "documentation": "A received cooldown applied to a usable item in the local inventory.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "UsableItem",
@@ -28742,6 +28980,8 @@
       "path": "Events.UsableItem.Started",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.UsableItemEvents",
       "clrEventName": "Started",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28767,7 +29007,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.UsableItemEvents.Started",
-      "documentation": "A start notification received for a serial; the item/owner can be unavailable locally."
+      "documentation": "A start notification received for a serial; the item/owner can be unavailable locally.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Voice",
@@ -28775,6 +29015,8 @@
       "path": "Events.Voice.Received",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.VoiceEvents",
       "clrEventName": "Received",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28800,7 +29042,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.VoiceEvents.Received",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Voice",
@@ -28808,6 +29050,8 @@
       "path": "Events.Voice.Receiving",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.VoiceEvents",
       "clrEventName": "Receiving",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28833,7 +29077,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.VoiceEvents.Receiving",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Voice",
@@ -28841,6 +29085,8 @@
       "path": "Events.Voice.Sending",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.VoiceEvents",
       "clrEventName": "Sending",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28866,7 +29112,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.VoiceEvents.Sending",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Voice",
@@ -28874,6 +29120,8 @@
       "path": "Events.Voice.Sent",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.VoiceEvents",
       "clrEventName": "Sent",
+      "delivery": "queued-latest-per-registration",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28899,7 +29147,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.VoiceEvents.Sent",
-      "documentation": null
+      "documentation": "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Warhead",
@@ -28907,6 +29155,8 @@
       "path": "Events.Warhead.Detonated",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.WarheadEvents",
       "clrEventName": "Detonated",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28932,7 +29182,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.WarheadEvents.Detonated",
-      "documentation": "Fires once when the warhead actually detonates."
+      "documentation": "Fires once when the warhead actually detonates.\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     },
     {
       "category": "Warhead",
@@ -28940,6 +29190,8 @@
       "path": "Events.Warhead.ProgressChanged",
       "clrDeclaringType": "Anomaly.Client.Api.Events.Handlers.WarheadEvents",
       "clrEventName": "ProgressChanged",
+      "delivery": "queued-ordered",
+      "canCancel": false,
       "parameters": [
         {
           "name": "ev",
@@ -28965,7 +29217,7 @@
         "returnType": "System.Boolean"
       },
       "documentationId": "E:Anomaly.Client.Api.Events.Handlers.WarheadEvents.ProgressChanged",
-      "documentation": "Fires when the countdown starts or stops (cancellation / detonation)."
+      "documentation": "Fires when the countdown starts or stops (cancellation / detonation).\nQueued read-only observation; Lua callbacks cannot cancel or modify the originating operation."
     }
   ]
 }

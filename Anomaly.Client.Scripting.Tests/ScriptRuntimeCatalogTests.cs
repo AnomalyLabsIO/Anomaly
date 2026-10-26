@@ -26,6 +26,9 @@ public sealed class ScriptRuntimeCatalogTests
         var registered = catalog.Events.Select(value => (FullName: value.ClrDeclaringType, Name: value.ClrEventName))
             .OrderBy(value => value.FullName).ThenBy(value => value.Name).ToArray();
         Assert.Equal(events, registered);
+        Assert.True(catalog.Events.Single(entry => entry.Path == "Events.Stats.StaminaChanged").CoalesceLatest);
+        Assert.True(catalog.Events.Single(entry => entry.Path == "Events.Voice.Received").CoalesceLatest);
+        Assert.False(catalog.Events.Single(entry => entry.Path == "Events.Client.Ready").CoalesceLatest);
         Assert.Equal(before, ReadySubscribers());
         Assert.False(ScriptingPolicy.RemoteExecutionEnabled);
         Assert.Throws<NotSupportedException>(() => runtime.CreateRemoteSession("return 1"));

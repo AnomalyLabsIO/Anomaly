@@ -26,7 +26,7 @@ internal sealed class ScriptApiCatalog
             ScriptNameRules.ValidateIdentifier(entry.Name);
         }
         var enumKeys = new Dictionary<string, ScriptEnumCatalog>(StringComparer.Ordinal);
-        var enumGlobals = new HashSet<string>(StringComparer.Ordinal) { "Enums", "Events", "Messages", "Game" };
+        var enumGlobals = new HashSet<string>(StringComparer.Ordinal) { "Enums", "Events", "Messages", "Game", "Output" };
         foreach (var entry in Enums)
         {
             if (string.IsNullOrEmpty(entry.ClrType) || !enumKeys.TryAdd(entry.ClrType, entry))
@@ -58,6 +58,7 @@ internal sealed class ScriptApiCatalog
     public bool HasEventsGlobal => Events.Count != 0;
     public bool HasMessagesGlobal { get; }
     public bool HasGameGlobal => Types.Any(type => type.ClrType == typeof(Bindings.ScriptGameContext).FullName);
+    public bool HasOutputGlobal => Types.Any(type => type.ClrType == typeof(Output.ScriptOutput).FullName);
 
     internal ScriptApiCatalog WithEvents(IEnumerable<ScriptEventCatalogEntry> events) => new(Types, events, HasMessagesGlobal, Enums);
     internal ScriptApiCatalog WithMessages() => new(Types, Events, hasMessagesGlobal: true, enums: Enums);
@@ -77,6 +78,7 @@ internal sealed class ScriptApiCatalog
             }
         }
         if (HasGameGlobal) lines.Add("global Game: GameContext");
+        if (HasOutputGlobal) lines.Add("global Output: ScriptOutput");
         if (Enums.Count != 0) lines.Add("global Enums: readonly-enum-registry");
         foreach (var entry in Enums)
         {
@@ -90,6 +92,7 @@ internal sealed class ScriptApiCatalog
         foreach (var entry in Events)
         {
             lines.Add($"event {entry.Path}({string.Join(",", entry.Parameters.Select(value => value.Name + ":" + value.ClrType))}) -> {entry.ClrDeclaringType}.{entry.ClrEventName}");
+            lines.Add(entry.CoalesceLatest ? "  delivery queued-latest-per-registration" : "  delivery queued-ordered");
             lines.Add("  method Add(callback:function): System.String");
             lines.Add("  method Remove(callbackOrToken:function|string): System.Boolean");
         }
@@ -107,6 +110,7 @@ internal sealed class ScriptApiCatalog
     {
         var globals = new List<object>();
         if (HasGameGlobal) globals.Add(new { name = "Game", kind = "GameContext" });
+        if (HasOutputGlobal) globals.Add(new { name = "Output", kind = "ScriptOutput" });
         if (HasEventsGlobal) globals.Add(new { name = "Events", kind = "event-registry" });
         if (HasMessagesGlobal) globals.Add(new { name = "Messages", kind = "pack-message-registry" });
         if (Enums.Count != 0) globals.Add(new { name = "Enums", kind = "readonly-enum-registry" });
@@ -119,14 +123,14 @@ internal sealed class ScriptApiCatalog
             types = Types.Select(type => new
             {
                 name = type.Name, clrType = type.ClrType, documentationId = type.DocumentationId,
-                documentation = Documentation(documentation, type.DocumentationId),
+                documentation = TypeDocumentation(documentation, type),
                 members = type.Members.Select(member => new
                 {
                     kind = member.Kind.ToString(), name = member.Name, clrName = member.ClrName,
                     returnType = member.ReturnType, allowWrite = member.AllowWrite,
                     parameters = member.Parameters.Select(parameter => new { name = parameter.Name, clrType = parameter.ClrType }),
                     documentationId = member.DocumentationId,
-                    documentation = Documentation(documentation, member.DocumentationId)
+                    documentation = MemberDocumentation(documentation, type, member)
                 })
             }),
             enums = Enums.Select(entry => new
@@ -141,11 +145,13 @@ internal sealed class ScriptApiCatalog
             {
                 category = entry.Category, name = entry.Name, path = entry.Path,
                 clrDeclaringType = entry.ClrDeclaringType, clrEventName = entry.ClrEventName,
+                delivery = entry.CoalesceLatest ? "queued-latest-per-registration" : "queued-ordered",
+                canCancel = false,
                 parameters = entry.Parameters.Select(parameter => new { name = parameter.Name, clrType = parameter.ClrType }),
                 add = new { parameters = entry.AddParameters.Select(parameter => new { name = parameter.Name, clrType = parameter.ClrType }), returnType = entry.AddReturnType },
                 remove = new { parameters = entry.RemoveParameters.Select(parameter => new { name = parameter.Name, clrType = parameter.ClrType }), returnType = entry.RemoveReturnType },
                 documentationId = entry.DocumentationId,
-                documentation = Documentation(documentation, entry.DocumentationId)
+                documentation = EventDocumentation(documentation, entry)
             })
         };
         return JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true })
@@ -177,11 +183,11 @@ internal sealed class ScriptApiCatalog
         foreach (var type in Types)
         {
             output.AppendLine();
-            AppendDocumentation(output, Documentation(documentation, type.DocumentationId));
+            AppendDocumentation(output, TypeDocumentation(documentation, type));
             output.AppendLine("---@class " + type.Name);
             foreach (var member in type.Members.Where(value => value.Kind == ScriptMemberKind.Property))
             {
-                var summary = Documentation(documentation, member.DocumentationId);
+                var summary = MemberDocumentation(documentation, type, member);
                 output.Append("---@field ").Append(member.Name).Append(' ').Append(LuaType(member.ReturnType));
                 output.Append(member.AllowWrite ? " # Writable." : " # Read-only.");
                 if (!string.IsNullOrEmpty(summary)) output.Append(' ').Append(OneLine(summary));
@@ -200,15 +206,19 @@ internal sealed class ScriptApiCatalog
             }
         }
         if (HasGameGlobal) output.AppendLine("\n---@type GameContext\nGame = nil -- Host-installed read-only local queries; no constructor is exposed.");
+        if (HasOutputGlobal) output.AppendLine("\n---@type ScriptOutput\nOutput = nil -- Host-owned bounded logging and plain text; automatically revoked with this session.");
         if (HasEventsGlobal)
         {
-            output.AppendLine("\n-- Host-installed subscription registry; callbacks receive frozen event data.\nEvents = {}");
+            output.AppendLine("\n-- Host-installed queued subscription registry. Frozen observations cannot cancel or modify the original operation.\nEvents = {}");
             foreach (var group in Events.GroupBy(value => value.Category))
             {
                 output.AppendLine("Events." + group.Key + " = {}");
                 foreach (var entry in group)
                 {
-                    AppendDocumentation(output, Documentation(documentation, entry.DocumentationId));
+                    AppendDocumentation(output, EventDocumentation(documentation, entry));
+                    output.AppendLine(entry.CoalesceLatest
+                        ? "--- Latest pending observation per registration; intervening observations may be coalesced."
+                        : "--- Ordered queued delivery; callbacks must remain within the documented traffic limits.");
                     output.AppendLine(entry.Path + " = {}");
                     var parameterNames = ParameterNames(entry.Parameters);
                     var callback = "fun(" + string.Join(", ", entry.Parameters.Select((value, index) => parameterNames[index] + ": " + LuaType(value.ClrType))) + ")";
@@ -262,6 +272,29 @@ internal sealed class ScriptApiCatalog
 
     private static string? Documentation(IReadOnlyDictionary<string, string>? documentation, string id)
         => documentation != null && documentation.TryGetValue(id, out var text) ? text : null;
+
+    private static bool HasObservedPermission(ScriptTypeCatalog type) =>
+        type.Members.Any(member => member.Name == "IsAllowed" && !member.AllowWrite);
+
+    private static string? TypeDocumentation(IReadOnlyDictionary<string, string>? documentation, ScriptTypeCatalog type) =>
+        HasObservedPermission(type)
+            ? "Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation."
+            : Documentation(documentation, type.DocumentationId);
+
+    private static string? MemberDocumentation(IReadOnlyDictionary<string, string>? documentation,
+        ScriptTypeCatalog type, ScriptMemberCatalog member) =>
+        member.Name == "IsAllowed" && HasObservedPermission(type)
+            ? "Observed permission at capture time, not a cancellation control."
+            : Documentation(documentation, member.DocumentationId);
+
+    private string EventDocumentation(IReadOnlyDictionary<string, string>? documentation, ScriptEventCatalogEntry entry)
+    {
+        var observesPermission = entry.Parameters.Any(parameter =>
+            Types.Any(type => type.ClrType == parameter.ClrType && HasObservedPermission(type)));
+        var summary = observesPermission ? null : Documentation(documentation, entry.DocumentationId);
+        const string semantics = "Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.";
+        return string.IsNullOrEmpty(summary) ? semantics : summary + "\n" + semantics;
+    }
 
     private static string OneLine(string text) => string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 

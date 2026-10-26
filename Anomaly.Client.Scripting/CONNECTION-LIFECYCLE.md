@@ -67,7 +67,7 @@ facility generation after admission gets its own admission scope and deadline.
    expired, or replaced admission cannot ready/create a player. Hub adoption retains
    the completed offer and grant rather than issuing a second offer.
 
-The [pre-player allowlist](../Anomaly.Shared/Networking/ContentBootstrapPolicy.cs)
+The pre-player allowlist (`Anomaly.Shared/Networking/ContentBootstrapPolicy.cs` in the source checkout)
 contains only bounded facility/content metadata, transfer traffic, confirmation,
 and matching consent/request/ack contracts. Direction, authentication phase,
 payload size, rate limits, AEAD, and replay checks still apply. General gameplay,

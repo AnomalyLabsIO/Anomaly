@@ -25,7 +25,7 @@ internal static class ScriptingBootstrap
     internal static void Initialize()
     {
         if (_runtime != null) return;
-        var runtime = new ScriptRuntime(Report);
+        var runtime = new ScriptRuntime(Report, textSink: new ScriptTextOverlay(), outputLog: LogOutput);
         try
         {
             runtime.DiscoverApi();
@@ -41,6 +41,7 @@ internal static class ScriptingBootstrap
     }
 
     private static void Report(string message) => MelonLogger.Warning("Scripting: " + message);
+    private static void LogOutput(string message) => MelonLogger.Msg(message);
 
     private static bool AllowMessageSend(ScriptToServerMessage message) =>
         IsConnectionPrepared && _messages?.TrySend(message) == true;

@@ -424,6 +424,7 @@ public sealed partial class Core : MelonMod
 
     public override void OnUpdate()
     {
+        TickClientScriptingSmoke();
         if ((_dummyVisibilitySmoke || _dedicatedDummyControlSmoke) && !_failed)
         {
             try { MuteDummyMenuMusicContinuous(); }

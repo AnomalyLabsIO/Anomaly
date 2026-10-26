@@ -54,7 +54,8 @@ public sealed class HostAllocationTests
     {
         using var runtime = new ScriptRuntime();
         using var session = runtime.CreateDevelopmentSession();
-        var resources = Enumerable.Range(0, 32).Select(_ => new Resource()).ToArray();
+        // The runtime installs one owned Output resource before source execution.
+        var resources = Enumerable.Range(0, 31).Select(_ => new Resource()).ToArray();
         foreach (var resource in resources) session.TrackResource(resource);
         Assert.Throws<InvalidOperationException>(() => session.TrackResource(new Resource()));
         session.Dispose();

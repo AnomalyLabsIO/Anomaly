@@ -15,7 +15,7 @@ public sealed class MemoryEventTests
         var diagnostics = new List<string>();
         using var session = new ScriptSession(bindings, Options(), diagnostics.Add, catalog);
         Assert.True(session.Load("Events.Signals.Changed.Add(function() " +
-            "pcall(function() return string.rep('x',8388608) end) end)").Succeeded);
+            "pcall(function() return string.rep('x',8388608) end) end)", "mods/fixture/memory.lua").Succeeded);
         SignalsEvents.Publish(new Payload());
         SignalsEvents.Publish(new Payload());
 
@@ -23,7 +23,9 @@ public sealed class MemoryEventTests
         Assert.True(session.IsRetired);
         Assert.Equal(1, SignalsEvents.Removes);
         Assert.False(session.DispatchQueuedEvent(TimeSpan.FromSeconds(1)));
-        Assert.Contains(diagnostics, message => message.Contains("MemoryLimit", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("MemoryLimit", StringComparison.Ordinal) &&
+            message.Contains("mods/fixture/memory.lua", StringComparison.Ordinal) &&
+            message.Contains("Events.Signals.Changed", StringComparison.Ordinal));
     }
 
     [Fact]

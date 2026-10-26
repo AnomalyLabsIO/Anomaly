@@ -44,13 +44,17 @@ namespace Anomaly.Client.Scripting.Tests.EventFixtures.Valid
         }
         [ScriptEvent("Empty")]
         public static event Action Ping { add => _ping += value; remove => _ping -= value; }
+        [ScriptEvent(CoalesceLatest = true)]
+        public static event Action<Payload>? Observed;
         public static event Action<Payload>? Hidden;
         [ScriptEvent, ScriptIgnore] public static event Action? Ignored;
         public static void Publish(Payload value) => _changed?.Invoke(value);
         public static void PublishEmpty() => _ping?.Invoke();
+        public static void PublishObservation(Payload value) => Observed?.Invoke(value);
         public static void Reset()
         {
             _changed = null; _ping = null; Hidden = null; Ignored = null;
+            Observed = null;
             Adds = Removes = Payload.GetterCalls = 0;
             Payload.ThrowOnRead = false;
             ThrowOnAdd = ThrowOnRemove = false; DuringAdd = null;

@@ -39,6 +39,15 @@ try {
     $stagedSdk = Join-Path $sdkTestRoot 'sdk'
     Copy-Item -LiteralPath $sdkPayload -Destination $stagedSdk -Recurse
 
+    foreach ($resourceRelative in @(
+        'samples/HelloAnomalyServer/ClientScripts/start.lua',
+        'samples/HelloAnomalyServer/ClientScripts/messages.json'
+    )) {
+        if (!(Test-Path -LiteralPath (Join-Path $stagedSdk $resourceRelative) -PathType Leaf)) {
+            throw "SDK starter source resource is missing: $resourceRelative"
+        }
+    }
+
     $referenceMetadata = Get-Content -Raw -LiteralPath `
         (Join-Path $stagedSdk 'reference/sdk-reference-metadata.json') | ConvertFrom-Json
     if ($referenceMetadata.schemaVersion -ne 1) {
@@ -123,6 +132,34 @@ public static class SdkCompileProbe
         if ($LASTEXITCODE -ne 0) { throw "Packaged server SDK starter failed: $sampleName" }
     }
 
+    # Inspect the emitted PE metadata, without loading game-dependent plugin types.
+    # A successful compile alone permits a missing Lua glob or wrong CLR resource names.
+    $serverSampleAssembly = Join-Path $stagedSdk 'samples/HelloAnomalyServer/bin/Release/net48/HelloAnomalyServer.dll'
+    $assemblyStream = [IO.File]::OpenRead($serverSampleAssembly)
+    try {
+        $peReader = [System.Reflection.PortableExecutable.PEReader]::new($assemblyStream)
+        try {
+            $metadata = [System.Reflection.Metadata.PEReaderExtensions]::GetMetadataReader($peReader)
+            $embeddedNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            foreach ($handle in $metadata.ManifestResources) {
+                $resource = $metadata.GetManifestResource($handle)
+                if ($resource.Implementation.IsNil) {
+                    [void]$embeddedNames.Add($metadata.GetString($resource.Name))
+                }
+            }
+            foreach ($expectedName in @(
+                'HelloAnomalyServer.ClientScripts.start.lua',
+                'HelloAnomalyServer.ClientScripts.messages.json'
+            )) {
+                if (!$embeddedNames.Contains($expectedName)) {
+                    throw "Packaged server starter is missing the exact embedded resource: $expectedName"
+                }
+            }
+        }
+        finally { $peReader.Dispose() }
+    }
+    finally { $assemblyStream.Dispose() }
+
     $bouncyCastlePath = Join-Path $stagedSdk 'lib/net48/BouncyCastle.Cryptography.dll'
     if (-not (Test-Path -LiteralPath $bouncyCastlePath -PathType Leaf)) {
         throw 'Staged SDK is missing BouncyCastle.Cryptography.dll.'
@@ -142,7 +179,7 @@ public static class SdkCompileProbe
     }
 
     $global:LASTEXITCODE = 0
-    Write-Host 'All client/server packaged starters, adjacent XML docs, and positive/negative SDK compile-closure gates passed.'
+    Write-Host 'All client/server packaged starters, exact embedded script/descriptor names, adjacent XML docs, and positive/negative SDK compile-closure gates passed.'
 }
 finally {
     $resolvedSdkTestRoot = [System.IO.Path]::GetFullPath($sdkTestRoot)

@@ -6,7 +6,14 @@ The patch targets the 247 interpreter files at MoonSharp commit
 `fbd03678d5c0f731d731d099211c7f4a3a1ae8b7`. The manifest pins each original file's
 SHA-256; the restore command verifies all inputs before creating a new local fork.
 
-Supply an existing checkout's `src/MoonSharp.Interpreter` directory:
+These commands require the full Anomaly source checkout, not an extracted
+developer SDK. The SDK includes this guide and `Fork-README.md` for reference;
+it does not include the runtime sources, restore script, manifest, or patch.
+Its starter plugins use the packaged API DLLs and do not require MoonSharp restore.
+
+Before building the client, scripting host, or runtime releases from a fresh
+checkout, obtain the upstream commit above separately (restore never downloads it).
+Supply that checkout's `src/MoonSharp.Interpreter` directory:
 
 ```powershell
 pwsh -File tools/MoonSharpHardening/Restore-MoonSharp.ps1 -UpstreamSourceDirectory <checkout>/src/MoonSharp.Interpreter

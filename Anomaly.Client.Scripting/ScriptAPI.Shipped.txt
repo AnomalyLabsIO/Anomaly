@@ -667,6 +667,10 @@ type Scp330Pickup -> Anomaly.Client.Api.Features.Scp330Pickup
   property Serial: System.UInt16 readonly
   property Type: Il2Cpp.ItemType readonly
   property Weight: System.Single readonly
+type ScriptOutput -> Anomaly.Client.Scripting.Output.ScriptOutput
+  method ClearText(): System.Void
+  method Log(System.String): System.Boolean
+  method ShowText(System.String,System.Double): System.Boolean
 type ShootingTargetAdminToy -> Anomaly.Client.Api.Features.ShootingTargetAdminToy
   property CommandName: System.String readonly
   property IsDestroyed: System.Boolean readonly
@@ -784,6 +788,7 @@ type Workstation -> Anomaly.Client.Api.Features.Workstation
   property Room: Anomaly.Client.Api.Features.Room readonly
   property Status: Il2CppInventorySystem.Items.Firearms.Attachments.WorkstationController+WorkstationStatus readonly
 global Game: GameContext
+global Output: ScriptOutput
 global Enums: readonly-enum-registry
 enum Enums["Anomaly.Shared.Networking.Messages.RoundPhase"] -> Anomaly.Shared.Networking.Messages.RoundPhase string case-insensitive-input
   alias Enums.RoundPhase
@@ -4160,297 +4165,395 @@ enum Enums["Il2CppWaterPhysics.BuoyancyMode"] -> Il2CppWaterPhysics.BuoyancyMode
   constant "SuperLight": "SuperLight" = 5
 global Events: event-registry
 event Events.AdminToy.Added(ev:Anomaly.Client.Api.Events.Args.AdminToyAddedEventArgs) -> Anomaly.Client.Api.Events.Handlers.AdminToyEvents.Added
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.AdminToy.Removed(ev:Anomaly.Client.Api.Events.Args.AdminToyRemovedEventArgs) -> Anomaly.Client.Api.Events.Handlers.AdminToyEvents.Removed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Announcer.LineScheduled(ev:Anomaly.Client.Api.Events.Args.AnnouncerLineScheduledEventArgs) -> Anomaly.Client.Api.Events.Handlers.AnnouncerEvents.LineScheduled
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Announcer.LineStarted(ev:Anomaly.Client.Api.Events.Args.AnnouncerLineStartedEventArgs) -> Anomaly.Client.Api.Events.Handlers.AnnouncerEvents.LineStarted
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Asset.OverrideApplied(ev:Anomaly.Client.Api.Events.Args.AssetOverrideAppliedEventArgs) -> Anomaly.Client.Api.Assets.AssetEvents.OverrideApplied
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Asset.OverrideCleared(ev:Anomaly.Client.Api.Events.Args.AssetOverrideClearedEventArgs) -> Anomaly.Client.Api.Assets.AssetEvents.OverrideCleared
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Audio.Playing(ev:Anomaly.Client.Api.Events.Args.AudioPlayingEventArgs) -> Anomaly.Client.Api.Events.Handlers.AudioEvents.Playing
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Camera.Shaking(ev:Anomaly.Client.Api.Events.Args.CameraShakingEventArgs) -> Anomaly.Client.Api.Events.Handlers.CameraEvents.Shaking
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Client.CanvasReady(ev:Anomaly.Client.Api.Events.Args.CanvasReadyEventArgs) -> Anomaly.Client.Api.Events.Handlers.ClientEvents.CanvasReady
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Client.Connected(ev:Anomaly.Client.Api.Events.Args.ClientConnectedEventArgs) -> Anomaly.Client.Api.Events.Handlers.ClientEvents.Connected
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Client.Disconnected(ev:Anomaly.Client.Api.Events.Args.ClientDisconnectedEventArgs) -> Anomaly.Client.Api.Events.Handlers.ClientEvents.Disconnected
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Client.EnrollmentChanged(ev:Anomaly.Client.Api.Events.Args.EnrollmentChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.ClientEvents.EnrollmentChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Client.Ready(ev:Anomaly.Client.Api.Events.Args.ClientReadyEventArgs) -> Anomaly.Client.Api.Events.Handlers.ClientEvents.Ready
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Client.SceneLoaded(ev:Anomaly.Client.Api.Events.Args.SceneLoadedEventArgs) -> Anomaly.Client.Api.Events.Handlers.ClientEvents.SceneLoaded
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Door.Added(ev:Anomaly.Client.Api.Events.Args.DoorEventArgs) -> Anomaly.Client.Api.Events.Handlers.DoorEvents.Added
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Door.LocksChanged(ev:Anomaly.Client.Api.Events.Args.DoorLocksChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.DoorEvents.LocksChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Door.Removed(ev:Anomaly.Client.Api.Events.Args.DoorEventArgs) -> Anomaly.Client.Api.Events.Handlers.DoorEvents.Removed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Door.StateChanged(ev:Anomaly.Client.Api.Events.Args.DoorStateChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.DoorEvents.StateChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Effect.Disabled(ev:Anomaly.Client.Api.Events.Args.EffectDisabledEventArgs) -> Anomaly.Client.Api.Events.Handlers.EffectEvents.Disabled
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Effect.Enabled(ev:Anomaly.Client.Api.Events.Args.EffectEnabledEventArgs) -> Anomaly.Client.Api.Events.Handlers.EffectEvents.Enabled
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Effect.IntensityChanged(ev:Anomaly.Client.Api.Events.Args.EffectIntensityChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.EffectEvents.IntensityChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Elevator.Moved(ev:Anomaly.Client.Api.Events.Args.ElevatorEventArgs) -> Anomaly.Client.Api.Events.Handlers.ElevatorEvents.Moved
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Elevator.Removed(ev:Anomaly.Client.Api.Events.Args.ElevatorEventArgs) -> Anomaly.Client.Api.Events.Handlers.ElevatorEvents.Removed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Elevator.Spawned(ev:Anomaly.Client.Api.Events.Args.ElevatorEventArgs) -> Anomaly.Client.Api.Events.Handlers.ElevatorEvents.Spawned
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.FacilityCamera.Created(ev:Anomaly.Client.Api.Events.Args.FacilityCameraEventArgs) -> Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents.Created
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.FacilityCamera.Removed(ev:Anomaly.Client.Api.Events.Args.FacilityCameraEventArgs) -> Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents.Removed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.FacilityCamera.Scp079Switching(ev:Anomaly.Client.Api.Events.Args.Scp079SwitchingCameraEventArgs) -> Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents.Scp079Switching
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.FacilityCamera.StateChanged(ev:Anomaly.Client.Api.Events.Args.FacilityCameraEventArgs) -> Anomaly.Client.Api.Events.Handlers.FacilityCameraEvents.StateChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.FileTransfer.Complete(ev:Anomaly.Client.Api.Events.Args.FileTransferCompleteEventArgs) -> Anomaly.Client.Api.Events.Handlers.FileTransferEvents.Complete
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.FileTransfer.Progress(ev:Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs) -> Anomaly.Client.Api.Events.Handlers.FileTransferEvents.Progress
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Firearm.AimingChanged(ev:Anomaly.Client.Api.Events.Args.FirearmStateChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.FirearmEvents.AimingChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Firearm.AmmoChanged(ev:Anomaly.Client.Api.Events.Args.FirearmStateChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.FirearmEvents.AmmoChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Firearm.ReloadStateChanged(ev:Anomaly.Client.Api.Events.Args.FirearmStateChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.FirearmEvents.ReloadStateChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Firearm.Shooting(ev:Anomaly.Client.Api.Events.Args.PlayerShootingEventArgs) -> Anomaly.Client.Api.Events.Handlers.FirearmEvents.Shooting
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Firearm.Shot(ev:Anomaly.Client.Api.Events.Args.FirearmShotEventArgs) -> Anomaly.Client.Api.Events.Handlers.FirearmEvents.Shot
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Firearm.StateChanged(ev:Anomaly.Client.Api.Events.Args.FirearmStateChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.FirearmEvents.StateChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Generator.Engaged(ev:Anomaly.Client.Api.Events.Args.GeneratorEngagedEventArgs) -> Anomaly.Client.Api.Events.Handlers.GeneratorEvents.Engaged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Generator.StateChanged(ev:Anomaly.Client.Api.Events.Args.GeneratorStateChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.GeneratorEvents.StateChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Hazard.Added(ev:Anomaly.Client.Api.Events.Args.HazardEventArgs) -> Anomaly.Client.Api.Events.Handlers.HazardEvents.Added
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Hazard.Removed(ev:Anomaly.Client.Api.Events.Args.HazardEventArgs) -> Anomaly.Client.Api.Events.Handlers.HazardEvents.Removed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Hud.BroadcastShowing(ev:Anomaly.Client.Api.Events.Args.BroadcastShowingEventArgs) -> Anomaly.Client.Api.Events.Handlers.HudEvents.BroadcastShowing
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Hud.HintDisplaying(ev:Anomaly.Client.Api.Events.Args.HintDisplayingEventArgs) -> Anomaly.Client.Api.Events.Handlers.HudEvents.HintDisplaying
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.InputRegistry.Pressed(obj:System.String) -> Anomaly.Client.Api.Input.InputRegistry.Pressed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.InputRegistry.Released(obj:System.String) -> Anomaly.Client.Api.Input.InputRegistry.Released
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Inventory.CurrentItemChanged(ev:Anomaly.Client.Api.Events.Args.CurrentItemChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.InventoryEvents.CurrentItemChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Inventory.CurrentItemChanging(ev:Anomaly.Client.Api.Events.Args.CurrentItemChangingEventArgs) -> Anomaly.Client.Api.Events.Handlers.InventoryEvents.CurrentItemChanging
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Inventory.DroppingItem(ev:Anomaly.Client.Api.Events.Args.PlayerDroppingItemEventArgs) -> Anomaly.Client.Api.Events.Handlers.InventoryEvents.DroppingItem
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Inventory.ItemsChanged(ev:Anomaly.Client.Api.Events.Args.InventoryChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.InventoryEvents.ItemsChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Inventory.UiClosing(ev:Anomaly.Client.Api.Events.Args.InventoryUiClosingEventArgs) -> Anomaly.Client.Api.Events.Handlers.InventoryEvents.UiClosing
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Inventory.UiOpening(ev:Anomaly.Client.Api.Events.Args.InventoryUiOpeningEventArgs) -> Anomaly.Client.Api.Events.Handlers.InventoryEvents.UiOpening
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.LocalPlayerMotion.Applied(obj:Anomaly.Client.Api.Features.MotionDiscontinuity) -> Anomaly.Client.Api.Features.LocalPlayerMotion.Applied
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Locker.StateChanged(ev:Anomaly.Client.Api.Events.Args.LockerStateChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.LockerEvents.StateChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.NetworkMessage.AnomalyMessageReceived(ev:Anomaly.Client.Api.Events.Args.AnomalyMessageReceivedEventArgs) -> Anomaly.Client.Api.Events.Handlers.NetworkMessageEvents.AnomalyMessageReceived
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Pickup.Added(ev:Anomaly.Client.Api.Events.Args.PickupAddedEventArgs) -> Anomaly.Client.Api.Events.Handlers.PickupEvents.Added
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Pickup.Removed(ev:Anomaly.Client.Api.Events.Args.PickupRemovedEventArgs) -> Anomaly.Client.Api.Events.Handlers.PickupEvents.Removed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Player.Added(ev:Anomaly.Client.Api.Events.Args.PlayerAddedEventArgs) -> Anomaly.Client.Api.Events.Handlers.PlayerEvents.Added
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Player.Interacted(ev:Anomaly.Client.Api.Events.Args.PlayerInteractedEventArgs) -> Anomaly.Client.Api.Events.Handlers.PlayerEvents.Interacted
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Player.Interacting(ev:Anomaly.Client.Api.Events.Args.PlayerInteractingEventArgs) -> Anomaly.Client.Api.Events.Handlers.PlayerEvents.Interacting
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Player.Jumping(ev:Anomaly.Client.Api.Events.Args.PlayerJumpingEventArgs) -> Anomaly.Client.Api.Events.Handlers.PlayerEvents.Jumping
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Player.NoclipToggling(ev:Anomaly.Client.Api.Events.Args.PlayerNoclipTogglingEventArgs) -> Anomaly.Client.Api.Events.Handlers.PlayerEvents.NoclipToggling
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Player.Removed(ev:Anomaly.Client.Api.Events.Args.PlayerRemovedEventArgs) -> Anomaly.Client.Api.Events.Handlers.PlayerEvents.Removed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Player.Sprinting(ev:Anomaly.Client.Api.Events.Args.PlayerSprintingEventArgs) -> Anomaly.Client.Api.Events.Handlers.PlayerEvents.Sprinting
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Projectile.Removed(ev:Anomaly.Client.Api.Events.Args.ProjectileRemovedEventArgs) -> Anomaly.Client.Api.Events.Handlers.ProjectileEvents.Removed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Projectile.Spawned(ev:Anomaly.Client.Api.Events.Args.ProjectileSpawnedEventArgs) -> Anomaly.Client.Api.Events.Handlers.ProjectileEvents.Spawned
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Projectile.Throwing(ev:Anomaly.Client.Api.Events.Args.PlayerThrowingEventArgs) -> Anomaly.Client.Api.Events.Handlers.ProjectileEvents.Throwing
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Ragdoll.Removed(ev:Anomaly.Client.Api.Events.Args.RagdollEventArgs) -> Anomaly.Client.Api.Events.Handlers.RagdollEvents.Removed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Ragdoll.Spawned(ev:Anomaly.Client.Api.Events.Args.RagdollEventArgs) -> Anomaly.Client.Api.Events.Handlers.RagdollEvents.Spawned
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Role.Changed(ev:Anomaly.Client.Api.Events.Args.PlayerRoleChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.RoleEvents.Changed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Round.Ended(ev:Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.RoundEvents.Ended
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Round.Ending(ev:Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.RoundEvents.Ending
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Round.PhaseChanged(ev:Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.RoundEvents.PhaseChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Round.Restarted(ev:Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.RoundEvents.Restarted
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Round.Started(ev:Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.RoundEvents.Started
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Round.Starting(ev:Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.RoundEvents.Starting
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Round.WaitingForPlayers(ev:Anomaly.Client.Api.Events.Args.RoundPhaseChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.RoundEvents.WaitingForPlayers
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Scp079.AuxiliaryPowerChanged(ev:Anomaly.Client.Api.Events.Args.Scp079AuxiliaryPowerChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.Scp079Events.AuxiliaryPowerChanged
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Scp079.ExperienceChanged(ev:Anomaly.Client.Api.Events.Args.Scp079ExperienceChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.Scp079Events.ExperienceChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Scp079.TierChanged(ev:Anomaly.Client.Api.Events.Args.Scp079TierChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.Scp079Events.TierChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Spectator.TargetChanged(ev:Anomaly.Client.Api.Events.Args.SpectatedPlayerChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.SpectatorEvents.TargetChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Stats.ArtificialHealthChanged(ev:Anomaly.Client.Api.Events.Args.PlayerStatChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.StatsEvents.ArtificialHealthChanged
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Stats.Changed(ev:Anomaly.Client.Api.Events.Args.PlayerStatChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.StatsEvents.Changed
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Stats.Healed(ev:Anomaly.Client.Api.Events.Args.PlayerHealedEventArgs) -> Anomaly.Client.Api.Events.Handlers.StatsEvents.Healed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Stats.HealthChanged(ev:Anomaly.Client.Api.Events.Args.PlayerStatChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.StatsEvents.HealthChanged
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Stats.HumeShieldChanged(ev:Anomaly.Client.Api.Events.Args.PlayerHumeShieldChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.StatsEvents.HumeShieldChanged
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Stats.MaximumChanged(ev:Anomaly.Client.Api.Events.Args.PlayerStatChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.StatsEvents.MaximumChanged
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Stats.StaminaChanged(ev:Anomaly.Client.Api.Events.Args.PlayerStaminaChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.StatsEvents.StaminaChanged
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Tesla.Added(ev:Anomaly.Client.Api.Events.Args.TeslaEventArgs) -> Anomaly.Client.Api.Events.Handlers.TeslaEvents.Added
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Tesla.Bursted(ev:Anomaly.Client.Api.Events.Args.TeslaEventArgs) -> Anomaly.Client.Api.Events.Handlers.TeslaEvents.Bursted
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Tesla.Removed(ev:Anomaly.Client.Api.Events.Args.TeslaEventArgs) -> Anomaly.Client.Api.Events.Handlers.TeslaEvents.Removed
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.UsableItem.Cancelled(ev:Anomaly.Client.Api.Events.Args.UsableItemStatusEventArgs) -> Anomaly.Client.Api.Events.Handlers.UsableItemEvents.Cancelled
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.UsableItem.CooldownChanged(ev:Anomaly.Client.Api.Events.Args.UsableItemCooldownEventArgs) -> Anomaly.Client.Api.Events.Handlers.UsableItemEvents.CooldownChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.UsableItem.Started(ev:Anomaly.Client.Api.Events.Args.UsableItemStatusEventArgs) -> Anomaly.Client.Api.Events.Handlers.UsableItemEvents.Started
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Voice.Received(ev:Anomaly.Client.Api.Events.Args.VoiceMessageReceivedEventArgs) -> Anomaly.Client.Api.Events.Handlers.VoiceEvents.Received
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Voice.Receiving(ev:Anomaly.Client.Api.Events.Args.VoiceMessageReceivingEventArgs) -> Anomaly.Client.Api.Events.Handlers.VoiceEvents.Receiving
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Voice.Sending(ev:Anomaly.Client.Api.Events.Args.VoiceMessageSendingEventArgs) -> Anomaly.Client.Api.Events.Handlers.VoiceEvents.Sending
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Voice.Sent(ev:Anomaly.Client.Api.Events.Args.VoiceMessageSentEventArgs) -> Anomaly.Client.Api.Events.Handlers.VoiceEvents.Sent
+  delivery queued-latest-per-registration
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Warhead.Detonated(ev:Anomaly.Client.Api.Events.Args.WarheadDetonatedEventArgs) -> Anomaly.Client.Api.Events.Handlers.WarheadEvents.Detonated
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 event Events.Warhead.ProgressChanged(ev:Anomaly.Client.Api.Events.Args.WarheadProgressChangedEventArgs) -> Anomaly.Client.Api.Events.Handlers.WarheadEvents.ProgressChanged
+  delivery queued-ordered
   method Add(callback:function): System.String
   method Remove(callbackOrToken:function|string): System.Boolean
 global Messages: pack-message-registry

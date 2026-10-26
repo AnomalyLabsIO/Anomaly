@@ -107,18 +107,95 @@ public sealed class ScriptSessionTests
     [Fact]
     public void CSharpEventsAreQueuedRatherThanCallingLuaSynchronously()
     {
-        using var runtime = new ScriptRuntime();
-        runtime.Bindings.RegisterType<Counter>();
+        using var runtime = new ScriptRuntime(timestamp: () => 0);
         using var session = runtime.CreateDevelopmentSession();
-        var counter = new Counter();
-        session.SetGlobal("counter", counter);
-        Assert.True(session.Load("function on_ready(value) counter:add(value) end").Succeeded);
+        Assert.True(session.Load("seen=0; function on_ready(value) seen=seen+value end; function Read() return seen end").Succeeded);
         runtime.QueueEvent("on_ready", 3);
-        Assert.Equal(0, counter.Count);
-        // JIT or scheduling can consume a tick's short wall budget; it may retire,
-        // but must never invoke outside that budget or synchronously on enqueue.
+        Assert.Equal(0d, session.Invoke("Read").Value);
         runtime.Tick();
-        Assert.True(counter.Count == 3 || session.IsRetired);
+        Assert.False(session.IsRetired);
+        Assert.Equal(3d, session.Invoke("Read").Value);
+        Assert.Equal(0, session.QueuedCount);
+    }
+
+    [Fact]
+    public void TwoArrivalsPerTickRemainHealthyBeyondTheFormerFrame64Overflow()
+    {
+        using var runtime = new ScriptRuntime(timestamp: () => 0);
+        using var session = runtime.CreateDevelopmentSession();
+        Assert.True(session.Load("seen=0; function Observe() seen=seen+1 end; function Read() return seen end").Succeeded);
+        // Warm ordinary callback machinery independently of the scheduling clock.
+        Assert.True(session.Invoke("Observe").Succeeded);
+        for (var frame = 0; frame < 128; frame++)
+        {
+            Assert.True(session.QueueEvent("Observe"));
+            Assert.True(session.QueueEvent("Observe"));
+            runtime.Tick();
+            Assert.False(session.IsRetired);
+            Assert.Equal(0, session.QueuedCount);
+            Assert.Equal(1d + 2d * (frame + 1), session.Invoke("Read").Value);
+        }
+    }
+
+    [Fact]
+    public void RuntimeRepeatsFairRoundsButStartsAtMostFourDeliveriesPerTick()
+    {
+        using var runtime = new ScriptRuntime(timestamp: () => 0);
+        var sessions = Enumerable.Range(0, 8).Select(_ => runtime.CreateDevelopmentSession()).ToArray();
+        foreach (var session in sessions)
+        {
+            Assert.True(session.Load("seen=0; function Observe() seen=seen+1 end; function Read() return seen end").Succeeded);
+            Assert.True(session.Invoke("Observe").Succeeded);
+            Assert.True(session.QueueEvent("Observe"));
+            Assert.True(session.QueueEvent("Observe"));
+        }
+        for (var tick = 0; tick < 4; tick++)
+        {
+            runtime.Tick();
+            Assert.Equal((tick + 1) * 4d, sessions.Sum(session => (double)session.Invoke("Read").Value! - 1d));
+            var counts = sessions.Select(session => (double)session.Invoke("Read").Value!).ToArray();
+            Assert.InRange(counts.Max() - counts.Min(), 0d, 1d);
+            Assert.All(sessions, session => Assert.False(session.IsRetired));
+        }
+        Assert.All(sessions, session => Assert.Equal(0, session.QueuedCount));
+    }
+
+    [Fact]
+    public void ACallbackAdmittedAtTheSchedulingBoundaryGetsItsOwnWallAllowance()
+    {
+        var window = Math.Max(1, System.Diagnostics.Stopwatch.Frequency / 500);
+        var stamps = new[] { 0L, 0L, window - 1, window };
+        var stamp = 0;
+        using var runtime = new ScriptRuntime(timestamp: () => stamps[Math.Min(stamp++, stamps.Length - 1)]);
+        using var session = runtime.CreateDevelopmentSession();
+        Assert.True(session.Load("seen=0; function Observe() seen=seen+1 end; function Read() return seen end").Succeeded);
+        Assert.True(session.Invoke("Observe").Succeeded);
+        for (var index = 0; index < 3; index++) Assert.True(session.QueueEvent("Observe"));
+        runtime.Tick();
+        Assert.False(session.IsRetired);
+        Assert.Equal(3d, session.Invoke("Read").Value);
+        Assert.Equal(1, session.QueuedCount);
+    }
+
+    [Fact]
+    public void DispatchRevocationStopsRepeatedRoundsBeforeAnotherCallback()
+    {
+        using var runtime = new ScriptRuntime(timestamp: () => 0);
+        runtime.Bindings.RegisterType<Revoker>();
+        using var first = runtime.CreateDevelopmentSession();
+        using var second = runtime.CreateDevelopmentSession();
+        var revoker = new Revoker(runtime.RevokeAll);
+        first.SetGlobal("revoker", revoker);
+        Assert.True(first.Load("function Observe() revoker:Revoke() end").Succeeded);
+        Assert.True(second.Load("function Observe() error('must not execute') end").Succeeded);
+        Assert.True(first.QueueEvent("Observe"));
+        Assert.True(second.QueueEvent("Observe"));
+        runtime.Tick();
+        Assert.Equal(1, revoker.Calls);
+        Assert.True(first.IsRetired);
+        Assert.True(second.IsRetired);
+        Assert.Equal(0, first.QueuedCount);
+        Assert.Equal(0, second.QueuedCount);
     }
 
     [Fact]
@@ -231,6 +308,14 @@ public sealed class ScriptSessionTests
         public int Count { get; private set; }
         [ScriptVisible("add")]
         public void Add(int value) => Count += value;
+    }
+
+    [ScriptType]
+    private sealed class Revoker(Action revoke)
+    {
+        public int Calls { get; private set; }
+        [ScriptVisible]
+        public void Revoke() { Calls++; revoke(); }
     }
 
     private sealed class Cleanup(Action action) : IDisposable

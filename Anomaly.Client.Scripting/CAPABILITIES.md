@@ -10,6 +10,13 @@ rooms, detached positions, observable health/shield/stamina, firearm observation
 spectating and round state. The annotations and generated JSON/LuaLS/baseline files are
 the contract; public C# members are **not** automatically callable Lua capabilities.
 
+`Output:Log(text)`, `Output:ShowText(text, durationSeconds)` and
+`Output:ClearText()` provide bounded diagnostics and session-owned plain screen
+text. There are no returned Unity handles, rich text, buttons, input capture or
+shared native hint-stack mutations. Each owner has an independent expiring label;
+retirement clears it without affecting siblings. See [limits and a runnable local
+starter](README.md#first-useful-local-script).
+
 Event values are frozen notifications. `IsAllowed` is the value at publication,
 **not** a writable cancellation control. Snapshot objects cannot be passed back as
 live host arguments; resolve a current object by ID for subsequent local queries.
@@ -23,11 +30,13 @@ and shutdown invalidate queued work and dispose host resources without Lua clean
 The disconnected event is registered for inventory completeness, not guaranteed as
 an unload callback. Do not delay revocation just to deliver one.
 
-**No direct game mutation binding is enabled by this change.** Pack-bound
-`Messages.Send` can request a server-approved action, but the declared message schema
-is not authorization: the LabAPI plugin must validate sender, state, arguments and
-rate before performing it. Remote execution remains disabled pending containment
-qualification; local verified-host/development paths retain their existing gates.
+**No gameplay or arbitrary game-object mutation is exposed.** Owned text is a
+local presentation capability. Pack-bound `Messages.Send` can request a
+server-approved action, but the declared schema is not authorization: the LabAPI
+plugin must validate sender, state, arguments and rate before performing it.
+Remote execution remains disabled pending containment qualification; local
+verified-host/development paths retain their existing gates. Local hosted sources
+use activation zero and cannot exchange pack messages with a remote server.
 
 ## Existing implementation and recommended bindings
 
@@ -40,7 +49,7 @@ qualification; local verified-host/development paths retain their existing gates
 | Stock CASSIE audio replacement | `Client/Assets/PathOverrideRegistry.cs` and `Patches/Audio/CassieLineSourceSchedulePatch.cs` replace supported `game/cassie/...` entries while checking stock clip timing. | Use existing catalog replacements. A script audio facade can later play an admitted address with bounded volume/duration/concurrency; it must not rewrite arbitrary stock timing. General pooled-audio replacement is not already provided by the CASSIE hook. |
 | Extra decorative visuals | `Client/Assets/DecorativeVisualClient.cs` constructs only validated Transform/MeshFilter/MeshRenderer hierarchies with scene/triangle bounds, managed by server snapshot/update messages. | Continue through server-authoritative decorative messages, or design a separate capped, disposable local cosmetic handle. Not arbitrary downloaded prefabs/components. |
 | Prevent local interactions | `Patches/Runtime/InteractionCoordinatorPatch.cs` raises Interacting synchronously before raycast/local action/RPC; other hooks cover shooting, throwing, dropping, item switching, sprint/jump/noclip, inventory UI, camera switching, HUD/audio effects and voice. | Add host-evaluated declarative rules/leases set **before** input, e.g. block interaction or item switching while a script-owned modal is active. C# checks the current rules synchronously in the existing hooks. Queued event callbacks cannot veto the input that produced them. |
-| Hints, broadcasts and simple screen effects | `Api/Features/LocalHint.cs`, `LocalBroadcast.cs`, `ScreenEffects.cs`, `Hud.cs`, `Subtitles.cs`. | Bounded text/duration/colour methods with per-session quotas and ownership. Existing shared hint/broadcast/overlay helpers need arbitration: retiring one script must not clear another owner's display. Prevent recursive hint/event loops. |
+| Hints, broadcasts and simple screen effects | `Output:ShowText` now supplies bounded, owned plain screen text independently of the shared game hint stack. Managed `LocalHint`, `LocalBroadcast`, `ScreenEffects`, `Hud`, `Subtitles` remain separate. | Use owned text now. Rich/native hints, broadcasts, colour and effects still need their own arbitration, budgets and cleanup. |
 | New GUI elements | `Api/UI/UiCanvas.cs` supplies ordered layers; `UiAnchor`, `SafeArea` and `UiParameterBinder` provide layout helpers. | A trusted factory for text/image/panel/button handles, not GameObject/RectTransform access. Limit nodes, text, texture pixels, geometry, draw/raycast/focus cost and update rate. Queue bounded click notifications. Use approved sprites, escape/limit rich text, scope input capture to a modal lease, and destroy all owned nodes on retirement. |
 
 The emotion export establishes signatures only: several method bodies are failed
@@ -64,10 +73,11 @@ promise of replication to other players or server acceptance.
   on a Lua callback to restore state. Handle partial application and cleanup failures.
 - Bound CLR/native work and reserve resources before allocation. VM instruction,
   wall-time and memory budgets do not interrupt Unity calls or account every native
-  allocation. High-rate events (audio, voice, stats) still consume the shared 32
-  subscriptions / 64 queued deliveries and can retire an overloaded script.
+  allocation. Stats, voice and auxiliary-power observations coalesce the latest
+  pending sample per subscription, not per entity. Discrete events/messages still
+  consume the bounded reliable queue and can retire an overloaded script.
 
-Recommended implementation order: owned text/image UI and simple hints; declarative
-interaction/modal leases; local emotion presets; admitted resource/cosmetic leases;
-then explicitly reviewed animation/pose actions. Keep each capability additive and
-test revocation, partial failures and conflicting owners before exposing it to Lua.
+Next capabilities: owned images and richer UI; declarative interaction/modal
+leases; local emotion presets; admitted resource/cosmetic leases; then explicitly
+reviewed animation/pose actions. Keep each capability additive and test revocation,
+partial failures and conflicting owners before exposing it to Lua.

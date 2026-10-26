@@ -6,18 +6,31 @@ namespace Anomaly.Client.Scripting.Events;
 internal sealed class ScriptEventInvocation : IQueuedScriptInvocation
 {
     private readonly ScriptEventRegistration _registration;
-    private readonly object?[] _arguments;
-    private readonly object? _allocationOwner;
+    private object?[] _arguments;
+    private object? _allocationOwner;
     internal ScriptEventInvocation(ScriptEventRegistration registration, object?[] arguments, object? allocationOwner = null)
     {
         _registration = registration;
-        _arguments = (object?[])arguments.Clone();
+        _arguments = arguments;
         _allocationOwner = allocationOwner;
     }
     public bool IsActive => _registration.IsActive;
     public DynValue Callback => _registration.Callback;
     internal string Name => _registration.Source.QualifiedName;
     internal object?[] Arguments => (object?[])_arguments.Clone();
+
+    internal void Replace(object?[] arguments, object? allocationOwner)
+    {
+        _arguments = arguments;
+        _allocationOwner = allocationOwner;
+    }
+
+    internal void ReleaseSnapshot() => Replace(Array.Empty<object?>(), null);
+
+    internal void BeginDispatch()
+    {
+        if (ReferenceEquals(_registration.Pending, this)) _registration.Pending = null;
+    }
 
     public DynValue[] ResolveArguments(Script script)
     {
@@ -45,7 +58,14 @@ internal sealed class ScriptEventRegistration
     internal ScriptEventSource Source { get; }
     internal string Token { get; }
     internal DynValue Callback { get; private set; }
+    internal ScriptEventInvocation? Pending { get; set; }
     internal bool IsActive => Volatile.Read(ref _active) != 0 && !Owner.IsUnavailable;
     internal void Activate() => Volatile.Write(ref _active, 1);
-    internal void Deactivate() { Volatile.Write(ref _active, 0); Callback = DynValue.Nil; }
+    internal void Deactivate()
+    {
+        Volatile.Write(ref _active, 0);
+        Callback = DynValue.Nil;
+        Pending?.ReleaseSnapshot();
+        Pending = null;
+    }
 }

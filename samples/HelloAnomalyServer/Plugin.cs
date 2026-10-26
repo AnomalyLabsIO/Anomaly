@@ -92,7 +92,7 @@ public sealed class Plugin : Plugin<Config>
             return;
         }
         if (ev.Message is not HelloRequest request) return;
-        // Ordinary authenticated messaging works even when content was declined.
+        // Ordinary messages still require an admitted authenticated connection.
         bool activated = CustomItems.GetPlayerReadiness(ev.Player) == ContentReadiness.Activated;
         if (!ClientMessaging.TrySend(ev.Player, new HelloReply { Token = request.Token, ContentActivated = activated }))
             Logger.Warn("Hello reply could not be delivered; the player may have disconnected.");
@@ -100,8 +100,9 @@ public sealed class Plugin : Plugin<Config>
 
     private void OnContentReady(ClientEventArgs ev)
     {
-        if (Config.EnableClientScripts)
-            ClientMessaging.TrySend(ev.Player, ScriptToClientMessage.Create("example:panel", "GetState", new StateQuery { RequestId = 1 }));
+        if (Config.EnableClientScripts &&
+            !ClientMessaging.TrySend(ev.Player, ScriptToClientMessage.Create("example:panel", "GetState", new StateQuery { RequestId = 1 })))
+            Logger.Warn("Script state request was not admitted; check the approved pack and current activation.");
         if (Config.GiveOnContentReady && CustomItems.TryGiveItem(ev.Player, ItemKey, out var item))
             Logger.Info($"Granted {ItemKey}, serial {item.Serial}, to {ev.Player.Nickname}.");
     }

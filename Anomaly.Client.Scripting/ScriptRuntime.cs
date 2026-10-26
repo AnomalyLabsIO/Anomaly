@@ -2,6 +2,7 @@ using Anomaly.Client.Scripting.Bindings;
 using Anomaly.Client.Scripting.Catalog;
 using Anomaly.Client.Scripting.Events;
 using Anomaly.Client.Scripting.Messaging;
+using Anomaly.Client.Scripting.Output;
 using System.Diagnostics;
 
 namespace Anomaly.Client.Scripting;
@@ -12,13 +13,16 @@ internal sealed class ScriptRuntime : IDisposable
     private readonly List<ScriptSession> _sessions;
     private readonly Action<string>? _diagnostic;
     private readonly MoonSharp.Interpreter.MemoryBudget _memory;
+    private readonly ScriptOutputHost _outputHost;
     private readonly int _ownerThread = Environment.CurrentManagedThreadId;
+    private readonly Func<long>? _timestamp;
     private bool _disposed;
     private bool _revoking;
     private int _nextSession;
     private ScriptEventCatalog? _eventCatalog;
 
-    internal ScriptRuntime(Action<string>? diagnostic = null, long allocationLimitBytes = 64L * 1024 * 1024)
+    internal ScriptRuntime(Action<string>? diagnostic = null, long allocationLimitBytes = 64L * 1024 * 1024,
+        Func<long>? timestamp = null, IScriptTextSink? textSink = null, Action<string>? outputLog = null)
     {
         if (allocationLimitBytes < 64 * 1024 || allocationLimitBytes > 256L * 1024 * 1024)
             throw new ArgumentOutOfRangeException(nameof(allocationLimitBytes));
@@ -29,6 +33,10 @@ internal sealed class ScriptRuntime : IDisposable
         // catalog must see the private engine before any approved execution.
         _ = typeof(MoonSharp.Interpreter.Script).Assembly;
         _diagnostic = diagnostic;
+        _timestamp = timestamp;
+        _outputHost = MoonSharp.Interpreter.MemoryBudget.Allocate(256,
+            () => new ScriptOutputHost(outputLog ?? diagnostic, textSink));
+        Bindings.RegisterType<ScriptOutput>();
     }
 
     internal ScriptBindingRegistry Bindings { get; } = new();
@@ -86,7 +94,7 @@ internal sealed class ScriptRuntime : IDisposable
         using var memoryScope = _memory.EnterScope();
         source.Validate();
         var session = CreateSession(options ?? new ScriptExecutionOptions
-        { InstructionLimit = 200_000, Timeout = TimeSpan.FromMilliseconds(100) });
+        { InstructionLimit = 200_000, Timeout = TimeSpan.FromMilliseconds(100) }, source);
         try
         {
             if (messageContext != null) session.InstallMessages(messageContext);
@@ -103,7 +111,7 @@ internal sealed class ScriptRuntime : IDisposable
         }
     }
 
-    private ScriptSession CreateSession(ScriptExecutionOptions? options)
+    private ScriptSession CreateSession(ScriptExecutionOptions? options, ScriptSource? source = null)
     {
         EnsureOwner();
         if (_disposed) throw new ObjectDisposedException(nameof(ScriptRuntime));
@@ -117,8 +125,18 @@ internal sealed class ScriptRuntime : IDisposable
         using var memoryScope = _memory.EnterScope();
         var session = MoonSharp.Interpreter.MemoryBudget.Allocate(512,
             () => new ScriptSession(Bindings, options ?? new ScriptExecutionOptions(), _diagnostic, _eventCatalog, _memory));
-        _sessions.Add(session);
-        return session;
+        try
+        {
+            if (source != null) session.SetSourceIdentity(source);
+            session.InstallOutput(_outputHost);
+            _sessions.Add(session);
+            return session;
+        }
+        catch
+        {
+            session.Dispose();
+            throw;
+        }
     }
 
     internal ScriptSession CreateRemoteSession(string? source, ScriptExecutionOptions? options = null)
@@ -159,23 +177,31 @@ internal sealed class ScriptRuntime : IDisposable
     {
         EnsureOwner();
         if (_disposed) return;
-        var started = Stopwatch.GetTimestamp();
+        _outputHost.Tick();
+        var started = Timestamp();
         _memory.Sweep();
-        var frameBudget = TimeSpan.FromMilliseconds(2);
+        var schedulingTicks = Math.Max(1, Stopwatch.Frequency / 500); // 2 ms: admission, not a callback deadline.
         var dispatched = 0;
-        for (var visited = 0; visited < _sessions.Count; visited++)
+        var idleVisits = 0;
+        while (_sessions.Count != 0 && dispatched < 4 && idleVisits < _sessions.Count)
         {
             // A required script's failure invalidates the whole connection set;
             // never enter another VM after that failure within this same tick.
             if (mayDispatch != null && !mayDispatch()) break;
-            var remaining = frameBudget - TimeSpan.FromSeconds((Stopwatch.GetTimestamp() - started) / (double)Stopwatch.Frequency);
-            if (remaining <= TimeSpan.Zero || dispatched == 4) break;
+            if (_sessions.Count == 0 || Timestamp() - started >= schedulingTicks) break;
             _nextSession %= _sessions.Count;
             var session = _sessions[_nextSession++];
-            if (session.DispatchQueuedEvent(remaining)) dispatched++;
+            if (session.DispatchQueuedEvent(ScriptSession.CallbackWallLimit))
+            {
+                dispatched++;
+                idleVisits = 0;
+            }
+            else idleVisits++;
         }
         _sessions.RemoveAll(session => session.IsRetired);
     }
+
+    private long Timestamp() => _timestamp?.Invoke() ?? Stopwatch.GetTimestamp();
 
     public void Dispose()
     {
@@ -185,8 +211,12 @@ internal sealed class ScriptRuntime : IDisposable
         try { RevokeAll(); }
         finally
         {
-            _eventCatalog?.Dispose();
-            _eventCatalog = null;
+            try { _eventCatalog?.Dispose(); }
+            finally
+            {
+                _eventCatalog = null;
+                _outputHost.Dispose();
+            }
         }
     }
 

@@ -10,7 +10,7 @@ public static class Scp079Events
     /// Fires for the first known or changed power value while the SCP-079 is
     /// locally controlled or spectated. This is not a per-frame prediction event.
     /// </summary>
-    [ScriptEvent]
+    [ScriptEvent(CoalesceLatest = true)]
     public static event AnomalyEventHandler<Scp079AuxiliaryPowerChangedEventArgs> AuxiliaryPowerChanged;
 
     /// <summary>Fires for the first known or changed total experience for a role life.</summary>

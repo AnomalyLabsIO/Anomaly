@@ -217,6 +217,29 @@ logged-in Remote Admin panel, and a successful command reply. It never enters
 `local-host-console.json`, `local-host-menu.json`, the screenshots, assertions,
 and result alongside the player/loader logs.
 
+### Client scripting and owned text
+
+Add `-ClientScripting` to a local-host run through the authorized ModLaunch install:
+
+```powershell
+./tools/EarlyAccessUiSmoke/Run-Smoke.ps1 `
+    -GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy' `
+    -EvidenceDirectory ./artifacts/scripting-readiness/local-output-run `
+    -UseModLaunch -LocalHosting -ClientScripting
+```
+
+The local script source tree must be empty; unrelated owner scripts are never
+replaced. The reversible backup includes the staged sample Lua/descriptor and
+two ownership fixtures. The production host reads these through its normal local
+pack validator. The harness checks sample output, real player/position queries,
+120 frames of two queued native-query callbacks per frame, independent literal
+text/raycast settings, owner-specific clear/expiry, and disconnect/rehost cleanup.
+Inspect `scripting-state-*.json`, `scripting-memory-*.json`, assertions, screenshots
+and the completion receipt. Memory values are charged estimates, not native/CLR heap
+measurements. This scenario neither enables remote execution nor qualifies hostile
+memory containment. Restore the backup after the launcher and game have exited.
+
+
 Add `-DummyVisibility` to the `-LocalHosting` invocation for the focused dummy
 reproduction. The harness uses stock text Remote Admin to force-start the round,
 lock the round, set the host to FacilityGuard, spawn a named dummy, set the dummy

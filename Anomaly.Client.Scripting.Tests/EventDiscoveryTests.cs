@@ -15,8 +15,10 @@ public sealed class EventDiscoveryTests
     {
         var bindings = new ScriptBindingRegistry();
         using var catalog = Discover(bindings);
-        Assert.Equal(new[] { "Changed", "Empty" }, catalog.GetCatalog().Select(value => value.Name));
+        Assert.Equal(new[] { "Changed", "Empty", "Observed" }, catalog.GetCatalog().Select(value => value.Name));
         Assert.All(catalog.GetCatalog(), entry => Assert.Equal("Signals", entry.Category));
+        Assert.True(catalog.GetCatalog().Single(entry => entry.Name == "Observed").CoalesceLatest);
+        Assert.False(catalog.GetCatalog().Single(entry => entry.Name == "Changed").CoalesceLatest);
         Assert.Contains("type Payload", bindings.DescribeSurface());
         using var wrongAssembly = ScriptEventCatalog.Discover(new ScriptBindingRegistry(), typeof(object).Assembly, ValidNamespace);
         Assert.Empty(wrongAssembly.GetCatalog());

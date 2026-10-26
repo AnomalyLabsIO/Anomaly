@@ -25,6 +25,44 @@ using the existing authenticated transport and server plugin
 and execution limits; outbound transport requires current content admission and
 player readiness. See [MESSAGING-DESIGN.md](MESSAGING-DESIGN.md) for schemas and Lua.
 
+## First useful local script
+
+Remote execution remains unavailable; the verified nondedicated in-process host
+is the supported local execution path. Copy `start.lua` and `messages.json` from
+[`samples/HelloAnomalyServer/ClientScripts`](../samples/HelloAnomalyServer/ClientScripts)
+to `<UserData>/Anomaly/ClientScripts/example/panel/`, then start a local host.
+The sample logs initialization and shows local state on future Ready/player-added
+notifications. It does not run in menus or while joining a remote server.
+Each source has its own VM; files do not share globals or import one another.
+Changes take effect on the next connection, not by hot reload.
+
+Every runtime-created session receives a host-owned `Output` capability:
+
+```lua
+Output:Log("Initialized") -- One bounded line with a host-controlled source prefix.
+Events.Client.Ready.Add(function()
+    local shown = Output:ShowText("Hello from Lua", 5)
+    -- false means invalid/rate-limited input, exhausted display slots, or UI not ready.
+end)
+-- Output:ClearText() clears only this session's text.
+```
+
+Text is literal, not rich text; no UI/native object or input capture is exposed.
+Both calls return `false` for ordinary rejection. `ClearText` returns no value.
+Logs and displays accept at most 1024 UTF-8 bytes; displays allow eight lines and
+finite durations from 0.1 through 10 seconds. Logs reject newlines. Control/format
+characters and malformed UTF-16 are rejected. Independent fixed one-second windows
+allow four logs/two display updates per session and sixteen logs/eight display
+updates across a runtime. At most eight owners display text simultaneously.
+Expiry, clear, session retirement and runtime shutdown release only the owner's
+label; no Lua unload callback is needed. A display reservation is a conservative
+workspace allowance, not measured native memory containment.
+
+Use [`Anomaly.Client.Api.d.lua`](Anomaly.Client.Api.d.lua) as a LuaLS
+`workspace.library` entry, not as an executable script. The SDK includes this
+guide, pack/message guides, exports and the sample's actual embedded resources.
+
+
 ## Opt-in object bindings
 
 Annotations belong to `Anomaly.Client.Api.Scripting` so API types can declare their
@@ -198,10 +236,13 @@ shared across sessions; the last removal detaches it. Removing a closure removes
 its registrations for that event/session; removing a token removes one. A removed
 registration's queued deliveries remain invalid even if the same closure is added again.
 The CLR event handler captures bounded read-only data and enqueues callbacks. It never
-calls Lua. `Tick` dispatches queued handlers through the
-same budgeted invocation path, with a shared two-millisecond wall budget per tick,
-at most four deliveries, and round-robin session selection. These are checkpoint
-limits, not a hard real-time preemption guarantee. Lua can define:
+calls Lua. `Tick` admits work for two milliseconds, starting at most four deliveries
+in repeated fair rounds; an active session can use otherwise idle capacity.
+Each admitted callback has its own terminal wall allowance of at most ten milliseconds
+(or a smaller configured timeout), not the frame's dwindling remainder. No new
+callback starts after the scheduling window closes. Managed/native work and GC
+cannot be hard-preempted, so this is not a hard two-millisecond frame ceiling.
+Lua can define:
 
 ```lua
 local function OnReady(args)
@@ -215,6 +256,16 @@ local token = Events.Client.Ready.Add(OnReady)
 Events are not replayed: initialization precedes Ready, but an earlier Connected,
 CanvasReady or download event is not delivered retroactively. Disconnect and offer
 replacement revoke queued work; do not rely on a Lua disconnect/unload callback.
+
+Events marked `[ScriptEvent(CoalesceLatest = true)]` keep only the latest pending
+snapshot for each registration generation. Continuous stats, voice and SCP-079
+auxiliary-power observations use this policy. Coalescing is **per subscription,
+not per player/stat/entity**: intervening samples, deltas and transition flags can
+be skipped. Treat these as change notifications and re-query current state when
+tracking several entities. Removal still invalidates pending work. Discrete events
+and pack Messages remain ordered and do not coalesce; genuine reliable queue/byte
+overflow still retires the session. Delivery policy is exported in JSON, the
+reviewed baseline and LuaLS definitions.
 
 Event data is copied before the publisher can mutate or reuse it. Snapshots allow
 only approved read-only properties, exact runtime types, depth 8, 64 nodes, 4 KiB per
@@ -233,6 +284,9 @@ Disconnect, scene reset and shutdown revoke sessions before stale game reference
 can be reused. Tracked subscriptions/resources are disposed in reverse order without
 calling script cleanup hooks; one ordinary resource or diagnostic observer failure cannot
 prevent the remaining cleanup. Runtime/session access is owner-thread-only.
+Runtime warnings include bounded source/event/reason context. Diagnostics have a
+prepaid, four-message per-session limit so exhaustion cannot cause unbounded logging.
+Use `Output:Log` for ordinary author diagnostics; it has a separate rate budget.
 
 ## CPU limits and restricted libraries
 

@@ -4509,11 +4509,11 @@ local _type_AssetOverrideAppliedEventArgs = {}
 ---@field NetId integer # Read-only.
 local _type_AssetOverrideClearedEventArgs = {}
 
---- Fires when AudioSourcePoolManager is about to play a sound on this client. Cancelling silences the playback locally; nothing about the server or other clients changes. Subscribers should filter by identity early to avoid per-frame overhead — this fires for footsteps, gunshot tails, ambient SFX, etc.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class AudioPlayingEventArgs
 ---@field Channel string # Read-only. Which mixer channel the sound was going to play on (DefaultSfx, Voice, etc.).
 ---@field ClipName string|nil # Read-only. The local clip name, or an empty string when no clip is available.
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Volume number # Read-only. Volume scalar in [0, 1].
 local _type_AudioPlayingEventArgs = {}
 
@@ -4553,11 +4553,11 @@ local _type_BodyArmorPickup = {}
 ---@field Name string|nil # Read-only.
 local _type_BreakableDoor = {}
 
---- Fires when a server-sent broadcast is about to be rendered on the local HUD. Cancelling suppresses the local render; the server's view is unaffected.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class BroadcastShowingEventArgs
 ---@field DurationSeconds integer # Read-only. How long the broadcast was intended to display, in seconds.
 ---@field Flags integer # Read-only. Raw Broadcast.BroadcastFlags byte (Truncated, AdminChat, etc.).
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Text string|nil # Read-only. The broadcast text the server sent.
 local _type_BroadcastShowingEventArgs = {}
 
@@ -4569,9 +4569,9 @@ local _type_BroadcastShowingEventArgs = {}
 ---@field MovementSmoothing integer # Read-only.
 local _type_CameraAdminToy = {}
 
---- Fires when a camera shake effect is about to be applied to the local view (CameraShakeController.AddEffect). Cancelling drops the effect on the floor; nothing about the server or other clients changes.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class CameraShakingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 local _type_CameraShakingEventArgs = {}
 
 ---@class CanvasReadyEventArgs
@@ -4632,9 +4632,9 @@ local _type_ConsumableItem = {}
 ---@field PreviousType string # Read-only. The item type held before the observed change.
 local _type_CurrentItemChangedEventArgs = {}
 
---- Fires when the local player initiates a held-item switch via Inventory.ClientSelectItem (mouse wheel / number keys), before the CmdSelectItem RPC is sent. Cancelling keeps the current held item; the server never sees the switch request. Note: server-forced switches (e.g., death holster) arrive via the NetworkCurItem SyncVar hook and fire CurrentItemChanged (post-action) instead — they do not pass through this path.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class CurrentItemChangingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Player Player|nil # Read-only.
 ---@field PreviousSerial integer # Read-only. The serial held before this local switch request.
 ---@field TargetSerial integer # Read-only. Serial of the item being switched to (0 for holster/no item).
@@ -4900,10 +4900,10 @@ local _type_Hazard = {}
 ---@field Hazard Hazard|nil # Read-only.
 local _type_HazardEventArgs = {}
 
---- Fires when a server-sent hint is about to be displayed on the local HUD. Cancelling suppresses the hint render; the server's view is unaffected.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class HintDisplayingEventArgs
 ---@field DurationSeconds number # Read-only. Display duration in seconds (0 if not provided by the hint).
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Text string|nil # Read-only. The raw hint text. May contain rich-text tags and translation tokens.
 local _type_HintDisplayingEventArgs = {}
 
@@ -4919,14 +4919,14 @@ local _type_InteractableAdminToy = {}
 ---@field Player Player|nil # Read-only.
 local _type_InventoryChangedEventArgs = {}
 
---- Fires when the local inventory panel is about to be hidden (InventoryGuiController.IsEnabled transitioning true → false). Cancelling keeps the panel visible; no network state is touched.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class InventoryUiClosingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 local _type_InventoryUiClosingEventArgs = {}
 
---- Fires when the local inventory panel is about to become visible (InventoryGuiController.IsEnabled transitioning false → true). Cancelling keeps the panel hidden; no network state is touched.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class InventoryUiOpeningEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 local _type_InventoryUiOpeningEventArgs = {}
 
 ---@class Item
@@ -5080,9 +5080,9 @@ local _type_Player = {}
 ---@field Player Player|nil # Read-only.
 local _type_PlayerAddedEventArgs = {}
 
---- Fires when the local player initiates a drop via Inventory.ClientDropItem, before the CmdDropItem RPC is sent. Cancelling keeps the item in the local inventory; the server never sees the drop request.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class PlayerDroppingItemEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Item Item|nil # Read-only. The item when it can be resolved from the client cache.
 ---@field ItemSerial integer # Read-only. Serial of the item the player is attempting to drop.
 ---@field Player Player|nil # Read-only.
@@ -5132,22 +5132,22 @@ local _type_PlayerHumeShieldChangedEventArgs = {}
 ---@field Workstation Workstation|nil # Read-only.
 local _type_PlayerInteractedEventArgs = {}
 
---- Fires when the local player presses the interact key, before the raycast and CmdServerInteract RPC run. Cancelling skips both the local IClientInteractable.ClientInteract callback and the server command.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class PlayerInteractingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Player Player|nil # Read-only.
 local _type_PlayerInteractingEventArgs = {}
 
---- Fires when the local player's FpcJumpController.ProcessJump is about to apply a jump. Cancelling suppresses the jump motor application; the server observes a continuous ground state instead of a jump.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class PlayerJumpingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field JumpSpeed number # Read-only. The jump speed the engine was about to apply (pre-multiplier).
 ---@field Player Player|nil # Read-only.
 local _type_PlayerJumpingEventArgs = {}
 
---- Fires when the local player presses the noclip toggle key, before the FpcNoclipToggleMessage is sent to the server. Server permission gating still applies; this event lets local mods (e.g., admin tooling) suppress the toggle attempt entirely.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class PlayerNoclipTogglingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Player Player|nil # Read-only.
 local _type_PlayerNoclipTogglingEventArgs = {}
 
@@ -5161,15 +5161,15 @@ local _type_PlayerRemovedEventArgs = {}
 ---@field PreviousRole Role|nil # Read-only.
 local _type_PlayerRoleChangedEventArgs = {}
 
---- Fires on the rising edge of the local player's trigger press, immediately before SimpleTriggerModule would send the trigger-held command to the server. Cancelling suppresses the local fire and the wire message.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class PlayerShootingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Player Player|nil # Read-only.
 local _type_PlayerShootingEventArgs = {}
 
---- Fires when the local player transitions into the sprinting movement state. Cancelling keeps the movement state at walking; the server only observes movement state changes, so suppressing this is desync-safe.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class PlayerSprintingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Player Player|nil # Read-only.
 local _type_PlayerSprintingEventArgs = {}
 
@@ -5200,9 +5200,9 @@ local _type_PlayerStat = {}
 ---@field ValueChanged boolean # Read-only.
 local _type_PlayerStatChangedEventArgs = {}
 
---- Fires when the local player initiates a throw (primary or secondary fire on a held throwable) before the BeginThrow network message is sent. Cancelling stops the throw stopwatch from starting and skips the request.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class PlayerThrowingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Item ThrowableItem|nil # Read-only.
 ---@field Player Player|nil # Read-only.
 local _type_PlayerThrowingEventArgs = {}
@@ -5333,9 +5333,9 @@ local _type_Scp079AuxiliaryPowerChangedEventArgs = {}
 ---@field Previous integer|nil # Read-only. The previous received value, or null before the first update for this role life.
 local _type_Scp079ExperienceChangedEventArgs = {}
 
---- Fires when the local SCP-079 player is about to send a camera-switch command, before Scp079CurrentCameraSync.ClientSendCmd runs. Cancelling keeps the SCP-079 on the current camera locally; the server never receives the switch request.
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class Scp079SwitchingCameraEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Player Player|nil # Read-only.
 ---@field TargetCamera FacilityCamera|nil # Read-only. The camera the local SCP-079 is switching to.
 local _type_Scp079SwitchingCameraEventArgs = {}
@@ -5433,6 +5433,17 @@ local _type_Scp330Item = {}
 ---@field Type string # Read-only.
 ---@field Weight number # Read-only.
 local _type_Scp330Pickup = {}
+
+---@class ScriptOutput
+local _type_ScriptOutput = {}
+function _type_ScriptOutput:ClearText() end
+---@param text string|nil
+---@return boolean
+function _type_ScriptOutput:Log(text) end
+---@param text string|nil
+---@param durationSeconds number
+---@return boolean
+function _type_ScriptOutput:ShowText(text, durationSeconds) end
 
 ---@class ShootingTargetAdminToy
 ---@field CommandName string|nil # Read-only.
@@ -5576,13 +5587,15 @@ local _type_VoiceMessagePacket = {}
 ---@field Packet VoiceMessagePacket|nil # Read-only.
 local _type_VoiceMessageReceivedEventArgs = {}
 
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class VoiceMessageReceivingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Packet VoiceMessagePacket|nil # Read-only.
 local _type_VoiceMessageReceivingEventArgs = {}
 
+--- Frozen queued event observation. IsAllowed reports permission at capture time; Lua cannot cancel or modify the originating operation.
 ---@class VoiceMessageSendingEventArgs
----@field IsAllowed boolean # Read-only.
+---@field IsAllowed boolean # Read-only. Observed permission at capture time, not a cancellation control.
 ---@field Packet VoiceMessagePacket|nil # Read-only.
 local _type_VoiceMessageSendingEventArgs = {}
 
@@ -5617,9 +5630,14 @@ local _type_Workstation = {}
 ---@type GameContext
 Game = nil -- Host-installed read-only local queries; no constructor is exposed.
 
--- Host-installed subscription registry; callbacks receive frozen event data.
+---@type ScriptOutput
+Output = nil -- Host-owned bounded logging and plain text; automatically revoked with this session.
+
+-- Host-installed queued subscription registry. Frozen observations cannot cancel or modify the original operation.
 Events = {}
 Events.AdminToy = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.AdminToy.Added = {}
 ---@param callback fun(ev: AdminToyAddedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5627,6 +5645,8 @@ function Events.AdminToy.Added.Add(callback) end
 ---@param callbackOrToken fun(ev: AdminToyAddedEventArgs|nil)|string
 ---@return boolean removed
 function Events.AdminToy.Added.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.AdminToy.Removed = {}
 ---@param callback fun(ev: AdminToyRemovedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5635,6 +5655,8 @@ function Events.AdminToy.Removed.Add(callback) end
 ---@return boolean removed
 function Events.AdminToy.Removed.Remove(callbackOrToken) end
 Events.Announcer = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Announcer.LineScheduled = {}
 ---@param callback fun(ev: AnnouncerLineScheduledEventArgs|nil)
 ---@return string subscriptionToken
@@ -5642,6 +5664,8 @@ function Events.Announcer.LineScheduled.Add(callback) end
 ---@param callbackOrToken fun(ev: AnnouncerLineScheduledEventArgs|nil)|string
 ---@return boolean removed
 function Events.Announcer.LineScheduled.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Announcer.LineStarted = {}
 ---@param callback fun(ev: AnnouncerLineStartedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5650,6 +5674,8 @@ function Events.Announcer.LineStarted.Add(callback) end
 ---@return boolean removed
 function Events.Announcer.LineStarted.Remove(callbackOrToken) end
 Events.Asset = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Asset.OverrideApplied = {}
 ---@param callback fun(ev: AssetOverrideAppliedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5657,6 +5683,8 @@ function Events.Asset.OverrideApplied.Add(callback) end
 ---@param callbackOrToken fun(ev: AssetOverrideAppliedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Asset.OverrideApplied.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Asset.OverrideCleared = {}
 ---@param callback fun(ev: AssetOverrideClearedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5665,7 +5693,8 @@ function Events.Asset.OverrideCleared.Add(callback) end
 ---@return boolean removed
 function Events.Asset.OverrideCleared.Remove(callbackOrToken) end
 Events.Audio = {}
---- Fires before a pooled audio source plays on this client. Cancel to silence.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Audio.Playing = {}
 ---@param callback fun(ev: AudioPlayingEventArgs|nil)
 ---@return string subscriptionToken
@@ -5674,7 +5703,8 @@ function Events.Audio.Playing.Add(callback) end
 ---@return boolean removed
 function Events.Audio.Playing.Remove(callbackOrToken) end
 Events.Camera = {}
---- Fires before a shake effect is enqueued on the local camera. Cancel to skip the shake.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Camera.Shaking = {}
 ---@param callback fun(ev: CameraShakingEventArgs|nil)
 ---@return string subscriptionToken
@@ -5683,6 +5713,8 @@ function Events.Camera.Shaking.Add(callback) end
 ---@return boolean removed
 function Events.Camera.Shaking.Remove(callbackOrToken) end
 Events.Client = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Client.CanvasReady = {}
 ---@param callback fun(ev: CanvasReadyEventArgs|nil)
 ---@return string subscriptionToken
@@ -5690,6 +5722,8 @@ function Events.Client.CanvasReady.Add(callback) end
 ---@param callbackOrToken fun(ev: CanvasReadyEventArgs|nil)|string
 ---@return boolean removed
 function Events.Client.CanvasReady.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Client.Connected = {}
 ---@param callback fun(ev: ClientConnectedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5698,6 +5732,8 @@ function Events.Client.Connected.Add(callback) end
 ---@return boolean removed
 function Events.Client.Connected.Remove(callbackOrToken) end
 --- Reports a transport disconnect, including unsuccessful handshake and retry attempts that never reached . Cleanup handlers must be idempotent; do not count this as one event per completed gameplay session.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Client.Disconnected = {}
 ---@param callback fun(ev: ClientDisconnectedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5706,6 +5742,8 @@ function Events.Client.Disconnected.Add(callback) end
 ---@return boolean removed
 function Events.Client.Disconnected.Remove(callbackOrToken) end
 --- Enrollment was disclosed or cleared. This does not replace transport or scene readiness.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Client.EnrollmentChanged = {}
 ---@param callback fun(ev: EnrollmentChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5714,6 +5752,8 @@ function Events.Client.EnrollmentChanged.Add(callback) end
 ---@return boolean removed
 function Events.Client.EnrollmentChanged.Remove(callbackOrToken) end
 --- Reports the client's scene-ready lifecycle callback. This can precede the local player hub, populated world collections, and server enrollment disclosure.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Client.Ready = {}
 ---@param callback fun(ev: ClientReadyEventArgs|nil)
 ---@return string subscriptionToken
@@ -5721,6 +5761,8 @@ function Events.Client.Ready.Add(callback) end
 ---@param callbackOrToken fun(ev: ClientReadyEventArgs|nil)|string
 ---@return boolean removed
 function Events.Client.Ready.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Client.SceneLoaded = {}
 ---@param callback fun(ev: SceneLoadedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5729,6 +5771,8 @@ function Events.Client.SceneLoaded.Add(callback) end
 ---@return boolean removed
 function Events.Client.SceneLoaded.Remove(callbackOrToken) end
 Events.Door = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Door.Added = {}
 ---@param callback fun(ev: DoorEventArgs|nil)
 ---@return string subscriptionToken
@@ -5736,6 +5780,8 @@ function Events.Door.Added.Add(callback) end
 ---@param callbackOrToken fun(ev: DoorEventArgs|nil)|string
 ---@return boolean removed
 function Events.Door.Added.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Door.LocksChanged = {}
 ---@param callback fun(ev: DoorLocksChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5743,6 +5789,8 @@ function Events.Door.LocksChanged.Add(callback) end
 ---@param callbackOrToken fun(ev: DoorLocksChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Door.LocksChanged.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Door.Removed = {}
 ---@param callback fun(ev: DoorEventArgs|nil)
 ---@return string subscriptionToken
@@ -5750,6 +5798,8 @@ function Events.Door.Removed.Add(callback) end
 ---@param callbackOrToken fun(ev: DoorEventArgs|nil)|string
 ---@return boolean removed
 function Events.Door.Removed.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Door.StateChanged = {}
 ---@param callback fun(ev: DoorStateChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5758,6 +5808,8 @@ function Events.Door.StateChanged.Add(callback) end
 ---@return boolean removed
 function Events.Door.StateChanged.Remove(callbackOrToken) end
 Events.Effect = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Effect.Disabled = {}
 ---@param callback fun(ev: EffectDisabledEventArgs|nil)
 ---@return string subscriptionToken
@@ -5765,6 +5817,8 @@ function Events.Effect.Disabled.Add(callback) end
 ---@param callbackOrToken fun(ev: EffectDisabledEventArgs|nil)|string
 ---@return boolean removed
 function Events.Effect.Disabled.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Effect.Enabled = {}
 ---@param callback fun(ev: EffectEnabledEventArgs|nil)
 ---@return string subscriptionToken
@@ -5772,6 +5826,8 @@ function Events.Effect.Enabled.Add(callback) end
 ---@param callbackOrToken fun(ev: EffectEnabledEventArgs|nil)|string
 ---@return boolean removed
 function Events.Effect.Enabled.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Effect.IntensityChanged = {}
 ---@param callback fun(ev: EffectIntensityChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5781,6 +5837,8 @@ function Events.Effect.IntensityChanged.Add(callback) end
 function Events.Effect.IntensityChanged.Remove(callbackOrToken) end
 Events.Elevator = {}
 --- Fires when an elevator chamber starts a movement sequence (door close → travel → door open at destination).
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Elevator.Moved = {}
 ---@param callback fun(ev: ElevatorEventArgs|nil)
 ---@return string subscriptionToken
@@ -5789,6 +5847,8 @@ function Events.Elevator.Moved.Add(callback) end
 ---@return boolean removed
 function Events.Elevator.Moved.Remove(callbackOrToken) end
 --- Fires when an elevator chamber is removed from the scene.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Elevator.Removed = {}
 ---@param callback fun(ev: ElevatorEventArgs|nil)
 ---@return string subscriptionToken
@@ -5797,6 +5857,8 @@ function Events.Elevator.Removed.Add(callback) end
 ---@return boolean removed
 function Events.Elevator.Removed.Remove(callbackOrToken) end
 --- Fires when a new elevator chamber spawns into the scene.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Elevator.Spawned = {}
 ---@param callback fun(ev: ElevatorEventArgs|nil)
 ---@return string subscriptionToken
@@ -5806,6 +5868,8 @@ function Events.Elevator.Spawned.Add(callback) end
 function Events.Elevator.Spawned.Remove(callbackOrToken) end
 Events.FacilityCamera = {}
 --- Fires when a CCTV camera is created (typically at scene load).
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.FacilityCamera.Created = {}
 ---@param callback fun(ev: FacilityCameraEventArgs|nil)
 ---@return string subscriptionToken
@@ -5814,6 +5878,8 @@ function Events.FacilityCamera.Created.Add(callback) end
 ---@return boolean removed
 function Events.FacilityCamera.Created.Remove(callbackOrToken) end
 --- Fires when a CCTV camera is destroyed.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.FacilityCamera.Removed = {}
 ---@param callback fun(ev: FacilityCameraEventArgs|nil)
 ---@return string subscriptionToken
@@ -5821,7 +5887,8 @@ function Events.FacilityCamera.Removed.Add(callback) end
 ---@param callbackOrToken fun(ev: FacilityCameraEventArgs|nil)|string
 ---@return boolean removed
 function Events.FacilityCamera.Removed.Remove(callbackOrToken) end
---- Fires when the local SCP-079 player is about to send a camera-switch command, before Scp079CurrentCameraSync.ClientSendCmd runs. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.FacilityCamera.Scp079Switching = {}
 ---@param callback fun(ev: Scp079SwitchingCameraEventArgs|nil)
 ---@return string subscriptionToken
@@ -5830,6 +5897,8 @@ function Events.FacilityCamera.Scp079Switching.Add(callback) end
 ---@return boolean removed
 function Events.FacilityCamera.Scp079Switching.Remove(callbackOrToken) end
 --- Fires when any CCTV camera's active/inactive state changes (e.g. SCP-079 switches the active camera). Use to observe the new state.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.FacilityCamera.StateChanged = {}
 ---@param callback fun(ev: FacilityCameraEventArgs|nil)
 ---@return string subscriptionToken
@@ -5838,6 +5907,8 @@ function Events.FacilityCamera.StateChanged.Add(callback) end
 ---@return boolean removed
 function Events.FacilityCamera.StateChanged.Remove(callbackOrToken) end
 Events.FileTransfer = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.FileTransfer.Complete = {}
 ---@param callback fun(ev: FileTransferCompleteEventArgs|nil)
 ---@return string subscriptionToken
@@ -5845,6 +5916,8 @@ function Events.FileTransfer.Complete.Add(callback) end
 ---@param callbackOrToken fun(ev: FileTransferCompleteEventArgs|nil)|string
 ---@return boolean removed
 function Events.FileTransfer.Complete.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.FileTransfer.Progress = {}
 ---@param callback fun(ev: FileTransferProgressEventArgs|nil)
 ---@return string subscriptionToken
@@ -5854,6 +5927,8 @@ function Events.FileTransfer.Progress.Add(callback) end
 function Events.FileTransfer.Progress.Remove(callbackOrToken) end
 Events.Firearm = {}
 --- Local equipped ADS state changed in an observed snapshot. Remote ADS-only updates are not tracked.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Firearm.AimingChanged = {}
 ---@param callback fun(ev: FirearmStateChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5862,6 +5937,8 @@ function Events.Firearm.AimingChanged.Add(callback) end
 ---@return boolean removed
 function Events.Firearm.AimingChanged.Remove(callbackOrToken) end
 --- Magazine ammo, capacity or insertion state changed in an observed snapshot.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Firearm.AmmoChanged = {}
 ---@param callback fun(ev: FirearmStateChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5870,6 +5947,8 @@ function Events.Firearm.AmmoChanged.Add(callback) end
 ---@return boolean removed
 function Events.Firearm.AmmoChanged.Remove(callbackOrToken) end
 --- Local equipped reload/unload prediction changed in an observed snapshot.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Firearm.ReloadStateChanged = {}
 ---@param callback fun(ev: FirearmStateChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5877,7 +5956,8 @@ function Events.Firearm.ReloadStateChanged.Add(callback) end
 ---@param callbackOrToken fun(ev: FirearmStateChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Firearm.ReloadStateChanged.Remove(callbackOrToken) end
---- Fires on the rising edge of the local player's trigger press. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Firearm.Shooting = {}
 ---@param callback fun(ev: PlayerShootingEventArgs|nil)
 ---@return string subscriptionToken
@@ -5886,6 +5966,8 @@ function Events.Firearm.Shooting.Add(callback) end
 ---@return boolean removed
 function Events.Firearm.Shooting.Remove(callbackOrToken) end
 --- Fires after a shot resolves. Observer-only.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Firearm.Shot = {}
 ---@param callback fun(ev: FirearmShotEventArgs|nil)
 ---@return string subscriptionToken
@@ -5894,6 +5976,8 @@ function Events.Firearm.Shot.Add(callback) end
 ---@return boolean removed
 function Events.Firearm.Shot.Remove(callbackOrToken) end
 --- Observer snapshot after magazine sync or a local equipped-firearm update. Includes first observation; intermediate changes between local updates can be coalesced. This is not proof that the server accepted a reload or input action.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Firearm.StateChanged = {}
 ---@param callback fun(ev: FirearmStateChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5903,6 +5987,8 @@ function Events.Firearm.StateChanged.Add(callback) end
 function Events.Firearm.StateChanged.Remove(callbackOrToken) end
 Events.Generator = {}
 --- Fires once per generator the moment it transitions to Engaged.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Generator.Engaged = {}
 ---@param callback fun(ev: GeneratorEngagedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5910,6 +5996,8 @@ function Events.Generator.Engaged.Add(callback) end
 ---@param callbackOrToken fun(ev: GeneratorEngagedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Generator.Engaged.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Generator.StateChanged = {}
 ---@param callback fun(ev: GeneratorStateChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5918,6 +6006,8 @@ function Events.Generator.StateChanged.Add(callback) end
 ---@return boolean removed
 function Events.Generator.StateChanged.Remove(callbackOrToken) end
 Events.Hazard = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Hazard.Added = {}
 ---@param callback fun(ev: HazardEventArgs|nil)
 ---@return string subscriptionToken
@@ -5925,6 +6015,8 @@ function Events.Hazard.Added.Add(callback) end
 ---@param callbackOrToken fun(ev: HazardEventArgs|nil)|string
 ---@return boolean removed
 function Events.Hazard.Added.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Hazard.Removed = {}
 ---@param callback fun(ev: HazardEventArgs|nil)
 ---@return string subscriptionToken
@@ -5933,7 +6025,8 @@ function Events.Hazard.Removed.Add(callback) end
 ---@return boolean removed
 function Events.Hazard.Removed.Remove(callbackOrToken) end
 Events.Hud = {}
---- Fires before a server-sent broadcast is rendered on the local HUD. Cancel to suppress.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Hud.BroadcastShowing = {}
 ---@param callback fun(ev: BroadcastShowingEventArgs|nil)
 ---@return string subscriptionToken
@@ -5941,7 +6034,8 @@ function Events.Hud.BroadcastShowing.Add(callback) end
 ---@param callbackOrToken fun(ev: BroadcastShowingEventArgs|nil)|string
 ---@return boolean removed
 function Events.Hud.BroadcastShowing.Remove(callbackOrToken) end
---- Fires before a server-sent hint is rendered on the local HUD. Mutate text/duration or cancel to suppress.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Hud.HintDisplaying = {}
 ---@param callback fun(ev: HintDisplayingEventArgs|nil)
 ---@return string subscriptionToken
@@ -5951,6 +6045,8 @@ function Events.Hud.HintDisplaying.Add(callback) end
 function Events.Hud.HintDisplaying.Remove(callbackOrToken) end
 Events.InputRegistry = {}
 --- Fires when a binding transitions from not-pressed to pressed. Dispatched by the internal .
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.InputRegistry.Pressed = {}
 ---@param callback fun(obj: string|nil)
 ---@return string subscriptionToken
@@ -5959,6 +6055,8 @@ function Events.InputRegistry.Pressed.Add(callback) end
 ---@return boolean removed
 function Events.InputRegistry.Pressed.Remove(callbackOrToken) end
 --- Fires when a binding transitions from pressed to not-pressed.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.InputRegistry.Released = {}
 ---@param callback fun(obj: string|nil)
 ---@return string subscriptionToken
@@ -5967,6 +6065,8 @@ function Events.InputRegistry.Released.Add(callback) end
 ---@return boolean removed
 function Events.InputRegistry.Released.Remove(callbackOrToken) end
 Events.Inventory = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Inventory.CurrentItemChanged = {}
 ---@param callback fun(ev: CurrentItemChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5974,7 +6074,8 @@ function Events.Inventory.CurrentItemChanged.Add(callback) end
 ---@param callbackOrToken fun(ev: CurrentItemChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Inventory.CurrentItemChanged.Remove(callbackOrToken) end
---- Fires when the local player initiates a held-item switch via ClientSelectItem, before CmdSelectItem. Server-forced switches do not pass through this path. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Inventory.CurrentItemChanging = {}
 ---@param callback fun(ev: CurrentItemChangingEventArgs|nil)
 ---@return string subscriptionToken
@@ -5982,7 +6083,8 @@ function Events.Inventory.CurrentItemChanging.Add(callback) end
 ---@param callbackOrToken fun(ev: CurrentItemChangingEventArgs|nil)|string
 ---@return boolean removed
 function Events.Inventory.CurrentItemChanging.Remove(callbackOrToken) end
---- Fires when the local player initiates a drop via ClientDropItem, before CmdDropItem. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Inventory.DroppingItem = {}
 ---@param callback fun(ev: PlayerDroppingItemEventArgs|nil)
 ---@return string subscriptionToken
@@ -5990,6 +6092,8 @@ function Events.Inventory.DroppingItem.Add(callback) end
 ---@param callbackOrToken fun(ev: PlayerDroppingItemEventArgs|nil)|string
 ---@return boolean removed
 function Events.Inventory.DroppingItem.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Inventory.ItemsChanged = {}
 ---@param callback fun(ev: InventoryChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -5997,7 +6101,8 @@ function Events.Inventory.ItemsChanged.Add(callback) end
 ---@param callbackOrToken fun(ev: InventoryChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Inventory.ItemsChanged.Remove(callbackOrToken) end
---- Fires when the local inventory UI panel is about to be hidden. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Inventory.UiClosing = {}
 ---@param callback fun(ev: InventoryUiClosingEventArgs|nil)
 ---@return string subscriptionToken
@@ -6005,7 +6110,8 @@ function Events.Inventory.UiClosing.Add(callback) end
 ---@param callbackOrToken fun(ev: InventoryUiClosingEventArgs|nil)|string
 ---@return boolean removed
 function Events.Inventory.UiClosing.Remove(callbackOrToken) end
---- Fires when the local inventory UI panel is about to become visible. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Inventory.UiOpening = {}
 ---@param callback fun(ev: InventoryUiOpeningEventArgs|nil)
 ---@return string subscriptionToken
@@ -6014,6 +6120,8 @@ function Events.Inventory.UiOpening.Add(callback) end
 ---@return boolean removed
 function Events.Inventory.UiOpening.Remove(callbackOrToken) end
 Events.LocalPlayerMotion = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.LocalPlayerMotion.Applied = {}
 ---@param callback fun(obj: MotionDiscontinuity|nil)
 ---@return string subscriptionToken
@@ -6023,6 +6131,8 @@ function Events.LocalPlayerMotion.Applied.Add(callback) end
 function Events.LocalPlayerMotion.Applied.Remove(callbackOrToken) end
 Events.Locker = {}
 --- Fires for changed replicated chamber masks after the initial spawn snapshot.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Locker.StateChanged = {}
 ---@param callback fun(ev: LockerStateChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6031,6 +6141,8 @@ function Events.Locker.StateChanged.Add(callback) end
 ---@return boolean removed
 function Events.Locker.StateChanged.Remove(callbackOrToken) end
 Events.NetworkMessage = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.NetworkMessage.AnomalyMessageReceived = {}
 ---@param callback fun(ev: AnomalyMessageReceivedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6039,6 +6151,8 @@ function Events.NetworkMessage.AnomalyMessageReceived.Add(callback) end
 ---@return boolean removed
 function Events.NetworkMessage.AnomalyMessageReceived.Remove(callbackOrToken) end
 Events.Pickup = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Pickup.Added = {}
 ---@param callback fun(ev: PickupAddedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6046,6 +6160,8 @@ function Events.Pickup.Added.Add(callback) end
 ---@param callbackOrToken fun(ev: PickupAddedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Pickup.Added.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Pickup.Removed = {}
 ---@param callback fun(ev: PickupRemovedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6054,6 +6170,8 @@ function Events.Pickup.Removed.Add(callback) end
 ---@return boolean removed
 function Events.Pickup.Removed.Remove(callbackOrToken) end
 Events.Player = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Player.Added = {}
 ---@param callback fun(ev: PlayerAddedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6062,6 +6180,8 @@ function Events.Player.Added.Add(callback) end
 ---@return boolean removed
 function Events.Player.Added.Remove(callbackOrToken) end
 --- A resolved local interaction; carries typed targets but does not imply server acceptance.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Player.Interacted = {}
 ---@param callback fun(ev: PlayerInteractedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6069,7 +6189,8 @@ function Events.Player.Interacted.Add(callback) end
 ---@param callbackOrToken fun(ev: PlayerInteractedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Player.Interacted.Remove(callbackOrToken) end
---- Fires when the local player presses the interact key, before the raycast/RPC run. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Player.Interacting = {}
 ---@param callback fun(ev: PlayerInteractingEventArgs|nil)
 ---@return string subscriptionToken
@@ -6077,7 +6198,8 @@ function Events.Player.Interacting.Add(callback) end
 ---@param callbackOrToken fun(ev: PlayerInteractingEventArgs|nil)|string
 ---@return boolean removed
 function Events.Player.Interacting.Remove(callbackOrToken) end
---- Fires when the local player's jump is about to be applied. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Player.Jumping = {}
 ---@param callback fun(ev: PlayerJumpingEventArgs|nil)
 ---@return string subscriptionToken
@@ -6085,7 +6207,8 @@ function Events.Player.Jumping.Add(callback) end
 ---@param callbackOrToken fun(ev: PlayerJumpingEventArgs|nil)|string
 ---@return boolean removed
 function Events.Player.Jumping.Remove(callbackOrToken) end
---- Fires when the local player presses the noclip toggle key, before the toggle message is sent. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Player.NoclipToggling = {}
 ---@param callback fun(ev: PlayerNoclipTogglingEventArgs|nil)
 ---@return string subscriptionToken
@@ -6093,6 +6216,8 @@ function Events.Player.NoclipToggling.Add(callback) end
 ---@param callbackOrToken fun(ev: PlayerNoclipTogglingEventArgs|nil)|string
 ---@return boolean removed
 function Events.Player.NoclipToggling.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Player.Removed = {}
 ---@param callback fun(ev: PlayerRemovedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6100,7 +6225,8 @@ function Events.Player.Removed.Add(callback) end
 ---@param callbackOrToken fun(ev: PlayerRemovedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Player.Removed.Remove(callbackOrToken) end
---- Fires when the local player transitions into the sprinting movement state. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Player.Sprinting = {}
 ---@param callback fun(ev: PlayerSprintingEventArgs|nil)
 ---@return string subscriptionToken
@@ -6109,6 +6235,8 @@ function Events.Player.Sprinting.Add(callback) end
 ---@return boolean removed
 function Events.Player.Sprinting.Remove(callbackOrToken) end
 Events.Projectile = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Projectile.Removed = {}
 ---@param callback fun(ev: ProjectileRemovedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6116,6 +6244,8 @@ function Events.Projectile.Removed.Add(callback) end
 ---@param callbackOrToken fun(ev: ProjectileRemovedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Projectile.Removed.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Projectile.Spawned = {}
 ---@param callback fun(ev: ProjectileSpawnedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6123,7 +6253,8 @@ function Events.Projectile.Spawned.Add(callback) end
 ---@param callbackOrToken fun(ev: ProjectileSpawnedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Projectile.Spawned.Remove(callbackOrToken) end
---- Fires when the local player initiates a throw, before the begin-throw network message is sent. Cancellable.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Projectile.Throwing = {}
 ---@param callback fun(ev: PlayerThrowingEventArgs|nil)
 ---@return string subscriptionToken
@@ -6133,6 +6264,8 @@ function Events.Projectile.Throwing.Add(callback) end
 function Events.Projectile.Throwing.Remove(callbackOrToken) end
 Events.Ragdoll = {}
 --- Fires when a ragdoll is removed from the scene (cleanup, round restart).
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Ragdoll.Removed = {}
 ---@param callback fun(ev: RagdollEventArgs|nil)
 ---@return string subscriptionToken
@@ -6141,6 +6274,8 @@ function Events.Ragdoll.Removed.Add(callback) end
 ---@return boolean removed
 function Events.Ragdoll.Removed.Remove(callbackOrToken) end
 --- Fires when a new ragdoll spawns into the scene (someone died).
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Ragdoll.Spawned = {}
 ---@param callback fun(ev: RagdollEventArgs|nil)
 ---@return string subscriptionToken
@@ -6149,6 +6284,8 @@ function Events.Ragdoll.Spawned.Add(callback) end
 ---@return boolean removed
 function Events.Ragdoll.Spawned.Remove(callbackOrToken) end
 Events.Role = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Role.Changed = {}
 ---@param callback fun(ev: PlayerRoleChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6157,6 +6294,8 @@ function Events.Role.Changed.Add(callback) end
 ---@return boolean removed
 function Events.Role.Changed.Remove(callbackOrToken) end
 Events.Round = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Round.Ended = {}
 ---@param callback fun(ev: RoundPhaseChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6164,6 +6303,8 @@ function Events.Round.Ended.Add(callback) end
 ---@param callbackOrToken fun(ev: RoundPhaseChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Round.Ended.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Round.Ending = {}
 ---@param callback fun(ev: RoundPhaseChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6171,6 +6312,8 @@ function Events.Round.Ending.Add(callback) end
 ---@param callbackOrToken fun(ev: RoundPhaseChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Round.Ending.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Round.PhaseChanged = {}
 ---@param callback fun(ev: RoundPhaseChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6178,6 +6321,8 @@ function Events.Round.PhaseChanged.Add(callback) end
 ---@param callbackOrToken fun(ev: RoundPhaseChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Round.PhaseChanged.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Round.Restarted = {}
 ---@param callback fun(ev: RoundPhaseChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6185,6 +6330,8 @@ function Events.Round.Restarted.Add(callback) end
 ---@param callbackOrToken fun(ev: RoundPhaseChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Round.Restarted.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Round.Started = {}
 ---@param callback fun(ev: RoundPhaseChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6192,6 +6339,8 @@ function Events.Round.Started.Add(callback) end
 ---@param callbackOrToken fun(ev: RoundPhaseChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Round.Started.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Round.Starting = {}
 ---@param callback fun(ev: RoundPhaseChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6199,6 +6348,8 @@ function Events.Round.Starting.Add(callback) end
 ---@param callbackOrToken fun(ev: RoundPhaseChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Round.Starting.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Round.WaitingForPlayers = {}
 ---@param callback fun(ev: RoundPhaseChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6208,6 +6359,8 @@ function Events.Round.WaitingForPlayers.Add(callback) end
 function Events.Round.WaitingForPlayers.Remove(callbackOrToken) end
 Events.Scp079 = {}
 --- Fires for the first known or changed power value while the SCP-079 is locally controlled or spectated. This is not a per-frame prediction event.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Scp079.AuxiliaryPowerChanged = {}
 ---@param callback fun(ev: Scp079AuxiliaryPowerChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6216,6 +6369,8 @@ function Events.Scp079.AuxiliaryPowerChanged.Add(callback) end
 ---@return boolean removed
 function Events.Scp079.AuxiliaryPowerChanged.Remove(callbackOrToken) end
 --- Fires for the first known or changed total experience for a role life.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Scp079.ExperienceChanged = {}
 ---@param callback fun(ev: Scp079ExperienceChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6224,6 +6379,8 @@ function Events.Scp079.ExperienceChanged.Add(callback) end
 ---@return boolean removed
 function Events.Scp079.ExperienceChanged.Remove(callbackOrToken) end
 --- Fires for the first known or changed one-based tier for a role life.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Scp079.TierChanged = {}
 ---@param callback fun(ev: Scp079TierChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6233,6 +6390,8 @@ function Events.Scp079.TierChanged.Add(callback) end
 function Events.Scp079.TierChanged.Remove(callbackOrToken) end
 Events.Spectator = {}
 --- Fires after the stock tracker changes its player target, including when the target is cleared. This does not observe remote spectators.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Spectator.TargetChanged = {}
 ---@param callback fun(ev: SpectatedPlayerChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6241,6 +6400,8 @@ function Events.Spectator.TargetChanged.Add(callback) end
 ---@return boolean removed
 function Events.Spectator.TargetChanged.Remove(callbackOrToken) end
 Events.Stats = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Stats.ArtificialHealthChanged = {}
 ---@param callback fun(ev: PlayerStatChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6249,6 +6410,8 @@ function Events.Stats.ArtificialHealthChanged.Add(callback) end
 ---@return boolean removed
 function Events.Stats.ArtificialHealthChanged.Remove(callbackOrToken) end
 --- Observed value or maximum changes. First samples and visibility changes rebase silently.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Stats.Changed = {}
 ---@param callback fun(ev: PlayerStatChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6256,6 +6419,8 @@ function Events.Stats.Changed.Add(callback) end
 ---@param callbackOrToken fun(ev: PlayerStatChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Stats.Changed.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Stats.Healed = {}
 ---@param callback fun(ev: PlayerHealedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6263,6 +6428,8 @@ function Events.Stats.Healed.Add(callback) end
 ---@param callbackOrToken fun(ev: PlayerHealedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Stats.Healed.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Stats.HealthChanged = {}
 ---@param callback fun(ev: PlayerStatChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6271,6 +6438,8 @@ function Events.Stats.HealthChanged.Add(callback) end
 ---@return boolean removed
 function Events.Stats.HealthChanged.Remove(callbackOrToken) end
 --- Fires when a player's Hume shield value changes. Use the convenience flag to detect the shield-broken transition specifically.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Stats.HumeShieldChanged = {}
 ---@param callback fun(ev: PlayerHumeShieldChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6278,6 +6447,8 @@ function Events.Stats.HumeShieldChanged.Add(callback) end
 ---@param callbackOrToken fun(ev: PlayerHumeShieldChangedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Stats.HumeShieldChanged.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Stats.MaximumChanged = {}
 ---@param callback fun(ev: PlayerStatChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6286,6 +6457,8 @@ function Events.Stats.MaximumChanged.Add(callback) end
 ---@return boolean removed
 function Events.Stats.MaximumChanged.Remove(callbackOrToken) end
 --- Fires when a player's stamina value changes. Driven by the polling tracker in the loader, so deltas reflect the per-tick change rather than the underlying continuous stamina drain.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Stats.StaminaChanged = {}
 ---@param callback fun(ev: PlayerStaminaChangedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6295,6 +6468,8 @@ function Events.Stats.StaminaChanged.Add(callback) end
 function Events.Stats.StaminaChanged.Remove(callbackOrToken) end
 Events.Tesla = {}
 --- Fires when a tesla gate spawns into the scene.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Tesla.Added = {}
 ---@param callback fun(ev: TeslaEventArgs|nil)
 ---@return string subscriptionToken
@@ -6303,6 +6478,8 @@ function Events.Tesla.Added.Add(callback) end
 ---@return boolean removed
 function Events.Tesla.Added.Remove(callbackOrToken) end
 --- Fires when a tesla gate completes its shock burst.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Tesla.Bursted = {}
 ---@param callback fun(ev: TeslaEventArgs|nil)
 ---@return string subscriptionToken
@@ -6311,6 +6488,8 @@ function Events.Tesla.Bursted.Add(callback) end
 ---@return boolean removed
 function Events.Tesla.Bursted.Remove(callbackOrToken) end
 --- Fires when a tesla gate is removed from the scene.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Tesla.Removed = {}
 ---@param callback fun(ev: TeslaEventArgs|nil)
 ---@return string subscriptionToken
@@ -6320,6 +6499,8 @@ function Events.Tesla.Removed.Add(callback) end
 function Events.Tesla.Removed.Remove(callbackOrToken) end
 Events.UsableItem = {}
 --- An explicit cancel notification, not normal completion or removal.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.UsableItem.Cancelled = {}
 ---@param callback fun(ev: UsableItemStatusEventArgs|nil)
 ---@return string subscriptionToken
@@ -6328,6 +6509,8 @@ function Events.UsableItem.Cancelled.Add(callback) end
 ---@return boolean removed
 function Events.UsableItem.Cancelled.Remove(callbackOrToken) end
 --- A received cooldown applied to a usable item in the local inventory.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.UsableItem.CooldownChanged = {}
 ---@param callback fun(ev: UsableItemCooldownEventArgs|nil)
 ---@return string subscriptionToken
@@ -6336,6 +6519,8 @@ function Events.UsableItem.CooldownChanged.Add(callback) end
 ---@return boolean removed
 function Events.UsableItem.CooldownChanged.Remove(callbackOrToken) end
 --- A start notification received for a serial; the item/owner can be unavailable locally.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.UsableItem.Started = {}
 ---@param callback fun(ev: UsableItemStatusEventArgs|nil)
 ---@return string subscriptionToken
@@ -6344,6 +6529,8 @@ function Events.UsableItem.Started.Add(callback) end
 ---@return boolean removed
 function Events.UsableItem.Started.Remove(callbackOrToken) end
 Events.Voice = {}
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Voice.Received = {}
 ---@param callback fun(ev: VoiceMessageReceivedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6351,6 +6538,8 @@ function Events.Voice.Received.Add(callback) end
 ---@param callbackOrToken fun(ev: VoiceMessageReceivedEventArgs|nil)|string
 ---@return boolean removed
 function Events.Voice.Received.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Voice.Receiving = {}
 ---@param callback fun(ev: VoiceMessageReceivingEventArgs|nil)
 ---@return string subscriptionToken
@@ -6358,6 +6547,8 @@ function Events.Voice.Receiving.Add(callback) end
 ---@param callbackOrToken fun(ev: VoiceMessageReceivingEventArgs|nil)|string
 ---@return boolean removed
 function Events.Voice.Receiving.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Voice.Sending = {}
 ---@param callback fun(ev: VoiceMessageSendingEventArgs|nil)
 ---@return string subscriptionToken
@@ -6365,6 +6556,8 @@ function Events.Voice.Sending.Add(callback) end
 ---@param callbackOrToken fun(ev: VoiceMessageSendingEventArgs|nil)|string
 ---@return boolean removed
 function Events.Voice.Sending.Remove(callbackOrToken) end
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Latest pending observation per registration; intervening observations may be coalesced.
 Events.Voice.Sent = {}
 ---@param callback fun(ev: VoiceMessageSentEventArgs|nil)
 ---@return string subscriptionToken
@@ -6374,6 +6567,8 @@ function Events.Voice.Sent.Add(callback) end
 function Events.Voice.Sent.Remove(callbackOrToken) end
 Events.Warhead = {}
 --- Fires once when the warhead actually detonates.
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Warhead.Detonated = {}
 ---@param callback fun(ev: WarheadDetonatedEventArgs|nil)
 ---@return string subscriptionToken
@@ -6382,6 +6577,8 @@ function Events.Warhead.Detonated.Add(callback) end
 ---@return boolean removed
 function Events.Warhead.Detonated.Remove(callbackOrToken) end
 --- Fires when the countdown starts or stops (cancellation / detonation).
+--- Queued read-only observation; Lua callbacks cannot cancel or modify the originating operation.
+--- Ordered queued delivery; callbacks must remain within the documented traffic limits.
 Events.Warhead.ProgressChanged = {}
 ---@param callback fun(ev: WarheadProgressChangedEventArgs|nil)
 ---@return string subscriptionToken

@@ -15,7 +15,7 @@ internal sealed class ScriptEnumRegistry
     private static readonly HashSet<string> ReservedGlobals = new(StringComparer.Ordinal)
     {
         "_G", "_VERSION", "assert", "error", "select", "type", "tonumber", "tostring", "ipairs", "pairs", "next",
-        "pcall", "xpcall", "math", "table", "string", "Enums", "Events", "Messages", "Game", "io", "os", "package",
+        "pcall", "xpcall", "math", "table", "string", "Enums", "Events", "Messages", "Game", "Output", "io", "os", "package",
         "debug", "require", "load", "loadfile", "dofile", "coroutine", "collectgarbage", "rawget", "rawset",
         "getmetatable", "setmetatable", "print"
     };

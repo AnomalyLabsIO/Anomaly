@@ -132,7 +132,24 @@ try {
     foreach ($requiredPath in @(
         'reference/Anomaly.Client.Scripting.ScriptAPI.Shipped.txt',
         'reference/Anomaly.Client.Scripting.ScriptAPI.json',
-        'reference/Anomaly.Client.Api.d.lua'
+        'reference/Anomaly.Client.Api.d.lua',
+        'samples/HelloAnomalyServer/ClientScripts/start.lua',
+        'samples/HelloAnomalyServer/ClientScripts/messages.json',
+        'Anomaly.Server/MODDING.md',
+        'Anomaly.Server/PLAYER_POSES.md',
+        'Anomaly.Server/COMBAT_POSES.md',
+        'Anomaly.Client.Scripting/README.md',
+        'Anomaly.Client.Scripting/SCRIPT-PACKS.md',
+        'Anomaly.Client.Scripting/MESSAGING-DESIGN.md',
+        'Anomaly.Client.Scripting/CAPABILITIES.md',
+        'Anomaly.Client.Scripting/CONNECTION-LIFECYCLE.md',
+        'Anomaly.Client.Scripting/ALLOCATION-AUDIT.md',
+        'Anomaly.Client.Scripting/ScriptAPI.Shipped.txt',
+        'Anomaly.Client.Scripting/ScriptAPI.json',
+        'Anomaly.Client.Scripting/Anomaly.Client.Api.d.lua',
+        'tools/MoonSharpHardening/README.md',
+        'tools/MoonSharpHardening/Fork-README.md',
+        'tools/MoonSharpHardening/LICENSE'
     )) {
         $layout = $originalLayout | ConvertFrom-Json
         $sdk = $layout.packages | Where-Object packageId -eq 'anomaly-sdk'
@@ -141,7 +158,7 @@ try {
         $failure = @(& dotnet @sdkFixtureArguments 2>&1)
         if ($LASTEXITCODE -eq 0 -or
             ($failure -join "`n") -notlike "*Package 'anomaly-sdk' is missing a required runtime or SDK entry.*") {
-            throw ("Missing SDK script export was not rejected at preflight: {0}: {1}" -f $requiredPath,($failure -join "`n"))
+            throw ("Missing SDK scripting resource, guide, or export was not rejected at preflight: {0}: {1}" -f $requiredPath,($failure -join "`n"))
         }
     }
 
