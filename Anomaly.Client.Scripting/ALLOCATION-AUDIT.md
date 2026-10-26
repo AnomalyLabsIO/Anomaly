@@ -1,7 +1,7 @@
 # CLR and host allocation audit
 
 This audit covers the restricted development host and pinned MoonSharp fork
-`3.0.0-anomaly.4`. It does not qualify a CLR heap ceiling.
+`3.0.0-anomaly.5`. It does not qualify a CLR heap ceiling.
 `MemoryHardeningQualified` and `RemoteExecutionEnabled` remain false. Remote
 script offers are rejected before consent/download and again at the connection
 and runtime entry points. Local owner sessions use a separate internal entry point
@@ -58,6 +58,37 @@ schema and message-scope validation. Weak-reference tests ensure completed setup
 does not retain producer schemas or source inventory records, while retired session
 wrappers cannot retain their VM through the messaging capability. Initialization
 failure tests verify capability rollback and refusal before any remote VM allocation.
+
+### Active-invocation CPU work (2026-10-26)
+
+The interpreter now installs/restores a thread-local active execution scope around
+VM processing and existing nested scopes. Arithmetic string-to-number coercion
+charges input length before parsing. String-key dictionary lookups, insertions and
+removals charge before hashing/mutation. Prime/shared tables charge traversal,
+length scans and dead-key collection to the current invocation, not a captured
+creation-time budget. The allocation owner remains independent of the work owner.
+
+Seven finite guarded regressions completed incorrectly before the fix with only
+512 fuel: numeric coercion, three prime-table traversal paths, and long-key reads,
+writes and insertions. They now require terminal `CpuLimit`; a bounded useful-work
+case still completes. Inputs are retained 128 KiB strings or 4,096-entry tables,
+prepared before a fresh invocation budget. `tonumber` and string arguments passed
+directly to callbacks already had entry charges; those paths were not changed.
+
+Both Debug and Release scripting suites passed all 518 tests. A separate standalone
+production-host smoke used 512-entry tables and 8,192-character strings within the
+unchanged session allocation allowance. All seven finite workloads returned
+`CpuLimit`, retired their session and rejected later invocation/queueing; a healthy
+sibling completed 57 invocations and owned logging still worked. The initial
+4,096-entry Lua setup hit `MemoryLimit`, so the smoke reduced table size and
+increased bounded traversal repetitions rather than relaxing production quotas.
+This exercises the managed host/coroutine path, not Unity/native calls.
+
+Tracked restore inputs rebuilt the fork from the hash-verified pinned upstream
+revision. All 253 restored C# sources matched the active fork after newline
+normalization; six added files differed only in line endings. Local evidence is
+under `artifacts/vm-containment-20261026/`. These CPU checks do not qualify memory
+containment or change the remote-execution gate.
 
 ## Remaining trust and runtime boundaries
 

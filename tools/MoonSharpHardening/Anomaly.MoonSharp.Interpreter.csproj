@@ -3,9 +3,9 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>Anomaly.MoonSharp.Interpreter</AssemblyName>
     <RootNamespace>MoonSharp.Interpreter</RootNamespace>
-    <Version>3.0.0-anomaly.4</Version>
+    <Version>3.0.0-anomaly.5</Version>
     <AssemblyVersion>3.0.0.0</AssemblyVersion>
-    <InformationalVersion>3.0.0-anomaly.4+upstream.fbd03678d5c0f731d731d099211c7f4a3a1ae8b7</InformationalVersion>
+    <InformationalVersion>3.0.0-anomaly.5+upstream.fbd03678d5c0f731d731d099211c7f4a3a1ae8b7</InformationalVersion>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>

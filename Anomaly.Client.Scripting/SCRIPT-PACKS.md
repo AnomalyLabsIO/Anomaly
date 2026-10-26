@@ -152,3 +152,73 @@ that proof. Local sources do not execute while joining a remote server.
 
 See [connection lifecycle](CONNECTION-LIFECYCLE.md) and
 [message schemas and Lua examples](MESSAGING-DESIGN.md).
+
+## Proposed unified content-pack authoring
+
+**Design recommendation, not an implemented format.** There is currently no
+`pack.json` loader or `ContentPacks` discovery path. Keep the supported directories
+and registrations above until a coordinated cutover exists.
+
+Use a directory and bounded descriptor to group scripts, indexed assets and typed
+server definitions; retain the existing authenticated catalog, manifest, transfer
+and SHA-256 cache. The client receives missing typed blobs, not an archive to extract:
+
+```text
+ContentPacks/example/panel/
+  pack.json
+  scripts/
+    main.lua
+    messages.json
+  assets/
+    panel.index.json
+    panel.bundle
+  data/
+    items.json
+  authoring/
+    icon.png
+```
+
+- The proposed descriptor identifies format version, logical pack ID/version,
+  explicit executable entrypoints, message schema and asset-index paths. Original
+  media under `authoring` is never offered to clients. Logical identity/version
+  does not replace exact content hashes or prove namespace ownership.
+- Initially lower one logical pack to existing uniquely named typed components,
+  for example asset pack `example:panel_assets` and script pack
+  `example:panel_scripts`. The current catalog rejects an asset and script pack
+  sharing one pack ID. The adapter must generate their existing canonical
+  addresses rather than assuming authoring disk paths are wire addresses.
+- Explicit entrypoints require changing discovery/index generation: today every
+  discovered `.lua` executes in its own VM. Do not silently introduce shared
+  globals or unrestricted `require`. Start with one declared entrypoint; reusable
+  source can be bundled offline within existing source limits. Any later runtime
+  modules need a sealed, bounded, hash-bound pack-local resolver and defined
+  initialization/cycle semantics within one VM.
+- Assets remain the existing restricted, self-contained LZ4 Unity bundle plus
+  typed index. No raw image/audio fallback, arbitrary prefabs, shaders or native
+  cross-bundle dependencies. Avoiding ZIP extraction does not remove bundle
+  validation, native loading or decompression.
+- Proposed `data/items.json` belongs to a bounded **server-side** parser feeding
+  the existing custom-item/catalog pipeline before registration freeze. It is not
+  an existing downloaded data-pack feature or generic CLR/Unity deserializer.
+- Reject duplicate IDs/addresses by default; do not copy implicit last-pack-wins
+  behavior. Preserve supported stock targets, remote-over-local lookup and the
+  local-only skin exclusion. Defer dependencies initially; later resolution must
+  be finite, deterministic and authenticated, without arbitrary URL fetching.
+- Preserve separate content/execution approval, the remote qualification gate,
+  immutable connection snapshots, transactional activation and disconnect cleanup.
+  Cache hits never confer authority. Any grouping/version/dependency/order field
+  that affects client behavior or approval must be bound into authenticated
+  metadata, requiring coordinated shared/server/client schema changes.
+
+The smallest implementation is a bounded server authoring adapter with canonical
+relative-path/reparse-point checks and existing component validators, followed by
+authenticated common metadata only when runtime semantics require it. Do not add
+a custom archive or parallel downloader. Existing physical-file/aggregate limits
+still apply; Lua hashes may be shared, but asset index/bundle hash reuse across
+separate catalog entries is currently rejected and is not general deduplication.
+
+Minecraft's useful analogy is the manifest, namespaces and typed content:
+[Bedrock pack manifests](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/addonsreference/packmanifest)
+separate resources/data/scripts and dependencies. Java also supports
+[multiple server packs and explicit un-application](https://www.minecraft.net/en-us/article/minecraft-java-edition-1-20-3).
+Borrow those lifecycle concepts, not ZIP delivery or implicit override rules.

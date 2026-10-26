@@ -59,6 +59,11 @@ internal static partial class Program
 
     private static void Execute(string fixture, ProbeState state)
     {
+        if (fixture.StartsWith("cpuwork-", StringComparison.Ordinal))
+        {
+            ExecuteBuiltinWork(fixture, state);
+            return;
+        }
         if (fixture.StartsWith("clralloc-", StringComparison.Ordinal))
         {
             ExecuteClrAllocations(fixture, state);

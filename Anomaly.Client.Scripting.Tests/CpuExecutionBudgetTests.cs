@@ -117,4 +117,30 @@ public sealed class CpuExecutionBudgetTests
         Assert.Equal(1, result.HostCalls);
         Assert.True(result.Terminal);
     }
+
+    [Theory]
+    [InlineData("cpuwork-number-coercion")]
+    [InlineData("cpuwork-prime-next")]
+    [InlineData("cpuwork-prime-length")]
+    [InlineData("cpuwork-prime-collect")]
+    [InlineData("cpuwork-key-read")]
+    [InlineData("cpuwork-key-write")]
+    [InlineData("cpuwork-key-insert")]
+    public async Task RetainedInputsAndPrimeTablesConsumeCurrentEntryFuel(string fixture)
+    {
+        var result = await CpuProbeProcess.Run(fixture);
+        Assert.Equal("Aborted", result.Outcome);
+        Assert.Equal("CpuLimit", result.Reason);
+        Assert.True(result.Terminal);
+        Assert.Null(result.Error);
+    }
+
+    [Fact]
+    public async Task SmallBuiltinWorkRemainsUsableAfterSetupBudgetEnds()
+    {
+        var result = await CpuProbeProcess.Run("cpuwork-bounded");
+        Assert.Equal("Completed", result.Outcome);
+        Assert.Equal(13, result.Number);
+        Assert.False(result.Terminal);
+    }
 }

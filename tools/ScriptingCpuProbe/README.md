@@ -33,6 +33,14 @@ use a longer independent deadline so a deadline does not masquerade as working
 fuel accounting. The pattern fixture uses a small host-created input to isolate
 builtin CPU work from allocation and parsing. These CPU fixtures avoid deliberate memory growth.
 
+The `cpuwork-*` fixtures prepare finite retained inputs before compiling their
+entrypoint, end the setup budget, then invoke with a fresh 512-fuel budget.
+They cover arithmetic string-to-number coercion, prime-table `next`, length and
+dead-key scans, and long string-key lookup, update and insertion. Inputs are at
+most 128 KiB strings or 4,096 table entries. The required outcome is `CpuLimit`,
+not a deadline, process kill or memory failure. A short-key/small-table/numeric
+conversion fixture must still return its exact computed result.
+
 The legacy `memory-*` fixtures use the host-only cumulative allocation allowance before VM
 initialization. After finite setup, most explicitly reserve the unused allowance
 to leave a small known remainder, isolating the allocation path being checked.

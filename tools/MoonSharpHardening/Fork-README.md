@@ -40,6 +40,11 @@ loops, string processing, and callback entry; it is not a Lua instruction count 
 One budget is shared across nested calls, coroutine creation/recycling, and all resume slices.
 It is never reset automatically on yields, Lua protected calls, or callback reentry.
 
+Thread-local execution scopes restore the previous budget on return, yield and
+failure. Numeric string coercion and shared table/index operations use the active
+invocation's budget; a retained prime table never captures an old work budget.
+Its memory ownership remains attached to its original allocation allowance.
+
 Exhaustion throws `ScriptExecutionAbortedException`, outside Lua's catchable `ScriptRuntimeException`
 hierarchy. `Reason` / `TerminationReason` is `CpuLimit`, `Deadline`, `DepthLimit`, or `Cancelled`.
 Cancellation is sticky: later calls with that budget fail before script execution or host callbacks.
@@ -58,8 +63,10 @@ pretend that an arbitrary managed call stack can be safely suspended as a corout
   protected-call paths. Check again after a trusted callback returns, even if it swallowed an abort.
 - Bound call/reentry depth and preflight bounded VM stack capacity. Parser expression/statement depth,
   compilation recursion and lexer/compiler work participate in the same budget.
-- Charge table traversal/copying/sorting, string comparison/concatenation and native string work.
-  Repetition charges calculated output work and memory reservations before allocating.
+- Charge table traversal/copying/sorting, including ownerless prime-table scans,
+  string-key dictionary hashing/equality, numeric string coercion, string comparison/
+  concatenation and native string work. Charges precede parsing/hashing; repetition
+  charges calculated output work and memory reservations before allocating.
 - Check pattern scanning/backtracking, callback reentry, formatting output and pattern recursion.
   Restore pattern recursion depth on return rather than consuming it permanently per attempt.
 - Resolve .NET 6's `ReferenceEqualityComparer` name conflict explicitly.
@@ -145,6 +152,9 @@ dotnet test Anomaly.Client.Scripting.Tests/Anomaly.Client.Scripting.Tests.csproj
 The fixed worker fixtures live in `tools/ScriptingCpuProbe`. They exercise main and coroutine loops,
 protected calls/error handlers, builtin callbacks/pattern work, C# reentry, cumulative fuel, depth,
 cancellation, deadlines after finite C# work, and rejection of later calls after termination.
+Fresh-entry fixtures also cover retained numeric strings and long table keys,
+prime-table iteration/length/dead-key scans, and bounded useful work after the setup
+budget ends. Direct `tonumber` string arguments already participate in callback-entry charges.
 Independent process/GC ceilings used by the test parent are experiment safeguards, not VM memory limits.
 Memory regressions likewise require a terminal engine `MemoryLimit`; watchdog/GC/process failures
 always fail. They exercise large and discarded strings, tables, closures, coroutine churn, source
