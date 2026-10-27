@@ -5,16 +5,10 @@ namespace Anomaly.Server;
 public class Config
 {
     /// <summary>
-    /// Directory of completed offline-authored .index.json and .bundle pairs.
-    /// Pairs are indexed on a worker and offered after authentication. Leave empty to disable.
+    /// Root of descriptor packs at namespace/pack/pack.json. Declared files are
+    /// captured on a worker for authenticated offers. Empty disables owner packs.
     /// </summary>
-    public string AssetDirectory { get; set; } = "";
-
-    /// <summary>
-    /// Lua sources below namespace/pack directories, with optional pack messages.json declarations.
-    /// Sources and indexes are captured automatically for future connection offers. Empty disables owner sources.
-    /// </summary>
-    public string ScriptDirectory { get; set; } = "ClientScripts";
+    public string ContentPackDirectory { get; set; } = "ContentPacks";
 
     /// <summary>
     /// Requests password-gated admission. Public/remote password authentication is

@@ -245,7 +245,8 @@
         <Compile Include="FileTransfer\FileTransferSession.cs" />
         <Compile Include="FileTransfer\ServerAssetManager.cs" />
         <Compile Include="FileTransfer\AssetPackSnapshot.cs" />
-        <Compile Include="Api\Scripting\ClientScripts.cs" />
+        <Compile Include="Api\Content\ContentPacks.cs" />
+        <Compile Include="FileTransfer\ContentPackFiles.cs" />
         <Compile Include="FileTransfer\AssetChunkReader.cs" />
         <Compile Include="Assets\DecorativeVisualState.cs" />
         <Compile Include="Api\Assets\DecorativeVisualScope.cs" />

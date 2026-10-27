@@ -3,6 +3,7 @@
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <IsPackable>false</IsPackable>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="ContentResources\Pack.json" LogicalName="Test.Items/pack.json" />
+    <EmbeddedResource Include="ContentResources\Items.json" LogicalName="Test.Items/items.json" />
+    <EmbeddedResource Include="ContentResources\LatePack.json" LogicalName="Test.LateItems/pack.json" />
+    <EmbeddedResource Include="ContentResources\Items.json" LogicalName="Test.LateItems/items.json" />
     <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj" AdditionalProperties="DeployLocal=false" />
     <Compile Include="..\Anomaly.Client\FileTransfer\ChunkBuffer.cs" Link="ClientFileTransfer\ChunkBuffer.cs" />
     <Compile Include="..\Anomaly.Client\FileTransfer\FileTransferClient.cs" Link="ClientFileTransfer\FileTransferClient.cs" />
@@ -42,7 +47,8 @@
     <Compile Include="..\Anomaly.Server\Api\Content\CustomItemDefinition.cs" Link="ServerContent\CustomItemDefinition.cs" />
     <Compile Include="..\Anomaly.Server\Api\Content\ContentReadiness.cs" Link="ServerContent\ContentReadiness.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\AssetPackSnapshot.cs" Link="ServerFileTransfer\AssetPackSnapshot.cs" />
-    <Compile Include="..\Anomaly.Server\Api\Scripting\ClientScripts.cs" Link="ServerScripting\ClientScripts.cs" />
+    <Compile Include="..\Anomaly.Server\Api\Content\ContentPacks.cs" Link="ServerContent\ContentPacks.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\ContentPackFiles.cs" Link="ServerFileTransfer\ContentPackFiles.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\AssetChunkReader.cs" Link="ServerFileTransfer\AssetChunkReader.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\FileTransferSession.cs" Link="ServerFileTransfer\FileTransferSession.cs" />
     <Compile Include="..\Anomaly.Server\Utils\OffThreadLogger.cs" Link="ServerUtils\OffThreadLogger.cs" />

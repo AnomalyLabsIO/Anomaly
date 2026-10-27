@@ -84,8 +84,9 @@
         ]
       },
       "entries": [
-        { "source": "release/assets/skins/personal-skins.bundle", "path": "UserData/Anomaly/AssetBundles/personal-skins.bundle" },
-        { "source": "release/assets/skins/personal-skins.index.json", "path": "UserData/Anomaly/AssetBundles/personal-skins.index.json" },
+        { "source": "release/assets/skins/pack.json", "path": "UserData/Anomaly/ContentPacks/personal/skins/pack.json" },
+        { "source": "release/assets/skins/personal-skins.bundle", "path": "UserData/Anomaly/ContentPacks/personal/skins/assets/personal-skins.bundle" },
+        { "source": "release/assets/skins/personal-skins.index.json", "path": "UserData/Anomaly/ContentPacks/personal/skins/assets/personal-skins.index.json" },
         { "source": "Anomaly.Bootstrap/bin/Release/net6.0/Anomaly.Bootstrap.dll", "path": "Plugins/Anomaly.Bootstrap.dll" },
         { "source": "Anomaly.Client/bin/Release/net6.0/Anomaly.Client.dll", "path": "Mods/Anomaly.Client.dll" },
         { "source": "Anomaly.Client.Api/bin/Release/net6.0/Anomaly.Client.Api.dll", "path": "UserLibs/Anomaly.Client.Api.dll" },
@@ -163,8 +164,9 @@
         { "source": "samples/HelloMessages.cs", "path": "samples/HelloMessages.cs" },
         { "source": "samples/HelloAnomalyServer/HelloAnomalyServer.csproj", "path": "samples/HelloAnomalyServer/HelloAnomalyServer.csproj" },
         { "source": "samples/HelloAnomalyServer/Plugin.cs", "path": "samples/HelloAnomalyServer/Plugin.cs" },
-        { "source": "samples/HelloAnomalyServer/ClientScripts/start.lua", "path": "samples/HelloAnomalyServer/ClientScripts/start.lua" },
-        { "source": "samples/HelloAnomalyServer/ClientScripts/messages.json", "path": "samples/HelloAnomalyServer/ClientScripts/messages.json" },
+        { "source": "samples/HelloAnomalyServer/ContentPacks/example/panel/pack.json", "path": "samples/HelloAnomalyServer/ContentPacks/example/panel/pack.json" },
+        { "source": "samples/HelloAnomalyServer/ContentPacks/example/panel/scripts/main.lua", "path": "samples/HelloAnomalyServer/ContentPacks/example/panel/scripts/main.lua" },
+        { "source": "samples/HelloAnomalyServer/ContentPacks/example/panel/scripts/messages.json", "path": "samples/HelloAnomalyServer/ContentPacks/example/panel/scripts/messages.json" },
         { "source": "samples/HelloAnomalyServer/README.md", "path": "samples/HelloAnomalyServer/README.md" },
         { "source": "Anomaly.Server/PLAYER_POSES.md", "path": "docs/PLAYER_POSES.md" },
         { "source": "Anomaly.Server/COMBAT_POSES.md", "path": "docs/COMBAT_POSES.md" },

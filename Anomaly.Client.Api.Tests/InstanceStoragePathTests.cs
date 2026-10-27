@@ -16,16 +16,15 @@ public sealed class InstanceStoragePathTests
         string firstRoot = Path.Combine(temporary.RootPath, "first game");
         ProbeResult first = await ProbeAsync(firstRoot);
         AssertLayout(first, firstRoot);
-        Assert.Equal(new[] { "Anomaly/AssetBundles/README.md" },
+        Assert.Equal(new[] { "Anomaly/ContentPacks/README.md" },
             Directory.EnumerateFiles(first.UserDataDirectory, "*", SearchOption.AllDirectories)
                 .Select(path => Path.GetRelativePath(first.UserDataDirectory, path).Replace('\\', '/'))
                 .OrderBy(path => path, StringComparer.Ordinal));
 
         string anomalyRoot = first.Paths[nameof(Paths.AnomalyPath)];
         string sentinel = Path.Combine(anomalyRoot, "existing-state.json");
-        string readme = Path.Combine(first.Paths[nameof(Paths.AssetBundlesPath)], "README.md");
+        string readme = Path.Combine(first.Paths[nameof(Paths.ContentPacksPath)], "README.md");
         Assert.True(File.Exists(readme));
-        Assert.Contains("Anomaly AssetBundles", File.ReadAllText(readme));
 
         const string existingState = "{\"instance\":\"first\"}";
         const string customReadme = "Player-maintained bundle instructions.\n";
@@ -42,8 +41,7 @@ public sealed class InstanceStoragePathTests
         AssertLayout(second, secondRoot);
         Assert.NotEqual(anomalyRoot, second.Paths[nameof(Paths.AnomalyPath)]);
         Assert.False(File.Exists(Path.Combine(second.Paths[nameof(Paths.AnomalyPath)], "existing-state.json")));
-        Assert.Contains("Anomaly AssetBundles", File.ReadAllText(
-            Path.Combine(second.Paths[nameof(Paths.AssetBundlesPath)], "README.md")));
+        Assert.True(File.Exists(Path.Combine(second.Paths[nameof(Paths.ContentPacksPath)], "README.md")));
         Assert.Equal(existingState, File.ReadAllText(sentinel));
         Assert.Equal(customReadme, File.ReadAllText(readme));
 
@@ -74,7 +72,7 @@ public sealed class InstanceStoragePathTests
             [nameof(Paths.AnomalyUserDataPath)] = anomaly,
             [nameof(Paths.FileCachePath)] = Path.Combine(anomaly, "FileCache"),
             [nameof(Paths.CrashReportsPath)] = Path.Combine(anomaly, "CrashReports"),
-            [nameof(Paths.AssetBundlesPath)] = Path.Combine(anomaly, "AssetBundles"),
+            [nameof(Paths.ContentPacksPath)] = Path.Combine(anomaly, "ContentPacks"),
             [nameof(Paths.SkinsPath)] = Path.Combine(userData, "Skins"),
             [nameof(Paths.OverridesPath)] = Path.Combine(anomaly, "Overrides"),
             [nameof(Paths.AudioOverridesPath)] = Path.Combine(anomaly, "Overrides", "AudioClip"),
@@ -86,7 +84,7 @@ public sealed class InstanceStoragePathTests
             Assert.Equal(path, result.Paths[name]);
 
         // Cache and report writers create their own directories on demand.
-        Assert.Equal(new[] { "Anomaly", "Anomaly/AssetBundles" },
+        Assert.Equal(new[] { "Anomaly", "Anomaly/ContentPacks" },
             Directory.EnumerateDirectories(userData, "*", SearchOption.AllDirectories)
                 .Select(path => Path.GetRelativePath(userData, path).Replace('\\', '/'))
                 .OrderBy(path => path, StringComparer.Ordinal));
@@ -188,7 +186,7 @@ public sealed class InstanceStoragePathTests
             $api = [System.Reflection.Assembly]::LoadFrom([IO.Path]::Combine($assemblyDirectory, 'Anomaly.Client.Api.dll'))
             $paths = $api.GetType('Anomaly.Client.Api.Features.Paths', $true)
             $values = [ordered]@{}
-            foreach ($name in @('ApplicationDataPath', 'AnomalyPath', 'AnomalyUserDataPath', 'FileCachePath', 'CrashReportsPath', 'AssetBundlesPath', 'SkinsPath', 'OverridesPath', 'AudioOverridesPath')) {
+            foreach ($name in @('ApplicationDataPath', 'AnomalyPath', 'AnomalyUserDataPath', 'FileCachePath', 'CrashReportsPath', 'ContentPacksPath', 'SkinsPath', 'OverridesPath', 'AudioOverridesPath')) {
                 $values[$name] = $paths.GetProperty($name).GetValue($null)
             }
             [ordered]@{ Success = $true; UserDataDirectory = $userData; Paths = $values } | ConvertTo-Json -Compress

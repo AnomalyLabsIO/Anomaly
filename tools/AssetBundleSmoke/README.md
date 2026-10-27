@@ -6,6 +6,11 @@ fixture. Supplying `-PackIndexPath` instead tests ordinary startup validation,
 immutable cache copies, typed local lookup, and the production preloader/menu
 bindings without assigning those bindings from the harness.
 
+Preparation wraps each selected `-PackIndexPath` and `-AdditionalLocalIndexPaths`
+export in `ContentPacks/<namespace>/<pack>/pack.json`, derived from its verified
+index ID. Its explicit `Assets.Index` points to `assets/pack.index.json`, with the
+bundle at `assets/<BundleFile>`. No default release skin pack is inherited.
+
 The optional `-QualificationIndexPath`, `-QualificationBundlePath`, and
 `-QualificationExpectedSha256` arguments add an owner-pinned integration probe
 for texture, sprite, mesh, compressed native audio playback, and trusted
@@ -33,8 +38,8 @@ observations, not a performance benchmark.
 
 `-LocalFallback missing -RawSkinDirectory <owner-skin-directory>` stages no local
 pack. `-LocalFallback invalid -PackIndexPath <valid-skin-index>` stages that valid
-pair plus a generated bounded invalid pair. Both require the original PNGs in
-the private legacy skin directory to remain ignored, stock preloader/menu assets
+descriptor pack plus a generated bounded invalid pack. Both require original
+PNGs in the private raw-source directory to remain ignored, stock preloader/menu assets
 to remain usable, and zero native bundle load attempts. Read
 `local-fallback.json` for these results; the positive native-binding flags in
 `native-gate.json` are intentionally false because no bundle was loaded.

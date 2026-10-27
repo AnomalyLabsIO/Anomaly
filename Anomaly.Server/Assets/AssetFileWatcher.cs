@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Anomaly.Server.FileTransfer;
@@ -16,11 +15,11 @@ internal static class AssetFileWatcher
     private static List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
     private static Timer _debounce;
     private static int _epoch;
-    public static void Start(string directory, string scriptDirectory = null)
+    public static void Start(string directory)
     {
         Stop();
-        string[] roots = new[] { directory, scriptDirectory }.Where(value => !string.IsNullOrWhiteSpace(value)).Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        if (roots.Length == 0) return;
+        if (string.IsNullOrWhiteSpace(directory)) return;
+        string[] roots = new[] { Path.GetFullPath(directory) };
         int epoch;
         lock (Sync) epoch = _epoch;
         Task.Run(() =>
@@ -64,7 +63,8 @@ internal static class AssetFileWatcher
     {
         string marker = Path.DirectorySeparatorChar + ".anomaly-spool";
         if (args.FullPath.EndsWith(marker, StringComparison.OrdinalIgnoreCase) || args.FullPath.IndexOf(marker + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) >= 0) return;
-        if (args.ChangeType != WatcherChangeTypes.Changed || args.FullPath.EndsWith(".index.json", StringComparison.OrdinalIgnoreCase) || args.FullPath.EndsWith(".bundle", StringComparison.OrdinalIgnoreCase) || args.FullPath.EndsWith(".lua", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(args.FullPath).Equals("messages.json", StringComparison.OrdinalIgnoreCase)) QueueRescan();
+        // Every declared relative path may be author-chosen, including schemas and item data.
+        QueueRescan();
     }
     private static void Renamed(object sender, RenamedEventArgs args) { Changed(sender, args); Changed(sender, new FileSystemEventArgs(WatcherChangeTypes.Renamed, Path.GetDirectoryName(args.OldFullPath), Path.GetFileName(args.OldFullPath))); }
     private static void QueueRescan() { lock (Sync) _debounce?.Change(250, Timeout.Infinite); }

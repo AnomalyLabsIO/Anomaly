@@ -28,12 +28,14 @@ player readiness. See [MESSAGING-DESIGN.md](MESSAGING-DESIGN.md) for schemas and
 ## First useful local script
 
 Remote execution remains unavailable; the verified nondedicated in-process host
-is the supported local execution path. Copy `start.lua` and `messages.json` from
-[`samples/HelloAnomalyServer/ClientScripts`](../samples/HelloAnomalyServer/ClientScripts)
-to `<UserData>/Anomaly/ClientScripts/example/panel/`, then start a local host.
+is the supported local execution path. Copy the complete
+[`samples/HelloAnomalyServer/ContentPacks/example/panel`](../samples/HelloAnomalyServer/ContentPacks/example/panel)
+directory to `<UserData>/Anomaly/ContentPacks/example/panel/`, retaining `pack.json`,
+`scripts/main.lua` and `scripts/messages.json`, then start a local host.
+The descriptor selects one entrypoint; unlisted Lua never executes.
 The sample logs initialization and shows local state on future Ready/player-added
 notifications. It does not run in menus or while joining a remote server.
-Each source has its own VM; files do not share globals or import one another.
+Each logical script pack has one VM; packs do not share globals or import modules.
 Changes take effect on the next connection, not by hot reload.
 
 Every runtime-created session receives a host-owned `Output` capability:

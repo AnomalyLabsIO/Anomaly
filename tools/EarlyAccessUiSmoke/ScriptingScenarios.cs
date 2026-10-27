@@ -17,12 +17,13 @@ public sealed partial class Core
     private static object ScriptingRuntime() => Type.GetType("Anomaly.Client.Internal.Bootstrap.ScriptingBootstrap, Anomaly.Client", true)
         .GetField("_runtime", All).GetValue(null);
 
-    private static object ScriptSession(string filename)
+    private static object ScriptSession(string owner)
     {
         var runtime = ScriptingRuntime();
         var sessions = (IEnumerable)runtime.GetType().GetField("_sessions", All).GetValue(runtime);
-        return sessions.Cast<object>().Single(session => ((string)session.GetType().GetProperty("SourceIdentity", All)
-            .GetValue(session)).EndsWith("/" + filename, StringComparison.Ordinal));
+        var identity = "anomaly_smoke:" + owner + " mods/anomaly_smoke/" + owner + "/scripts/main.lua";
+        return sessions.Cast<object>().Single(session => string.Equals((string)session.GetType()
+            .GetProperty("SourceIdentity", All).GetValue(session), identity, StringComparison.Ordinal));
     }
 
     private static object InvokeScript(object session, string function, params object[] arguments)
@@ -59,19 +60,19 @@ public sealed partial class Core
         }, 15);
         Add("scripting-sample-capture-" + entry, () =>
         {
-            Require((bool)InvokeScript(ScriptSession("owner-a.lua"), "ReadGame"), "Lua resolves the actual local player and detached native position");
+            Require((bool)InvokeScript(ScriptSession("owner-a"), "ReadGame"), "Lua resolves the actual local player and detached native position");
             Require(!Anomaly.Client.Api.Scripting.ScriptingPolicy.RemoteExecutionEnabled, "Live local execution does not bypass remote qualification");
             Require(_readyEvents == (entry == "console" ? 1 : 2), "One public Ready transition per hosted connection");
             Capture("scripting-local-sample-" + entry);
-            _scriptingTrafficSession = ScriptSession("owner-a.lua");
+            _scriptingTrafficSession = ScriptSession("owner-a");
             _scriptingTrafficFrames = 120;
         });
         AddWait("scripting-sustained-native-queries-" + entry, () => _scriptingTrafficFrames == 0, 30);
         Add("scripting-owned-text-" + entry, () =>
         {
             Require(!ScriptRetired(_scriptingTrafficSession), "Two native-query callbacks per frame do not retire a healthy session");
-            Require((bool)InvokeScript(ScriptSession("owner-a.lua"), "ShowOwner", "owner A\n<color=red>literal</color>", 10d), "Owner A can show bounded text");
-            Require((bool)InvokeScript(ScriptSession("owner-b.lua"), "ShowOwner", "owner B remains independent", 10d), "Owner B can show bounded text");
+            Require((bool)InvokeScript(ScriptSession("owner-a"), "ShowOwner", "owner A\n<color=red>literal</color>", 10d), "Owner A can show bounded text");
+            Require((bool)InvokeScript(ScriptSession("owner-b"), "ShowOwner", "owner B remains independent", 10d), "Owner B can show bounded text");
         });
         Add("scripting-owned-capture-" + entry, () =>
         {
@@ -88,10 +89,10 @@ public sealed partial class Core
         });
         Add("scripting-owner-clear-" + entry, () =>
         {
-            InvokeScript(ScriptSession("owner-a.lua"), "ClearOwner");
+            InvokeScript(ScriptSession("owner-a"), "ClearOwner");
             Require(!ScriptOutputLabels().Any(text => text.text.StartsWith("owner A\n", StringComparison.Ordinal)), "Clear removes only owner A");
             Require(ScriptOutputLabels().Any(text => text.text == "owner B remains independent"), "Owner A clear preserves owner B");
-            Require((bool)InvokeScript(ScriptSession("owner-b.lua"), "ShowOwner", "owner B expires", 1d), "Owner B can replace its own text");
+            Require((bool)InvokeScript(ScriptSession("owner-b"), "ShowOwner", "owner B expires", 1d), "Owner B can replace its own text");
             var runtime = ScriptingRuntime();
             File.WriteAllText(Path.Combine(_output, "scripting-memory-" + entry + ".json"), JsonSerializer.Serialize(new
             {
@@ -121,8 +122,8 @@ public sealed partial class Core
             verifiedHost = hosting.GetProperty("IsVerifiedScriptHost", All).GetValue(null),
             prepared = bootstrap.GetProperty("IsConnectionPrepared", All).GetValue(null),
             scriptSetPresent = scripts != null,
-            sourcePresent = File.Exists(Path.Combine(Anomaly.Client.Api.Features.Paths.AnomalyPath,
-                "ClientScripts", "anomaly_smoke", "output", "start.lua")),
+            sourcePresent = File.Exists(Path.Combine(Anomaly.Client.Api.Features.Paths.ContentPacksPath,
+                "example", "panel", "scripts", "main.lua")),
             labelTexts = ScriptOutputLabels().Select(text => text.text).ToArray()
         }, new JsonSerializerOptions { WriteIndented = true }));
     }

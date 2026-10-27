@@ -4,10 +4,18 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="ScriptResources\Main.lua" />
-    <EmbeddedResource Include="ScriptResources\Messages.json" />
+    <EmbeddedResource Include="ScriptResources\Pack.json" LogicalName="Test.Panel/pack.json" />
+    <EmbeddedResource Include="ScriptResources\Main.lua" LogicalName="Test.Panel/main.lua" />
+    <EmbeddedResource Include="ScriptResources\Messages.json" LogicalName="Test.Panel/messages.json" />
+    <EmbeddedResource Include="ScriptResources\Pack.json" LogicalName="Test.MissingSource/pack.json" />
+    <EmbeddedResource Include="ContentResources\Pack.json" LogicalName="Test.Visual/pack.json" />
+    <EmbeddedResource Include="ContentResources\Content.index.json" LogicalName="Test.Visual/assets/content.index.json" />
+    <EmbeddedResource Include="ContentResources\Content.bundle.txt" LogicalName="Test.Visual/assets/content.bundle" />
+    <EmbeddedResource Include="ContentResources\Pack.json" LogicalName="Test.MissingBundle/pack.json" />
+    <EmbeddedResource Include="ContentResources\Content.index.json" LogicalName="Test.MissingBundle/assets/content.index.json" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
     <PackageReference Include="xunit" Version="2.7.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7">
@@ -32,7 +40,8 @@
     <Compile Include="..\Anomaly.Server\Auth\EnrollmentSessionRegistry.cs" Link="Production\EnrollmentSessionRegistry.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\ServerAssetManager.cs" Link="Production\ServerAssetManager.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\AssetPackSnapshot.cs" Link="Production\AssetPackSnapshot.cs" />
-    <Compile Include="..\Anomaly.Server\Api\Scripting\ClientScripts.cs" Link="Production\ClientScripts.cs" />
+    <Compile Include="..\Anomaly.Server\Api\Content\ContentPacks.cs" Link="Production\ContentPacks.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\ContentPackFiles.cs" Link="Production\ContentPackFiles.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\AssetChunkReader.cs" Link="Production\AssetChunkReader.cs" />
     <Compile Include="..\Anomaly.Server\Assets\DecorativeVisualState.cs" Link="Production\DecorativeVisualState.cs" />
     <Compile Include="..\Anomaly.Server\Poses\PlayerPoseState.cs" Link="Production\PlayerPoseState.cs" />

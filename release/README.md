@@ -25,9 +25,11 @@ Install the client ZIP beside `SCPSL.exe` and the server ZIP into the LabAPI roo
 as described in the [main README](../README.md). Client directories are `Mods`,
 `Plugins`, `UserLibs`, and `UserData`. The client ZIP includes the checked-in
 logo/background pack from `release/assets/skins/`, installed as
-`UserData/Anomaly/AssetBundles/personal-skins.bundle` and
-`personal-skins.index.json`. Only that pair is copied; authoring logs, Unity
-manifests, smoke plugins, other local packs, and personal profiles are excluded.
+`UserData/Anomaly/ContentPacks/personal/skins/pack.json`, with its explicit
+`Assets` index and bundle under `assets/personal-skins.index.json` and
+`assets/personal-skins.bundle`. Only the generated descriptor and selected pair
+are included; authoring logs, Unity manifests, smoke plugins, other local packs,
+and personal profiles are excluded.
 
 The minimum additional third-party runtime libraries for the current supported
 game/loader profile are:
@@ -51,8 +53,9 @@ Extract the SDK ZIP into a separate developer directory. It includes the client
 and server API DLLs, Shared and its public Bouncy Castle compile dependency,
 adjacent XML IntelliSense docs, shipped API baselines, reference metadata,
 developer guides, four starter projects, and their supporting sources. The server
-starter includes both `samples/HelloAnomalyServer/ClientScripts/start.lua` and
-`ClientScripts/messages.json`; retain them beside its project when building.
+starter includes `samples/HelloAnomalyServer/ContentPacks/example/panel/pack.json`,
+`scripts/main.lua` and `scripts/messages.json` beneath that pack directory;
+retain the complete directory beside its project when building.
 Scripting guides are under `Anomaly.Client.Scripting/`: start with `README.md`,
 `SCRIPT-PACKS.md`, `MESSAGING-DESIGN.md`, and `CAPABILITIES.md`; lifecycle and
 allocation-audit companions are also included. Source-relative guide paths and
@@ -65,7 +68,7 @@ and queued events as the runtime catalog. SDK documentation and license files
 stay in that archive, separate from game installation files. Its entries come
 from the complete `anomaly-sdk` definition in `package-layout.json`.
 
-The starter's `EnableClientScripts` defaults to `false`. Do not enable it for
+The starter's `EnableScriptPack` defaults to `false`. Do not enable it for
 normal remote connections: remote script offers fail closed before content or
 execution approval while `MemoryHardeningQualified` / `RemoteExecutionEnabled`
 are false. Consent cannot override this gate. The embedded pack is an authoring
@@ -81,9 +84,10 @@ production bundle validator, then checks every ZIP entry's path, length, and
 SHA-256. All three ZIPs are validated, and the SDK's four starters and its
 positive/negative compile-dependency probes are built using the same host
 references as the runtime projects, before any artifacts reach the output
-directory. The staged server starter's emitted PE metadata must contain both
-exact embedded names `HelloAnomalyServer.ClientScripts.start.lua` and
-`HelloAnomalyServer.ClientScripts.messages.json`; a successful build alone is
+directory. The staged server starter's emitted PE metadata must contain all three
+exact embedded names `HelloAnomalyServer.Panel/pack.json`,
+`HelloAnomalyServer.Panel/scripts/main.lua` and
+`HelloAnomalyServer.Panel/scripts/messages.json`; a successful build alone is
 not enough. `DeployLocal=false` applies throughout.
 This command creates unsigned local packages; the complete release gate below
 provides the additional core tests, reproducibility, and signing evidence for

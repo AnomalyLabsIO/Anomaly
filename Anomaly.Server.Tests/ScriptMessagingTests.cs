@@ -165,7 +165,7 @@ public sealed class ScriptMessagingTests : IDisposable
     public void SnapshotSchemaResultsAreDefensiveCopies()
     {
         WritePack();
-        using var snapshot = AssetPackSnapshot.Build(null, _root);
+        using var snapshot = AssetPackSnapshot.Build(_root);
         Assert.True(snapshot.TryGetScriptSchema("example:panel", "GetState", AnomalyMessageDirection.ServerToClient, out var first, out var hash));
         first.Fields.Clear();
         Assert.True(snapshot.TryGetScriptSchema("example:panel", "GetState", AnomalyMessageDirection.ServerToClient, out var second, out var secondHash));
@@ -261,7 +261,7 @@ public sealed class ScriptMessagingTests : IDisposable
     {
         AnomalyMessageRegistry.RegisterDefaults();
         WritePack();
-        ServerAssetManager.Init(null, _root);
+        ServerAssetManager.Init(_root);
         Assert.True(SpinWait.SpinUntil(() => ServerAssetManager.IsReady, 5000));
         var connection = new NetworkConnectionToClient { connectionId = 17 };
         LiteNetLib4MirrorServer.Peers[connection.connectionId] = new Peer();
@@ -310,6 +310,7 @@ public sealed class ScriptMessagingTests : IDisposable
     {
         string pack = Path.Combine(_root, "example", "panel");
         Directory.CreateDirectory(pack);
+        File.WriteAllText(Path.Combine(pack, "pack.json"), "{\"SchemaVersion\":1,\"PackId\":\"example:panel\",\"Version\":\"1.0.0\",\"Scripts\":{\"PackId\":\"example:panel\",\"EntryPoint\":\"main.lua\",\"Messages\":\"messages.json\"}}", new UTF8Encoding(false));
         File.WriteAllBytes(Path.Combine(pack, "main.lua"), Array.Empty<byte>());
         string descriptor = "{\"Messages\":[{\"Name\":\"" + outgoingName + "\",\"Direction\":\"ServerToClient\",\"Version\":1,\"Fields\":[{\"Name\":\"RequestId\",\"Type\":\"UInt32\"}]}," +
             "{\"Name\":\"State\",\"Direction\":\"ClientToServer\",\"Version\":1,\"Fields\":[{\"Name\":\"RequestId\",\"Type\":\"UInt32\"},{\"Name\":\"Enabled\",\"Type\":\"Boolean\"}]}]}";
@@ -318,7 +319,7 @@ public sealed class ScriptMessagingTests : IDisposable
 
     private string IndexHash()
     {
-        using var snapshot = AssetPackSnapshot.Build(null, _root);
+        using var snapshot = AssetPackSnapshot.Build(_root);
         return ServerAssetManager.ToHex(Assert.Single(snapshot.CopyScriptPacks()).IndexHash);
     }
     private static string Hash(byte[] bytes)

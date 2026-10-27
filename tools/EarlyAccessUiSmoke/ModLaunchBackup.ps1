@@ -36,10 +36,18 @@ function New-ModLaunchSmokeBackup([string] $Repository, [string] $GameDirectory,
     New-Item -ItemType Directory -Path (Join-Path $backupRoot 'files') -Force | Out-Null
     $stockRoot = [IO.Path]::GetFullPath((Join-Path $env:APPDATA 'SCP Secret Laboratory'))
     $entries = @()
+    $createdDirectories = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $paths = @($GamePaths | Sort-Object -Unique | ForEach-Object { @{scope='game';path=$_} }) +
         @(@{scope='stock';path='registry.txt'}, @{scope='stock';path='iphistory.txt'})
     foreach ($item in $paths) {
         $target = Resolve-SmokeBackupTarget $GameDirectory $stockRoot $item.scope $item.path
+        if ($item.scope -eq 'game') {
+            $parent = Split-Path $target
+            while (!(Test-Path -LiteralPath $parent)) {
+                [void]$createdDirectories.Add([IO.Path]::GetRelativePath($GameDirectory, $parent).Replace('\','/'))
+                $parent = Split-Path $parent
+            }
+        }
         $entry = [ordered]@{ scope=$item.scope; path=$item.path; existed=(Test-Path -LiteralPath $target -PathType Leaf); backup=$null; sha256=$null; attributes=$null; lastWriteUtc=$null }
         if ($entry.existed) {
             $file = Get-Item -LiteralPath $target
@@ -62,7 +70,7 @@ function New-ModLaunchSmokeBackup([string] $Repository, [string] $GameDirectory,
         }
     }
     [ordered]@{ schemaVersion=1; gameDirectory=$GameDirectory; stockDirectory=$stockRoot; createdUtc=[DateTimeOffset]::UtcNow.ToString('O');
-        entries=$entries; protected=$protected; notice='Local backup may contain private profiles and configuration. Do not share its files.' } |
+        entries=$entries; createdDirectories=@($createdDirectories); protected=$protected; notice='Local backup may contain private profiles and configuration. Do not share its files.' } |
         ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $backupRoot 'backup.json')
     return $backupRoot
 }

@@ -228,9 +228,10 @@ Add `-ClientScripting` to a local-host run through the authorized ModLaunch inst
     -UseModLaunch -LocalHosting -ClientScripting
 ```
 
-The local script source tree must be empty; unrelated owner scripts are never
-replaced. The reversible backup includes the staged sample Lua/descriptor and
-two ownership fixtures. The production host reads these through its normal local
+The local content-pack root must be empty; unrelated owner packs are never
+replaced. The reversible backup includes `example/panel` and independent
+`anomaly_smoke/owner-a` and `anomaly_smoke/owner-b` descriptor packs, each selecting
+`scripts/main.lua`. The production host reads these through its normal local
 pack validator. The harness checks sample output, real player/position queries,
 120 frames of two queued native-query callbacks per frame, independent literal
 text/raycast settings, owner-specific clear/expiry, and disconnect/rehost cleanup.
@@ -384,12 +385,13 @@ Prepare a new server with `Prepare-Server.ps1` as above, then run:
 
 ```powershell
 ./tools/ServerApiSmoke/Prepare-Assets.ps1 `
-    -OutputDirectory ./artifacts/server-api/assets-01
+    -OutputDirectory ./artifacts/server-api/assets-01 `
+    -PackIndexPath ./artifacts/assetbundles/qualified-fixture/anomaly-qualified-fixture.index.json
 
 ./tools/ServerApiSmoke/Run-Server.ps1 `
     -ServerDirectory ./artifacts/early-access/smoke-server-01 `
     -EvidenceDirectory ./artifacts/server-api/server-run-01 `
-    -AssetDirectory ./artifacts/server-api/assets-01 `
+    -ContentPackDirectory ./artifacts/server-api/assets-01 `
     -Port 27988
 
 $serverPid = [int](Get-Content ./artifacts/server-api/server-run-01/server.pid)

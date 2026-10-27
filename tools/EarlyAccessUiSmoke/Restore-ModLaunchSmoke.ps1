@@ -27,6 +27,18 @@ foreach ($entry in $manifest.entries) {
         Remove-Item -LiteralPath $target -Force
     }
 }
+foreach ($relative in @($manifest.createdDirectories | Sort-Object Length -Descending)) {
+    $directory = Resolve-SmokeBackupTarget $game $manifest.stockDirectory 'game' $relative
+    if ((Test-Path -LiteralPath $directory) -and
+        ((Get-Item -LiteralPath $directory).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw "Refusing a reparse-point staging directory during restore: $relative"
+    }
+    if ((Test-Path -LiteralPath $directory -PathType Container) -and
+        !(Get-ChildItem -LiteralPath $directory -Force | Select-Object -First 1)) {
+        # Remove only previously absent, still-empty directories created by staging.
+        [IO.Directory]::Delete($directory)
+    }
+}
 $mismatches = @($manifest.protected | Where-Object {
     $target = Resolve-SmokeBackupTarget $game $manifest.stockDirectory 'game' $_.path
     !(Test-Path -LiteralPath $target -PathType Leaf) -or (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant() -ne $_.sha256

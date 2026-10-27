@@ -3,6 +3,7 @@ using Anomaly.AssetValidation;
 using Anomaly.Client.Api.Assets;
 using Anomaly.Client.Api.Features;
 using Anomaly.Client.Api.FileTransfer;
+using Anomaly.Client.Content;
 using Anomaly.Shared.Assets;
 using Anomaly.Shared.Content;
 using MelonLoader;
@@ -102,7 +103,7 @@ internal static class AssetBundleManager
         {
             Directory.CreateDirectory(_verifiedRoot);
             CleanPriorVerifiedCopies();
-            root = Paths.AssetBundlesPath;
+            root = Paths.ContentPacksPath;
             Directory.CreateDirectory(root);
         }
         catch (Exception exception)
@@ -114,12 +115,9 @@ internal static class AssetBundleManager
         _initialized = true;
         try
         {
-            var paths = Directory.EnumerateFiles(root, "*.index.json", SearchOption.AllDirectories)
-                .Take(MaximumPacks + 1).OrderBy(path => path, StringComparer.Ordinal).ToArray();
-            if (paths.Length > MaximumPacks) throw new InvalidDataException("Too many local asset packs.");
             // Parsing and decompression never run on the engine thread. Startup waits
             // for the bounded job so the first preloader can use validated local skins.
-            using var prepared = Task.Run(() => PrepareLocal(paths)).GetAwaiter().GetResult();
+            using var prepared = Task.Run(() => PrepareLocal(ContentPackDirectoryReader.ReadPacks(root))).GetAwaiter().GetResult();
             _local = Materialize(prepared, remote: false);
         }
         catch (Exception exception)
@@ -304,26 +302,23 @@ internal static class AssetBundleManager
         lock (CacheLock) EvictUnused(all: true);
     }
 
-    private static PreparedSet PrepareLocal(IEnumerable<string> paths)
+    private static PreparedSet PrepareLocal(IEnumerable<LocalContentPack> packs)
     {
         var set = new PreparedSet();
         try
         {
-            foreach (string path in paths)
+            foreach (var pack in packs)
             {
                 try
                 {
-                    byte[] bytes = ReadIndex(path, null, 0);
-                    var index = AssetPackIndexCodec.Parse(bytes, remote: false);
-                    string bundle = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path), index.BundleFile));
-                    string directory = Path.GetFullPath(Path.GetDirectoryName(path)) + Path.DirectorySeparatorChar;
-                    if (!bundle.StartsWith(directory, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidDataException("Local bundle path escaped its index directory.");
-                    set.Packs.Add(PreparePack(index, Hash(bytes), bundle, CancellationToken.None));
+                    var contents = pack.Contents;
+                    if (contents.AssetIndex == null) continue;
+                    string bundle = pack.Resolve(contents.BundlePath);
+                    set.Packs.Add(PreparePack(contents.AssetIndex, Hash(contents.AssetIndexBytes), bundle, CancellationToken.None));
                 }
                 catch (Exception exception)
                 {
-                    throw new InvalidDataException($"Local index '{Path.GetFileName(path)}' rejected the complete local layer: {exception.Message}", exception);
+                    throw new InvalidDataException($"Local pack '{pack.Contents.Descriptor.PackId}' rejected the complete local layer: {exception.Message}", exception);
                 }
             }
             return set;

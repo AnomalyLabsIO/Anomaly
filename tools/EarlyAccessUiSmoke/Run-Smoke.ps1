@@ -52,10 +52,23 @@ if ($ClientScripting -and (!$LocalHosting -or $LoopbackServer -or $DummyVisibili
     throw 'ClientScripting requires LocalHosting and runs without a remote server or dummy fixture.'
 }
 if ($ClientScripting) {
-    $scriptRoot = Join-Path $game 'UserData/Anomaly/ClientScripts'
+    $scriptRoot = Join-Path $game 'UserData/Anomaly/ContentPacks'
+    foreach ($fixture in @('example/panel','anomaly_smoke/owner-a','anomaly_smoke/owner-b')) {
+        if (Test-Path -LiteralPath (Join-Path $scriptRoot $fixture)) {
+            throw "ClientScripting never replaces an existing fixture pack directory: $fixture"
+        }
+    }
     if (Test-Path -LiteralPath $scriptRoot) {
-        $existingSources = @(Get-ChildItem -LiteralPath $scriptRoot -Recurse -File -Filter '*.lua')
-        if ($existingSources.Count -ne 0) { throw 'ClientScripting requires an empty local script source tree; existing owner scripts are never replaced.' }
+        foreach ($owner in Get-ChildItem -LiteralPath $scriptRoot -Directory) {
+            if ($owner.Name -eq '.anomaly-spool') { continue }
+            foreach ($pack in Get-ChildItem -LiteralPath $owner.FullName -Directory) {
+                $descriptor = Join-Path $pack.FullName 'pack.json'
+                if (!(Test-Path -LiteralPath $descriptor -PathType Leaf)) { throw "Content pack has no descriptor: $descriptor" }
+                if ((Get-Content -Raw -LiteralPath $descriptor | ConvertFrom-Json).Scripts) {
+                    throw 'ClientScripting requires no existing local script components; owner packs are never replaced.'
+                }
+            }
+        }
     }
 }
 if ($DedicatedDummyControl -and ($ConnectionOnly -or $ServerApi -or $LocalHosting -or $DummyVisibility)) {
@@ -83,9 +96,15 @@ $backupPaths = @((($layout.packages | Where-Object packageId -eq 'anomaly-client
       'UserData/Anomaly/user.json','UserData/Anomaly/server-trust.json','UserData/Anomaly/content-consent.json',
       'UserData/Loader.cfg','UserData/MelonPreferences.cfg')
 if ($ClientScripting) {
-    $backupPaths += @('start.lua','messages.json','owner-a.lua','owner-b.lua' | ForEach-Object {
-        'UserData/Anomaly/ClientScripts/anomaly_smoke/output/' + $_
-    })
+    $backupPaths += @(
+        'UserData/Anomaly/ContentPacks/example/panel/pack.json',
+        'UserData/Anomaly/ContentPacks/example/panel/scripts/main.lua',
+        'UserData/Anomaly/ContentPacks/example/panel/scripts/messages.json'
+    )
+    foreach ($owner in @('owner-a','owner-b')) {
+        $backupPaths += "UserData/Anomaly/ContentPacks/anomaly_smoke/$owner/pack.json"
+        $backupPaths += "UserData/Anomaly/ContentPacks/anomaly_smoke/$owner/scripts/main.lua"
+    }
 }
 $backupPaths += @(Get-ChildItem -LiteralPath (Join-Path $repository 'Anomaly.Client/Resources/i18n') -File -Filter '*.yaml' |
     ForEach-Object { 'UserData/Anomaly/i18n/anomaly/' + $_.Name })
@@ -101,10 +120,11 @@ foreach ($mod in @('samples/HelloAnomalyMod/bin/Release/net6.0/HelloAnomalyMod.d
     Copy-Item -LiteralPath (Join-Path $repository $mod) -Destination (Join-Path $game 'Mods')
 }
 if ($ClientScripting) {
-    $scriptPack = Join-Path $game 'UserData/Anomaly/ClientScripts/anomaly_smoke/output'
-    [void](New-Item -ItemType Directory -Force -Path $scriptPack)
-    foreach ($file in @('start.lua','messages.json')) {
-        Copy-Item -LiteralPath (Join-Path $repository "samples/HelloAnomalyServer/ClientScripts/$file") -Destination (Join-Path $scriptPack $file)
+    $samplePack = 'ContentPacks/example/panel'
+    foreach ($file in @('pack.json','scripts/main.lua','scripts/messages.json')) {
+        $target = Join-Path $game "UserData/Anomaly/$samplePack/$file"
+        [void](New-Item -ItemType Directory -Force -Path (Split-Path $target))
+        Copy-Item -LiteralPath (Join-Path $repository "samples/HelloAnomalyServer/$samplePack/$file") -Destination $target
     }
     $ownedFixture = @'
 Output:Log("Owned output fixture initialized.")
@@ -116,8 +136,15 @@ function ReadGame()
         and Game:GetPosition(player.PlayerId) ~= nil
 end
 '@
-    foreach ($file in @('owner-a.lua','owner-b.lua')) {
-        [IO.File]::WriteAllText((Join-Path $scriptPack $file), $ownedFixture, [Text.UTF8Encoding]::new($false))
+    foreach ($owner in @('owner-a','owner-b')) {
+        $scriptPack = Join-Path $game "UserData/Anomaly/ContentPacks/anomaly_smoke/$owner"
+        [void](New-Item -ItemType Directory -Force -Path (Join-Path $scriptPack 'scripts'))
+        $descriptor = [ordered]@{
+            SchemaVersion=1; PackId="anomaly_smoke:$owner"; Version='1.0.0'
+            Scripts=[ordered]@{PackId="anomaly_smoke:$owner"; EntryPoint='scripts/main.lua'}
+        } | ConvertTo-Json -Depth 4 -Compress
+        [IO.File]::WriteAllText((Join-Path $scriptPack 'pack.json'), $descriptor, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $scriptPack 'scripts/main.lua'), $ownedFixture, [Text.UTF8Encoding]::new($false))
     }
 }
 # Approve only the three artifacts staged by this runner. Preserve prior approvals;

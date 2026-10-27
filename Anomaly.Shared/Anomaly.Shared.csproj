@@ -106,6 +106,10 @@
         <Compile Include="Assets\BoundedPackJson.cs" />
         <Compile Include="Assets\StockAssetProfile.cs" />
         <Compile Include="Assets\AssetManifestSnapshot.cs" />
+        <Compile Include="Content\Packs\ContentPackDescriptor.cs" />
+        <Compile Include="Content\Packs\CapturedContentPack.cs" />
+        <Compile Include="Content\Packs\PackItemDefinition.cs" />
+        <Compile Include="Content\Packs\ContentPackCodec.cs" />
         <Compile Include="Content\CatalogTypes.cs" />
         <Compile Include="Content\CatalogScriptPack.cs" />
         <Compile Include="Content\CatalogBuilder.cs" />

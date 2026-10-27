@@ -47,7 +47,7 @@ server process, so restart after changing or removing registrations.
 | --- | --- |
 | `Api.Content.CustomItems` | Register definitions, resolve stable keys, inspect readiness, and grant activated items through `TryGiveItem(Player, string, out Item)`. |
 | `Api.Auth.ClientModRequirements` | Require a companion client mod ID within a version range before connection admission. |
-| `Api.Scripting.ClientScripts` | Publish embedded Lua sources with `RegisterEmbedded` and dispose their registration during plugin shutdown. |
+| `Api.Content.ContentPacks` | Capture descriptor-declared embedded content with `RegisterEmbedded(Assembly, resourceRoot)`; dispose registration during plugin shutdown. |
 | `Api.Networking.ClientMessaging` | Send bounded authenticated messages to native LabAPI players. Register identical shared C# contracts in both runtimes, or use built-in pack-bound Lua carriers. |
 | `Api.Events.Handlers.ClientEvents` | Connected, MessageReceived, CapabilitiesChanged, ContentReady, and MotionApplied notifications. |
 | `Api.Features.ClientCapabilities` | Inspect the current client capability snapshot. |
@@ -67,74 +67,64 @@ Pending consent does not reserve transfer slots or transfer bytes. The fixed
 connection admission deadline still applies. Decline, timeout, or
 transfer/activation failure revokes the grant and closes the connection.
 
-## Client Lua sources
+## Content packs
 
-Owners place `.lua` files below `Config.ScriptDirectory`, which defaults to
-`ClientScripts` relative to the server working directory:
+Owners install `ContentPacks/<namespace>/<pack>/pack.json` under
+`Config.ContentPackDirectory` (default `ContentPacks`, relative to the server
+working directory). The descriptor explicitly composes one Lua entrypoint, an
+asset index and/or typed server item definitions. Unlisted files do not execute
+or transfer. There is no recursive Lua/index discovery, runtime module loader,
+dependency resolution or implicit override order.
 
-```text
-ClientScripts/
-  example/
-    panel/
-      start.lua
-      widgets/
-        status.lua
-      messages.json
-```
+For example, the [server starter](../samples/HelloAnomalyServer/README.md) contains
+`ContentPacks/example/panel/pack.json` declaring wrapper `example:panel`, version
+`1.0.0`, and script component `example:panel_scripts` with entrypoint
+`scripts/main.lua` and message schemas `scripts/messages.json`. The script address
+is `mods/example/panel/scripts/main.lua`; messages use the component ID.
+Version is diagnostic metadata only, not compatibility or load-order policy.
 
-The namespace and pack directory determine `example:panel`. Anomaly generates
-the script index, hashes and source inventory; no authoring tool is required.
-Source addresses are lowercase, for example `mods/example/panel/start.lua`.
-Files with colliding normalized addresses are rejected. `messages.json` is
-optional and contains `{"Messages":[...]}` using the message declarations below.
-Other files are ignored. Scripts are bounded strict UTF-8 text, at most eight
-files, 64 KiB each and 256 KiB total across all owner and plugin packs. Empty
-sources are valid. Filesystem links and excessive directory nesting are rejected.
-
-Plugin developers embed their sources as ordinary assembly resources and opt in
-during their normal LabAPI lifecycle:
+Embed the descriptor and its declared files with exact slash-delimited CLR
+`LogicalName` values, then register during the normal LabAPI lifecycle:
 
 ```csharp
-using Anomaly.Server.Api.Scripting;
+using Anomaly.Server.Api.Content;
 
-private IDisposable _scripts;
+private IDisposable _pack;
 
 public override void Enable()
 {
-    _scripts = ClientScripts.RegisterEmbedded(
-        "example:panel", typeof(Plugin).Assembly,
-        "MyPlugin.ClientScripts",
-        "MyPlugin.ClientScripts.Messages.json");
+    _pack = ContentPacks.RegisterEmbedded(typeof(Plugin).Assembly, "HelloAnomalyServer.Panel");
 }
 
 public override void Disable()
 {
-    _scripts?.Dispose();
-    _scripts = null;
+    _pack?.Dispose();
+    _pack = null;
 }
 ```
 
-Use `<EmbeddedResource Include="ClientScripts\**\*.lua" />` and an explicit
-resource for the optional descriptor in your project. The prefix is the exact
-dotted CLR resource-name prefix, normally the project's root namespace followed
-by `ClientScripts`. Relative resource dots become directory separators:
-`MyPlugin.ClientScripts.Widgets.Status.lua` becomes
-`mods/example/panel/widgets/status.lua`. Omit the final argument when no message
-schemas are needed. Registering captures and validates immutable bytes; Anomaly
-does not scan unrelated plugin resources automatically.
+The exact descriptor resource is `HelloAnomalyServer.Panel/pack.json`; the
+entrypoint and schema resources are `HelloAnomalyServer.Panel/scripts/main.lua`
+and `HelloAnomalyServer.Panel/scripts/messages.json`. No resource scanning or
+dotted-name conversion occurs. See the [content-pack guide](../Anomaly.Client.Scripting/SCRIPT-PACKS.md)
+for the complete descriptor, project resource declarations, strict paths,
+typed `Data.Items` schema and limits.
 
-Owner edits and registration changes publish complete snapshots for future
-connections through the existing authenticated transfer, cache and consent
-flow. Active clients retain their exact approved snapshot until disconnect or
-connection activation replacement. Disposing a registration does not hot-unload
-already approved clients. Conflicts, invalid files and incomplete writes reject
-the candidate generation and retain the previous complete snapshot. Publish
-owner changes atomically where possible. Script indexes and source files are
-transferred directly and scripts initialize before ClientReady after separate
-execution approval. Asset packs continue to use their independent validation.
-An initial indexing failure holds admission closed. Registration changes also
-hold new offers until their exact inventory is published, so a failed owner
-scan cannot keep offering a plugin whose registration was removed.
+Owner edits and registration changes publish complete immutable snapshots for
+future offers through the existing authenticated transfer, cache and separate
+content/execution consent flow. Active clients retain their approved snapshot
+until replacement or disconnect. Disposal is not immediate client revocation.
+Invalid candidates retain the previous complete snapshot; registration changes
+hold new offers until their exact revision is published. Initial indexing failure
+holds admission closed. Frozen item definitions cannot be changed by a refresh:
+restart the server after definition changes. C# `CustomItems.Register` remains
+supported alongside descriptor items; collisions reject atomically.
+Disposing an embedded registration is idempotent even after its `Data.Items`
+definitions freeze. It removes the authoring inventory, not native item
+registrations. Subsequent candidates missing/changing those definitions reject,
+leaving future admissions unavailable until restart; approved snapshots and
+leases survive.
+
 
 ## Pack-bound Lua messages
 
@@ -150,7 +140,7 @@ names, directions and primitive fields in the source pack's `Messages`
 list. See the [script authoring guide](../Anomaly.Client.Scripting/SCRIPT-PACKS.md)
 and [message contract guide](../Anomaly.Client.Scripting/MESSAGING-DESIGN.md).
 
-For a pack named `example:panel`, declare `GetState` as server-to-client with
+For script component `example:panel_scripts`, declare `GetState` as server-to-client with
 `RequestId: UInt32`, and `State` as client-to-server with `RequestId: UInt32` and
 `Enabled: Boolean`. Then subscribe and unsubscribe using normal LabAPI plugin
 lifecycle methods:
@@ -176,14 +166,14 @@ public override void Disable()
 private static void OnContentReady(ClientEventArgs ev)
 {
     ClientMessaging.TrySend(ev.Player,
-        ScriptToClientMessage.Create("example:panel", "GetState",
+        ScriptToClientMessage.Create("example:panel_scripts", "GetState",
             new StateQuery { RequestId = 1 }));
 }
 
 private static void OnMessageReceived(ClientMessageReceivedEventArgs ev)
 {
     if (ev.Message is not ScriptToServerMessage message ||
-        message.PackId != "example:panel" || message.Name != "State" ||
+        message.PackId != "example:panel_scripts" || message.Name != "State" ||
         !message.TryRead<StateReply>(out var reply))
         return;
 
@@ -292,11 +282,12 @@ the same material property; shaders without a supported texture slot are skipped
 ## Offline asset packs
 
 Build packs on the owner/modder's device with the matching Unity 6000.0.43f1
-exporter for the Windows x64 client, then copy completed `.bundle` and
-`.index.json` pairs into `Config.AssetDirectory`. The headless server only
-validates bounded metadata and hashes/copies completed pairs. It does not import
-PNG/OGG files, decompress bundles, or run Unity Editor. Publish the index last,
-preferably using an atomic rename after both files have finished copying.
+exporter for the Windows x64 client. Place the completed bundle/index under
+`Config.ContentPackDirectory/<namespace>/<pack>/assets/`, and explicitly declare
+the index in `pack.json` as `Assets.Index` with its matching `Assets.PackId`.
+The bundle resolves relative to that index. The headless server validates bounded
+metadata and hashes/copies completed files; it does not import PNG/OGG files,
+decompress bundles or run Unity Editor. Publish completed pack updates atomically.
 
 The index selects every asset by a canonical `Anomaly.Shared.Assets.AssetAddress`.
 Use `mods/<namespace>/...` for new assets and supported `game/cassie/<name>`

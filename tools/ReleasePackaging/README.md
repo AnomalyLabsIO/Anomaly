@@ -3,11 +3,14 @@
 `release/Build-RuntimeRelease.ps1` uses the `create-local` command to
 produce client, server, and SDK ZIPs plus `SHA256SUMS` from a local checkout. Installation ZIPs
 contain the declared runtime DLLs, license notices, dependency declaration, and
-client skin bundle/index pair and asset guide. The client includes the private
+client descriptor-driven skin pack and asset guide. The client includes the private
 MoonSharp fork's BSD-3-Clause license and provenance. It shares the
 reviewed layout, PE assembly dependency audit, archive writer, and ZIP hash
-verification below. It also validates and includes the logo/background skin
-pair with the production index and bundle validators. The SDK uses its complete
+verification below. It validates the selected logo/background export with the
+production index and bundle validators, then generates
+`UserData/Anomaly/ContentPacks/<namespace>/<pack>/pack.json` from the verified
+index identity. The descriptor explicitly selects the exported pair under
+`assets/`; the default root is `personal/skins`. The SDK uses its complete
 declared layout, including documentation, baselines, reference metadata,
 samples, and license files. Its required `reference/` payload also includes
 `Anomaly.Client.Scripting.ScriptAPI.Shipped.txt`, the generated

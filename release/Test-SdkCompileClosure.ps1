@@ -40,8 +40,9 @@ try {
     Copy-Item -LiteralPath $sdkPayload -Destination $stagedSdk -Recurse
 
     foreach ($resourceRelative in @(
-        'samples/HelloAnomalyServer/ClientScripts/start.lua',
-        'samples/HelloAnomalyServer/ClientScripts/messages.json'
+        'samples/HelloAnomalyServer/ContentPacks/example/panel/pack.json',
+        'samples/HelloAnomalyServer/ContentPacks/example/panel/scripts/main.lua',
+        'samples/HelloAnomalyServer/ContentPacks/example/panel/scripts/messages.json'
     )) {
         if (!(Test-Path -LiteralPath (Join-Path $stagedSdk $resourceRelative) -PathType Leaf)) {
             throw "SDK starter source resource is missing: $resourceRelative"
@@ -148,8 +149,9 @@ public static class SdkCompileProbe
                 }
             }
             foreach ($expectedName in @(
-                'HelloAnomalyServer.ClientScripts.start.lua',
-                'HelloAnomalyServer.ClientScripts.messages.json'
+                'HelloAnomalyServer.Panel/pack.json',
+                'HelloAnomalyServer.Panel/scripts/main.lua',
+                'HelloAnomalyServer.Panel/scripts/messages.json'
             )) {
                 if (!$embeddedNames.Contains($expectedName)) {
                     throw "Packaged server starter is missing the exact embedded resource: $expectedName"

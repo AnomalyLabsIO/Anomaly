@@ -26,8 +26,15 @@ namespace Anomaly.Server.Content
 {
     internal static class ServerContentRegistrar
     {
-        public static bool RegisterItems(IEnumerable<Anomaly.Shared.Content.CatalogEntry> entries) => true;
-        public static bool Reset() => true;
+        internal static readonly List<Anomaly.Shared.Content.CatalogEntry> RegisteredItems = new();
+        internal static bool AcceptItems = true;
+        public static bool RegisterItems(IEnumerable<Anomaly.Shared.Content.CatalogEntry> entries)
+        {
+            if (!AcceptItems) return false;
+            RegisteredItems.AddRange(entries);
+            return true;
+        }
+        public static bool Reset() { RegisteredItems.Clear(); return true; }
     }
 
 }
@@ -263,11 +270,13 @@ namespace Anomaly.Server.FileTransfer
     // Deterministic publisher boundary: the real snapshot copier and chunk reader are linked below.
     internal static class ServerAssetManager
     {
+        internal static readonly object Sync = new object();
+        internal static void ValidateFreezeSnapshot(AssetPackSnapshot snapshot) { }
         private static AssetPackSnapshot _snapshot = AssetPackSnapshot.Empty();
         private static string _sourceRoot;
         public static bool IsReady => true;
         public static void Rescan() { }
-        internal static void InvalidateScriptRegistrations() { }
+        internal static void InvalidateContentRegistrations() { }
         public static void SetAssets(params AssetInfo[] assets)
         {
             _snapshot.Dispose();
@@ -286,8 +295,10 @@ namespace Anomaly.Server.FileTransfer
             for (int i = 0; i < assets.Length; i++)
             {
                 AssetInfo file = assets[i];
+                string packRoot = Path.Combine(_sourceRoot, "fixture", "pack" + i);
+                Directory.CreateDirectory(packRoot);
                 string name = "fixture" + i + ".bundle";
-                File.Copy(file.FullPath, Path.Combine(_sourceRoot, name));
+                File.Copy(file.FullPath, Path.Combine(packRoot, name));
                 var index = new AssetPackIndex
                 {
                     SchemaVersion = 1, PackId = "fixture:pack" + i, Namespace = "fixture",
@@ -302,7 +313,9 @@ namespace Anomaly.Server.FileTransfer
                 };
                 var json = Newtonsoft.Json.Linq.JObject.FromObject(index);
                 foreach (var asset in json["Assets"]) ((Newtonsoft.Json.Linq.JObject)asset).Remove("AssetKind");
-                File.WriteAllText(Path.Combine(_sourceRoot, "fixture" + i + ".index.json"), json.ToString());
+                File.WriteAllText(Path.Combine(packRoot, "fixture" + i + ".index.json"), json.ToString());
+                File.WriteAllText(Path.Combine(packRoot, "pack.json"), "{\"SchemaVersion\":1,\"PackId\":\"fixture:pack" + i +
+                    "\",\"Version\":\"1.0.0\",\"Assets\":{\"PackId\":\"fixture:pack" + i + "\",\"Index\":\"fixture" + i + ".index.json\"}}");
             }
             _snapshot.Dispose();
             _snapshot = AssetPackSnapshot.Build(_sourceRoot);

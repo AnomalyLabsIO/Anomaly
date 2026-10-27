@@ -95,7 +95,7 @@ M|System.Collections.Generic.IReadOnlyList`1<Anomaly.Server.Api.Map.GlyphPairInf
 M|System.Collections.Generic.IReadOnlyList`1<Anomaly.Shared.Assets.AssetAddress> Anomaly.Server.Api.Assets.AssetRegistry::All()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Collections.Generic.List`1<System.String> Anomaly.Server.Config::get_BlockedClientModIds()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.IDisposable Anomaly.Server.Api.Auth.ClientModRequirements::Register(System.String,System.String,System.String)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="modId":in=False:out=False:optional=False:default=none:params=False;"minimumVersion":in=False:out=False:optional=False:default=none:params=False;"maximumVersionExclusive":in=False:out=False:optional=True:default=null:params=False
-M|System.IDisposable Anomaly.Server.Api.Scripting.ClientScripts::RegisterEmbedded(System.String,System.Reflection.Assembly,System.String,System.String)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="packId":in=False:out=False:optional=False:default=none:params=False;"assembly":in=False:out=False:optional=False:default=none:params=False;"resourcePrefix":in=False:out=False:optional=False:default=none:params=False;"messageSchemasResource":in=False:out=False:optional=True:default=null:params=False
+M|System.IDisposable Anomaly.Server.Api.Content.ContentPacks::RegisterEmbedded(System.Reflection.Assembly,System.String)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="assembly":in=False:out=False:optional=False:default=none:params=False;"resourceRoot":in=False:out=False:optional=False:default=none:params=False
 M|System.Int32 Anomaly.Server.Api.Events.Arguments.FacilityLayoutFinalizingEventArgs::get_Seed()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Int32 Anomaly.Server.Api.Features.PlayerPoseOptions::get_Priority()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Int32 Anomaly.Server.Config::get_PasswordBlockSeconds()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
@@ -113,8 +113,7 @@ M|System.String Anomaly.Server.Api.Events.Arguments.PlayerMotionAppliedEventArgs
 M|System.String Anomaly.Server.Api.Features.Announcer/Word::get_ApiName()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Server.Api.Features.PlayerCombatPoseScope::get_OwnerId()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Server.Api.Features.PlayerPoseScope::get_OwnerId()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
-M|System.String Anomaly.Server.Config::get_AssetDirectory()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
-M|System.String Anomaly.Server.Config::get_ScriptDirectory()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|System.String Anomaly.Server.Config::get_ContentPackDirectory()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Server.Plugin::get_Author()|static=False|virtual=True|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Server.Plugin::get_Description()|static=False|virtual=True|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Server.Plugin::get_Name()|static=False|virtual=True|abstract=False|gp=|access=public|final=False|newslot=False|params=
@@ -190,15 +189,14 @@ M|System.Void Anomaly.Server.Api.Networking.ClientMessaging::SendToAll(Anomaly.S
 M|System.Void Anomaly.Server.Api.Networking.ClientMessaging::SendToAllExcept(LabApi.Features.Wrappers.Player,Anomaly.Shared.Networking.IAnomalyMessage)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="excludedPlayer":in=False:out=False:optional=False:default=none:params=False;"message":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::.ctor()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Void Anomaly.Server.Config::set_AllowRiskyClientModifications(System.Boolean)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
-M|System.Void Anomaly.Server.Config::set_AssetDirectory(System.String)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_BlockAnyAdditionalClientMods(System.Boolean)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_BlockedClientModIds(System.Collections.Generic.List`1<System.String>)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
+M|System.Void Anomaly.Server.Config::set_ContentPackDirectory(System.String)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_EnableLegacyPasswordAuthOnLoopback(System.Boolean)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_PasswordBlockSeconds(System.Int32)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_PasswordKdfIterations(System.Int32)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_PasswordMaxFailuresPerIp(System.Int32)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_RequirePassword(System.Boolean)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
-M|System.Void Anomaly.Server.Config::set_ScriptDirectory(System.String)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Plugin::.ctor()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Void Anomaly.Server.Plugin::Disable()|static=False|virtual=True|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Void Anomaly.Server.Plugin::Enable()|static=False|virtual=True|abstract=False|gp=|access=public|final=False|newslot=False|params=
@@ -253,8 +251,7 @@ P|System.String Anomaly.Server.Api.Events.Arguments.PlayerMotionAppliedEventArgs
 P|System.String Anomaly.Server.Api.Features.Announcer/Word::ApiName()|get=public|set=nonpublic|params=
 P|System.String Anomaly.Server.Api.Features.PlayerCombatPoseScope::OwnerId()|get=public|set=none|params=
 P|System.String Anomaly.Server.Api.Features.PlayerPoseScope::OwnerId()|get=public|set=none|params=
-P|System.String Anomaly.Server.Config::AssetDirectory()|get=public|set=public|params=
-P|System.String Anomaly.Server.Config::ScriptDirectory()|get=public|set=public|params=
+P|System.String Anomaly.Server.Config::ContentPackDirectory()|get=public|set=public|params=
 P|System.String Anomaly.Server.Plugin::Author()|get=public|set=none|params=
 P|System.String Anomaly.Server.Plugin::Description()|get=public|set=none|params=
 P|System.String Anomaly.Server.Plugin::Name()|get=public|set=none|params=
@@ -274,6 +271,7 @@ T|Anomaly.Server.Api.Assets.AssetOverrides|class|base=System.Object|ifaces=|gp=|
 T|Anomaly.Server.Api.Assets.AssetRegistry|class|base=System.Object|ifaces=|gp=|access=public|abstract=True|sealed=True
 T|Anomaly.Server.Api.Assets.DecorativeVisualScope|class|base=System.Object|ifaces=System.IDisposable|gp=|access=public|abstract=False|sealed=True
 T|Anomaly.Server.Api.Auth.ClientModRequirements|class|base=System.Object|ifaces=|gp=|access=public|abstract=True|sealed=True
+T|Anomaly.Server.Api.Content.ContentPacks|class|base=System.Object|ifaces=|gp=|access=public|abstract=True|sealed=True
 T|Anomaly.Server.Api.Content.ContentReadiness|enum|base=System.Enum|ifaces=|gp=|access=public|abstract=False|sealed=True
 T|Anomaly.Server.Api.Content.CustomItemDefinition|class|base=System.Object|ifaces=|gp=|access=public|abstract=False|sealed=True
 T|Anomaly.Server.Api.Content.CustomItems|class|base=System.Object|ifaces=|gp=|access=public|abstract=True|sealed=True
@@ -303,6 +301,5 @@ T|Anomaly.Server.Api.Map.FacilityLayout|class|base=System.Object|ifaces=|gp=|acc
 T|Anomaly.Server.Api.Map.FacilityRoomPlacement|class|base=System.Object|ifaces=|gp=|access=public|abstract=False|sealed=True
 T|Anomaly.Server.Api.Map.GlyphPairInfo|struct|base=System.ValueType|ifaces=|gp=|access=public|abstract=False|sealed=True
 T|Anomaly.Server.Api.Networking.ClientMessaging|class|base=System.Object|ifaces=|gp=|access=public|abstract=True|sealed=True
-T|Anomaly.Server.Api.Scripting.ClientScripts|class|base=System.Object|ifaces=|gp=|access=public|abstract=True|sealed=True
 T|Anomaly.Server.Config|class|base=System.Object|ifaces=|gp=|access=public|abstract=False|sealed=False
 T|Anomaly.Server.Plugin|class|base=LabApi.Loader.Features.Plugins.Plugin`1<Anomaly.Server.Config>|ifaces=|gp=|access=public|abstract=False|sealed=False

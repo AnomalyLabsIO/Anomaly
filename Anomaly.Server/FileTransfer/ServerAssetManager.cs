@@ -4,24 +4,26 @@ using System.Diagnostics;
 using System.Linq;
 using Anomaly.Shared.Assets;
 using Anomaly.Server.Utils;
-using Anomaly.Server.Api.Scripting;
+using Anomaly.Server.Api.Content;
+using Anomaly.Server.Content;
 
 namespace Anomaly.Server.FileTransfer;
 
 internal static class ServerAssetManager
 {
-    private static readonly object Sync = new object();
+    // Publication, embedded registration and native definition freeze share this gate.
+    internal static readonly object Sync = new object();
     private static AssetPackSnapshot _current = AssetPackSnapshot.Empty();
-    private static string _directory, _scriptDirectory;
+    private static string _directory;
     private static int _epoch;
     private static bool _scanning, _rescan, _ready;
-    internal static bool IsReady { get { lock (Sync) return _ready && _current.ScriptRegistrationRevision == ClientScripts.Revision; } }
-    public static void Init(string directory, string scriptDirectory = null)
-    { Reset(); lock (Sync) { _directory = directory; _scriptDirectory = scriptDirectory; } Rescan(); }
+    internal static bool IsReady { get { lock (Sync) return _ready && _current.ContentRegistrationRevision == ContentPacks.Revision; } }
+    public static void Init(string directory)
+    { Reset(); lock (Sync) _directory = directory; Rescan(); }
     public static void Reset()
     {
         AssetPackSnapshot previous;
-        lock (Sync) { _epoch++; _directory = _scriptDirectory = null; _ready = _rescan = _scanning = false; previous = _current; _current = AssetPackSnapshot.Empty(); }
+        lock (Sync) { _epoch++; _directory = null; _ready = _rescan = _scanning = false; previous = _current; _current = AssetPackSnapshot.Empty(); }
         previous.Dispose();
     }
     public static void Rescan()
@@ -35,7 +37,7 @@ internal static class ServerAssetManager
             Task.Run(() => ScanWorker(epoch));
         }
     }
-    internal static void InvalidateScriptRegistrations()
+    internal static void InvalidateContentRegistrations()
     {
         lock (Sync) _ready = false;
         Rescan();
@@ -44,29 +46,30 @@ internal static class ServerAssetManager
     {
         while (true)
         {
-            string directory, scriptDirectory;
+            string directory;
             lock (Sync)
             {
                 if (epoch != _epoch) return;
                 if (!_rescan) { _scanning = false; return; }
-                _rescan = false; directory = _directory; scriptDirectory = _scriptDirectory;
+                _rescan = false; directory = _directory;
             }
             AssetPackSnapshot candidate = null;
             var elapsed = Stopwatch.StartNew();
             try
             {
-                candidate = AssetPackSnapshot.Build(directory, scriptDirectory);
+                candidate = AssetPackSnapshot.Build(directory);
                 int fileCount = candidate.Files.Count;
                 long totalBytes = candidate.Files.Values.Sum(file => (long)file.Size);
                 AssetPackSnapshot previous;
                 lock (Sync)
                 {
                     if (epoch != _epoch) { candidate.Dispose(); return; }
-                    if (candidate.ScriptRegistrationRevision != ClientScripts.Revision)
+                    if (candidate.ContentRegistrationRevision != ContentPacks.Revision)
                     {
                         candidate.Dispose(); candidate = null; _rescan = true;
                         continue;
                     }
+                    ContentRegistry.ValidateSnapshotDefinitions(candidate);
                     previous = _current; _current = candidate; candidate = null; _ready = true;
                 }
                 previous.Dispose();
@@ -80,12 +83,21 @@ internal static class ServerAssetManager
         }
     }
     internal static AssetPackSnapshot AcquireSnapshot() { lock (Sync) return _current.Retain(); }
+    internal static void ValidateFreezeSnapshot(AssetPackSnapshot snapshot)
+    {
+        if (snapshot.ContentRegistrationRevision != ContentPacks.Revision)
+            throw new InvalidOperationException("Content registrations changed before the offer could freeze.");
+        // A retained first-offer snapshot must still match the publishable definitions.
+        if (_ready && !ContentRegistry.SameDefinitions(_current.Items, snapshot.Items))
+            throw new InvalidOperationException("Content definitions changed before the first offer could freeze.");
+    }
     internal static bool TryAcquireOfferSnapshot(out AssetPackSnapshot snapshot)
     {
         lock (Sync)
         {
             snapshot = null;
-            if (!_ready || _current.ScriptRegistrationRevision != ClientScripts.Revision) return false;
+            if (!_ready || _current.ContentRegistrationRevision != ContentPacks.Revision) return false;
+            ContentRegistry.ValidateSnapshotDefinitions(_current);
             snapshot = _current.Retain();
             return true;
         }

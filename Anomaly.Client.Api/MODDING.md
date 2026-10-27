@@ -184,7 +184,7 @@ All public APIs live under `Anomaly.Client.Api.*`. Quick pointers:
 - **`AnomalyMessaging`** and **`AnomalyMessageRegistry`** — custom client⇆server messages over the Anomaly encrypted channel. See [NETWORKING.md](Networking/NETWORKING.md) for message authoring, wire format, and transport channels.
 - **`PlayerPoseRigs`** — discover built-in stable bone IDs and capture model-root-relative final poses after a local solver. Base Anomaly renders server-owned poses without requiring the producing mod; see [the pose contract](../Anomaly.Server/PLAYER_POSES.md).
 - **`Tr`** — translations. `Tr.RegisterMod(namespace)` loads `UserData/i18n/<namespace>/`; `Tr.RegisterMod(namespace, dir)` can point at a custom per-locale YAML directory. `Tr.Get(key, args...)` uses exact locale, language-prefix, then English fallback. Missing English keys return the raw key and log a warning. Locale changes require restart in v1. See [LOCALIZATION.md](Localization/LOCALIZATION.md).
-- **`AnomalyResources`** — content-addressed PNG texture and OGG audio loading, populated by the file-transfer layer. Use `TryGetTexture(hash, ...)` and `TryGetAudioClip(hash, ...)`; treat returned objects as borrowed resources valid for the current connection. The framework owns disk-cache maintenance and shared-object unloading. Remote AssetBundles are not part of public v1.
+- **`AnomalyResources`** — typed native assets from validated indexed Unity bundles. Use `TryGetTexture(AssetAddress, ...)`, `TryGetSprite`, `TryGetAudioClip` and `TryGetMesh`; returned objects are borrowed and remote references expire on disconnect. Author through descriptor-selected `Assets.Index` under `Paths.ContentPacksPath` or server `Config.ContentPackDirectory`. See [ASSETBUNDLES.md](../ASSETBUNDLES.md) for supported native types, validation and lifetimes.
 - **`Coroutines`** — `Coroutines.Start(IEnumerator)` / `Coroutines.Stop` / `Coroutines.CallDelayed(float, Action)` wrappers over `MelonCoroutines`.
 - **`FeatureHealth`** — metadata-only snapshots of core and managed-module health. Fragile hook records include the expected upstream target, the target actually resolved, current state, and operator/developer remediation where available.
 - **Feature wrappers** — `Client.Players`, `Client.LocalPlayer`, `Client.Rooms`, `Client.Doors`, `Client.Pickups`, `Client.Projectiles`, `Client.AdminToys`, plus wrappers for `Item`, `Role`, `PlayerEffect`, `PlayerStatsWrapper`, etc. Read-only views over the game state.
@@ -201,9 +201,10 @@ This root contains `user.json` (identity, nickname, and rotation history),
 `server-trust.json` (accepted server identities), `content-consent.json`,
 `FileCache/` (downloaded server assets), and `CrashReports/` (reports, optional
 dumps, and the shutdown marker). Existing bindings, overrides, managed modules,
-and their config/data directories retain their locations beneath it. Skins stay
-in `UserData/Skins`, translations in `UserData/i18n`, and `ClientConfig` and
-`ClientPersistence` continue to store values through MelonPreferences.
+and their config/data directories retain their locations beneath it. Completed
+local asset/script packs, including skins, use `Paths.ContentPacksPath` under
+`UserData/Anomaly/ContentPacks`. Translations stay in `UserData/i18n`;
+`ClientConfig` and `ClientPersistence` use MelonPreferences.
 
 Each game instance starts a new identity if its local profile is missing and
 reuses that profile on later launches. Anomaly does not import, fall back to, or
@@ -229,14 +230,14 @@ fail closed when that protection context is unavailable. The local location
 does not make protected identity material portable across Windows users or Wine
 prefixes.
 
-## Items-only server content
+## Server item definitions
 
-Public v1 custom content is server-registered items. A LabAPI companion calls
-`Anomaly.Server.Api.Content.CustomItems.Register` during `Enable()`:
+Custom items may be declared through a content pack's typed `Data.Items` schema
+or registered by a LabAPI companion during `Enable()`:
 
 ```csharp
 using Anomaly.Server.Api.Content;
-using InventorySystem;
+using Anomaly.Shared.Assets;
 
 CustomItems.Register(new CustomItemDefinition
 {
@@ -244,7 +245,7 @@ CustomItems.Register(new CustomItemDefinition
     BaseTemplate = ItemType.Coin,
     DisplayName = "Scanner",
     Description = "Reports nearby activity.",
-    IconPath = "mymod/scanner.png"
+    IconAddress = AssetAddress.Parse("mods/mymod/scanner")
 });
 ```
 
@@ -277,25 +278,29 @@ SHA-256, and manifest SHA-256. Reusing the exact approved tuple is allowed;
 changing any member requires consent again. A decline requests zero files and
 activates nothing.
 
-Only PNG and OGG files can appear in a remote v1 manifest. Item icons are PNG.
-Limits are 64 MiB per encoded file and 256 MiB across the manifest, with decoded
-allocation checks before activation. Blobs use the instance's content-addressed
-`<MelonLoader UserData>/Anomaly/FileCache/`, while consent/provenance remains
-separate in `Anomaly/content-consent.json` beneath the same UserData directory.
+Remote manifests bind validated typed asset indexes/bundles and generated script
+indexes/sources, not raw media filenames. Item icons use indexed Texture2D/Sprite
+addresses. Limits remain 64 MiB per encoded file and 256 MiB per offered session,
+with bounded native validation before activation. Blobs use the instance's
+content-addressed `<MelonLoader UserData>/Anomaly/FileCache/`; consent/provenance
+remains separate in `Anomaly/content-consent.json` under that UserData directory.
 
 Registration copies each definition. Register during consumer `Enable()`;
 after definitions freeze on first use, catalog changes require a server restart.
-Catalog offers are immutable for an active player session. File changes and deletions
-rebuild the offer for future connections; public v1 does not destructively hot
-reload connected clients. Remote custom roles, effects, models, weights,
-AssetBundles, meshes, generic prefabs, and generic spawning are not supported.
+Catalog offers are immutable for an active player session. Descriptor-declared
+file changes rebuild offers for future connections, not destructive hot reload.
+Remote custom roles, effects, item models, weights and arbitrary prefabs/components
+are unsupported. Restricted static meshes and decorative descriptions are
+supported only within the [validated asset subset](../ASSETBUNDLES.md).
 
-Authenticated facility generation and ordinary messaging do not wait for optional
-content consent. Server `ClientEvents.Connected` means authenticated readiness;
-`ContentReady` means the custom-item catalog has activated. A pending choice
-reserves no active transfer slot and may remain open beyond 30 seconds. The
-30-second transfer inactivity timeout starts only after approval. See the
-[server API guide](../Anomaly.Server/MODDING.md) for lifecycle and migration details.
+Required content activation and declared Lua initialization precede native
+Ready/AddPlayer and public `ClientReady`; Lua additionally requires separate
+execution approval. Remote Lua remains disabled until memory containment is
+qualified, regardless of consent. Local scripts execute only with verified
+nondedicated in-process host proof. Pending consent reserves no transfer slot;
+admission retains its fixed 120-second deadline. See the
+[server API guide](../Anomaly.Server/MODDING.md) and
+[descriptor/data schema](../Anomaly.Client.Scripting/SCRIPT-PACKS.md).
 
 ## Events
 

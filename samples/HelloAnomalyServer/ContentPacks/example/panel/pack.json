@@ -1,0 +1,10 @@
+{
+  "SchemaVersion": 1,
+  "PackId": "example:panel",
+  "Version": "1.0.0",
+  "Scripts": {
+    "PackId": "example:panel_scripts",
+    "EntryPoint": "scripts/main.lua",
+    "Messages": "scripts/messages.json"
+  }
+}

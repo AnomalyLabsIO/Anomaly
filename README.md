@@ -84,6 +84,13 @@ it from the same release as your Anomaly installation, then follow a quickstart:
 
 The [full documentation](https://docs.anomalylabs.io/) covers events, commands,
 input, UI, networking, custom content, and packaging your mods.
+
+Content authors use `ContentPacks/<namespace>/<pack>/pack.json` to declare one Lua
+entrypoint, an explicit asset index and/or typed server items. See the
+[content-pack contract and embedded sample](Anomaly.Client.Scripting/SCRIPT-PACKS.md)
+and [native asset authoring guide](ASSETBUNDLES.md). Remote Lua remains gated off
+until memory containment is qualified; content/execution consent cannot bypass
+that gate.
 >We also supply agent readable API documentation for Anomaly's client and server libraries. See https://docs.anomalylabs.io/llms.txt.
 
 ## Get help

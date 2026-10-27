@@ -44,27 +44,38 @@ The companion does not initiate custom traffic to clients without a request.
 Install the matching companion before using the client command. Its message
 subscriptions, like native item handlers, are removed during `Disable()`.
 
-`EnableClientScripts` defaults to `false`; leave it disabled for normal remote
+`EnableScriptPack` defaults to `false`; leave it disabled for normal remote
 connections. **Remote script execution is currently gated off**:
 `ScriptingPolicy.MemoryHardeningQualified` and `RemoteExecutionEnabled` remain
 false. A required remote script offer fails closed before content approval,
 download, or execution approval. Neither player consent nor this sample's config
 can enable that gate.
 
-Set `EnableClientScripts: true` only when intentionally inspecting/testing the
-embedded pack registration, not to enable remote play. Keep `ClientScripts/start.lua` and
-`ClientScripts/messages.json` beside the project when building: the emitted CLR
-resource names must be exactly `HelloAnomalyServer.ClientScripts.start.lua` and
-`HelloAnomalyServer.ClientScripts.messages.json`. The ordinary
-`ClientScripts.RegisterEmbedded` registration captures their bounded bytes;
-Anomaly generates the index. The intended exchange after permitted activation is:
-the sample sends `GetState` through `ClientMessaging` at ContentReady and Lua
-replies with `State` through the same authenticated channel. No client companion
-mod is required. The separate content/execution approval flow is described in
-the [script-pack guide](../../Anomaly.Client.Scripting/SCRIPT-PACKS.md); declining
-required content or execution closes the connection.
-For the currently supported local path, copy both source resources to
-`<UserData>/Anomaly/ClientScripts/example/panel/` and start a nondedicated host.
+Set `EnableScriptPack: true` only when intentionally inspecting/testing the
+embedded pack registration, not to enable remote play. Keep the complete
+[`ContentPacks/example/panel`](ContentPacks/example/panel) directory beside the
+project when building. Its [`pack.json`](ContentPacks/example/panel/pack.json)
+declares wrapper `example:panel`, diagnostic version `1.0.0`, script component
+`example:panel_scripts`, one entrypoint `scripts/main.lua` and the optional
+`scripts/messages.json` schemas. The exact embedded CLR names are:
+
+- `HelloAnomalyServer.Panel/pack.json`
+- `HelloAnomalyServer.Panel/scripts/main.lua`
+- `HelloAnomalyServer.Panel/scripts/messages.json`
+
+The project declares explicit `LogicalName` values; `ContentPacks.RegisterEmbedded(
+typeof(Plugin).Assembly, "HelloAnomalyServer.Panel")` captures declared bounded
+bytes without resource scanning or dotted-name conversion. Anomaly generates
+the script index. The intended exchange after permitted activation sends
+`GetState` at ContentReady and replies with `State`, both using component ID
+`example:panel_scripts` through the existing authenticated messaging channel.
+No client companion mod is required. See the [content-pack guide](../../Anomaly.Client.Scripting/SCRIPT-PACKS.md)
+for separate consent, the descriptor, explicit assets and typed `Data.Items`.
+Declining required content or execution closes the connection.
+
+For the supported local path, copy the complete pack directory, preserving
+`pack.json` and its `scripts` subdirectory, to
+`<UserData>/Anomaly/ContentPacks/example/panel/` and start a nondedicated host.
 The same Lua logs initialization and displays local player/round observations
 without a client companion. Its message handler is installed, but local activation
 zero cannot exchange pack messages; that part remains a remote qualification example.

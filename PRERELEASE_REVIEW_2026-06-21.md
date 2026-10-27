@@ -210,14 +210,12 @@ The dominant theme across the codebase: most bugs are states that *didn't* get r
 
 **Fix.** Hook `ServerEvents.RoundRestarted` in both, clearing per-round state (mirror `FacilityLayout`).
 
-### H2 — Server `SessionCompleted` never fires when `AssetDirectory` is empty (the default) → all late-join replay dead
+### H2 — Superseded by descriptor content-pack admission
 
-- **Severity:** HIGH · **Confidence:** high (mechanics) / medium (impact)
-- **Location:** `Anomaly.Server/FileTransfer/FileTransferSession.cs:50-58` (`StartForPlayer` early-returns when `ServerAssetManager.AllAssets.Count == 0`); `Anomaly.Server/Config.cs:9` (`AssetDirectory = ""` default).
-
-**Reasoning.** `StartForPlayer` returns before firing `SessionCompleted` when there are no assets. Everything that hooks `SessionCompleted` then goes dead for every player: late-join round-phase snapshot (`RoundStateBroadcaster.cs:46`), spawn replay (`AssetSpawner.cs:40`), override replay (`AssetOverrides.cs:47`), announcer-vocabulary replay (`Announcer.cs:38`). Because `AssetDirectory` defaults to `""`, **the out-of-box configuration ships with the framework's own late-join mechanism disabled, with no warning.**
-
-**Fix.** When there is nothing to transfer, fire `SessionCompleted` immediately (or send an empty manifest) so downstream replay still runs.
+The historical directory/admission finding no longer describes the supported
+authoring system. Server content now uses `Config.ContentPackDirectory` and
+explicit `ContentPacks/<namespace>/<pack>/pack.json` descriptors, including empty
+authenticated inventories. See the current [content-pack contract](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
 
 ### H3 — Client.Api wrapper-cache leaks (several never cleared; `Item.Unregister` never called)
 
@@ -628,7 +626,7 @@ Phased by what gates a release vs. what can follow.
 - **B4 confirmed:** `MirrorDiagnosticPatches` is compiled at `Anomaly.Client/Anomaly.Client.csproj:417`, labels itself temporary/remove-or-gate at `Anomaly.Client/Patches/Diagnostics/MirrorDiagnosticPatches.cs:11-29`, and changes `NetworkClient.UnpackAndInvoke` failures into success at `Anomaly.Client/Patches/Diagnostics/MirrorDiagnosticPatches.cs:155-213`. Remove it or make it debug-config off by default.
 - **B5b confirmed:** `AssetFileWatcher` acknowledges `FileSystemWatcher` worker-thread callbacks at `Anomaly.Server/Assets/AssetFileWatcher.cs:60-63`, then mutates `_pendingDebounces` and calls MEC `Timing.KillCoroutines`/`Timing.CallDelayed` at `:66-70`; `ProcessChange` mutates the same dictionary at `:72-75`. Queue paths to a main-thread pump before touching MEC or shared dictionaries.
 - **B6/B7 confirmed:** The visible test preference remains at `Anomaly.Client/Core.cs:50`; `anomaly_debug.log` is still written from the preauth patch at `Anomaly.Server/Patches/ProcessConnectionRequestPatch.cs:31-36`; `MelonGameVersion` is absent while only the data-only `SupportedGameVersion` remains at `Anomaly.Client/Core.cs:19-21` and `Anomaly.Client.Api/Compatibility/SupportedGameVersionAttribute.cs:3-7`.
-- **H1/H2 confirmed:** `AssetSpawner` and `AssetOverrides` replay state via `FileTransferSession.SessionCompleted` but have no round-restart clear, while `FacilityLayout` does clear on `RoundRestarted` at `Anomaly.Server/Map/FacilityLayout.cs:344-347`. `FileTransferSession.StartForPlayer` returns before firing `SessionCompleted` when there are no assets at `Anomaly.Server/FileTransfer/FileTransferSession.cs:50-58`, and `AssetDirectory` defaults empty at `Anomaly.Server/Config.cs:5-9`.
+- **H1 historical finding; H2 superseded:** `AssetSpawner` and `AssetOverrides` replay state via `FileTransferSession.SessionCompleted` but had no round-restart clear, while `FacilityLayout` cleared on `RoundRestarted`. H2's directory example has been replaced by the current descriptor-driven content-pack contract; this note does not revalidate unrelated historical findings.
 - **H7/H8 confirmed:** `Plugin.Disable` calls global `Harmony.UnpatchAll()` at `Anomaly.Server/Plugin.cs:104-110`. `AuthCrypto.CreateIdentity` copies a variable-length `BigInteger.ToByteArrayUnsigned()` into a 32-byte field at `Anomaly.Shared/Auth/AuthCrypto.cs:38-48`; use fixed-width left padding.
 - **H9-H13 confirmed:** Delegate conversion is not cached for `CharacterModels` attach/detach at `Anomaly.Client.Api/Features/CharacterModels.cs:241-245` and `:282-285`; lifecycle network patches lack `PatchInvocationGuard` at `Anomaly.Client/Patches/Network/CustomNetworkManagerPatch.cs:10-36`; raw input/message events bypass `EventInvoker` at `Anomaly.Client.Api/Input/InputRegistry.cs:41-46`, `:133-134` and `Anomaly.Client.Api/Networking/AnomalyMessaging.cs:116-124`; debounced persistence uses the shared scheduler at `Anomaly.Client.Api/Internal/Persistence/MelonPreferencesPersistenceStore.cs:93-97` and disconnect clears the scheduler at `Anomaly.Client/Internal/Bootstrap/ClientRuntime.cs:135-158`.
 - **S1 confirmed against vanilla export:** Anomaly performs phase-1 server auth work before any vanilla-style challenge/IP limiter at `Anomaly.Server/Patches/ProcessConnectionRequestPatch.cs:164-231`. Vanilla runs challenge/IP rate limiting before later auth flow at `%USERPROFILE%/Documents/SCPSLExport/AssetRipper_export_Server/ExportedProjectServer/Assets/Scripts/Assembly-CSharp/CustomLiteNetLib4MirrorTransport.cs:223-339` and `:667-691`.

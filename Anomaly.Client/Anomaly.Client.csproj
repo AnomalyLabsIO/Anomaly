@@ -402,7 +402,7 @@
 		<Compile Include="Content\ClientContentRegistrar.cs" />
 		<Compile Include="Content\ContentCatalogClient.cs" />
 		<Compile Include="Content\ScriptPackReader.cs" />
-		<Compile Include="Content\ScriptDirectoryReader.cs" />
+		<Compile Include="Content\ContentPackDirectoryReader.cs" />
 		<Compile Include="Content\ScriptPackManager.cs" />
 		<Compile Include="Content\ConnectionContentBootstrap.cs" />
 		<Compile Include="Content\ContentConsentStore.cs" />

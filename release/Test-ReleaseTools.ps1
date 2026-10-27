@@ -14,6 +14,34 @@ try {
     $inventory = Join-Path $toolTempDirectory 'dependency-inventory.json'
     [IO.File]::WriteAllBytes($inventory, [Text.UTF8Encoding]::new($false).GetBytes('{"schemaVersion":1}'))
 
+    . (Join-Path $toolRepositoryRoot 'tools/ContentPackFixture.ps1')
+    $skinIndexPath = Join-Path $PSScriptRoot 'assets/skins/personal-skins.index.json'
+    $skinBundlePath = Join-Path $PSScriptRoot 'assets/skins/personal-skins.bundle'
+    $fixtureEntries = @(Get-AssetContentPackFixtureEntries -IndexPath $skinIndexPath -BundlePath $skinBundlePath -Root 'UserData/Anomaly/ContentPacks')
+    $expectedFixturePaths = @(
+        'UserData/Anomaly/ContentPacks/personal/skins/pack.json',
+        'UserData/Anomaly/ContentPacks/personal/skins/assets/pack.index.json',
+        'UserData/Anomaly/ContentPacks/personal/skins/assets/personal-skins.bundle'
+    )
+    if (@(Compare-Object ($fixtureEntries.path | Sort-Object) ($expectedFixturePaths | Sort-Object) -CaseSensitive).Count) {
+        throw 'Exporter fixture wrapping must stage exactly one descriptor and its declared index/bundle.'
+    }
+    $fixtureDescriptor = ($fixtureEntries | Where-Object path -eq $expectedFixturePaths[0]).content | ConvertFrom-Json
+    if ($fixtureDescriptor.SchemaVersion -ne 1 -or
+        $fixtureDescriptor.PackId -cne 'personal:skins' -or $fixtureDescriptor.Assets.PackId -cne 'personal:skins' -or
+        $fixtureDescriptor.Assets.Index -cne 'assets/pack.index.json') {
+        throw 'Exporter fixture descriptor does not explicitly identify its sole asset component.'
+    }
+    $badFixtureBundle = Join-Path $toolTempDirectory 'bad-fixture.bundle'
+    [IO.File]::WriteAllBytes($badFixtureBundle, [byte[]]@(1,2,3))
+    $badFixtureRejected = $false
+    try { Get-AssetContentPackFixtureEntries -IndexPath $skinIndexPath -BundlePath $badFixtureBundle | Out-Null }
+    catch {
+        if ($_.Exception.Message -notlike '*bundle/index identity mismatch*') { throw }
+        $badFixtureRejected = $true
+    }
+    if (!$badFixtureRejected) { throw 'Exporter fixture wrapping accepted bytes not pinned by the index.' }
+
     $artifactNames = @(
         'Anomaly.Bootstrap.dll',
         'Anomaly.Client.Api.dll',
@@ -114,7 +142,10 @@ try {
 
     foreach ($requiredPath in @(
         'UserLibs/Anomaly.Client.Scripting.dll', 'UserLibs/Anomaly.MoonSharp.Interpreter.dll',
-        'licenses/MoonSharp.LICENSE', 'licenses/MoonSharp.md'
+        'licenses/MoonSharp.LICENSE', 'licenses/MoonSharp.md',
+        'UserData/Anomaly/ContentPacks/personal/skins/pack.json',
+        'UserData/Anomaly/ContentPacks/personal/skins/assets/personal-skins.index.json',
+        'UserData/Anomaly/ContentPacks/personal/skins/assets/personal-skins.bundle'
     )) {
         $layout = $originalLayout | ConvertFrom-Json
         $client = $layout.packages | Where-Object packageId -eq 'anomaly-client'
@@ -133,8 +164,9 @@ try {
         'reference/Anomaly.Client.Scripting.ScriptAPI.Shipped.txt',
         'reference/Anomaly.Client.Scripting.ScriptAPI.json',
         'reference/Anomaly.Client.Api.d.lua',
-        'samples/HelloAnomalyServer/ClientScripts/start.lua',
-        'samples/HelloAnomalyServer/ClientScripts/messages.json',
+        'samples/HelloAnomalyServer/ContentPacks/example/panel/pack.json',
+        'samples/HelloAnomalyServer/ContentPacks/example/panel/scripts/main.lua',
+        'samples/HelloAnomalyServer/ContentPacks/example/panel/scripts/messages.json',
         'Anomaly.Server/MODDING.md',
         'Anomaly.Server/PLAYER_POSES.md',
         'Anomaly.Server/COMBAT_POSES.md',

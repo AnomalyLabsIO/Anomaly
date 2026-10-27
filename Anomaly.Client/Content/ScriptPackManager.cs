@@ -21,7 +21,7 @@ internal static class ScriptPackManager
         {
             if (!FileTransferClient.IsFileApproved(hash, kind))
                 throw new InvalidDataException("Script file was outside the approved transfer.");
-            return ScriptDirectoryReader.ReadBounded(FileCache.GetFilePath(hash), kind == FileContentKind.ScriptIndex
+            return ContentPackDirectoryReader.ReadBounded(FileCache.GetFilePath(hash), kind == FileContentKind.ScriptIndex
                 ? ScriptPackLimits.MaxIndexBytes : ScriptPackLimits.MaxScriptBytesPerFile);
         });
     }
@@ -36,5 +36,5 @@ internal static class ScriptPackManager
     internal static void Reset() => _remote = null;
 
     internal static IReadOnlyList<ScriptSource> ReadLocalScripts() =>
-        ScriptDirectoryReader.Read(Path.Combine(Paths.AnomalyPath, "ClientScripts"));
+        ContentPackDirectoryReader.Read(Paths.ContentPacksPath);
 }

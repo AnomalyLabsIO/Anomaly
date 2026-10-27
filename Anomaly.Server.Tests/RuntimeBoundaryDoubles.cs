@@ -218,6 +218,27 @@ namespace Anomaly.Server.Content
 {
     internal static class ContentRegistry
     {
+        private static Anomaly.Shared.Content.Packs.PackItemDefinition[] _frozen;
+        internal static bool Frozen => _frozen != null;
+        // The Shared test project covers real native freeze. This seam exercises the
+        // real asynchronous manager's publication boundary against an immutable frozen set.
+        internal static void FreezeDefinitions(Anomaly.Server.FileTransfer.AssetPackSnapshot snapshot)
+        {
+            lock (Anomaly.Server.FileTransfer.ServerAssetManager.Sync)
+            {
+                Anomaly.Server.FileTransfer.ServerAssetManager.ValidateFreezeSnapshot(snapshot);
+                _frozen = snapshot.Items;
+            }
+        }
+        internal static void ResetDefinitions() { lock (Anomaly.Server.FileTransfer.ServerAssetManager.Sync) _frozen = null; }
+        internal static void ValidateSnapshotDefinitions(Anomaly.Server.FileTransfer.AssetPackSnapshot snapshot)
+        {
+            if (Frozen && !SameDefinitions(_frozen, snapshot.Items))
+                throw new InvalidOperationException("Descriptor item definitions changed after native freeze.");
+        }
+        internal static bool SameDefinitions(Anomaly.Shared.Content.Packs.PackItemDefinition[] left, Anomaly.Shared.Content.Packs.PackItemDefinition[] right) =>
+            left.Length == right.Length && left.Zip(right, (a, b) => a.Key == b.Key && a.BaseTemplate == b.BaseTemplate &&
+                a.DisplayName == b.DisplayName && a.Description == b.Description && a.IconAddress == b.IconAddress).All(equal => equal);
         internal static bool TryGetId(string key, out int id) { id = 0; return false; }
         internal static Anomaly.Shared.Content.ContentCatalog CreateOfferCatalog(byte[] manifest, Anomaly.Server.FileTransfer.AssetPackSnapshot snapshot)
         {

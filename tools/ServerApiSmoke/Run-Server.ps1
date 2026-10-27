@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ServerDirectory,
     [Parameter(Mandatory = $true)] [string] $EvidenceDirectory,
-    [Parameter(Mandatory = $true)] [string] $AssetDirectory,
+    [Parameter(Mandatory = $true)] [string] $ContentPackDirectory,
     [string] $AdmissionRequirements = '',
     [string] $PlainRejection = '',
     [switch] $BlockAnyAdditionalClientMods,
@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $server = [IO.Path]::GetFullPath($ServerDirectory)
 $evidence = [IO.Path]::GetFullPath($EvidenceDirectory)
-$assets = [IO.Path]::GetFullPath($AssetDirectory)
+$contentPacks = [IO.Path]::GetFullPath($ContentPackDirectory)
 if (!$server.StartsWith((Join-Path $repository 'artifacts') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Use a private server staged under this repository artifacts directory.'
 }
@@ -36,7 +36,7 @@ $blockedIdsYaml = if ($BlockedClientModIds.Count -eq 0) { '[]' } else {
     "`n" + (($BlockedClientModIds | ForEach-Object { "  - '$($_.Replace("'", "''"))'" }) -join "`n")
 }
 @(
-    "asset_directory: '$($assets.Replace("'", "''"))'"
+    "content_pack_directory: '$($contentPacks.Replace("'", "''"))'"
     "block_any_additional_client_mods: $($BlockAnyAdditionalClientMods.IsPresent.ToString().ToLowerInvariant())"
     "blocked_client_mod_ids: $blockedIdsYaml"
 ) | Set-Content -LiteralPath $config
@@ -61,6 +61,6 @@ $inputs = @($inputPaths | Sort-Object -Unique | ForEach-Object {
     $file = Get-Item -LiteralPath (Join-Path $labRoot $_)
     [ordered]@{ path=$_; size=$file.Length; sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
 })
-[ordered]@{ server=$server; assets=$assets; port=$Port; startedUtc=[DateTimeOffset]::UtcNow.ToString('O'); processId=$process.Id; inputs=$inputs } |
+[ordered]@{ server=$server; contentPacks=$contentPacks; port=$Port; startedUtc=[DateTimeOffset]::UtcNow.ToString('O'); processId=$process.Id; inputs=$inputs } |
     ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $evidence 'runtime-inputs.json')
 Write-Output "Started private loopback fixture PID $($process.Id). Evidence: $evidence"

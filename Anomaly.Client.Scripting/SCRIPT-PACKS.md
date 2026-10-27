@@ -1,224 +1,259 @@
-# Client script packs
+# Content packs and client scripts
 
-Server owners place Lua files in a directory. LabAPI plugins embed Lua resources
-in their assembly and register that resource prefix. Anomaly snapshots those exact
-bytes, generates the index, and sends both through its existing authenticated
-content transfer, cache, consent, and connection-admission flow. Authors do not
-build a Unity project or hand-write source hashes.
+Content packs compose an explicit Lua entrypoint, an indexed Unity AssetBundle,
+and typed server item definitions in one bounded authoring descriptor. Anomaly
+captures declared content and uses its existing authenticated catalog, manifest,
+transfer, SHA-256 cache and admission flow. There is no ZIP/custom archive or
+parallel downloader. Unlisted files never execute or transfer.
 
-Remote execution remains disabled until memory containment is qualified.
-`RemoteExecutionEnabled` follows `MemoryHardeningQualified`, currently false.
-Required remote script offers fail closed before consent or download. The execution
-flow below is exercised through local owner and isolated development paths;
-client approval cannot enable the remote gate. Filesystem, OS, network, module loading, reflection, and automatic CLR
-interop remain unavailable to Lua. Source delivery does not qualify CLR heap
-containment. See [host constraints](README.md) and the [allocation audit](ALLOCATION-AUDIT.md).
+**Remote script execution remains disabled.** `RemoteExecutionEnabled` follows
+`MemoryHardeningQualified`, currently false. Required remote script offers fail
+closed before consent or download; client approval cannot override this gate.
+The verified nondedicated in-process host is the supported local execution path.
+Filesystem, OS, networking, reflection, automatic CLR interop and module loading
+remain unavailable to Lua. Source delivery does not qualify CLR heap containment.
+See [host constraints](README.md) and the [allocation audit](ALLOCATION-AUDIT.md).
 
-## Server owner directories
+## Descriptor and directories
 
-`Config.ScriptDirectory` defaults to `ClientScripts`, resolved relative to the
-server process working directory like the existing asset directory. An absolute
-path fixes that location independently of the working directory. Each
-`<namespace>/<pack>` directory is one logical pack:
-
-```text
-ClientScripts/
-  example/
-    panel/
-      start.lua
-      display.lua
-      messages.json
-```
-
-The pack ID is `example:panel`. Lua files can live in subdirectories; their canonical
-addresses are `mods/example/panel/<relative-path>.lua`. `messages.json` is optional
-and declares custom message contracts; it is not executable. Other filenames are
-not executable sources. Keep names canonical and use the lowercase `.lua` extension.
-
-The server watches owner files and publishes immutable snapshots. A completed edit
-affects subsequent offers; existing connections retain their exact approved
-snapshot until offer replacement or disconnect. Do not use a file edit as an
-immediate hot-reload or revocation mechanism.
-Invalid input cannot replace the current valid snapshot.
-
-## Embedded plugin resources
-
-Use ordinary embedded resources in the LabAPI plugin project:
-
-```xml
-<ItemGroup>
-  <EmbeddedResource Include="ClientScripts\**\*.lua" />
-  <EmbeddedResource Include="ClientScripts\messages.json" />
-</ItemGroup>
-```
-
-Opt the exact resource prefix in during the existing plugin lifecycle:
-
-```csharp
-using System;
-using Anomaly.Server.Api.Scripting;
-
-private IDisposable _clientScripts;
-
-public override void Enable()
-{
-    _clientScripts = ClientScripts.RegisterEmbedded(
-        "example:panel",
-        typeof(Plugin).Assembly,
-        "MyPlugin.ClientScripts",
-        "MyPlugin.ClientScripts.messages.json"); // Optional descriptor resource.
-}
-
-public override void Disable()
-{
-    _clientScripts?.Dispose();
-    _clientScripts = null;
-}
-```
-
-Resource names use the assembly's exact CLR manifest spelling. Anomaly selects
-only `.lua` resources beneath that prefix, maps relative dotted names to canonical
-lowercase paths, and copies bounded source bytes when registering. It does not
-scan arbitrary loaded assemblies for executable content. Omitting the final
-argument means the pack declares no custom messages.
-
-A registration owns the pack until disposed. Pack IDs must be unique across owner
-and plugin sources. Disposing changes subsequent snapshots; active connections
-keep their approved snapshot until offer replacement or disconnect. Registration
-or disposal blocks new offers until a snapshot reflecting that registry revision is published.
-If invalid owner files prevent publication, new admissions wait and fail closed at
-the normal deadline while existing leases continue. A plugin requiring immediate
-gameplay revocation must enforce that policy in its authoritative server code.
-
-## Sources and generated index
-
-Save sources as strict UTF-8 without a BOM or binary control characters. Tabs,
-carriage returns, line feeds, Unicode text, and empty files are supported. NUL,
-bytecode, and MoonSharp dumped chunks are rejected before interpreter creation.
-Source bytes are not normalized, so newline or Unicode changes change identity.
-
-Anomaly generates a bounded schema-1 script-pack index with `PackId`, `ApiVersion`,
-`Sources`, and optional `Messages`. Each source entry contains its canonical
-`Address`, exact `SourceBytes`, and lowercase `SourceSha256`. Authors supply only
-source files and meaningful message schemas. The authenticated catalog and
-manifest bind the exact index and source hashes; the client recomputes identity
-on downloads and cache hits before execution.
-
-| Resource | Limit |
-| --- | --- |
-| Source files | 8 across the active connection source set |
-| One source | 64 KiB UTF-8 |
-| Total source | 256 KiB across the active connection source set |
-| Generated index | 64 KiB per pack |
-| Message schemas | 32 per pack; 256 across the catalog |
-
-Shared source content can use one cached physical file while retaining separate
-logical pack/address identities. Empty files have the standard SHA-256 of empty
-bytes and still count as sources.
-
-## Approval and initialization
-
-The following approval sequence applies only after the execution gate permits
-the source path; required remote script offers currently fail before this step.
-The client first approves the exact authenticated content offer before requesting
-missing files. After source/index validation it presents a separate execution
-approval with the server identity, source count, and byte count. Remembered content
-consent does not authorize script execution. Declining required content or scripts
-closes the connection.
-
-After approval, the client validates the complete inventory, installs its pack-bound
-`Messages` capability, and executes top-level chunks in ordinal `PackId`, then
-ordinal `Address` order. Each source has a separate VM; no imports or cross-file
-globals are supplied. Top-level code should register event/message handlers and
-return promptly. It cannot wait for application messaging before admission.
-
-Initialization finishes before Activated and before public `ClientReady`. The
-existing facility/content/server-confirmation barriers still hold native remote
-Ready and player creation, with a fixed fail-closed admission timeout. Initial
-execution currently has 200,000 instruction fuel and a 100 ms wall deadline per
-source, including compilation and host callbacks. Callbacks use the host's existing
-bounded invocation and queue rules.
-
-A stale offer, syntax error, terminal CPU/allocation failure, or another required
-initialization failure revokes the whole set and closes the connection. Disconnect,
-rekey, generation replacement, and shutdown revoke sessions, subscriptions, queued
-callbacks, and messaging authority. Untrusted Lua unload hooks are not called.
-
-Local owner sources at `<UserData>/Anomaly/ClientScripts/<namespace>/<pack>` use the
-same generated index and source validation. They execute only during a verified
-current nondedicated in-process host connection, before public `ClientReady`.
-Menus, offline play, dedicated mode, and remote loopback connections do not satisfy
-that proof. Local sources do not execute while joining a remote server.
-
-See [connection lifecycle](CONNECTION-LIFECYCLE.md) and
-[message schemas and Lua examples](MESSAGING-DESIGN.md).
-
-## Proposed unified content-pack authoring
-
-**Design recommendation, not an implemented format.** There is currently no
-`pack.json` loader or `ContentPacks` discovery path. Keep the supported directories
-and registrations above until a coordinated cutover exists.
-
-Use a directory and bounded descriptor to group scripts, indexed assets and typed
-server definitions; retain the existing authenticated catalog, manifest, transfer
-and SHA-256 cache. The client receives missing typed blobs, not an archive to extract:
+Server `Config.ContentPackDirectory` defaults to `ContentPacks`, relative to the
+server process working directory; an absolute path fixes the location. Local
+client packs use `Paths.ContentPacksPath`, `<UserData>/Anomaly/ContentPacks`.
+Discovery visits exactly `<namespace>/<pack>/pack.json`, not recursive Lua or
+asset-index trees. Every pack directory must contain its descriptor. Root and
+namespace files are ignored; only the root `.anomaly-spool` directory is skipped.
 
 ```text
 ContentPacks/example/panel/
   pack.json
-  scripts/
-    main.lua
-    messages.json
-  assets/
-    panel.index.json
-    panel.bundle
-  data/
-    items.json
-  authoring/
-    icon.png
+  scripts/main.lua
+  scripts/messages.json
+  assets/panel.index.json
+  assets/panel.bundle
+  data/items.json
+  authoring/icon.png
 ```
 
-- The proposed descriptor identifies format version, logical pack ID/version,
-  explicit executable entrypoints, message schema and asset-index paths. Original
-  media under `authoring` is never offered to clients. Logical identity/version
-  does not replace exact content hashes or prove namespace ownership.
-- Initially lower one logical pack to existing uniquely named typed components,
-  for example asset pack `example:panel_assets` and script pack
-  `example:panel_scripts`. The current catalog rejects an asset and script pack
-  sharing one pack ID. The adapter must generate their existing canonical
-  addresses rather than assuming authoring disk paths are wire addresses.
-- Explicit entrypoints require changing discovery/index generation: today every
-  discovered `.lua` executes in its own VM. Do not silently introduce shared
-  globals or unrestricted `require`. Start with one declared entrypoint; reusable
-  source can be bundled offline within existing source limits. Any later runtime
-  modules need a sealed, bounded, hash-bound pack-local resolver and defined
-  initialization/cycle semantics within one VM.
-- Assets remain the existing restricted, self-contained LZ4 Unity bundle plus
-  typed index. No raw image/audio fallback, arbitrary prefabs, shaders or native
-  cross-bundle dependencies. Avoiding ZIP extraction does not remove bundle
-  validation, native loading or decompression.
-- Proposed `data/items.json` belongs to a bounded **server-side** parser feeding
-  the existing custom-item/catalog pipeline before registration freeze. It is not
-  an existing downloaded data-pack feature or generic CLR/Unity deserializer.
-- Reject duplicate IDs/addresses by default; do not copy implicit last-pack-wins
-  behavior. Preserve supported stock targets, remote-over-local lookup and the
-  local-only skin exclusion. Defer dependencies initially; later resolution must
-  be finite, deterministic and authenticated, without arbitrary URL fetching.
-- Preserve separate content/execution approval, the remote qualification gate,
-  immutable connection snapshots, transactional activation and disconnect cleanup.
-  Cache hits never confer authority. Any grouping/version/dependency/order field
-  that affects client behavior or approval must be bound into authenticated
-  metadata, requiring coordinated shared/server/client schema changes.
+A descriptor composing all three sections is:
 
-The smallest implementation is a bounded server authoring adapter with canonical
-relative-path/reparse-point checks and existing component validators, followed by
-authenticated common metadata only when runtime semantics require it. Do not add
-a custom archive or parallel downloader. Existing physical-file/aggregate limits
-still apply; Lua hashes may be shared, but asset index/bundle hash reuse across
-separate catalog entries is currently rejected and is not general deduplication.
+```json
+{
+  "SchemaVersion": 1,
+  "PackId": "example:panel",
+  "Version": "1.0.0",
+  "Scripts": {
+    "PackId": "example:panel_scripts",
+    "EntryPoint": "scripts/main.lua",
+    "Messages": "scripts/messages.json"
+  },
+  "Assets": {
+    "PackId": "example:panel_assets",
+    "Index": "assets/panel.index.json"
+  },
+  "Data": { "Items": "data/items.json" }
+}
+```
 
-Minecraft's useful analogy is the manifest, namespaces and typed content:
-[Bedrock pack manifests](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/addonsreference/packmanifest)
-separate resources/data/scripts and dependencies. Java also supports
-[multiple server packs and explicit un-application](https://www.minecraft.net/en-us/article/minecraft-java-edition-1-20-3).
-Borrow those lifecycle concepts, not ZIP delivery or implicit override rules.
+`Scripts`, `Assets` and `Data` are optional, but at least one must exist.
+`Scripts.Messages` is optional; other shown fields are required in their section.
+Unknown, duplicate and null fields are rejected. `Version` must be numeric
+`major.minor.patch`; it is authoring/diagnostic metadata, not a compatibility,
+load-order or approval policy. Exact hashes still bind client content.
+There are no dependencies, runtime modules, implicit overrides or hot reload.
+
+The directory identity must exactly equal the wrapper `PackId` (`example/panel`
+for `example:panel`), using lowercase ASCII without case normalization.
+Script and asset component IDs are explicit, share the wrapper namespace and
+must be globally unique across components and owner/embedded inventories.
+Use separate IDs when both components exist. A sole component may reuse its
+wrapper ID, including an existing exported skin index ID. The asset index's
+`PackId` must equal `Assets.PackId`, and its `Namespace` must equal the wrapper
+namespace. Message carriers use the **script component ID**, here
+`example:panel_scripts`, not the wrapper ID.
+
+Descriptor paths are canonical pack-relative lowercase ASCII (`a-z0-9._-/`), at
+most 255 characters and eight segments. Empty, `.` and `..` segments, backslashes,
+rooted paths, drives and traversal are rejected. Metadata paths must be distinct.
+Entrypoints end in `.lua`, messages/items in `.json`, and asset indexes in
+`.index.json`. The bundle path derives from the index-relative `BundleFile` and
+must remain inside the pack. Filesystem roots and every path ancestor are checked
+for links/reparse points. Original media under `authoring` is not traversed or
+included merely because it exists.
+
+## One entrypoint and explicit assets
+
+Each script component declares exactly one Lua entrypoint and gets one VM; no
+imports, `require`, runtime modules or shared globals are supplied. Bundle reusable source
+offline within the existing source limits. The example's source address is
+`mods/example/panel/scripts/main.lua`: it derives from the wrapper ID plus the
+entrypoint, not from the script component ID. Only this source executes.
+`Scripts.Messages` refers to the existing `{"Messages":[...]}` schema file.
+
+`Assets.Index` explicitly selects the existing typed asset index. Keep the
+exported self-contained LZ4 bundle beside that index when `BundleFile` names a
+sibling. No raw-image/audio fallback, arbitrary prefabs, shaders or native
+cross-bundle dependencies are added. Local-only skin exclusions, supported stock
+targets and remote-over-local address lookup remain unchanged. See
+[asset authoring and native limits](../ASSETBUNDLES.md).
+
+## Typed server items
+
+`Data.Items` selects a server-side JSON file, not downloadable arbitrary data or a
+CLR/Unity object deserializer. The LabAPI server plugin materializes definitions;
+copying a pack to the client's local directory validates its data but does not
+register server items in a nondedicated stock host.
+
+For example, `data/items.json` can contain:
+
+```json
+{
+  "SchemaVersion": 1,
+  "Items": [
+    {
+      "Key": "example:coin",
+      "BaseTemplate": "Coin",
+      "DisplayName": "Example coin",
+      "Description": "An ordinary coin with custom presentation.",
+      "IconAddress": "mods/example/coin"
+    }
+  ]
+}
+```
+
+`Key`, `BaseTemplate` and `DisplayName` are required. `Description` is optional
+and defaults to empty; `IconAddress` is optional. Unknown, duplicate and null
+fields are rejected. `BaseTemplate` is the exact supported `ItemType` enum name,
+not a numeric value. Keys and icons belong to the wrapper namespace. An icon must
+be a Texture2D or Sprite declared in this same captured pack's `Assets` index;
+omit the icon for a data-only pack. Limits are 127 definitions and 64 KiB per
+items file, with 128/512/4096 UTF-8 bytes for key/name/description. The server also
+checks the aggregate item count.
+
+Definitions join the existing main-thread catalog transaction before native
+registration freezes. C# `CustomItems.Register` remains supported alongside data
+items; collisions reject atomically. Definitions live for the server process:
+restart after changing/removing them. Changes to frozen definitions reject future
+publication/offers rather than hot-registering or unregistering native items.
+
+## Embedded plugin resources
+
+The [server starter](../samples/HelloAnomalyServer/README.md) embeds a script-only
+descriptor. Declare exact CLR logical names, including forward slashes:
+
+```xml
+<ItemGroup>
+  <EmbeddedResource Include="ContentPacks\example\panel\pack.json" LogicalName="HelloAnomalyServer.Panel/pack.json" />
+  <EmbeddedResource Include="ContentPacks\example\panel\scripts\main.lua" LogicalName="HelloAnomalyServer.Panel/scripts/main.lua" />
+  <EmbeddedResource Include="ContentPacks\example\panel\scripts\messages.json" LogicalName="HelloAnomalyServer.Panel/scripts/messages.json" />
+</ItemGroup>
+```
+
+Register during the ordinary LabAPI plugin lifecycle:
+
+```csharp
+using System;
+using Anomaly.Server.Api.Content;
+
+private IDisposable _pack;
+
+public override void Enable()
+{
+    _pack = ContentPacks.RegisterEmbedded(typeof(Plugin).Assembly, "HelloAnomalyServer.Panel");
+}
+
+public override void Disable()
+{
+    _pack?.Dispose();
+    _pack = null;
+}
+```
+
+Anomaly reads `resourceRoot.TrimEnd('/') + "/pack.json"`, then that exact root
+plus each canonical declared path. It does not scan resources, transform dotted
+names or discover other assemblies. Registration captures bounded immutable
+metadata, source and any declared bundle bytes. Dispose the registration at
+plugin shutdown. Registration/disposal blocks new offers until the matching
+registry revision is published. Existing approved leases remain valid until
+replacement or disconnect; disposal is not immediate gameplay revocation.
+
+Disposal is idempotent even when an embedded pack supplied `Data.Items` that
+already froze into native registrations. It removes the authoring registration
+and invalidates the publication revision; it does not unregister frozen native
+items. A subsequent candidate missing or changing those definitions is rejected,
+so future admissions remain unavailable until server restart. Existing approved
+snapshots and leases survive.
+
+## Limits, snapshots and consent
+
+Save sources as strict UTF-8 without a BOM, NUL, binary control characters,
+bytecode or MoonSharp dumped chunks. Tabs, newlines, Unicode text and empty files
+are supported. Exact source bytes are not normalized. Anomaly generates the
+existing schema-1 script index with component `PackId`, `ApiVersion`, `Sources`
+and optional `Messages`; each source has an address, byte count and SHA-256.
+The client checks authenticated identity on downloads and cache hits.
+
+| Resource | Limit |
+| --- | --- |
+| Descriptor | 16 KiB |
+| Discovered packs / scanned entries | 128 / 4096 |
+| Source files | 8 across the active connection source set |
+| One source / total source | 64 KiB / 256 KiB UTF-8 |
+| Generated script index | 64 KiB per component |
+| Message schemas | 32 per component; 256 across the catalog |
+| One encoded transfer file / offered session | 64 MiB / 256 MiB |
+
+The server watches owner content and publishes complete immutable snapshots.
+Invalid input cannot replace a valid snapshot. Active connections retain their
+exact approved bytes; edits affect future offers, not immediate hot reload.
+If a registration revision cannot be published, new admissions wait and fail
+closed at the normal deadline while existing leases continue. Publish completed
+pack updates atomically where possible. Enforce urgent gameplay revocation in
+authoritative server code.
+
+After the execution gate permits a path, content consent precedes missing-file
+requests. Separate execution consent displays server identity and source/byte
+counts. Remembered content consent or cached bytes never authorize execution.
+Declining required content/scripts closes the connection. Approved sources
+initialize in ordinal component `PackId`, then address order, before Activated
+and public `ClientReady`; native facility/content/server-confirmation barriers
+and the fixed admission timeout remain. Top-level code should register handlers
+and return promptly, not wait for messages. Initial execution has 200,000
+instruction fuel and a 100 ms wall deadline per source, including compilation and
+host callbacks; callback invocation and queues retain their existing bounds.
+
+A stale offer, syntax error, terminal CPU/allocation failure or required
+initialization failure revokes the whole set and closes the connection.
+Disconnect, rekey, generation replacement and shutdown revoke sessions,
+subscriptions, queued callbacks and messaging authority, without Lua unload hooks.
+
+Local client scripts use the same descriptors and source validation, but execute
+only during a verified current nondedicated in-process host connection before
+`ClientReady`. Menus, offline play, dedicated mode and remote loopback do not
+satisfy host proof. Local scripts never execute while joining a remote server.
+Local activation zero cannot exchange authenticated pack messages.
+
+See [connection lifecycle](CONNECTION-LIFECYCLE.md) and
+[message schemas and Lua examples](MESSAGING-DESIGN.md).
+
+## Cutover acceptance (2026-10-26)
+
+The real game/loader smoke passed through both console `host` and Create Server
+with three explicit script descriptors. The sample rendered local player/round
+text; independent owners retained literal, noninteractive output and separate
+clear/expiry. Both hosted connections exercised queued native-query callbacks,
+disconnect and fresh rehost sessions. The loader also reported the declared local
+skin component loaded with both texture roots. Screenshots were inspected and
+the reversible deployment/profile restoration verified protected hashes.
+
+A fresh isolated dedicated server materialized owner and exact-name embedded
+`Data.Items` definitions into distinct native Coin templates. Repeated disposal
+of the embedded registration preserved frozen templates, invalidated new offers
+and rejected the subsequent missing-definition candidate. No client connection
+or remote Lua execution was involved in that server probe.
+
+Contract/lifecycle suites, both public API baselines, release tooling and all
+packaged SDK starters passed. A selected skin index with spaces/uppercase in its
+source filename was accepted and staged under a canonical declared path. Local
+evidence is retained in `artifacts/content-packs-cutover-20261026/`; test-only
+probe sources and deployment DLLs were removed. This does not qualify hostile
+remote Lua, native/CLR heap limits or multiplayer churn.

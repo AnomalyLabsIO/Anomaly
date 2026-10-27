@@ -186,11 +186,11 @@ public class Plugin : Plugin<Config>
             },
             [ServerInitializationStage.AssetsAndContent] = () =>
             {
-                ServerAssetManager.Init(Config.AssetDirectory, Config.ScriptDirectory);
+                ServerAssetManager.Init(Config.ContentPackDirectory);
                 AssetOverrides.Init();
                 DecorativeVisualScope.Init();
                 Announcer.Init();
-                AssetFileWatcher.Start(Config.AssetDirectory, Config.ScriptDirectory);
+                AssetFileWatcher.Start(Config.ContentPackDirectory);
             },
             [ServerInitializationStage.LifecycleSubscriptions] = () =>
             {

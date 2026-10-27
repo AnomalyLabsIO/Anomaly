@@ -9,6 +9,7 @@ using Anomaly.Server.FileTransfer;
 using Anomaly.Shared.Assets;
 using Anomaly.Shared.Content;
 using Anomaly.Shared.Networking.Messages;
+using Anomaly.Shared.Content.Packs;
 using InventorySystem;
 using Logger = LabApi.Features.Console.Logger;
 
@@ -26,12 +27,19 @@ namespace Anomaly.Server.Content
             new Dictionary<string, int>(StringComparer.Ordinal);
         private static readonly Dictionary<int, CatalogEntry> ItemById =
             new Dictionary<int, CatalogEntry>();
+        private static CustomItemDefinition[] FrozenItems = Array.Empty<CustomItemDefinition>();
+        private static PackItemDefinition[] FrozenPackItems = Array.Empty<PackItemDefinition>();
 
         public static bool Frozen { get; private set; }
         public static bool Materialized { get; private set; }
         public static ContentCatalog Catalog { get; private set; } = EmptyCatalog();
 
         internal static void Add(CustomItemDefinition definition)
+        {
+            lock (ServerAssetManager.Sync) AddCore(definition);
+        }
+
+        private static void AddCore(CustomItemDefinition definition)
         {
             if (definition == null)
                 throw new ArgumentNullException(nameof(definition));
@@ -69,15 +77,27 @@ namespace Anomaly.Server.Content
 
         internal static bool Freeze(AssetPackSnapshot snapshot = null)
         {
-            if (Frozen)
-                return Materialized;
+            lock (ServerAssetManager.Sync) return FreezeCore(snapshot);
+        }
 
+        private static bool FreezeCore(AssetPackSnapshot snapshot)
+        {
             AssetPackSnapshot ownedSnapshot = snapshot == null ? ServerAssetManager.AcquireSnapshot() : null;
             snapshot ??= ownedSnapshot;
-            Frozen = true;
+            if (Frozen)
+            {
+                try { ValidateSnapshotDefinitions(snapshot); return Materialized; }
+                finally { ownedSnapshot?.Dispose(); }
+            }
             try
             {
-                var entries = Items.Values.Select(item => BuildItemEntry(item, snapshot)).ToList();
+                ServerAssetManager.ValidateFreezeSnapshot(snapshot);
+                Frozen = true;
+                FrozenPackItems = snapshot.Items.Select(CopyPackItem).ToArray();
+                var definitions = Items.Values.Concat(snapshot.Items.Select(ToDefinition)).ToArray();
+                if (definitions.Select(item => item.Key).Distinct(StringComparer.Ordinal).Count() != definitions.Length)
+                    throw new InvalidDataException("Descriptor and programmatic item keys collide.");
+                var entries = definitions.Select(item => BuildItemEntry(item, snapshot)).ToList();
                 var availableItems = InventoryItemLoader.AvailableItems;
                 if (availableItems == null)
                     throw new InvalidOperationException("InventoryItemLoader.AvailableItems is unavailable.");
@@ -100,6 +120,7 @@ namespace Anomaly.Server.Content
                 }
 
                 Materialized = true;
+                FrozenItems = definitions;
                 SafeLogInfo(
                     $"Anomaly.Content: items-only catalog frozen with {Catalog.Entries.Count} item(s), " +
                     $"catalog={ToHex(Catalog.CatalogSha256)}, manifest={ToHex(Catalog.ManifestSha256)}.");
@@ -150,11 +171,18 @@ namespace Anomaly.Server.Content
         /// </summary>
         internal static ContentCatalog CreateOfferCatalog(byte[] manifestSha256, AssetPackSnapshot snapshot)
         {
+            lock (ServerAssetManager.Sync) return CreateOfferCatalogCore(manifestSha256, snapshot);
+        }
+
+        private static ContentCatalog CreateOfferCatalogCore(byte[] manifestSha256, AssetPackSnapshot snapshot)
+        {
+            if (snapshot.ContentRegistrationRevision != ContentPacks.Revision)
+                throw new InvalidOperationException("Content registrations changed before the offer was created.");
             if (!Freeze(snapshot))
                 throw new InvalidOperationException("The server item catalog is not materialized.");
 
             var entries = new List<CatalogEntry>();
-            foreach (CustomItemDefinition definition in Items.Values.OrderBy(item => item.Key, StringComparer.Ordinal))
+            foreach (CustomItemDefinition definition in FrozenItems.OrderBy(item => item.Key, StringComparer.Ordinal))
             {
                 CatalogEntry current = BuildItemEntry(definition, snapshot);
                 if (!KeyToId.TryGetValue(current.Key, out current.AssignedId))
@@ -176,6 +204,11 @@ namespace Anomaly.Server.Content
 
         internal static void Reset()
         {
+            lock (ServerAssetManager.Sync) ResetCore();
+        }
+
+        private static void ResetCore()
+        {
             bool registrarClean = false;
             try
             {
@@ -188,6 +221,8 @@ namespace Anomaly.Server.Content
                 Items.Clear();
                 KeyToId.Clear();
                 ItemById.Clear();
+                FrozenItems = Array.Empty<CustomItemDefinition>();
+                FrozenPackItems = Array.Empty<PackItemDefinition>();
                 Catalog = EmptyCatalog();
                 Frozen = false;
                 Materialized = false;
@@ -196,6 +231,43 @@ namespace Anomaly.Server.Content
             if (!registrarClean)
                 throw new InvalidOperationException(
                     "One or more server item templates remain pending cleanup; a clean reload is blocked.");
+        }
+
+        internal static void ValidateSnapshotDefinitions(AssetPackSnapshot snapshot)
+        {
+            if (Frozen && !SameDefinitions(FrozenPackItems, snapshot.Items))
+                throw new InvalidOperationException("Descriptor item definitions changed after native freeze. Restart the server to change definitions.");
+        }
+
+        internal static bool SameDefinitions(PackItemDefinition[] left, PackItemDefinition[] right)
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+            {
+                var a = left[i]; var b = right[i];
+                if (a.Key != b.Key || a.BaseTemplate != b.BaseTemplate || a.DisplayName != b.DisplayName ||
+                    (a.Description ?? string.Empty) != (b.Description ?? string.Empty) || a.IconAddress != b.IconAddress) return false;
+            }
+            return true;
+        }
+
+        private static PackItemDefinition CopyPackItem(PackItemDefinition item) => new PackItemDefinition
+        {
+            Key = item.Key, BaseTemplate = item.BaseTemplate, DisplayName = item.DisplayName,
+            Description = item.Description, IconAddress = item.IconAddress,
+        };
+
+        private static CustomItemDefinition ToDefinition(PackItemDefinition item)
+        {
+            if (!Enum.TryParse(item.BaseTemplate, false, out ItemType template) || !Enum.IsDefined(typeof(ItemType), item.BaseTemplate) ||
+                (int)template < 0 || (int)template > ItemIdCeiling)
+                throw new InvalidDataException("Unsupported vanilla item template: " + item.BaseTemplate);
+            return new CustomItemDefinition
+            {
+                Key = item.Key, BaseTemplate = template, DisplayName = item.DisplayName,
+                Description = item.Description ?? string.Empty,
+                IconAddress = item.IconAddress == null ? (AssetAddress?)null : AssetAddress.Parse(item.IconAddress),
+            };
         }
 
         private static void SafeLogInfo(string message)

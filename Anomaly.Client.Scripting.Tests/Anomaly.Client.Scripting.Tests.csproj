@@ -9,7 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\Anomaly.Client\Content\ScriptPackReader.cs" Link="Client\ScriptPackReader.cs" />
-    <Compile Include="..\Anomaly.Client\Content\ScriptDirectoryReader.cs" Link="Client\ScriptDirectoryReader.cs" />
+    <Compile Include="..\Anomaly.Client\Content\ContentPackDirectoryReader.cs" Link="Client\ContentPackDirectoryReader.cs" />
     <Compile Include="..\Anomaly.Client\Content\ScriptPackManager.cs" Link="Client\ScriptPackManager.cs" />
     <None Include="..\Anomaly.Client.Scripting\ScriptAPI.Shipped.txt" Link="ScriptAPI.Shipped.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Anomaly.Client.Scripting\ScriptAPI.json" Link="ScriptAPI.json" CopyToOutputDirectory="PreserveNewest" />

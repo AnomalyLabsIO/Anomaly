@@ -1,5 +1,6 @@
 using Anomaly.AssetValidation;
 using Anomaly.Shared.Assets;
+using Anomaly.Shared.Content.Packs;
 using System.Text;
 using System.Text.Json;
 
@@ -7,7 +8,7 @@ namespace Anomaly.ReleasePackaging;
 
 internal static partial class ReleasePackageBuilder
 {
-    private const string SkinPackDirectory = "UserData/Anomaly/AssetBundles";
+    private const string ContentPackDirectory = "UserData/Anomaly/ContentPacks";
 
     internal static void CreateLocalReleaseArchives(
         string repositoryRoot,
@@ -49,9 +50,9 @@ internal static partial class ReleasePackageBuilder
             var entries = new Dictionary<string, PackageInventoryEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (var definition in package.Entries)
             {
-                // The selected skin pair is staged below; all other declared files include their notices.
+                // The selected skin descriptor and its declared assets are staged below.
                 if (package.Target == "client-runtime" &&
-                    definition.Path.StartsWith(SkinPackDirectory + "/", StringComparison.Ordinal))
+                    definition.Path.StartsWith(ContentPackDirectory + "/", StringComparison.Ordinal))
                     continue;
                 StageRuntimeFile(
                     ResolveUnderRoot(repository, definition.Source), definition.Path, packageRoot, entries);
@@ -61,12 +62,18 @@ internal static partial class ReleasePackageBuilder
             {
                 var sourceIndex = Path.GetFullPath(skinIndexPath);
                 var index = ReadSkinIndex(sourceIndex);
-                StageRuntimeFile(sourceIndex,
-                    SkinPackDirectory + "/" + Path.GetFileName(sourceIndex), packageRoot, entries);
+                var packRoot = ContentPackDirectory + "/" + index.PackId.Replace(':', '/');
+                const string indexRelative = "assets/pack.index.json";
+                var descriptorBytes = Encoding.UTF8.GetBytes(
+                    "{\"SchemaVersion\":1,\"PackId\":\"" + index.PackId +
+                    "\",\"Version\":\"1.0.0\",\"Assets\":{\"PackId\":\"" + index.PackId +
+                    "\",\"Index\":\"" + indexRelative + "\"}}");
+                ContentPackCodec.Parse(descriptorBytes, remote: false);
+                StageRuntimeBytes(descriptorBytes, packRoot + "/pack.json", packageRoot, entries);
+                StageRuntimeFile(sourceIndex, packRoot + "/" + indexRelative, packageRoot, entries);
                 StageRuntimeFile(Path.Combine(Path.GetDirectoryName(sourceIndex)!, index.BundleFile),
-                    SkinPackDirectory + "/" + index.BundleFile, packageRoot, entries);
-                ValidateSkinPack(ResolveUnderRoot(packageRoot,
-                    SkinPackDirectory + "/" + Path.GetFileName(sourceIndex)));
+                    packRoot + "/assets/" + index.BundleFile, packageRoot, entries);
+                ValidateSkinContentPack(ResolveUnderRoot(packageRoot, packRoot));
             }
 
             var closure = BuildAssemblyClosure(package, packageRoot, inputs, package.RuntimeClosure, "runtime");
@@ -112,6 +119,28 @@ internal static partial class ReleasePackageBuilder
         Console.WriteLine($"Validated logo/background skin pack '{index.PackId}'.");
     }
 
+    private static void ValidateSkinContentPack(string packRoot)
+    {
+        var descriptorPath = Path.Combine(packRoot, "pack.json");
+        ValidateRegularFile(descriptorPath, "Skin descriptor");
+        if (new FileInfo(descriptorPath).Length > ContentPackCodec.MaxDescriptorBytes)
+            throw new InvalidDataException("Skin descriptor is oversized.");
+        var descriptor = ContentPackCodec.Parse(File.ReadAllBytes(descriptorPath), remote: false);
+        var capture = ContentPackCodec.Capture(descriptor, (relative, maximum) =>
+        {
+            var path = ResolveUnderRoot(packRoot, relative);
+            ValidateRegularFile(path, "Skin metadata");
+            if (new FileInfo(path).Length > maximum)
+                throw new InvalidDataException("Skin metadata is oversized.");
+            return File.ReadAllBytes(path);
+        }, remote: false);
+        if (descriptor.Scripts is not null || descriptor.Data is not null || capture.AssetIndex is null ||
+            descriptor.PackId.Replace(':', '/') !=
+            Path.GetFileName(Path.GetDirectoryName(packRoot)) + "/" + Path.GetFileName(packRoot))
+            throw new InvalidDataException("Skin content pack must contain only its declared asset component and match its directory.");
+        ValidateSkinPack(ResolveUnderRoot(packRoot, descriptor.Assets.Index));
+    }
+
     private static AssetPackIndex ReadSkinIndex(string indexPath)
     {
         ValidateRegularFile(indexPath, "Skin index");
@@ -128,6 +157,27 @@ internal static partial class ReleasePackageBuilder
             index.Assets.Any(asset => asset.AssetKind != AssetKind.Texture2D))
             throw new InvalidDataException("Skin pack must contain exactly the logo and background Texture2D roots.");
         return index;
+    }
+
+    private static void StageRuntimeBytes(
+        byte[] bytes,
+        string path,
+        string packageRoot,
+        IDictionary<string, PackageInventoryEntry> entries)
+    {
+        var normalized = NormalizeRelativePath(path);
+        if (entries.ContainsKey(normalized))
+            throw new InvalidDataException($"Duplicate runtime package entry: {normalized}");
+        var destination = ResolveUnderRoot(packageRoot, normalized);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.WriteAllBytes(destination, bytes);
+        entries.Add(normalized, new PackageInventoryEntry
+        {
+            Path = normalized,
+            Name = Path.GetFileName(normalized),
+            SizeBytes = bytes.Length,
+            Sha256 = HashBytes(bytes),
+        });
     }
 
     private static void StageRuntimeFile(

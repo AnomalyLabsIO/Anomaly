@@ -8,7 +8,8 @@
   <Import Project="..\Anomaly.Server.Sample.props" />
   <ItemGroup>
     <Compile Include="..\HelloMessages.cs" Link="HelloMessages.cs" />
-    <EmbeddedResource Include="ClientScripts\**\*.lua" />
-    <EmbeddedResource Include="ClientScripts\messages.json" />
+    <EmbeddedResource Include="ContentPacks\example\panel\pack.json" LogicalName="HelloAnomalyServer.Panel/pack.json" />
+    <EmbeddedResource Include="ContentPacks\example\panel\scripts\main.lua" LogicalName="HelloAnomalyServer.Panel/scripts/main.lua" />
+    <EmbeddedResource Include="ContentPacks\example\panel\scripts\messages.json" LogicalName="HelloAnomalyServer.Panel/scripts/messages.json" />
   </ItemGroup>
 </Project>

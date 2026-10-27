@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)] [string] $Version,
-    [string] $ReleaseOutput = ''
+    [string] $ReleaseOutput = '',
+    [string] $SkinIndexPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,7 +13,14 @@ if ([string]::IsNullOrWhiteSpace($ReleaseOutput)) {
 }
 $ReleaseOutput = [IO.Path]::GetFullPath($ReleaseOutput)
 $runtimeTestPackager = Join-Path $runtimeTestRepository 'tools/ReleasePackaging/bin/Release/net8.0/Anomaly.ReleasePackaging.dll'
-$runtimeTestSkinDirectory = Join-Path $PSScriptRoot 'assets/skins'
+if ([string]::IsNullOrWhiteSpace($SkinIndexPath)) {
+    $SkinIndexPath = Join-Path $PSScriptRoot 'assets/skins/personal-skins.index.json'
+}
+$runtimeTestSkinIndex = [IO.Path]::GetFullPath($SkinIndexPath)
+$runtimeTestSkin = Get-Content -Raw -LiteralPath $runtimeTestSkinIndex | ConvertFrom-Json
+$runtimeTestSkinBundle = Join-Path (Split-Path $runtimeTestSkinIndex) $runtimeTestSkin.BundleFile
+$runtimeTestSkinRoot = 'UserData/Anomaly/ContentPacks/' + $runtimeTestSkin.PackId.Replace(':','/')
+$runtimeTestSkinIndexRelative = 'assets/pack.index.json'
 $runtimeTestTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $runtimeTestTemp = Join-Path $runtimeTestTempRoot ("anomaly-runtime-test-{0}" -f [guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $runtimeTestTemp)
@@ -57,12 +65,17 @@ try {
             # manifest controls the exact layout; DLLs retain an independent list
             # so dropping a required dependency from the manifest still fails.
             $expectedPaths = @($definition[0].entries.path)
+            if ($packageId -eq 'anomaly-client') {
+                $expectedPaths = @($expectedPaths | Where-Object { !$_.StartsWith('UserData/Anomaly/ContentPacks/', [StringComparison]::Ordinal) }) +
+                    @("$runtimeTestSkinRoot/pack.json", "$runtimeTestSkinRoot/$runtimeTestSkinIndexRelative", "$runtimeTestSkinRoot/assets/$($runtimeTestSkin.BundleFile)")
+            }
             $difference = @(Compare-Object ($expectedPaths | Sort-Object) ($paths | Sort-Object) -CaseSensitive)
             if ($difference.Count -ne 0) { throw "Missing or unexpected runtime archive files in $packageId." }
             $archivedDlls = @($paths | Where-Object { $_.EndsWith('.dll', [StringComparison]::OrdinalIgnoreCase) })
             $dllDifference = @(Compare-Object ($expectedDlls[$packageId] | Sort-Object) ($archivedDlls | Sort-Object) -CaseSensitive)
             if ($dllDifference.Count -ne 0) { throw "Missing or unexpected runtime DLLs in $packageId." }
             foreach ($file in $definition[0].entries) {
+                if ($packageId -eq 'anomaly-client' -and $file.path.StartsWith('UserData/Anomaly/ContentPacks/', [StringComparison]::Ordinal)) { continue }
                 $entry = $archive.GetEntry($file.path)
                 $stream = $entry.Open()
                 try { $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)) }
@@ -73,16 +86,28 @@ try {
             }
             $userData = @($paths | Where-Object { $_ -like 'UserData/*' })
             if ($packageId -eq 'anomaly-client') {
-                $skinFiles = @('personal-skins.bundle','personal-skins.index.json')
-                if ($userData.Count -ne 2) { throw 'Client must carry exactly the two skin pack files in UserData.' }
-                foreach ($name in $skinFiles) {
-                    $entry = $archive.GetEntry("UserData/Anomaly/AssetBundles/$name")
-                    if ($null -eq $entry) { throw "Client is missing the skin file $name." }
+                if ($userData.Count -ne 3) { throw 'Client must carry exactly the descriptor and its two declared skin assets in UserData.' }
+                $descriptorEntry = $archive.GetEntry("$runtimeTestSkinRoot/pack.json")
+                if ($descriptorEntry.Length -gt 16384) { throw 'Skin descriptor is oversized.' }
+                $descriptorReader = [IO.StreamReader]::new($descriptorEntry.Open())
+                try { $descriptor = $descriptorReader.ReadToEnd() | ConvertFrom-Json }
+                finally { $descriptorReader.Dispose() }
+                if ($descriptor.SchemaVersion -ne 1 -or
+                    $descriptor.PackId -cne $runtimeTestSkin.PackId -or $descriptor.Assets.PackId -cne $runtimeTestSkin.PackId -or
+                    $descriptor.Assets.Index -cne $runtimeTestSkinIndexRelative) {
+                    throw 'Skin descriptor does not explicitly declare the selected asset index and identity.'
+                }
+                foreach ($skinFile in @(
+                    @{path="$runtimeTestSkinRoot/$runtimeTestSkinIndexRelative"; source=$runtimeTestSkinIndex},
+                    @{path="$runtimeTestSkinRoot/assets/$($runtimeTestSkin.BundleFile)"; source=$runtimeTestSkinBundle}
+                )) {
+                    $entry = $archive.GetEntry($skinFile.path)
+                    if ($null -eq $entry) { throw "Client is missing the declared skin asset $($skinFile.path)." }
                     $stream = $entry.Open()
                     try { $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)) }
                     finally { $stream.Dispose() }
-                    if ($hash -ne (Get-FileHash -LiteralPath (Join-Path $runtimeTestSkinDirectory $name)).Hash) {
-                        throw "Archived skin bytes differ from the checked-in pack: $name"
+                    if ($hash -ne (Get-FileHash -LiteralPath $skinFile.source).Hash) {
+                        throw "Archived skin bytes differ from the selected pack: $($skinFile.path)"
                     }
                 }
             } elseif ($userData.Count -ne 0) { throw 'Server must not carry client skins or profiles.' }
@@ -117,11 +142,10 @@ try {
     $afterHashes = @($artifacts | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName).Hash })
     if (@(Compare-Object $beforeHashes $afterHashes).Count -ne 0) { throw 'Existing archives were altered.' }
 
-    foreach ($name in @('personal-skins.bundle','personal-skins.index.json')) {
-        Copy-Item -LiteralPath (Join-Path $runtimeTestSkinDirectory $name) -Destination $runtimeTestTemp
-    }
-    $testIndex = Join-Path $runtimeTestTemp 'personal-skins.index.json'
-    $testBundle = Join-Path $runtimeTestTemp 'personal-skins.bundle'
+    $testIndex = Join-Path $runtimeTestTemp ([IO.Path]::GetFileName($runtimeTestSkinIndex))
+    $testBundle = Join-Path $runtimeTestTemp $runtimeTestSkin.BundleFile
+    Copy-Item -LiteralPath $runtimeTestSkinIndex -Destination $testIndex
+    Copy-Item -LiteralPath $runtimeTestSkinBundle -Destination $testBundle
     & dotnet $runtimeTestPackager validate-skins $testIndex
     if ($LASTEXITCODE -ne 0) { throw 'Valid default skin pack was rejected.' }
 
@@ -133,7 +157,7 @@ try {
         throw 'Corrupt skin bundle was not rejected by its index hash.'
     }
 
-    Copy-Item -LiteralPath (Join-Path $runtimeTestSkinDirectory 'personal-skins.bundle') -Destination $testBundle -Force
+    Copy-Item -LiteralPath $runtimeTestSkinBundle -Destination $testBundle -Force
     $index = Get-Content -Raw -LiteralPath $testIndex | ConvertFrom-Json
     $index.Assets = @($index.Assets | Where-Object Address -ne 'game/skin/background')
     [IO.File]::WriteAllText($testIndex, ($index | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))

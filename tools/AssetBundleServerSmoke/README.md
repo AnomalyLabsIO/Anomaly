@@ -11,8 +11,13 @@ copy independent files, preserve source files, and require loopback bindings.
 
 ```powershell
 tools/AssetBundleServerSmoke/Prepare-Server.ps1 -SourceServerRoot E:/Projects/AnomalyLabs/Server/server -OutputDirectory artifacts/assetbundles/network-server-01
-tools/AssetBundleServerSmoke/Run-Server.ps1 -ServerDirectory artifacts/assetbundles/network-server-01 -EvidenceDirectory artifacts/assetbundles/network-server-run01 -AssetDirectory artifacts/assetbundles/network-packs-01
+tools/AssetBundleServerSmoke/Run-Server.ps1 -ServerDirectory artifacts/assetbundles/network-server-01 -EvidenceDirectory artifacts/assetbundles/network-server-run01 -ContentPackDirectory artifacts/assetbundles/network-packs-01
 ```
+
+The content root must contain `<namespace>/<pack>/pack.json` matching the exported
+index identity and declaring `Assets.Index`; unlisted bundle/index pairs are not
+discovered. Use the fixture preparation tooling to stage the descriptor and
+its referenced files together.
 
 Default port: `27989`. Preserve the stage's `AppData` between client joins to
 keep the same server identity. Use a new evidence directory for each server run.

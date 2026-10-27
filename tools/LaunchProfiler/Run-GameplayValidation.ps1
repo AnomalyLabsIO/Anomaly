@@ -236,7 +236,7 @@ try {
     foreach ($folder in @('plugins','dependencies')) { Copy-Item -LiteralPath (Join-Path $oldLab $folder) -Destination $newLab -Recurse }
     $anomalyConfig = Join-Path $newLab "configs/$Port/Anomaly"
     New-Item -ItemType Directory -Path $anomalyConfig -Force | Out-Null
-    @('asset_directory: ''''','require_password: false','enable_legacy_password_auth_on_loopback: false') | Set-Content -LiteralPath (Join-Path $anomalyConfig 'config.yml')
+    @('content_pack_directory: ''''','require_password: false','enable_legacy_password_auth_on_loopback: false') | Set-Content -LiteralPath (Join-Path $anomalyConfig 'config.yml')
     if ($DedicatedDummyControl) { Copy-Item -LiteralPath (Join-Path $serverData.backup ([IO.Path]::GetRelativePath((Join-Path $server 'AppData'),$ServerIdentityFile))) -Destination (Join-Path $anomalyConfig 'server_identity.yml') }
     $configuration = Join-Path $server "AppData/config/$Port"
     New-Item -ItemType Directory -Path $configuration -Force | Out-Null

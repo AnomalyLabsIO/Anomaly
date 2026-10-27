@@ -14,6 +14,19 @@
     <Compile Include="..\..\Anomaly.Shared\Assets\BoundedPackJson.cs" Link="Assets\BoundedPackJson.cs" />
     <Compile Include="..\..\Anomaly.Shared\Assets\StockAssetProfile.cs" Link="Assets\StockAssetProfile.cs" />
     <Compile Include="..\..\Anomaly.Shared\Content\ModNamespace.cs" Link="Content\ModNamespace.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Content\Packs\ContentPackDescriptor.cs" Link="Content\Packs\ContentPackDescriptor.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Content\Packs\CapturedContentPack.cs" Link="Content\Packs\CapturedContentPack.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Content\Packs\PackItemDefinition.cs" Link="Content\Packs\PackItemDefinition.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Content\Packs\ContentPackCodec.cs" Link="Content\Packs\ContentPackCodec.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Scripting\ScriptPackLimits.cs" Link="Scripting\ScriptPackLimits.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Scripting\ScriptPackIndex.cs" Link="Scripting\ScriptPackIndex.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Scripting\ScriptPackIndexCodec.cs" Link="Scripting\ScriptPackIndexCodec.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Scripting\ScriptSourceValidator.cs" Link="Scripting\ScriptSourceValidator.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Scripting\ScriptMessageLimits.cs" Link="Scripting\ScriptMessageLimits.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Scripting\ScriptMessageField.cs" Link="Scripting\ScriptMessageField.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Scripting\ScriptMessageSchema.cs" Link="Scripting\ScriptMessageSchema.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Scripting\ScriptMessagePayload.cs" Link="Scripting\ScriptMessagePayload.cs" />
+    <Compile Include="..\..\Anomaly.Shared\Networking\AnomalyMessageDirection.cs" Link="Networking\AnomalyMessageDirection.cs" />
     <EmbeddedResource Include="..\..\Anomaly.Shared\Assets\CassieProfile.tsv" LogicalName="Anomaly.Shared.Assets.CassieProfile.tsv" />
   </ItemGroup>
 </Project>

@@ -1124,8 +1124,8 @@ M|System.String Anomaly.Client.Api.Features.LockerChamberWrapper::ToString()|sta
 M|System.String Anomaly.Client.Api.Features.Paths::get_AnomalyPath()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Features.Paths::get_AnomalyUserDataPath()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Features.Paths::get_ApplicationDataPath()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
-M|System.String Anomaly.Client.Api.Features.Paths::get_AssetBundlesPath()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Features.Paths::get_AudioOverridesPath()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|System.String Anomaly.Client.Api.Features.Paths::get_ContentPacksPath()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Features.Paths::get_CrashReportsPath()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Features.Paths::get_FileCachePath()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.String Anomaly.Client.Api.Features.Paths::get_OverridesPath()|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
@@ -2421,8 +2421,8 @@ P|System.String Anomaly.Client.Api.Features.Item::TypeName()|get=public|set=none
 P|System.String Anomaly.Client.Api.Features.Paths::AnomalyPath()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Features.Paths::AnomalyUserDataPath()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Features.Paths::ApplicationDataPath()|get=public|set=none|params=
-P|System.String Anomaly.Client.Api.Features.Paths::AssetBundlesPath()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Features.Paths::AudioOverridesPath()|get=public|set=none|params=
+P|System.String Anomaly.Client.Api.Features.Paths::ContentPacksPath()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Features.Paths::CrashReportsPath()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Features.Paths::FileCachePath()|get=public|set=none|params=
 P|System.String Anomaly.Client.Api.Features.Paths::OverridesPath()|get=public|set=none|params=

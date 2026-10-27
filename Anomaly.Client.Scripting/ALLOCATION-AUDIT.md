@@ -142,9 +142,9 @@ boundary. Current tests do not qualify live Unity/IL2CPP GC behavior or native u
 The opt-in `EarlyAccessUiSmoke -UseModLaunch -LocalHosting -ClientScripting`
 scenario passed against the supported game/loader through both console `host`
 and Create Server. Evidence is retained locally under
-`artifacts/scripting-readiness/local-output-20261026-b/`: native Mirror readiness,
-the reciprocal host proof and prepared script set were all true; the real sample
-rendered player/round text. Each hosted connection exercised 120 frames with two
+`artifacts/content-packs-cutover-20261026/local-host/`: descriptor-selected sources,
+native Mirror readiness, reciprocal host proof and the prepared set were verified;
+the real sample rendered player/round text. Each hosted connection exercised 120 frames with two
 queued native-query callbacks per frame, literal/noninteractive owner labels,
 independent clear/expiry and disconnect cleanup. Returning to the menu and rehosting
 created fresh sessions. No production GC was forced. The reversible deployment was

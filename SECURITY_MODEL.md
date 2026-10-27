@@ -70,15 +70,27 @@ The legacy PBKDF2 verifier is authentication-equivalent and is not suitable for 
 
 ## Custom content
 
-Public v1 accepts items only. Custom items clone a stock item template and
-inherit its model, pickup behavior, and weight; the only custom presentation is
-name, description, and an optional PNG icon. Remote manifests accept PNG and OGG
-only. They do not activate custom roles, effects, models, weights, AssetBundles,
-meshes, generic prefab hierarchies, or generic spawning.
+Content packs use a strict bounded `pack.json` descriptor under
+`ContentPacks/<namespace>/<pack>`. Explicit sections select one Lua entrypoint,
+an asset index and/or typed server-side items; unlisted files never execute or
+transfer. Item definitions clone stock templates and inherit their gameplay,
+model and weight, with custom name, description and optional indexed
+Texture2D/Sprite icon. Typed `Data.Items` is not CLR/Unity object activation.
+Restricted self-contained Unity bundles support textures, sprites, audio,
+static meshes and decorative descriptions, not arbitrary prefabs, shaders,
+script-backed objects or native cross-bundle dependencies. The client validates
+immutable bytes before Unity loading, but Unity/FMOD/graphics still consume data
+in-process: this is not process isolation. See [native limits](ASSETBUNDLES.md).
+
+Lua has one declared entrypoint per logical pack with no modules, OS/filesystem,
+network, reflection or automatic CLR interop. Remote execution remains disabled
+until memory containment is qualified; separate content/execution consent cannot
+override that gate. Only verified nondedicated in-process hosting permits local
+owner scripts. See the [descriptor and execution contract](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
 
 Consent is bound to server fingerprint, catalog SHA-256, and manifest SHA-256.
-A decline requests no files. Every item clone, PNG decode, icon, translation,
-and collision check is staged before the catalog is committed all-or-nothing.
+A decline requests no files. Item/native-asset materialization, icon, translation
+and collision checks stage before all-or-nothing catalog commit.
 Active connections keep their immutable catalog; file changes affect future
 offers instead of triggering destructive hot reload. SHA-256 blobs are cached
 within the game instance under `<MelonLoader UserData>/Anomaly/FileCache/`;

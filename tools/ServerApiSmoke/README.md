@@ -10,8 +10,10 @@ dotnet build tools/ServerApiSmoke/ServerApiSmoke.csproj -c Release -p:DeployLoca
 ./tools/ServerApiSmoke/Prepare-Assets.ps1 -OutputDirectory ./artifacts/server-api/assets-01 -PackIndexPath ./artifacts/assetbundles/qualified-fixture/anomaly-qualified-fixture.index.json
 ```
 
-Set the isolated Anomaly plugin's `AssetDirectory` to that absolute asset path
-before starting the server. Stage `Anomaly.ServerApiSmoke.dll` only in the
+Set the isolated Anomaly plugin's `ContentPackDirectory` to that absolute content
+root before starting the server. Preparation wraps the exported index/bundle in
+a descriptor pack with explicit `Assets.Index`; loose pairs are not discovered.
+Stage `Anomaly.ServerApiSmoke.dll` only in the
 isolated LabAPI `plugins/global` directory. Anomaly initializes at highest
 priority; this fixture uses Low and waits for completed pack indexing.
 
@@ -234,4 +236,4 @@ when room transforms match on both peers; layout authors must preserve valid
 native topology. A native stage exception rejects that generation and disconnects
 its clients. Exact descriptor parity is a placement check, not a playability test.
 
-Protocol 7 fixtures require completed bundle/index pairs from the external Unity authoring project. Pass Prepare-Assets.ps1 -PackIndexPath with an index exposing mods/fixture/textures/checker and mods/fixture/audio/tone. The script only copies completed files; it no longer generates raw PNG/OGG assets or invokes FFmpeg. Rebuild both smoke mods from the current SDK.
+Fixtures require completed bundle/index pairs from the external Unity authoring project. Pass `Prepare-Assets.ps1 -PackIndexPath` with an index exposing `mods/fixture/textures/checker` and `mods/fixture/audio/tone`. Preparation copies the completed files into a descriptor pack; it does not generate raw PNG/OGG assets or invoke FFmpeg. Rebuild both smoke mods from the current SDK.

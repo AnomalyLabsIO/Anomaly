@@ -113,9 +113,11 @@ observe future ClientReady but cannot observe an earlier Connected retroactively
 
 ## Local nondedicated host
 
-Local owner directories use the same source/index validation. Their sources remain
-inert in menus, offline play, dedicated-server mode, and remote connections. Local
-content fallback never executes owner scripts while joining a remote server.
+Local owner packs under `<UserData>/Anomaly/ContentPacks/<namespace>/<pack>` use
+the same strict `pack.json` descriptor and source/index validation, with one
+declared entrypoint and no modules. Their sources remain inert in menus, offline
+play, dedicated-server mode and remote connections. Local content fallback never
+executes owner scripts while joining a remote server.
 
 Execution requires a current nondedicated in-process host: NetworkServer is active,
 NetworkClient is an active host, and the server local connection and current client

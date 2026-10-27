@@ -4,7 +4,9 @@ Anomaly protocol 7 transfers externally authored Unity AssetBundles and their JS
 
 ## Installing a pack
 
-Export one self-contained LZ4 bundle and one `*.index.json` file. Copy both beside each other into the server's configured `asset_directory`, or into the client's `UserData/Anomaly/AssetBundles`. Subdirectories organize files only; the index's catalog addresses select their meaning. Local changes take effect after restarting the client. Server indexing happens in the background and publishes a complete snapshot atomically. Existing connections retain their exact consented snapshot until cleanup; future offers use the new snapshot.
+Export one self-contained LZ4 bundle and one `*.index.json` file. Install them under `ContentPacks/<namespace>/<pack>/assets/` inside server `Config.ContentPackDirectory` (default `ContentPacks`) or client `Paths.ContentPacksPath` (`UserData/Anomaly/ContentPacks`). Every pack requires `pack.json` at its root with `SchemaVersion: 1`, its exact directory-derived `PackId`, numeric `Version` such as `1.0.0`, and an explicit `Assets` section containing `PackId` and `Index` (for example `assets/panel.index.json`). The index `PackId` must match `Assets.PackId` and its namespace must match the wrapper. The bundle resolves relative to the index's `BundleFile`. A sole asset component may reuse the wrapper ID; a pack with scripts must use separate component IDs. Version is diagnostic only. Unlisted files and unreferenced indexes are not discovered. See the [complete descriptor contract](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
+
+Local asset changes take effect after restarting the client. Server indexing publishes complete immutable snapshots in the background. Existing connections retain their exact consented snapshot until cleanup; future offers use the new snapshot. Pack updates are not hot reload.
 
 Do not edit a bundle after exporting its index. The index includes exact bundle length and SHA-256, platform/engine/game profile, typed roots, measured dimensions/audio frames/mesh counts, and optional decorative descriptions. The client hashes the complete index too, and the authenticated catalog and consent digest bind both files. Changing either requires a new exact-content approval. No cross-bundle dependencies are supported. An invalid server refresh keeps the previous complete snapshot and logs its error.
 
@@ -25,7 +27,7 @@ Approved server content takes precedence over matching local addresses for that 
 
 ## Supported authoring subset
 
-Lua source delivery uses independent [script packs](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
+Lua and typed server items can share the same [content-pack descriptor](Anomaly.Client.Scripting/SCRIPT-PACKS.md), through optional `Scripts` and `Data` sections.
 AssetBundles remain restricted to the data types below.
 
 - Textures: RGBA32, one mip, at most 4096 on each axis and 16 million pixels. Keep alpha for skin images. The initial logo/background conversion preserves source dimensions and pixel appearance.
@@ -36,15 +38,18 @@ AssetBundles remain restricted to the data types below.
 
 Custom item models, animation, particles, physics, cameras, lights and arbitrary component/property assignment are outside this feature. Item icons and the existing supported renderer texture overrides remain available.
 
-## Migrating source media
+## Source media and runtime assets
 
 Keep original images and audio unchanged. Import copies into the external authoring project, assign catalog addresses, validate and export on your own device. A PNG's disk folder or filename does not imply a replacement; explicitly assign `game/skin/logo` or `game/skin/background`. Assign stock CASSIE addresses from the matching game profile, preserving names such as `.g7`. Use a personal namespace for additions.
 
-`Paths.SkinsPath`, `Paths.OverridesPath` and `Paths.AudioOverridesPath` remain inert source-location helpers for migration tools. Runtime code no longer creates or reads those legacy folders. Use `Paths.AssetBundlesPath` for completed local packs.
+Keep source media outside the declared runtime payload. `Paths.ContentPacksPath`
+is the completed local pack root; the runtime reads only descriptor-selected
+indexes and their bundles, never raw authoring PNG/OGG files.
 
-## Companion-mod migration
+## Companion-mod APIs
 
-This is a coordinated breaking protocol update from 5 to 6. Client, server, Shared and companion mods must be rebuilt from the same development SDK. Managed assembly versions remain `1.0.0.0` under the existing pre-release policy. There is no compatibility path for the former raw-file protocol.
+Build client, server, Shared and companion mods against the same development SDK.
+Managed assembly versions remain `1.0.0.0` under the existing pre-release policy.
 
 Client mods retrieve borrowed native objects on the Unity thread:
 
@@ -59,7 +64,7 @@ if (AnomalyResources.TryGetTexture(address, out var texture))
 }
 ```
 
-`TryGetSprite`, `TryGetAudioClip` and `TryGetMesh` use the same typed-address pattern. Hash-based overloads are removed. Do not destroy borrowed objects or retain remote references after disconnect. `AssetOverrideAppliedEventArgs.TextureAddress` replaces the former byte hash. Client-side `Announcer.AddWord(name, AssetAddress, category)` also accepts a new `mods/` audio address; its clip and duration follow the effective address layer. Stock CASSIE names cannot be registered as new words.
+`TryGetSprite`, `TryGetAudioClip` and `TryGetMesh` use the same typed-address pattern. Do not destroy borrowed objects or retain remote references after disconnect. `AssetOverrideAppliedEventArgs.TextureAddress` identifies the bound address. Client-side `Announcer.AddWord(name, AssetAddress, category)` also accepts a new `mods/` audio address; its clip and duration follow the effective address layer. Stock CASSIE names cannot be registered as new words.
 
 Server mods use `Api.Assets.AssetRegistry.IsReady`, `TryGetKind`, `TryGetAudioDuration` and `All` to inspect indexed metadata. Register custom item definitions during plugin enable with `CustomItemDefinition.IconAddress`; the completed catalog verifies its type. Wait for indexing before `Announcer.AddWord(name, AssetAddress, category)` or spawning decorative content. Duration is derived from the indexed clip, not supplied by the plugin. Texture override methods now take `AssetAddress`.
 

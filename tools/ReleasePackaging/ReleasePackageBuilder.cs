@@ -101,7 +101,7 @@ internal static partial class ReleasePackageBuilder
             }
 
             if (package.Target == "client-runtime")
-                ValidateSkinPack(ResolveUnderRoot(packageRoot, SkinPackDirectory + "/personal-skins.index.json"));
+                ValidateSkinContentPack(ResolveUnderRoot(packageRoot, ContentPackDirectory + "/personal/skins"));
 
             packageInventory.RuntimeClosure = BuildAssemblyClosure(
                 package, packageRoot, inventory.ResolvedInputs, package.RuntimeClosure, "runtime");
@@ -658,8 +658,9 @@ internal static partial class ReleasePackageBuilder
         {
             ["anomaly-client"] = ("client-runtime",
             [
-                "UserData/Anomaly/AssetBundles/personal-skins.bundle",
-                "UserData/Anomaly/AssetBundles/personal-skins.index.json",
+                "UserData/Anomaly/ContentPacks/personal/skins/pack.json",
+                "UserData/Anomaly/ContentPacks/personal/skins/assets/personal-skins.bundle",
+                "UserData/Anomaly/ContentPacks/personal/skins/assets/personal-skins.index.json",
                 "Plugins/Anomaly.Bootstrap.dll",
                 "Mods/Anomaly.Client.dll",
                 "UserLibs/Anomaly.Client.Api.dll",
@@ -696,8 +697,9 @@ internal static partial class ReleasePackageBuilder
                 "samples/Anomaly.Server.Sample.props",
                 "samples/HelloAnomalyServer/HelloAnomalyServer.csproj",
                 "samples/HelloAnomalyServer/Plugin.cs",
-                "samples/HelloAnomalyServer/ClientScripts/start.lua",
-                "samples/HelloAnomalyServer/ClientScripts/messages.json",
+                "samples/HelloAnomalyServer/ContentPacks/example/panel/pack.json",
+                "samples/HelloAnomalyServer/ContentPacks/example/panel/scripts/main.lua",
+                "samples/HelloAnomalyServer/ContentPacks/example/panel/scripts/messages.json",
                 "samples/HelloAnomalyServer/README.md",
                 "docs/PLAYER_POSES.md",
                 "docs/COMBAT_POSES.md",

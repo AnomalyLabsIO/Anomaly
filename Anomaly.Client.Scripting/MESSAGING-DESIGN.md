@@ -64,9 +64,10 @@ they cannot invent a server-side pack grant to make `Send` succeed.
 ## Pack contracts
 
 The automatically generated, hash-bound script-pack index uses schema 1 for a
-`Messages` array. Owners put this descriptor in their pack's optional `messages.json`;
-plugin developers supply an embedded descriptor when registering their resources.
-The same fields appear in the generated index:
+`Messages` array. A content descriptor's optional `Scripts.Messages` selects the
+JSON schema file (for example `scripts/messages.json`), including for exact-name
+embedded resources. Carriers bind the script component's `Scripts.PackId`, not
+the logical wrapper ID. The same fields appear in the generated index:
 
 ```json
 {
@@ -140,14 +141,9 @@ ownership, game state, distances, and cooldowns before applying gameplay effects
 `RequestId` can be an ordinary `UInt32` application field; existing plugin state
 can correlate requests without a new RPC subsystem.
 
-## Later authoring options
+## Supported authoring boundary
 
-Option 2, a chunk returning `{ Handlers = { GetState = function(Message) ... end } }`,
-remains a proposal. Current chunk results accept only bounded primitives, so
-returning a handler table still yields `InvalidResult`. Any future export syntax
-should feed the same registration and lifetime model.
-
-Option 3, `Messages.Request(...):Then(...)`, also remains a proposal. There are no
-futures, request timers, retries, continuation objects, or coroutine API. It can
-later layer bounded correlation and deadlines over these same message carriers.
-For now, pair named messages and explicit application request IDs.
+Register handlers explicitly with `Messages.On`. Chunk results accept only bounded
+primitives; returning a handler table yields `InvalidResult`. There are no
+`Messages.Request` futures, request timers, retries, continuations or coroutine
+API. Pair named messages with explicit application request IDs instead.

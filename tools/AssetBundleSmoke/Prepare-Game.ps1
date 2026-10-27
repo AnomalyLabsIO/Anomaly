@@ -16,6 +16,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..')).TrimEnd('\','/')
+. (Join-Path $PSScriptRoot '../ContentPackFixture.ps1')
 function Resolve-InputPath([string] $Value) {
     if ([IO.Path]::IsPathRooted($Value)) { return [IO.Path]::GetFullPath($Value) }
     return [IO.Path]::GetFullPath((Join-Path $repository $Value))
@@ -35,7 +36,9 @@ foreach ($relative in @('SCPSL.exe','GameAssembly.dll','UnityPlayer.dll','versio
     if (!(Test-Path -LiteralPath (Join-Path $source $relative) -PathType Leaf)) { throw "Missing seed input: $relative" }
 }
 $layout = Get-Content -Raw -LiteralPath (Join-Path $repository 'release/package-layout.json') | ConvertFrom-Json
-$entries = @((($layout.packages | Where-Object packageId -eq 'anomaly-client').entries) | ForEach-Object {
+$entries = @((($layout.packages | Where-Object packageId -eq 'anomaly-client').entries) | Where-Object {
+    !$_.path.StartsWith('UserData/Anomaly/ContentPacks/', [StringComparison]::Ordinal)
+} | ForEach-Object {
     [pscustomobject]@{ source=($_.source -replace '/Release/','/Debug/'); path=$_.path }
 })
 $entries += [pscustomobject]@{source='tools/AssetBundleSmoke/bin/Debug/net6.0/Anomaly.AssetBundleSmoke.dll';path='Mods/Anomaly.AssetBundleSmoke.dll'}
@@ -49,8 +52,7 @@ if ($PackIndexPath) {
     $index = Get-Content -Raw -LiteralPath $indexPath | ConvertFrom-Json
     if ($index.BundleSha256 -ne $ExpectedSha256 -or $index.BundleBytes -ne (Get-Item -LiteralPath $bundle).Length -or
         [IO.Path]::GetFileName($index.BundleFile) -ne $index.BundleFile) { throw 'Pipeline fixture index does not match the pinned bundle.' }
-    $entries += [pscustomobject]@{source=$indexPath;path='UserData/Anomaly/AssetBundles/pack.index.json'}
-    $entries += [pscustomobject]@{source=$bundle;path="UserData/Anomaly/AssetBundles/$($index.BundleFile)"}
+    $entries += @(Get-AssetContentPackFixtureEntries -IndexPath $indexPath -BundlePath $bundle -Root 'UserData/Anomaly/ContentPacks')
 }
 if ($QualificationIndexPath -or $QualificationBundlePath -or $QualificationExpectedSha256) {
     if (!$PackIndexPath -or !$QualificationIndexPath -or !$QualificationBundlePath -or $QualificationExpectedSha256 -notmatch '^[a-fA-F0-9]{64}$') {
@@ -77,12 +79,11 @@ foreach ($extraIndexInput in $AdditionalLocalIndexPaths) {
     $extraBundlePath = Join-Path (Split-Path $extraIndexPath) $extraIndex.BundleFile
     if ((Get-FileHash -LiteralPath $extraBundlePath -Algorithm SHA256).Hash -ne $extraIndex.BundleSha256 -or
         (Get-Item -LiteralPath $extraBundlePath).Length -ne $extraIndex.BundleBytes) { throw 'Additional local pack hash/length mismatch.' }
-    $entries += [pscustomobject]@{source=$extraIndexPath;path="UserData/Anomaly/AssetBundles/$($extraIndex.BundleFile).index.json"}
-    $entries += [pscustomobject]@{source=$extraBundlePath;path="UserData/Anomaly/AssetBundles/$($extraIndex.BundleFile)"}
+    $entries += @(Get-AssetContentPackFixtureEntries -IndexPath $extraIndexPath -BundlePath $extraBundlePath -Root 'UserData/Anomaly/ContentPacks')
 }
 if (@($entries.path | Group-Object | Where-Object Count -gt 1).Count) { throw 'Stage inputs collide on a destination path.' }
 foreach ($entry in $entries) {
-    if (!(Test-Path -LiteralPath (Resolve-InputPath $entry.source) -PathType Leaf)) { throw "Build the Debug input before staging: $($entry.source)" }
+    if ($null -ne $entry.source -and !(Test-Path -LiteralPath (Resolve-InputPath $entry.source) -PathType Leaf)) { throw "Build the Debug input before staging: $($entry.source)" }
 }
 New-Item -ItemType Directory -Path $destination | Out-Null
 $marker = Join-Path $destination 'assetbundle-smoke-staging.json'
@@ -111,10 +112,16 @@ foreach ($file in Get-ChildItem -LiteralPath $source -Recurse -File) {
 foreach ($entry in $entries) {
     $target = Join-Path $destination $entry.path
     New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
-    Copy-Item -LiteralPath (Resolve-InputPath $entry.source) -Destination $target
+    if ($null -eq $entry.source) {
+        [IO.File]::WriteAllText($target, $entry.content, [Text.UTF8Encoding]::new($false))
+    } else {
+        Copy-Item -LiteralPath (Resolve-InputPath $entry.source) -Destination $target
+    }
 }
 if ($LocalFallback -eq 'invalid') {
-    $invalidRoot = Join-Path $destination 'UserData/Anomaly/AssetBundles'
+    $invalidPackRoot = 'UserData/Anomaly/ContentPacks/fixture/invalid-local'
+    $invalidRoot = Join-Path $destination "$invalidPackRoot/assets"
+    New-Item -ItemType Directory -Force -Path $invalidRoot | Out-Null
     $invalidBundle = Join-Path $invalidRoot 'invalid-local.bundle'
     [IO.File]::WriteAllBytes($invalidBundle, [Text.Encoding]::ASCII.GetBytes('not-a-unity-bundle'))
     $invalidIndex = Get-Content -Raw -LiteralPath ([IO.Path]::GetFullPath($PackIndexPath)) | ConvertFrom-Json
@@ -126,10 +133,13 @@ if ($LocalFallback -eq 'invalid') {
     $invalidAsset.Address = 'mods/fixture/textures/invalid'; $invalidAsset.EntryName = $invalidAsset.Address
     $invalidAsset.Width = 1; $invalidAsset.Height = 1
     $invalidIndex.Assets = @($invalidAsset); $invalidIndex.Visuals = @()
-    $invalidIndexPath = Join-Path $invalidRoot 'zz-invalid.index.json'
+    $invalidIndexPath = Join-Path $invalidRoot 'pack.index.json'
     $invalidIndex | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $invalidIndexPath
-    $entries += [pscustomobject]@{source=$invalidBundle;path='UserData/Anomaly/AssetBundles/invalid-local.bundle'}
-    $entries += [pscustomobject]@{source=$invalidIndexPath;path='UserData/Anomaly/AssetBundles/zz-invalid.index.json'}
+    $invalidDescriptor = '{"SchemaVersion":1,"PackId":"fixture:invalid-local","Version":"1.0.0","Assets":{"PackId":"fixture:invalid-local","Index":"assets/pack.index.json"}}'
+    [IO.File]::WriteAllText((Join-Path $destination "$invalidPackRoot/pack.json"), $invalidDescriptor, [Text.UTF8Encoding]::new($false))
+    $entries += [pscustomobject]@{source=$invalidBundle;path="$invalidPackRoot/assets/invalid-local.bundle"}
+    $entries += [pscustomobject]@{source=$invalidIndexPath;path="$invalidPackRoot/assets/pack.index.json"}
+    $entries += [pscustomobject]@{source=$null;path="$invalidPackRoot/pack.json"}
 }
 foreach ($folder in @('UserData/Anomaly','ProfileAppData/config','Fixture')) { New-Item -ItemType Directory -Force -Path (Join-Path $destination $folder) | Out-Null }
 Copy-Item -LiteralPath $bundle -Destination (Join-Path $destination 'Fixture/skin.bundle')
