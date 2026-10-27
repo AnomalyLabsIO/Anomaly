@@ -1879,7 +1879,7 @@ diff --git a/src/Execution/ExecutionBudget.cs b/src/Execution/ExecutionBudget.cs
 new file mode 100644
 --- /dev/null
 +++ b/src/Execution/ExecutionBudget.cs
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,157 @@
 +using System;
 +using System.Diagnostics;
 +using System.Threading;
@@ -1891,11 +1891,14 @@ new file mode 100644
 +    {
 +        [ThreadStatic] private static ExecutionBudget _current;
 +        internal static ExecutionBudget Current { get { return _current; } }
-+        private readonly long _deadline;
++        private long _deadline;
 +        private readonly int _maxCallDepth;
 +        private long _remaining;
 +        private int _reason;
 +        private int _reentryDepth;
++        private long _pausedAt;
++        private int _pauseDepth;
++        private int _pauseThread;
 +
 +        public ExecutionBudget(long instructionLimit, TimeSpan timeout, int maxCallDepth = 128)
 +        {
@@ -1917,7 +1920,8 @@ new file mode 100644
 +            MemoryBudget.Current?.Check();
 +            var reason = TerminationReason;
 +            if (reason != ExecutionTerminationReason.None) throw new ScriptExecutionAbortedException(reason);
-+            if (Stopwatch.GetTimestamp() >= _deadline) Abort(ExecutionTerminationReason.Deadline);
++            if ((_pauseDepth == 0 ? Stopwatch.GetTimestamp() : _pausedAt) >= _deadline)
++                Abort(ExecutionTerminationReason.Deadline);
 +        }
 +
 +        public void Charge(long work = 1)
@@ -1925,6 +1929,46 @@ new file mode 100644
 +            if (work < 0) throw new ArgumentOutOfRangeException(nameof(work));
 +            Check();
 +            if (Interlocked.Add(ref _remaining, -work) < 0) Abort(ExecutionTerminationReason.CpuLimit);
++        }
++
++        /// <summary>
++        /// Excludes a trusted host IPC wait from this entry's elapsed execution
++        /// time. Fuel and sticky termination are unchanged. An independent
++        /// process watchdog must bound the wait; never expose this to Lua.
++        /// Scopes are owner-thread only and must be disposed in reverse order.
++        /// </summary>
++        public HostPauseScope PauseForHost()
++        {
++            if (!ReferenceEquals(_current, this))
++                throw new InvalidOperationException("Only the executing host can pause its budget.");
++            Check();
++            int thread = Environment.CurrentManagedThreadId;
++            if (_pauseDepth != 0 && _pauseThread != thread)
++                throw new InvalidOperationException("Host wait belongs to another thread.");
++            if (_pauseDepth == 0)
++            {
++                _pausedAt = Stopwatch.GetTimestamp();
++                _pauseThread = thread;
++            }
++            return new HostPauseScope(this, ++_pauseDepth);
++        }
++
++        private void ResumeHost(int depth)
++        {
++            if (_pauseDepth != depth || _pauseThread != Environment.CurrentManagedThreadId)
++                throw new InvalidOperationException("Host wait scopes must be disposed once in reverse order.");
++            if (--_pauseDepth != 0) return;
++            long elapsed = Math.Max(0, Stopwatch.GetTimestamp() - _pausedAt);
++            _deadline = elapsed >= long.MaxValue - _deadline ? long.MaxValue : _deadline + elapsed;
++            _pauseThread = 0;
++        }
++
++        public readonly struct HostPauseScope : IDisposable
++        {
++            private readonly ExecutionBudget _budget;
++            private readonly int _depth;
++            internal HostPauseScope(ExecutionBudget budget, int depth) { _budget = budget; _depth = depth; }
++            public void Dispose() { _budget?.ResumeHost(_depth); }
 +        }
 +
 +        public void Cancel()

@@ -15,7 +15,9 @@ internal sealed class ScriptOutput : IDisposable
     internal const int MaxSourceCharacters = 48;
     private static readonly Encoding Utf8 = new UTF8Encoding(false, true);
     private readonly ScriptOutputHost _host;
-    private readonly Script _owner;
+    private readonly Script? _owner;
+    private readonly MemoryBudget? _memory;
+    private MemoryBudget? Budget => _owner != null ? _owner.MemoryBudget : _memory;
     private readonly int _ownerThread = Environment.CurrentManagedThreadId;
     private string _prefix = string.Empty;
     private ScriptOutputHost.RateWindow _logs, _displays;
@@ -26,6 +28,14 @@ internal sealed class ScriptOutput : IDisposable
     {
         _host = host;
         _owner = owner;
+        _memory = owner.MemoryBudget;
+        SetSourceIdentity(sourceIdentity);
+    }
+
+    internal ScriptOutput(ScriptOutputHost host, MemoryBudget memory, string sourceIdentity)
+    {
+        _host = host;
+        _memory = memory;
         SetSourceIdentity(sourceIdentity);
     }
 
@@ -33,7 +43,7 @@ internal sealed class ScriptOutput : IDisposable
     {
         CheckOwner(_owner);
         if (_disposed) throw new ObjectDisposedException(nameof(ScriptOutput));
-        using var scope = _owner.MemoryBudget?.EnterScope();
+        using var scope = Budget?.EnterScope();
         var length = Math.Min(sourceIdentity?.Length ?? 0, MaxSourceCharacters);
         using var reservation = MemoryBudget.ReserveString(10 + Math.Max(1, length));
         _prefix = string.Create(10 + Math.Max(1, length), (sourceIdentity, length), static (span, state) =>
@@ -61,7 +71,7 @@ internal sealed class ScriptOutput : IDisposable
         if (!Available || !_host.HasLog || !IsValidText(text, display: false)) return false;
         var now = _host.Now();
         if (!_host.TryRate(false, ref _logs, now)) return false;
-        using var scope = _owner.MemoryBudget?.EnterScope();
+        using var scope = Budget?.EnterScope();
         using var reservation = MemoryBudget.ReserveString(_prefix.Length + text.Length);
         var line = string.Concat(_prefix, text);
         reservation.Bind(line);
@@ -78,7 +88,7 @@ internal sealed class ScriptOutput : IDisposable
         // Expired owners do not occupy scarce UI slots until the next frame.
         _host.Tick();
         if (!_host.HasSlot(this) || !_host.TryRate(true, ref _displays, now)) return false;
-        using var scope = _owner.MemoryBudget?.EnterScope();
+        using var scope = Budget?.EnterScope();
         using var storage = MemoryBudget.Reserve(ScriptOutputHost.DisplayStorageBytes + 32L + text.Length * 2L);
         var copy = new string(text.AsSpan());
         storage.Bind(copy);
@@ -101,8 +111,9 @@ internal sealed class ScriptOutput : IDisposable
     internal void InstallGlobal()
     {
         CheckOwner(_owner);
+        if (_owner == null) throw new InvalidOperationException("Remote output cannot install interpreter globals.");
         if (_disposed || !_host.IsAvailable) throw new ObjectDisposedException(nameof(ScriptOutput));
-        using var scope = _owner.MemoryBudget?.EnterScope();
+        using var scope = Budget?.EnterScope();
         if (!_owner.Globals.Get("Output").IsNil()) throw new InvalidOperationException("Output is already installed.");
         var descriptor = MemoryBudget.Allocate(256, () => new Descriptor(this));
         _owner.Globals.Set("Output", UserData.Create(this, descriptor));
@@ -123,12 +134,12 @@ internal sealed class ScriptOutput : IDisposable
         _host.Clear(this);
     }
 
-    private void CheckOwner(Script script)
+    private void CheckOwner(Script? script)
     {
         if (Environment.CurrentManagedThreadId != _ownerThread || !ReferenceEquals(script, _owner))
             throw new ScriptRuntimeException("Output belongs to another session or thread.");
-        script.ExecutionBudget?.Check();
-        script.MemoryBudget?.Check();
+        script?.ExecutionBudget?.Check();
+        Budget?.Check();
     }
 
     private static bool IsValidText(string? text, bool display)
@@ -170,7 +181,7 @@ internal sealed class ScriptOutput : IDisposable
         }
         public bool SetIndex(Script script, object obj, DynValue index, DynValue value, bool isDirectIndexing)
         { Check(script, obj); throw new ScriptRuntimeException("Output is read-only."); }
-        public string AsString(object obj) { Check(_output._owner, obj); return "[script Output]"; }
+        public string AsString(object obj) { Check(_output._owner!, obj); return "[script Output]"; }
         public DynValue MetaIndex(Script script, object obj, string metaname) { Check(script, obj); return null!; }
         public bool IsTypeCompatible(Type type, object obj) => false;
         private void Check(Script script, object obj)

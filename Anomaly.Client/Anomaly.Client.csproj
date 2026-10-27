@@ -373,6 +373,7 @@
 
 	<ItemGroup>
 		<Compile Include="Core.cs" />
+		<Compile Include="Patches\Runtime\NativeScriptStringPatch.cs" />
         <Compile Include="Internal\Poses\PosePresentationLoop.cs" />
         <Compile Include="Internal\Poses\PoseReceiptLedger.cs" />
         <Compile Include="Internal\Poses\PoseRuntime.cs" />

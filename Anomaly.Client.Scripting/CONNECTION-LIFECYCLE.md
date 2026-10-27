@@ -6,11 +6,15 @@ SHA-256 digests, API compatibility, and message schemas. Lua source files travel
 through the existing file-transfer protocol and are validated before they reach
 the interpreter. Raw remote source strings are not an execution entry point.
 
-Remote execution is disabled. `RemoteExecutionEnabled` follows
-`MemoryHardeningQualified`, which remains false:
-accounted allocation leases do not impose a qualified CLR heap ceiling or intercept
-arbitrary approved C#/native work. See [script authoring](SCRIPT-PACKS.md),
-[host constraints](README.md), and the [allocation audit](ALLOCATION-AUDIT.md).
+Remote execution requires `RemoteIsolationQualified`; `RemoteExecutionEnabled`
+follows actual Windows AppContainer/job qualification and denial/memory probes.
+`MemoryHardeningQualified` remains false for local VMs: accounted allocation leases
+do not impose a CLR heap ceiling. Remote packs load asynchronously in a separate
+bounded worker only after exact content and execution consent, with transactional
+readiness and connection/offer/activation rechecks. Failure kills/revokes the set;
+unsupported platforms/Wine never fall back to an in-process VM. See
+[script authoring](SCRIPT-PACKS.md), [host constraints](README.md), and
+the [allocation audit](ALLOCATION-AUDIT.md).
 
 An offer requiring scripts is declined before content consent, download or VM
 creation while this gate is closed. The initialization order below describes the

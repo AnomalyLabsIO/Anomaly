@@ -19,6 +19,7 @@ identity reuse with an unrelated MoonSharp distribution. The namespace is not a 
 The fork has no package or game/Unity dependencies. Source license is **BSD-3-Clause**, retained
 in [LICENSE](LICENSE), with KopiLua/Lua MIT notices retained in their source files. The project
 overrides the repository's default package license metadata accordingly.
+The current Anomaly hardening revision is `3.0.0-anomaly.6`.
 
 ## Host execution budget
 
@@ -39,6 +40,13 @@ at the next checkpoint. The fuel measure includes VM instructions, source/compil
 loops, string processing, and callback entry; it is not a Lua instruction count or real-time guarantee.
 One budget is shared across nested calls, coroutine creation/recycling, and all resume slices.
 It is never reset automatically on yields, Lua protected calls, or callback reentry.
+
+Revision `.6` adds trusted-host-only `PauseForHost()`, returning an allocation-free scope.
+A synchronous worker RPC wait pauses only elapsed engine deadline time; disposing the scope
+restores deadline accounting. Fuel consumed, call depth, cancellation and terminal
+state are never reset. It is not exposed to Lua and cannot turn arbitrary managed
+or native work into exempt execution. The parent's independent five-second command
+watchdog continues while the engine deadline is paused.
 
 Thread-local execution scopes restore the previous budget on return, yield and
 failure. Numeric string coercion and shared table/index operations use the active
@@ -132,10 +140,11 @@ been qualified. Bounded host code must reserve before allocating its own large b
 null allowance retains upstream's unbounded memory model. Never replace a session's allowance,
 clear terminal state, manually credit live storage, or expose budget objects to scripts.
 
-Anomaly keeps remote script execution disabled until memory qualification; approval
-cannot bypass that gate. Verified local hosted sources use a separate internal
-entry point. Raw remote source remains rejected. No Unity/MelonLoader runtime, game-frame performance,
-or live server acceptance is implied.
+Remote script execution requires a separate Windows AppContainer/job worker with
+actual successful isolation probes and exact content/execution approval; unavailable
+isolation fails closed. Local CLR memory accounting remains unqualified. Verified
+local hosted sources retain their separate entry point; raw remote source rejects.
+Engine regression evidence alone does not establish live game/frame acceptance.
 
 Build the isolated fork:
 

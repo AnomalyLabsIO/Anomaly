@@ -55,6 +55,8 @@ public class PlayerEffect
         if (_effects.TryGetValue(effectBase, out PlayerEffect effect))
             return effect;
 
+        ScriptHostAccess.ChargeRegistryEntries(_effects.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         effect = new PlayerEffect(effectBase);
         _effects[effectBase] = effect;
         return effect;

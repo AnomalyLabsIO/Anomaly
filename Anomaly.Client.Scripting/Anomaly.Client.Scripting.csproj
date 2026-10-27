@@ -11,16 +11,39 @@
     <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <DeployLocal Condition="'$(DeployLocal)' == ''">false</DeployLocal>
   </PropertyGroup>
+  <PropertyGroup>
+    <WorkerOutputDirectory>$(MSBuildThisFileDirectory)..\Anomaly.Client.ScriptWorker\bin\$(Configuration)\net6.0\</WorkerOutputDirectory>
+    <WorkerIdentityManifest>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\WorkerIdentity.json</WorkerIdentityManifest>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="Assembly-CSharp" HintPath="$(AnomalyClientInteropDir)\Assembly-CSharp.dll" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(AnomalyClientInteropDir)\UnityEngine.CoreModule.dll" Aliases="UnityInterop" />
     <ProjectReference Include="..\Anomaly.Client.Api\Anomaly.Client.Api.csproj" AdditionalProperties="DeployLocal=$(DeployLocal)" />
     <ProjectReference Include="..\third_party\MoonSharp\Anomaly.MoonSharp.Interpreter.csproj" />
+    <ProjectReference Include="..\Anomaly.Client.ScriptWorker\Anomaly.Client.ScriptWorker.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="$(WorkerOutputDirectory)Anomaly.Client.ScriptWorker.dll;$(WorkerOutputDirectory)Anomaly.Client.ScriptWorker.deps.json;$(WorkerOutputDirectory)Anomaly.Client.ScriptWorker.runtimeconfig.json"
+             Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="$(WorkerIdentityManifest)" LogicalName="Anomaly.Client.Scripting.WorkerIdentity.json" />
+  </ItemGroup>
+  <Target Name="GenerateWorkerIdentity" BeforeTargets="PrepareResources" DependsOnTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <WorkerIdentityFiles Include="$(WorkerOutputDirectory)Anomaly.Client.ScriptWorker.dll;$(WorkerOutputDirectory)Anomaly.Client.ScriptWorker.deps.json;$(WorkerOutputDirectory)Anomaly.Client.ScriptWorker.runtimeconfig.json;$(WorkerOutputDirectory)Anomaly.MoonSharp.Interpreter.dll" />
+    </ItemGroup>
+    <GetFileHash Files="@(WorkerIdentityFiles)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="WorkerIdentityHashes" />
+    </GetFileHash>
+    <PropertyGroup>
+      <WorkerIdentityJson>{&quot;files&quot;:[@(WorkerIdentityHashes->'{&quot;name&quot;:&quot;%(Filename)%(Extension)&quot;,&quot;sha256&quot;:&quot;%(FileHash)&quot;}', ',')]}</WorkerIdentityJson>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(WorkerIdentityManifest)" Lines="$(WorkerIdentityJson)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
   <Target Name="CopyScriptingToLocalClient" AfterTargets="Build" Condition="'$(DeployLocal)' == 'true'">
     <ItemGroup>
       <ScriptingLocalFiles Include="$(TargetPath)" />
       <ScriptingLocalFiles Include="$(TargetDir)Anomaly.MoonSharp.Interpreter.dll" />
+      <ScriptingLocalFiles Include="$(TargetDir)Anomaly.Client.ScriptWorker.dll;$(TargetDir)Anomaly.Client.ScriptWorker.deps.json;$(TargetDir)Anomaly.Client.ScriptWorker.runtimeconfig.json" />
     </ItemGroup>
     <Copy SourceFiles="@(ScriptingLocalFiles)" DestinationFolder="$(AnomalyClientUserLibsDir)"
           Condition="Exists('$(AnomalyClientUserLibsDir)')" />

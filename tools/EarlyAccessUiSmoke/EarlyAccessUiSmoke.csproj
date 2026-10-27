@@ -12,5 +12,6 @@
     <Reference Include="0Harmony" HintPath="$(AnomalyClientMelonLibDir)\0Harmony.dll" Private="false" />
     <Compile Include="..\ServerApiSmoke\SmokeMessages.cs" Link="SmokeMessages.cs" />
     <Compile Include="..\ServerApiSmoke\FacilityContents.cs" Link="FacilityContents.cs" />
+    <Compile Remove="RemoteServerFixture\**\*.cs" />
   </ItemGroup>
 </Project>

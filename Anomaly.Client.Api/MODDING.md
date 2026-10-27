@@ -295,12 +295,67 @@ supported only within the [validated asset subset](../ASSETBUNDLES.md).
 
 Required content activation and declared Lua initialization precede native
 Ready/AddPlayer and public `ClientReady`; Lua additionally requires separate
-execution approval. Remote Lua remains disabled until memory containment is
-qualified, regardless of consent. Local scripts execute only with verified
-nondedicated in-process host proof. Pending consent reserves no transfer slot;
+execution approval. Remote Lua requires actual qualified Windows AppContainer/job
+isolation; failed/unsupported isolation (including Wine) cannot be overridden by
+consent and has no in-process fallback. Local accounting remains unqualified;
+local scripts require verified nondedicated in-process host proof. Pending consent
+reserves no transfer slot;
 admission retains its fixed 120-second deadline. See the
 [server API guide](../Anomaly.Server/MODDING.md) and
 [descriptor/data schema](../Anomaly.Client.Scripting/SCRIPT-PACKS.md).
+
+## Remote native query bounds
+
+The remote capability bridge and remote event capture enter an internal,
+thread-local `ScriptHostAccess` operation. Ordinary trusted C# API use and local
+owner/development scripts do not enter this scope and retain their existing API
+semantics. No gameplay setter or additional method is exposed by these checks.
+Nested scopes share counters rather than resetting the allowance. Exhaustion is
+a terminal `ScriptHostAccessException`, not an empty result or a swallowed failure.
+
+The reviewed shipped surface comprises the 21 directly annotated getter families
+below, their annotated inherited subtype members, the annotated event argument
+records, and the nine `Game` query methods. Unannotated collection/scene-discovery
+APIs such as `Room.Players`, `Locker.Chambers`, `List`, `FindObjectsOfType`, and raw
+Unity objects are not remotely callable.
+
+| Reviewed family | Parent work and boundary |
+|---|---|
+| `Player` / inherited `LocalPlayer`; `Role`; `PlayerStat`; `PlayerEffect` | Scalar native fields, fixed role/movement lookups, enum/type names and policy checks. Local-player resolution, fallback identity scans and promotion/remapping have a shared 512-entry operation budget; remote ID lookup uses an explicit bounded hub scan instead of an opaque native ID search. Scoped failures propagate through legacy availability catches. Stat lookup preflights native module array length. |
+| `Item` and its inherited item subtypes; `Pickup` and its inherited pickup/projectile subtypes; `FirearmState` | Scalar fields and readonly state snapshots. Modular item permission/weight reads and firearm module queries preflight the native subcomponent array length. Subtype dispatch uses fixed factory lists, not assembly/type discovery. Serial-index growth is checked before dictionary insertion. |
+| `Room`; `Generator`; `Locker`; `Elevator`; `Tesla`; `Hazard` and inherited hazards; `Workstation` | Room identifiers and scalar state. Generator/locker ancestry walks charge before each component lookup and fail beyond 64 total steps. Position-to-room resolution preflights the native room registry size before calling the game lookup. No chamber/room/player collection snapshot is exposed. |
+| `Door` and inherited doors; `AdminToy` and inherited toys; `FacilityCamera`; `Ragdoll`; `AnnouncerWord` | Scalar state and native names/labels. All IL2CPP-to-managed string copies passing through the guarded conversion preflight their native UTF-16 length. Cached native object identities are reused; cache misses are bounded before wrapper construction and potential dictionary growth. |
+| `MotionDiscontinuity`; `VoiceMessagePacket`; annotated event argument records | Stored readonly scalar/wrapper references and fixed arithmetic. Computed names (`ClipName`, `SceneName`, announcer names) use the same native string guard. Interaction-target getters can create door/locker/generator/workstation wrappers and therefore share the capture operation's wrapper/cache allowance. Event construction performed by the game before publication is not charged as a remote query. |
+| Nine `Game` methods: `GetPlayer`, `GetPlayerAt`, `GetCurrentItem`, `GetRoom`, `GetFirearmState`, `GetHealth`, `GetHumeShield`, `GetStamina`, `GetPosition` | ID resolution uses the bounded registry path; indexed access and cached player count are constant work. Item/inventory, room, stat and role cache misses share the same allowance. Position and firearm results have fixed-size fields; stat synchronization/visibility policy is unchanged. Round flags are cached scalar reads. |
+
+One operation permits at most four new API wrappers, 64 hierarchy steps and
+512 aggregate registry/module/cache-growth entries. Existing cache hits do not
+recreate wrappers. These are operation limits, not new global cache sizes or
+per-session heap measurements. Existing trusted game lifecycle eviction remains
+responsible for the shared caches.
+
+The Client patches the real
+`Il2CppInterop.Runtime.IL2CPP.Il2CppStringToManaged(IntPtr)` entry point. Its prefix
+calls `il2cpp_string_length` and rejects lengths outside 0..4096 **before** the
+interop method constructs a managed string. Null pointers retain the original
+null behavior. Outside a remote scope the prefix does not perform a native length
+read. The exact prefix/target tuple is a mandatory startup hook registered with
+Bootstrap's existing verifier; a missing hook fails startup rather than enabling
+unbounded remote string conversion. Protocol UTF-8/result-size bounds are separate.
+
+These checks do not intercept native allocation, IL2CPP array/proxy allocation,
+or arbitrary C#/native getters. They assume the shipped game/Unity/interop calls
+used for scalar reads, casts, collection iteration, native string-length reads,
+room lookup, module lookup, stat visibility and spectator tracking are trusted and
+return. Native virtual getters may construct native temporary strings or other
+state before conversion; the managed-copy guard does not bound that native work.
+The local exported game stubs establish signatures/collection fields but contain
+`AnalysisFailedException` bodies for several native queries, so they are not
+evidence of native instruction counts or allocation ceilings. Harmony installation
+and the real oversized-string path must also be exercised in the supported game;
+source/unit checks alone do not establish runtime detouring or absence of native
+inlining. The external worker's hard process limits do not interrupt a native
+operation already executing in the game process.
 
 ## Events
 

@@ -41,6 +41,9 @@ internal static class ContentCatalogClient
     private static bool _failureLatched;
     private static bool _activationSent;
     private static bool _activationPending;
+    private static bool _qualificationPending;
+    private static bool _offerResolutionStarted;
+    private static string _offerFingerprint;
     private static long _offerGeneration;
     internal static bool IsActivated { get; private set; }
 
@@ -90,6 +93,9 @@ internal static class ContentCatalogClient
         _failureLatched = false;
         _activationSent = false;
         _activationPending = false;
+        _qualificationPending = false;
+        _offerResolutionStarted = false;
+        _offerFingerprint = null;
         Exception cleanupFailure = null;
         try { ScriptingBootstrap.RevokeAll(); }
         catch (Exception exception) { cleanupFailure = exception; }
@@ -166,13 +172,32 @@ internal static class ContentCatalogClient
         }
     }
 
+    internal static void Tick()
+    {
+        if (!_qualificationPending) return;
+        if (_catalog == null || _manifest == null || _declined || _failureLatched ||
+            !ConnectionContentBootstrap.IsCurrentScriptOffer(_manifest.SessionId, _catalog.CatalogSha256, _catalog.ManifestSha256))
+        {
+            _qualificationPending = false;
+            return;
+        }
+        if (ScriptingBootstrap.IsRemoteQualificationPending) return;
+        _qualificationPending = false;
+        TryResolveOffer();
+    }
+
     private static void TryResolveOffer()
     {
-        if (_catalog == null || _manifest == null || _decisionSent || _declined || _failureLatched)
+        if (_catalog == null || _manifest == null || _decisionSent || _declined || _failureLatched || _offerResolutionStarted)
             return;
         if (string.IsNullOrWhiteSpace(AuthHandler.CurrentServerFingerprint))
         {
             Fail("the authenticated server fingerprint is unavailable");
+            return;
+        }
+        if (_offerFingerprint != null && !string.Equals(_offerFingerprint, AuthHandler.CurrentServerFingerprint, StringComparison.Ordinal))
+        {
+            Fail("the authenticated server changed while worker qualification was pending");
             return;
         }
         if (!CatalogBuilder.HashesEqual(_catalog.ManifestSha256, _manifest.ManifestSha256))
@@ -184,9 +209,17 @@ internal static class ContentCatalogClient
         try
         {
             ValidateCatalogFiles(_catalog, _manifest);
-            if (_catalog.ScriptPacks.Count != 0 && !ScriptingPolicy.RemoteExecutionEnabled)
-                throw new NotSupportedException(ScriptingPolicy.RemoteExecutionDisabledReason);
+            _offerFingerprint ??= AuthHandler.CurrentServerFingerprint;
             ConnectionContentBootstrap.BindOffer(_manifest.SessionId, _catalog.CatalogSha256, _catalog.ManifestSha256);
+            if (_catalog.ScriptPacks.Any(pack => pack.Sources.Count != 0) && !ScriptingPolicy.RemoteExecutionEnabled)
+            {
+                if (ScriptingBootstrap.IsRemoteQualificationPending)
+                {
+                    _qualificationPending = true;
+                    return;
+                }
+                throw new NotSupportedException(ScriptingPolicy.RemoteExecutionDisabledReason);
+            }
         }
         catch (Exception exception)
         {
@@ -194,6 +227,8 @@ internal static class ContentCatalogClient
             return;
         }
 
+        _qualificationPending = false;
+        _offerResolutionStarted = true;
         if (ContentConsentStore.IsApproved(
                 AuthHandler.CurrentServerFingerprint,
                 _catalog.CatalogSha256,
@@ -208,6 +243,16 @@ internal static class ContentCatalogClient
         byte[] catalogHash = (byte[])_catalog.CatalogSha256.Clone();
         byte[] manifestHash = (byte[])_catalog.ManifestSha256.Clone();
         long offerGeneration = _offerGeneration;
+        ulong activationId = _manifest.SessionId;
+        long transportGeneration = AnomalyMessaging.TransportGeneration;
+        var pointer = NetworkClient.connection?.Pointer ?? IntPtr.Zero;
+        bool CurrentConsent() => offerGeneration == _offerGeneration && !_decisionSent && !_declined && !_failureLatched &&
+            AnomalyMessaging.TransportGeneration == transportGeneration && _catalog != null && _manifest?.SessionId == activationId &&
+            CatalogBuilder.HashesEqual(catalogHash, _catalog.CatalogSha256) &&
+            CatalogBuilder.HashesEqual(manifestHash, _catalog.ManifestSha256) &&
+            string.Equals(fingerprint, AuthHandler.CurrentServerFingerprint, StringComparison.Ordinal) &&
+            (NetworkClient.connection == null || (NetworkClient.connection.Pointer == pointer &&
+                ConnectionContentBootstrap.IsCurrentScriptOffer(activationId, catalogHash, manifestHash)));
         PasswordPrompt.ShowConfirmation(
             PromptOwner,
             Tr.Get(TrKeys.Content_ApprovalTitle),
@@ -217,16 +262,8 @@ internal static class ContentCatalogClient
             Tr.Get(TrKeys.Prompt_SkipContent),
             () =>
             {
-                if (offerGeneration != _offerGeneration)
+                if (!CurrentConsent())
                     return;
-                if (_catalog == null ||
-                    !CatalogBuilder.HashesEqual(catalogHash, _catalog.CatalogSha256) ||
-                    !CatalogBuilder.HashesEqual(manifestHash, _catalog.ManifestSha256) ||
-                    !string.Equals(fingerprint, AuthHandler.CurrentServerFingerprint, StringComparison.Ordinal))
-                {
-                    Fail("the authenticated offer changed while consent was pending");
-                    return;
-                }
                 if (!ContentConsentStore.TryRemember(fingerprint, catalogHash, manifestHash))
                 {
                     Fail("consent could not be persisted safely");
@@ -236,7 +273,7 @@ internal static class ContentCatalogClient
             },
             () =>
             {
-                if (offerGeneration == _offerGeneration)
+                if (CurrentConsent())
                     DeclineByUser("user declined the content offer");
             });
     }
@@ -255,6 +292,13 @@ internal static class ContentCatalogClient
         }))
         {
             Fail("the exact content approval could not be delivered over the authenticated transport");
+            return;
+        }
+        if (NetworkClient.connection == null)
+        {
+            FailActivation("the approved content connection disappeared before transfer",
+                _catalog.Packs.Select(pack => pack.PackId).Concat(_catalog.ScriptPacks.Select(pack => pack.PackId))
+                    .Concat(_catalog.Entries.Select(entry => entry.Key)));
             return;
         }
         ReportHealth(FeatureHealthStatus.Degraded,
@@ -326,7 +370,7 @@ internal static class ContentCatalogClient
 
     private static void HandleTransferFinished(bool successful)
     {
-        if (_declined || _activationSent || _activationPending || _catalog == null)
+        if (_declined || _failureLatched || !_decisionSent || _activationSent || _activationPending || _catalog == null || _manifest == null)
             return;
         _activationPending = true;
         string[] catalogKeys = _catalog.Packs.Select(pack => pack.PackId).Concat(_catalog.ScriptPacks.Select(pack => pack.PackId))
@@ -340,10 +384,37 @@ internal static class ContentCatalogClient
             }
 
             long generation = _offerGeneration;
+            long transportGeneration = AnomalyMessaging.TransportGeneration;
+            var pointer = NetworkClient.connection?.Pointer ?? IntPtr.Zero;
+            var fingerprint = AuthHandler.CurrentServerFingerprint;
+            ulong activationId = _manifest.SessionId;
             ContentCatalog catalog = _catalog;
+            var catalogHash = (byte[])catalog.CatalogSha256.Clone();
+            var manifestHash = (byte[])catalog.ManifestSha256.Clone();
+            bool OwnsActivation() => generation == _offerGeneration && !_declined && !_failureLatched &&
+                _catalog != null && _manifest?.SessionId == activationId &&
+                CatalogBuilder.HashesEqual(catalogHash, _catalog.CatalogSha256) &&
+                CatalogBuilder.HashesEqual(manifestHash, _catalog.ManifestSha256) &&
+                string.Equals(fingerprint, AuthHandler.CurrentServerFingerprint, StringComparison.Ordinal) &&
+                AnomalyMessaging.TransportGeneration == transportGeneration;
+            bool CheckCurrent()
+            {
+                if (!OwnsActivation()) return false;
+                // A missing native connection is a failure of this still-owned
+                // transaction, not evidence that a replacement owns its resources.
+                if (NetworkClient.connection == null)
+                {
+                    FailActivation("the approved content connection disappeared during initialization", catalogKeys);
+                    return false;
+                }
+                return NetworkClient.connection.Pointer == pointer &&
+                    ConnectionContentBootstrap.IsCurrentScriptOffer(activationId, catalogHash, manifestHash);
+            }
+            bool bundleCompleted = false;
             AssetBundleManager.ActivateRemote(catalog, (valid, validationError) =>
             {
-                if (generation != _offerGeneration || _declined || _activationSent) return;
+                if (bundleCompleted || !CheckCurrent() || _activationSent) return;
+                bundleCompleted = true;
                 try
                 {
                     if (!valid)
@@ -352,41 +423,62 @@ internal static class ContentCatalogClient
                         return;
                     }
                     ScriptPackManager.PrepareRemote(catalog);
+                    bool initializationStarted = false;
+                    bool initializationCompleted = false;
                     void Complete(bool executionApproved)
                     {
-                        if (generation != _offerGeneration || _declined || _activationSent || _failureLatched) return;
+                        if (initializationStarted || !CheckCurrent() || _activationSent) return;
+                        initializationStarted = true;
                         try
                         {
                             ConnectionContentBootstrap.EnsureInitializing();
-                            if (!ClientContentRegistrar.TryActivate(catalog, out List<string> failedKeys, out string error))
+                            PasswordPrompt.Hide(ScriptPromptOwner);
+                            ScriptingBootstrap.BeginPrepareConnection(catalog, executionApproved, activationId, (ready, scriptError) =>
                             {
-                                FailActivation("custom item activation rolled back: " + error, failedKeys);
-                                return;
-                            }
-                            ConnectionContentBootstrap.Loaded(_manifest.SessionId, catalog.CatalogSha256,
-                                catalog.ManifestSha256, ScriptingBootstrap.PrepareConnection(catalog, executionApproved, _manifest.SessionId));
-                            if (!SendActivation(true, Array.Empty<string>()))
-                                throw new InvalidOperationException("The exact activation acknowledgement could not be delivered.");
-                            IsActivated = true;
-                            ReportHealth(FeatureHealthStatus.Healthy,
-                                "The authenticated bundles, item catalog and approved scripts were initialized.");
+                                if (initializationCompleted || !CheckCurrent() || _activationSent) return;
+                                initializationCompleted = true;
+                                try
+                                {
+                                    if (!ready || !ScriptingBootstrap.IsConnectionPrepared)
+                                    {
+                                        FailActivation("required script initialization failed: " + scriptError, catalogKeys);
+                                        return;
+                                    }
+                                    ConnectionContentBootstrap.EnsureInitializing();
+                                    if (!ClientContentRegistrar.TryActivate(catalog, out List<string> failedKeys, out string error))
+                                    {
+                                        if (CheckCurrent()) FailActivation("custom item activation rolled back: " + error, failedKeys);
+                                        return;
+                                    }
+                                    if (!CheckCurrent()) return;
+                                    ConnectionContentBootstrap.Loaded(activationId, catalogHash, manifestHash, true);
+                                    if (!SendActivation(true, Array.Empty<string>()))
+                                        throw new InvalidOperationException("The exact activation acknowledgement could not be delivered.");
+                                    if (!CheckCurrent()) return;
+                                    IsActivated = true;
+                                    ReportHealth(FeatureHealthStatus.Healthy,
+                                        "The authenticated bundles, item catalog and approved scripts were initialized.");
+                                }
+                                catch (Exception exception) { if (CheckCurrent()) FailActivation(exception.Message, catalogKeys); }
+                            });
                         }
-                        catch (Exception exception) { FailActivation(exception.Message, catalogKeys); }
+                        catch (Exception exception) { if (CheckCurrent()) FailActivation(exception.Message, catalogKeys); }
                     }
                     int scriptCount = catalog.ScriptPacks.Sum(pack => pack.Sources.Count);
                     if (scriptCount == 0) { Complete(false); return; }
                     PasswordPrompt.ShowConfirmation(ScriptPromptOwner,
                         Tr.Get(TrKeys.Content_ScriptApprovalTitle),
                         Tr.Get(TrKeys.Content_ScriptApprovalDetails, scriptCount,
-                            catalog.ScriptPacks.Sum(pack => pack.Sources.Sum(source => (long)source.Size)), ServerTrustStore.FormatFingerprint(AuthHandler.CurrentServerFingerprint)),
+                            catalog.ScriptPacks.Sum(pack => pack.Sources.Sum(source => (long)source.Size)), ServerTrustStore.FormatFingerprint(fingerprint)),
                         Tr.Get(TrKeys.Content_RunScripts), Tr.Get(TrKeys.Prompt_SkipContent),
                         () => Complete(true),
                         () =>
                         {
-                            if (generation == _offerGeneration) DeclineByUser("user declined script execution");
+                            if (!initializationStarted && CheckCurrent() && !_activationSent)
+                                DeclineByUser("user declined script execution");
                         });
                 }
-                catch (Exception exception) { FailActivation(exception.Message, catalogKeys); }
+                catch (Exception exception) { if (CheckCurrent()) FailActivation(exception.Message, catalogKeys); }
             });
         }
         catch (Exception exception)

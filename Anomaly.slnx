@@ -8,6 +8,7 @@
   <Project Path="Anomaly.Client.Api.Tests/Anomaly.Client.Api.Tests.csproj" />
   <Project Path="Anomaly.Client.Scripting/Anomaly.Client.Scripting.csproj" />
   <Project Path="Anomaly.Client.Scripting.Tests/Anomaly.Client.Scripting.Tests.csproj" />
+  <Project Path="Anomaly.Client.ScriptWorker/Anomaly.Client.ScriptWorker.csproj" />
   <Project Path="third_party/MoonSharp/Anomaly.MoonSharp.Interpreter.csproj" />
   <Project Path="Anomaly.Server/Anomaly.Server.csproj" Id="5b1bd184-cf04-444a-ad8b-9e00cac92ab5" />
   <Project Path="Anomaly.Server.Tests/Anomaly.Server.Tests.csproj" />

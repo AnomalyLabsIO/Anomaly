@@ -61,8 +61,10 @@ public sealed partial class Core : MelonMod
         _dummyVisibilitySmoke = Environment.GetEnvironmentVariable("ANOMALY_DUMMY_VISIBILITY_SMOKE") == "1";
         _dedicatedDummyControlSmoke = Environment.GetEnvironmentVariable("ANOMALY_DEDICATED_DUMMY_SMOKE") == "1";
         _newsSmokeOnly = Environment.GetEnvironmentVariable("ANOMALY_UI_SMOKE_NEWS_ONLY") == "1";
-        if (_localHostingSmoke || _dedicatedDummyControlSmoke || FacilityCatalogFailureProbe.Enabled || _newsSmokeOnly)
+        _remoteScriptingSmoke = Environment.GetEnvironmentVariable("ANOMALY_REMOTE_SCRIPTING_SMOKE") == "1";
+        if (_localHostingSmoke || _dedicatedDummyControlSmoke || FacilityCatalogFailureProbe.Enabled || _newsSmokeOnly || _remoteScriptingSmoke)
         {
+            if (_remoteScriptingSmoke) InitializeServerApiSmoke();
             ClientEvents.CanvasReady += OnCanvasReady;
             ClientEvents.Ready += OnReady;
             ClientEvents.Disconnected += OnDisconnected;
@@ -108,6 +110,7 @@ public sealed partial class Core : MelonMod
         if (FacilityCatalogFailureProbe.Enabled) { EnqueueFacilityCatalogFailureProbe(); return; }
         if (_localHostingSmoke) { EnqueueLocalHostingSmoke(); return; }
         if (_dedicatedDummyControlSmoke) { EnqueueDedicatedDummyControlSmoke(); return; }
+        if (_remoteScriptingSmoke) { EnqueueRemoteScriptingSmoke(); return; }
         if (_serverApiSmoke) { EnqueueServerApiSmoke(); return; }
         string integrityMode = Environment.GetEnvironmentVariable("ANOMALY_INTEGRITY_SMOKE_MODE");
         if (!string.IsNullOrEmpty(integrityMode)) { EnqueueIntegrityProbe(integrityMode); return; }
@@ -425,6 +428,7 @@ public sealed partial class Core : MelonMod
     public override void OnUpdate()
     {
         TickClientScriptingSmoke();
+        TickRemoteScriptingSmoke();
         if ((_dummyVisibilitySmoke || _dedicatedDummyControlSmoke) && !_failed)
         {
             try { MuteDummyMenuMusicContinuous(); }

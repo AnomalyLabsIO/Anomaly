@@ -86,6 +86,10 @@ public sealed class ContentFailureAcknowledgementTests : IDisposable
         Assert.Equal(new[] { "ack", "revoke" }, AnomalyMessaging.TransportEvents);
         Assert.Equal(1, AnomalyMessaging.TransportFailures);
         Assert.Empty(MelonCoroutines.Started);
+        Assert.False(ContentCatalogClient.IsActivated);
+        Assert.False(AssetBundleManager.Active);
+        Assert.False(ClientContentRegistrar.Active);
+        Assert.Null(AssetBundleManager.LastActivationCallback);
     }
 
     [Fact]

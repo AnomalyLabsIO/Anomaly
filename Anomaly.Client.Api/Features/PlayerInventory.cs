@@ -1,6 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using Il2CppInventorySystem;
 using Il2CppInventorySystem.Items;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -102,6 +103,8 @@ public class PlayerInventory
         if (_inventories.TryGetValue(inventory, out PlayerInventory wrapper))
             return wrapper;
 
+        ScriptHostAccess.ChargeRegistryEntries(_inventories.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         wrapper = new PlayerInventory(inventory);
         _inventories[inventory] = wrapper;
         return wrapper;

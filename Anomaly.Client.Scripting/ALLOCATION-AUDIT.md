@@ -1,11 +1,14 @@
 # CLR and host allocation audit
 
 This audit covers the restricted development host and pinned MoonSharp fork
-`3.0.0-anomaly.5`. It does not qualify a CLR heap ceiling.
-`MemoryHardeningQualified` and `RemoteExecutionEnabled` remain false. Remote
-script offers are rejected before consent/download and again at the connection
-and runtime entry points. Local owner sessions use a separate internal entry point
-after the client proves the current nondedicated host connection.
+`3.0.0-anomaly.6`. It does not qualify a CLR heap ceiling.
+`MemoryHardeningQualified` remains false for the in-process local host. It is not
+the remote availability gate: `RemoteExecutionEnabled` follows actual
+`RemoteIsolationQualified` Windows AppContainer/job qualification. Remote packs
+use a separate worker with hard process memory/CPU/process limits and bounded
+host RPC, never an in-game VM fallback. Unsupported or failed qualification rejects
+offers before consent/download. Local owner sessions retain their separate entry
+point after proof of the current nondedicated host connection.
 
 ## Closed paths
 
@@ -99,12 +102,15 @@ and keeps memory qualification false. Each future capability needs bounded,
 reviewed work and explicit reservations/ownership for its own large buffers and native
 resources. An annotation alone is not a memory boundary.
 
-The annotated gameplay surface does not qualify those native getters. Player/room/item
-resolution, wrapper cache misses, stat queries, IL2CPP strings and firearm/module reads
-can allocate in trusted API/Unity code outside the VM allowance. Native cache/population
-and teardown behavior still require live review. The bounded owned-text capability
-now creates native TMP labels, but its 256 KiB workspace reservation is conservative;
-native font/material/geometry/GC use is not a qualified allocator ceiling.
+Remote gameplay access uses independently bounded native host scopes; see the
+[client API native-source audit](../Anomaly.Client.Api/MODDING.md#remote-native-query-bounds) for reviewed getter
+families, inherited subtype/event getters, Game queries and trusted native assumptions.
+Player/room/item resolution, wrapper cache misses, stat queries, IL2CPP strings and
+firearm/module reads can still allocate inside trusted API/Unity code outside the VM
+allowance. Native source-work caps do not intercept arbitrary native allocations or
+qualify the in-process heap. The bounded owned-text capability creates native TMP
+labels, but its 256 KiB workspace reservation is conservative; native
+font/material/geometry/GC use is not a per-script allocator ceiling.
 Other [future mutation bindings](CAPABILITIES.md) need their own budgets.
 
 CLR-private exception trace/diagnostic internals, JIT/type/reflection/culture caches,

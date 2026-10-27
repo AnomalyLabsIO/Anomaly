@@ -128,9 +128,11 @@ leases survive.
 
 ## Pack-bound Lua messages
 
-Remote script execution is currently disabled until client memory containment is
-qualified. Clients decline offers requiring scripts before consent or download;
-the authoring and messaging interfaces below do not bypass that gate.
+Remote script execution requires a client with actual qualified Windows
+AppContainer/job isolation and separate content/execution approval. Unavailable
+isolation, including unsupported platforms/Wine, rejects required offers before
+consent/download; authoring/messaging APIs cannot bypass it. Local in-process
+accounting remains unqualified and is not the remote availability gate.
 
 Use the existing `ClientMessaging` and `ClientEvents.MessageReceived` APIs. The
 built-in `ScriptToClientMessage` and `ScriptToServerMessage` carriers are already

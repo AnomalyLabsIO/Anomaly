@@ -1,0 +1,1 @@
+{"Messages":[{"Name":"GetState","Direction":"ServerToClient","Version":1,"Fields":[{"Name":"RequestId","Type":"UInt32"},{"Name":"Command","Type":"String","MaxBytes":32}]}]}

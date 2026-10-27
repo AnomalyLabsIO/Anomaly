@@ -53,6 +53,8 @@ public class Role
         if (_roles.TryGetValue(roleBase, out Role role) && !role.IsDestroyed)
             return role;
 
+        ScriptHostAccess.ChargeRegistryEntries(_roles.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         role = new Role(roleBase);
         _roles[roleBase] = role;
         return role;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Internal.Wrappers;
 
@@ -27,7 +28,8 @@ internal sealed class SerialOwnershipIndex<T> where T : class
         if (serial == 0 || value == null)
             return null;
 
-        _bySerial.TryGetValue(serial, out T previous);
+        if (!_bySerial.TryGetValue(serial, out T previous))
+            ScriptHostAccess.ChargeRegistryEntries(_bySerial.Count);
         _bySerial[serial] = value;
         return previous != null && !ReferenceEquals(previous, value) ? previous : null;
     }

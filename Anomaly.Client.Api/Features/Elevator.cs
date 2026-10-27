@@ -111,6 +111,8 @@ public class Elevator
         if (chamberBase == null) return null;
         if (_elevators.TryGetValue(chamberBase, out Elevator wrapper))
             return wrapper;
+        ScriptHostAccess.ChargeRegistryEntries(_elevators.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         wrapper = new Elevator(chamberBase);
         _elevators[chamberBase] = wrapper;
         return wrapper;

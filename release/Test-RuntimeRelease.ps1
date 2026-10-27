@@ -30,6 +30,7 @@ try {
             'Plugins/Anomaly.Bootstrap.dll', 'Mods/Anomaly.Client.dll',
             'UserLibs/Anomaly.Client.Api.dll', 'UserLibs/Anomaly.Shared.dll',
             'UserLibs/Anomaly.Client.Scripting.dll', 'UserLibs/Anomaly.MoonSharp.Interpreter.dll',
+            'UserLibs/Anomaly.Client.ScriptWorker.dll',
             'UserLibs/Anomaly.AssetValidation.dll', 'UserLibs/BouncyCastle.Cryptography.dll',
             'UserLibs/AssetsTools.NET.dll', 'UserLibs/YamlDotNet.dll'
         )

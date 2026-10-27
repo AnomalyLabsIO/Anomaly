@@ -6,7 +6,7 @@ using MoonSharp.Interpreter;
 
 namespace Anomaly.Client.Scripting;
 
-/// <summary>One connection/offer's all-or-nothing script initialization on its owner thread.</summary>
+/// <summary>One verified local host's all-or-nothing in-process initialization on its owner thread.</summary>
 internal sealed class ConnectionScriptSet : IDisposable
 {
     private readonly ScriptRuntime _runtime;
@@ -49,13 +49,7 @@ internal sealed class ConnectionScriptSet : IDisposable
         }
     }
 
-    internal bool Initialize(IReadOnlyList<ScriptSource> sources, bool approved, out string error)
-        => InitializeCore(sources, approved, remote: true, out error);
-
     internal bool InitializeLocal(IReadOnlyList<ScriptSource> sources, bool approved, out string error)
-        => InitializeCore(sources, approved, remote: false, out error);
-
-    private bool InitializeCore(IReadOnlyList<ScriptSource> sources, bool approved, bool remote, out string error)
     {
         error = string.Empty;
         if (_disposed)
@@ -78,7 +72,6 @@ internal sealed class ConnectionScriptSet : IDisposable
                 _initialized = true;
                 return true;
             }
-            if (remote) RemoteExecutionGate.EnsureAllowed();
 
             using var memoryScope = _runtime.EnterAllocationScope();
             // Freeze the inventory before any script can run. Validate the entire
@@ -102,7 +95,7 @@ internal sealed class ConnectionScriptSet : IDisposable
                 {
                     if (ordered[previous].Address == source.Address)
                         throw new InvalidDataException("The connection script inventory repeats an address.");
-                    if (ordered[previous].PackId == source.PackId && !SameContracts(ordered[previous], source))
+                    if (ordered[previous].PackId == source.PackId && !ordered[previous].HasSameContracts(source))
                         throw new InvalidDataException("Scripts in the same pack must retain the same approved message contracts.");
                 }
             }
@@ -112,8 +105,7 @@ internal sealed class ConnectionScriptSet : IDisposable
                 var context = source.MessageSchemas == null ? null : MemoryBudget.Allocate(256,
                     () => new ScriptMessageContext(source.PackId, source.IndexSha256!, _activationId,
                         source.MessageSchemas, _isCurrent, _send));
-                var session = remote ? _runtime.CreateApprovedSession(source, messageContext: context) :
-                    _runtime.CreateLocalSession(source, messageContext: context);
+                var session = _runtime.CreateLocalSession(source, messageContext: context);
                 _sessions.Add(session);
                 // Once compilation owns the source, dispatch needs only these
                 // bounded identities, not another full source/contract graph.
@@ -174,22 +166,6 @@ internal sealed class ConnectionScriptSet : IDisposable
         return found;
     }
 
-    private static bool SameContracts(ScriptSource first, ScriptSource second)
-    {
-        if (first.IndexSha256 != second.IndexSha256 || (first.MessageSchemas == null) != (second.MessageSchemas == null)) return false;
-        if (first.MessageSchemas == null) return true;
-        if (first.MessageSchemas.Count != second.MessageSchemas!.Count) return false;
-        for (var index = 0; index < first.MessageSchemas.Count; index++)
-        {
-            var a = first.MessageSchemas[index];
-            var b = second.MessageSchemas[index];
-            if (a.Name != b.Name || a.Direction != b.Direction || a.Version != b.Version || a.Fields.Count != b.Fields.Count) return false;
-            for (var field = 0; field < a.Fields.Count; field++)
-                if (a.Fields[field].Name != b.Fields[field].Name || a.Fields[field].Type != b.Fields[field].Type ||
-                    a.Fields[field].MaxBytes != b.Fields[field].MaxBytes) return false;
-        }
-        return true;
-    }
 
     private sealed record MessageGrant(string PackId, string? IndexSha256);
 }

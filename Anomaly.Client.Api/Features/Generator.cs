@@ -75,6 +75,7 @@ public class Generator
             Transform t = Base.transform;
             while (t != null)
             {
+                ScriptHostAccess.ChargeHierarchyStep();
                 Il2CppMapGeneration.RoomIdentifier rid = t.GetComponent<Il2CppMapGeneration.RoomIdentifier>();
                 if (rid != null)
                     return Room.Get(rid);
@@ -113,6 +114,8 @@ public class Generator
         if (_generators.TryGetValue(generatorBase, out Generator wrapper))
             return wrapper;
 
+        ScriptHostAccess.ChargeRegistryEntries(_generators.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         wrapper = new Generator(generatorBase);
         _generators[generatorBase] = wrapper;
         return wrapper;

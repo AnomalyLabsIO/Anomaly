@@ -104,6 +104,8 @@ public class Room
         if (_rooms.TryGetValue(roomIdentifier, out Room room))
             return room;
 
+        ScriptHostAccess.ChargeRegistryEntries(_rooms.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         room = new Room(roomIdentifier);
         _rooms[roomIdentifier] = room;
         return room;
@@ -127,6 +129,8 @@ public class Room
 
     public static Room Get(Vector3 position)
     {
+        if (ScriptHostAccess.IsActive)
+            ScriptHostAccess.ChargeRegistryEntries(RoomIdentifier.AllRoomIdentifiers.Count);
         if (!RoomUtils.TryGetRoom(position, out RoomIdentifier roomIdentifier))
             return null;
 

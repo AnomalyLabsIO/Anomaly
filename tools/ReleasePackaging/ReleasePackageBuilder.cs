@@ -19,6 +19,7 @@ internal static partial class ReleasePackageBuilder
         "Anomaly.Client",
         "Anomaly.Client.Api",
         "Anomaly.Client.Scripting",
+        "Anomaly.Client.ScriptWorker",
         "Anomaly.AssetValidation",
         "Anomaly.Server",
         "Anomaly.Shared",
@@ -492,6 +493,11 @@ internal static partial class ReleasePackageBuilder
                          .OrderBy(item => item.Name, StringComparer.Ordinal)
                          .ThenBy(item => item.Version, StringComparer.Ordinal))
             {
+                if ((assembly.Name is "Anomaly.Client.ScriptWorker" or "Anomaly.MoonSharp.Interpreter") &&
+                    !frameworkNames.Contains(reference.Name) &&
+                    !string.Equals(reference.Name, "Anomaly.MoonSharp.Interpreter", StringComparison.Ordinal))
+                    throw new InvalidDataException(
+                        $"Isolated worker dependency '{assembly.Name}' must not reference game or host assembly '{reference.Name}'.");
                 string resolution;
                 if (packagedAssemblies.TryGetValue(reference.Name, out var packagedDependency))
                 {
@@ -666,6 +672,9 @@ internal static partial class ReleasePackageBuilder
                 "UserLibs/Anomaly.Client.Api.dll",
                 "UserLibs/Anomaly.Client.Scripting.dll",
                 "UserLibs/Anomaly.MoonSharp.Interpreter.dll",
+                "UserLibs/Anomaly.Client.ScriptWorker.dll",
+                "UserLibs/Anomaly.Client.ScriptWorker.deps.json",
+                "UserLibs/Anomaly.Client.ScriptWorker.runtimeconfig.json",
                 "UserLibs/Anomaly.Shared.dll",
                 "UserLibs/BouncyCastle.Cryptography.dll",
                 "UserLibs/Anomaly.AssetValidation.dll",

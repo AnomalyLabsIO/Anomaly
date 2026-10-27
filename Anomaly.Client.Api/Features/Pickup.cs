@@ -33,6 +33,7 @@ public class Pickup
 
     protected Pickup(ItemPickupBase pickupBase)
     {
+        ScriptHostAccess.ChargeWrapperCreation();
         Base = pickupBase;
     }
 
@@ -164,6 +165,7 @@ public class Pickup
             return pickup;
         }
 
+        ScriptHostAccess.ChargeRegistryEntries(_pickups.Count);
         pickup = CreateForType(pickupBase);
         if (pickup == null)
             return null;
@@ -319,7 +321,7 @@ public class Pickup
                 return 0;
             return Base.Info.Serial;
         }
-        catch
+        catch (Exception) when (!ScriptHostAccess.IsActive)
         {
             return 0;
         }

@@ -119,6 +119,8 @@ public class FacilityCamera
         if (cameraBase == null) return null;
         if (_cameras.TryGetValue(cameraBase, out FacilityCamera wrapper))
             return wrapper;
+        ScriptHostAccess.ChargeRegistryEntries(_cameras.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         wrapper = new FacilityCamera(cameraBase);
         _cameras[cameraBase] = wrapper;
         return wrapper;

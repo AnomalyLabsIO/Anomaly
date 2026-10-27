@@ -30,7 +30,6 @@ public sealed class ScriptRuntimeCatalogTests
         Assert.True(catalog.Events.Single(entry => entry.Path == "Events.Voice.Received").CoalesceLatest);
         Assert.False(catalog.Events.Single(entry => entry.Path == "Events.Client.Ready").CoalesceLatest);
         Assert.Equal(before, ReadySubscribers());
-        Assert.False(ScriptingPolicy.RemoteExecutionEnabled);
         Assert.Throws<NotSupportedException>(() => runtime.CreateRemoteSession("return 1"));
     }
 

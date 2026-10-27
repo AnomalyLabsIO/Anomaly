@@ -22,7 +22,7 @@
 "anomaly.prompt.allow_content": "Allow content"
 "anomaly.prompt.skip_content": "Decline and disconnect"
 "anomaly.content.script_approval_title": "Allow server scripts?"
-"anomaly.content.script_approval_details": "This server requests {0:N0} Lua scripts ({1:N0} source bytes).\nServer fingerprint:\n{2}\n\nThey can use the approved in-game scripting API for this connection. The sandbox's memory accounting is experimental. This approval applies only to the current connection and exact validated scripts. Declining closes the connection."
+"anomaly.content.script_approval_details": "This server requests {0:N0} Lua scripts ({1:N0} source bytes).\nServer fingerprint:\n{2}\n\nScripts run in a restricted worker process with enforced memory and time limits. They can read approved game state, show bounded output and exchange declared messages. Approval applies only to this connection and these exact validated scripts. Declining disconnects."
 "anomaly.content.run_scripts": "Run scripts"
 "anomaly.prompt.save_error": "Could not save. Check that Anomaly's UserData folder is writable, then try again. Your input is still here."
 "anomaly.prompt.nickname_title": "Choose your Anomaly nickname"

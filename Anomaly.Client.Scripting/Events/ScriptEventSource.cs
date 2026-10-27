@@ -129,7 +129,16 @@ internal sealed class ScriptEventSource : IDisposable
                     }
             }
             object?[] arguments;
-            try { arguments = _snapshot == null ? Array.Empty<object?>() : new[] { _snapshot.Capture(value, allocationOwner) }; }
+            try
+            {
+                var requiresNativeScope = false;
+                for (var index = 0; index < count; index++)
+                    requiresNativeScope |= deliveries[index].Registration.Owner.RequiresNativeScope;
+                using Anomaly.Client.Api.Scripting.ScriptHostAccess.Scope? nativeScope =
+                    requiresNativeScope ? Anomaly.Client.Api.Scripting.ScriptHostAccess.Enter() : null;
+                arguments = _snapshot == null ? Array.Empty<object?>() : new[] { _snapshot.Capture(value, allocationOwner) };
+                if (requiresNativeScope) Anomaly.Client.Api.Scripting.ScriptHostAccess.ThrowIfFailed();
+            }
             catch (Exception exception)
             {
                 for (var index = 0; index < count; index++) deliveries[index].Registration.Owner.RequestRetirement(

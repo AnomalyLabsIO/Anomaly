@@ -49,6 +49,7 @@ foreach ($override in @(
 
 $runtimeProjects = @(
     'Anomaly.Bootstrap', 'Anomaly.Client', 'Anomaly.Client.Api', 'Anomaly.Client.Scripting',
+    'Anomaly.Client.ScriptWorker',
     'Anomaly.AssetValidation', 'Anomaly.Server', 'Anomaly.Shared'
 )
 $packagerProject = Join-Path $runtimeRepositoryRoot 'tools/ReleasePackaging/ReleasePackaging.csproj'

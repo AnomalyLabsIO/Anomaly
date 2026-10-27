@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using Il2CppPlayerStatsSystem;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Features;
 
@@ -78,9 +79,11 @@ public class PlayerStatsWrapper
 
         try
         {
+            if (ScriptHostAccess.IsActive && Base != null)
+                ScriptHostAccess.ChargeRegistryEntries(Base._statModules?.Length ?? PlayerStats.DefinedModules.Length);
             return Base.TryGetModule(out module) && module != null;
         }
-        catch
+        catch (Exception) when (!ScriptHostAccess.IsActive)
         {
             return false;
         }
@@ -94,6 +97,8 @@ public class PlayerStatsWrapper
         if (_wrappers.TryGetValue(playerStats, out PlayerStatsWrapper wrapper))
             return wrapper;
 
+        ScriptHostAccess.ChargeRegistryEntries(_wrappers.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         wrapper = new PlayerStatsWrapper(playerStats);
         _wrappers[playerStats] = wrapper;
         return wrapper;

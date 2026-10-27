@@ -250,8 +250,8 @@ internal static partial class Program
             "The host session exceeded its outstanding allocation allowance.");
         ReclaimCheck(state, session.MemoryTotalAllocatedBytes > limit, "Host workload did not exceed one cumulative allowance.");
         ReclaimCheck(state, session.MemoryUnboundBytes == 0, "Host calls accumulated unknown-lifetime allocation debt.");
-        ReclaimCheck(state, !ScriptingPolicy.RemoteExecutionEnabled && !ScriptingPolicy.MemoryHardeningQualified,
-            "Remote execution must remain disabled while memory containment is unqualified.");
+        ReclaimCheck(state, !ScriptingPolicy.MemoryHardeningQualified,
+            "Local allocation accounting must not be represented as a qualified heap ceiling.");
         state.MemoryChargedOverride = session.MemoryChargedBytes;
         state.MemoryLimitOverride = limit;
         state.MemoryTotalOverride = session.MemoryTotalAllocatedBytes;

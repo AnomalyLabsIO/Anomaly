@@ -104,6 +104,8 @@ public class Ragdoll
         if (ragdollBase == null) return null;
         if (_ragdolls.TryGetValue(ragdollBase, out Ragdoll wrapper))
             return wrapper;
+        ScriptHostAccess.ChargeRegistryEntries(_ragdolls.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         wrapper = new Ragdoll(ragdollBase);
         _ragdolls[ragdollBase] = wrapper;
         return wrapper;

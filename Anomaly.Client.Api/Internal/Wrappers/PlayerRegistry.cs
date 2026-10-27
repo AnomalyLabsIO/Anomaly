@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Anomaly.Client.Api.Features;
+using Anomaly.Client.Api.Scripting;
 using Il2Cpp;
 using UnityEngine;
 
@@ -30,6 +31,7 @@ internal static class PlayerRegistry
             return PromoteLocalPlayer(hub, existing);
         }
 
+        ScriptHostAccess.ChargeWrapperCreation();
         return AddWrapper(IsLocalHub(hub) ? new LocalPlayer(hub) : new Player(hub));
     }
 
@@ -49,6 +51,19 @@ internal static class PlayerRegistry
 
     internal static Player Get(int playerId)
     {
+        if (ScriptHostAccess.IsActive)
+        {
+            if (ReferenceHub.AllHubs == null)
+                return null;
+            foreach (ReferenceHub candidate in ReferenceHub.AllHubs)
+            {
+                ScriptHostAccess.ChargeRegistryEntries();
+                if (candidate != null && candidate.PlayerId == playerId)
+                    return Get(candidate);
+            }
+            return null;
+        }
+
         if (!ReferenceHub.TryGetHub(playerId, out ReferenceHub hub))
             return null;
 
@@ -74,11 +89,13 @@ internal static class PlayerRegistry
             if (TryGetExisting(localHub, out Player existing))
                 return existing as LocalPlayer ?? PromoteLocalPlayer(localHub, existing);
 
+            ScriptHostAccess.ChargeWrapperCreation();
             return AddWrapper(new LocalPlayer(localHub)) as LocalPlayer;
         }
 
         foreach (Player player in _players)
         {
+            ScriptHostAccess.ChargeRegistryEntries();
             if (player is LocalPlayer localPlayer && player.ReferenceHub != null)
                 return localPlayer;
         }
@@ -94,6 +111,7 @@ internal static class PlayerRegistry
         {
             foreach (ReferenceHub hub in ReferenceHub.AllHubs)
             {
+                ScriptHostAccess.ChargeRegistryEntries();
                 if (hub == null)
                     continue;
 
@@ -116,6 +134,7 @@ internal static class PlayerRegistry
         if (hub == null || !TryGetExisting(hub, out Player player))
             return false;
 
+        ScriptHostAccess.ChargeRegistryEntries(_players.Count);
         RemoveHubMappings(player);
         _players.Remove(player);
 
@@ -137,6 +156,9 @@ internal static class PlayerRegistry
 
     private static Player AddWrapper(Player player)
     {
+        ScriptHostAccess.ChargeRegistryEntries(_hubToPlayer.Count);
+        ScriptHostAccess.ChargeRegistryEntries(_gameObjectToPlayer.Count);
+        ScriptHostAccess.ChargeRegistryEntries(_players.Count);
         _hubToPlayer[player.ReferenceHub] = player;
         _players.Add(player);
 
@@ -148,6 +170,10 @@ internal static class PlayerRegistry
 
     private static LocalPlayer PromoteLocalPlayer(ReferenceHub hub, Player existing)
     {
+        ScriptHostAccess.ChargeWrapperCreation();
+        ScriptHostAccess.ChargeRegistryEntries(_players.Count);
+        ScriptHostAccess.ChargeRegistryEntries(_hubToPlayer.Count);
+        ScriptHostAccess.ChargeRegistryEntries(_gameObjectToPlayer.Count);
         LocalPlayer localPlayer = new(hub);
         int index = _players.IndexOf(existing);
 
@@ -176,12 +202,16 @@ internal static class PlayerRegistry
 
         foreach (KeyValuePair<ReferenceHub, Player> pair in _hubToPlayer)
         {
+            ScriptHostAccess.ChargeRegistryEntries();
             if (pair.Key == null || pair.Key.gameObject == null || !ContainsHub(observedHubs, pair.Key))
                 _staleHubs.Add(pair.Key);
         }
 
         foreach (ReferenceHub staleHub in _staleHubs)
+        {
+            ScriptHostAccess.ChargeRegistryEntries();
             Remove(staleHub);
+        }
     }
 
     private static void RemoveGameObjectMapping(Player player)
@@ -190,6 +220,7 @@ internal static class PlayerRegistry
 
         foreach (KeyValuePair<GameObject, Player> pair in _gameObjectToPlayer)
         {
+            ScriptHostAccess.ChargeRegistryEntries();
             if (ReferenceEquals(pair.Value, player))
             {
                 keyToRemove = pair.Key;
@@ -207,12 +238,16 @@ internal static class PlayerRegistry
 
         foreach (KeyValuePair<ReferenceHub, Player> pair in _hubToPlayer)
         {
+            ScriptHostAccess.ChargeRegistryEntries();
             if (ReferenceEquals(pair.Value, player))
                 _staleHubs.Add(pair.Key);
         }
 
         foreach (ReferenceHub staleHub in _staleHubs)
+        {
+            ScriptHostAccess.ChargeRegistryEntries();
             _hubToPlayer.Remove(staleHub);
+        }
     }
 
     private static bool TryGetExisting(ReferenceHub hub, out Player player)
@@ -222,16 +257,19 @@ internal static class PlayerRegistry
 
         if (hub.gameObject != null && _gameObjectToPlayer.TryGetValue(hub.gameObject, out player))
         {
+            ScriptHostAccess.ChargeRegistryEntries(_hubToPlayer.Count);
             _hubToPlayer[hub] = player;
             return true;
         }
 
         foreach (KeyValuePair<ReferenceHub, Player> pair in _hubToPlayer)
         {
+            ScriptHostAccess.ChargeRegistryEntries();
             if (!AreSameHub(pair.Key, hub))
                 continue;
 
             player = pair.Value;
+            ScriptHostAccess.ChargeRegistryEntries(_hubToPlayer.Count);
             _hubToPlayer[hub] = player;
             return true;
         }
@@ -247,6 +285,7 @@ internal static class PlayerRegistry
 
         foreach (ReferenceHub hub in hubs)
         {
+            ScriptHostAccess.ChargeRegistryEntries();
             if (AreSameHub(hub, target))
                 return true;
         }
@@ -262,6 +301,26 @@ internal static class PlayerRegistry
     internal static bool TryGetLocalHub(out ReferenceHub localHub)
     {
         localHub = null;
+        if (ScriptHostAccess.IsActive)
+        {
+            if (ReferenceHub._localHub != null)
+            {
+                localHub = ReferenceHub._localHub;
+                return true;
+            }
+            if (ReferenceHub.AllHubs == null)
+                return false;
+            foreach (ReferenceHub candidate in ReferenceHub.AllHubs)
+            {
+                ScriptHostAccess.ChargeRegistryEntries();
+                if (candidate != null && IsMarkedLocal(candidate))
+                {
+                    localHub = candidate;
+                    return true;
+                }
+            }
+            return false;
+        }
 
         try
         {
@@ -293,6 +352,7 @@ internal static class PlayerRegistry
 
             foreach (ReferenceHub hub in ReferenceHub.AllHubs)
             {
+                ScriptHostAccess.ChargeRegistryEntries();
                 if (hub == null)
                     continue;
 
@@ -317,7 +377,7 @@ internal static class PlayerRegistry
             if (hub.authManager != null && hub.authManager.isLocalPlayer)
                 return true;
         }
-        catch
+        catch (Exception) when (!ScriptHostAccess.IsActive)
         {
         }
 
@@ -325,7 +385,7 @@ internal static class PlayerRegistry
         {
             return hub.networkIdentity != null && hub.networkIdentity.isLocalPlayer;
         }
-        catch
+        catch (Exception) when (!ScriptHostAccess.IsActive)
         {
             return false;
         }
@@ -341,7 +401,7 @@ internal static class PlayerRegistry
             if (left == right)
                 return true;
         }
-        catch
+        catch (Exception) when (!ScriptHostAccess.IsActive)
         {
         }
 
@@ -350,7 +410,7 @@ internal static class PlayerRegistry
             if (left.gameObject != null && right.gameObject != null && left.gameObject == right.gameObject)
                 return true;
         }
-        catch
+        catch (Exception) when (!ScriptHostAccess.IsActive)
         {
         }
 
@@ -358,7 +418,7 @@ internal static class PlayerRegistry
         {
             return left.networkIdentity != null && right.networkIdentity != null && left.networkIdentity == right.networkIdentity;
         }
-        catch
+        catch (Exception) when (!ScriptHostAccess.IsActive)
         {
             return false;
         }

@@ -34,7 +34,7 @@ public sealed partial class Core
     private void InitializeServerApiSmoke()
     {
         _serverApiSmoke = Environment.GetEnvironmentVariable("ANOMALY_SERVER_API_SMOKE") == "1";
-        if (!_serverApiSmoke) return;
+        if (!_serverApiSmoke && !_remoteScriptingSmoke) return;
         AnomalyMessageRegistry.Register(SmokeRequest.Name, () => new SmokeRequest());
         AnomalyMessageRegistry.Register(SmokeResponse.Name, () => new SmokeResponse());
         _smokeCapability = ClientCapabilities.Register(new CapabilityDescriptor("anomaly-smoke:client", 1, 0));

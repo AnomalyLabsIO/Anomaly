@@ -83,10 +83,24 @@ immutable bytes before Unity loading, but Unity/FMOD/graphics still consume data
 in-process: this is not process isolation. See [native limits](ASSETBUNDLES.md).
 
 Lua has one declared entrypoint per logical pack with no modules, OS/filesystem,
-network, reflection or automatic CLR interop. Remote execution remains disabled
-until memory containment is qualified; separate content/execution consent cannot
-override that gate. Only verified nondedicated in-process hosting permits local
-owner scripts. See the [descriptor and execution contract](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
+network, reflection or automatic CLR interop. Remote execution requires actual
+Windows low-privilege AppContainer (LPAC)/job qualification, hash-vetted worker
+payloads and separate exact content/execution consent. Standard AppContainer is not
+a fallback. Before resume, qualification verifies actual LPAC access behavior on the
+duplicated child token, zero capabilities/no loopback exemption and bounded
+protected-directory ACL audits; ACL changes do not grant ancestor-directory access.
+Controlled network qualification requires same-listener positive controls before and
+after, a secret parent nonce and no child connection. Timeout or recognized Winsock
+startup error 10107 is accepted only with independently verified LPAC, zero network
+capabilities and no loopback exemption. Error 10107 means network unavailable, not
+proven permission denial; neither the error nor timeout alone proves isolation.
+Windows' enforced LPAC no-network-capability contract is the security authority.
+The isolated worker has hard process memory/CPU/process
+limits, bounded data-only host RPC and a dedicated non-ThreadPool wall watchdog;
+unsupported platforms/Wine or failed probes fail closed with no in-game VM fallback.
+`MemoryHardeningQualified` remains false for the separate local owner path, which
+requires verified nondedicated in-process hosting. See the
+[descriptor and execution contract](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
 
 Consent is bound to server fingerprint, catalog SHA-256, and manifest SHA-256.
 A decline requests no files. Item/native-asset materialization, icon, translation

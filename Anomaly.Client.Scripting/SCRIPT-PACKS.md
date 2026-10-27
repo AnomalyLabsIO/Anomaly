@@ -6,10 +6,13 @@ captures declared content and uses its existing authenticated catalog, manifest,
 transfer, SHA-256 cache and admission flow. There is no ZIP/custom archive or
 parallel downloader. Unlisted files never execute or transfer.
 
-**Remote script execution remains disabled.** `RemoteExecutionEnabled` follows
-`MemoryHardeningQualified`, currently false. Required remote script offers fail
-closed before consent or download; client approval cannot override this gate.
-The verified nondedicated in-process host is the supported local execution path.
+**Remote script execution requires qualified Windows process isolation.**
+`RemoteExecutionEnabled` follows `RemoteIsolationQualified`, established by actual
+low-privilege AppContainer (LPAC)/job enforcement and probes, not `MemoryHardeningQualified` (still false).
+Required offers fail closed before consent/download when isolation is unavailable;
+content and separate execution approval are both required when it is available.
+Unsupported platforms and Wine have no in-process fallback. Verified nondedicated
+in-process hosting remains the separate local owner execution path.
 Filesystem, OS, networking, reflection, automatic CLR interop and module loading
 remain unavailable to Lua. Source delivery does not qualify CLR heap containment.
 See [host constraints](README.md) and the [allocation audit](ALLOCATION-AUDIT.md).

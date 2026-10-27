@@ -3,11 +3,11 @@ using Anomaly.Shared.Content;
 
 namespace Anomaly.Client.Api.Scripting
 {
-    // Tests may exercise future qualified execution without opening the real policy gate.
+    // Qualification itself is exercised by the real worker suite; admission sees only its published result.
     internal static class ScriptingPolicy
     {
         internal static bool RemoteExecutionEnabled = true;
-        internal const string RemoteExecutionDisabledReason = "Remote script memory containment is not qualified.";
+        internal const string RemoteExecutionDisabledReason = "Remote worker isolation is not qualified.";
     }
 }
 
@@ -154,7 +154,11 @@ namespace Anomaly.Client.Internal.Bootstrap
     {
         internal static int Revocations;
         internal static bool ScriptsReady = true;
-        internal static bool IsConnectionPrepared => ScriptsReady;
+        internal static bool IsRemoteQualificationPending;
+        internal static bool HoldPreparation, PreparationPending;
+        internal static Action<bool, string> LastPreparationCompletion;
+        private static long _preparationGeneration;
+        internal static bool IsConnectionPrepared => ScriptsReady && !PreparationPending;
         internal static bool ThrowOnRevoke;
         internal static bool ThrowOnPrepare;
         internal static int PrepareCalls, PreparedScriptCount;
@@ -163,24 +167,48 @@ namespace Anomaly.Client.Internal.Bootstrap
         internal static void RevokeAll()
         {
             Revocations++;
+            _preparationGeneration++;
+            PreparationPending = false;
+            PreparedScriptCount = 0;
             if (ThrowOnRevoke) throw new InvalidOperationException("injected script cleanup failure");
         }
-        internal static bool PrepareConnection(ContentCatalog catalog, bool approved, ulong activationId = 0)
+        internal static void BeginPrepareConnection(ContentCatalog catalog, bool approved, ulong activationId, Action<bool, string> completed)
         {
             PrepareCalls++;
             PrepareApprovals.Add(approved);
-            if (ThrowOnPrepare) throw new InvalidOperationException("injected VM preparation failure");
+            if (ThrowOnPrepare) throw new InvalidOperationException("injected worker preparation failure");
             int scripts = catalog.ScriptPacks.Sum(pack => pack.Sources.Count);
-            if (!ScriptsReady || (scripts != 0 && !approved)) return false;
-            PreparedScriptCount += scripts;
+            if (!ScriptsReady || (scripts != 0 && !approved))
+            {
+                completed(false, "injected worker initialization failure");
+                return;
+            }
             ObserveExecute?.Invoke(catalog, approved);
-            return true;
+            long generation = ++_preparationGeneration;
+            bool finished = false;
+            LastPreparationCompletion = (success, error) =>
+            {
+                if (!finished && generation == _preparationGeneration)
+                {
+                    finished = true;
+                    PreparationPending = false;
+                    ScriptsReady = success;
+                    if (success) PreparedScriptCount += scripts;
+                }
+                // Deliberately allow replay/stale delivery to exercise coordinator guards.
+                completed(success, error);
+            };
+            if (scripts != 0 && HoldPreparation) PreparationPending = true;
+            else LastPreparationCompletion(true, string.Empty);
         }
         internal static void ResetForTests()
         {
             Revocations = PrepareCalls = PreparedScriptCount = 0;
             ScriptsReady = true;
             ThrowOnRevoke = ThrowOnPrepare = false;
+            IsRemoteQualificationPending = HoldPreparation = PreparationPending = false;
+            LastPreparationCompletion = null;
+            _preparationGeneration++;
             ObserveExecute = null;
             PrepareApprovals.Clear();
         }

@@ -42,6 +42,15 @@ internal sealed class ScriptRuntime : IDisposable
     internal ScriptBindingRegistry Bindings { get; } = new();
     internal long MemoryChargedBytes => _memory.ChargedBytes;
     internal long MemoryTotalAllocatedBytes => _memory.TotalAllocatedBytes;
+    internal ScriptEventCatalog? EventCatalog => _eventCatalog;
+    internal MoonSharp.Interpreter.MemoryBudget HostMemory => _memory;
+
+    internal ScriptOutput CreateRemoteOutput(MoonSharp.Interpreter.MemoryBudget memory, string identity)
+    {
+        EnsureOwner();
+        if (_disposed || _revoking) throw new ObjectDisposedException(nameof(ScriptRuntime));
+        return new ScriptOutput(_outputHost, memory, identity);
+    }
 
     internal void DiscoverApi()
     {
@@ -71,14 +80,6 @@ internal sealed class ScriptRuntime : IDisposable
         return _memory.EnterScope();
     }
 
-    internal ScriptSession CreateApprovedSession(ScriptSource source, ScriptExecutionOptions? options = null,
-        ScriptMessageContext? messageContext = null)
-    {
-        // A typed, exact-hash script-pack entry is the only production source path.
-        // Consent/connection ownership is checked by ConnectionScriptSet as well.
-        RemoteExecutionGate.EnsureAllowed();
-        return CreateSourceSession(source, options, messageContext);
-    }
 
     // The caller must first prove ownership of the current non-dedicated hosted
     // connection. Local source admission does not open the remote execution gate.

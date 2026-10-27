@@ -34,8 +34,10 @@ an unload callback. Do not delay revocation just to deliver one.
 local presentation capability. Pack-bound `Messages.Send` can request a
 server-approved action, but the declared schema is not authorization: the LabAPI
 plugin must validate sender, state, arguments and rate before performing it.
-Remote execution remains disabled pending containment qualification; local
-verified-host/development paths retain their existing gates. Local hosted sources
+Remote execution requires qualified Windows AppContainer/job isolation plus explicit
+content/execution approval; unavailable isolation fails closed without a local VM
+fallback. `MemoryHardeningQualified` remains false for local hosted/development VMs.
+Local verified-host/development paths retain their existing gates. Local hosted sources
 use activation zero and cannot exchange pack messages with a remote server.
 
 ## Existing implementation and recommended bindings

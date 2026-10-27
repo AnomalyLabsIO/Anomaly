@@ -81,6 +81,242 @@ public sealed class ScriptPackConsentTests : IDisposable
     }
 
     [Fact]
+    public void WorkerInitializationHoldsLoadedActivationAndEveryReadinessPublicationUntilHealthyCompletion()
+    {
+        ScriptingBootstrap.HoldPreparation = true;
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(301, scriptCount: 1));
+        PasswordPrompt.Approve();
+        Action approval = PasswordPrompt.Approve;
+        approval();
+        approval();
+        Assert.Equal(1, ScriptingBootstrap.PrepareCalls);
+        Assert.True(ScriptingBootstrap.PreparationPending);
+        Assert.False(ScriptingBootstrap.IsConnectionPrepared);
+        Assert.False(ContentCatalogClient.IsActivated);
+        Assert.False(ClientContentRegistrar.Active);
+        Assert.Empty(AnomalyMessaging.Sent.OfType<ContentCatalogAckMessage>());
+        Assert.True(ConnectionContentBootstrap.DeferReady());
+        Assert.True(ConnectionContentBootstrap.DeferPlayer());
+        Assert.True(ConnectionContentBootstrap.DeferClientReady(new Il2Cpp.CustomNetworkManager()));
+        FacilityRecipeClient.IsReady = true;
+        ConnectionContentBootstrap.Tick();
+        Assert.Equal(0, NetworkClient.ReadyCalls);
+        Assert.Equal(0, NetworkClient.AddPlayerCalls);
+        Assert.Equal(0, ClientRuntime.ReadyPublications);
+
+        Action<bool, string> completed = ScriptingBootstrap.LastPreparationCompletion;
+        completed(true, string.Empty);
+        completed(false, "replayed failure");
+        Assert.True(ContentCatalogClient.IsActivated);
+        Assert.True(ClientContentRegistrar.Active);
+        Assert.Equal(1, ClientContentRegistrar.Activations);
+        Assert.Equal(ContentCatalogActivationStatus.Activated,
+            Assert.Single(AnomalyMessaging.Sent.OfType<ContentCatalogAckMessage>()).Status);
+        Assert.Equal(0, NetworkClient.ReadyCalls);
+        var offer = AnomalyMessaging.Sent.OfType<ContentCatalogDecisionMessage>().Single();
+        AnomalyMessaging.ContentBootstrapMessageReceived(new ContentBootstrapReadyMessage
+        {
+            SessionId = 301, CatalogSha256 = offer.CatalogSha256, ManifestSha256 = offer.ManifestSha256,
+        });
+        Assert.Equal(1, NetworkClient.ReadyCalls);
+        Assert.Equal(1, NetworkClient.AddPlayerCalls);
+        Assert.Equal(1, ClientRuntime.ReadyPublications);
+        Assert.Equal(0, AnomalyMessaging.TransportFailures);
+    }
+
+    [Fact]
+    public void FailedAsyncWorkerInitializationRollsBackWithoutLoadedOrActivated()
+    {
+        ScriptingBootstrap.HoldPreparation = true;
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(302, scriptCount: 1));
+        PasswordPrompt.Approve();
+        PasswordPrompt.Approve();
+        Action<bool, string> completed = ScriptingBootstrap.LastPreparationCompletion;
+        completed(false, "required source failed in worker");
+        completed(true, string.Empty);
+        Assert.False(ContentCatalogClient.IsActivated);
+        Assert.False(ClientContentRegistrar.Active);
+        Assert.False(AssetBundleManager.Active);
+        Assert.Equal(0, ClientContentRegistrar.Activations);
+        Assert.Equal(ContentCatalogActivationStatus.Failed,
+            Assert.Single(AnomalyMessaging.Sent.OfType<ContentCatalogAckMessage>()).Status);
+        Assert.Equal(0, NetworkClient.AddPlayerCalls);
+        Assert.Equal(0, ClientRuntime.ReadyPublications);
+        ContentConsentFixture.DrainGrace();
+        Assert.Equal(1, AnomalyMessaging.TransportFailures);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SameOfferLosingItsNativeConnectionDuringWorkerInitializationRevokesImmediately(bool workerSucceeded)
+    {
+        ScriptingBootstrap.HoldPreparation = true;
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(310, scriptCount: 1));
+        PasswordPrompt.Approve();
+        PasswordPrompt.Approve();
+        Action<bool, string> completed = ScriptingBootstrap.LastPreparationCompletion;
+        int revocations = ScriptingBootstrap.Revocations;
+        NetworkClient.connection = null;
+        completed(workerSucceeded, workerSucceeded ? string.Empty : "worker failed after disconnect");
+        Assert.False(ContentCatalogClient.IsActivated);
+        Assert.False(AssetBundleManager.Active);
+        Assert.False(ClientContentRegistrar.Active);
+        Assert.True(ScriptingBootstrap.Revocations > revocations);
+        Assert.Equal(ContentCatalogActivationStatus.Failed,
+            Assert.Single(AnomalyMessaging.Sent.OfType<ContentCatalogAckMessage>()).Status);
+        Assert.Equal(1, AnomalyMessaging.TransportFailures);
+        Assert.Empty(MelonCoroutines.Started);
+        Assert.Equal(0, NetworkClient.AddPlayerCalls);
+        Assert.Equal(0, ClientRuntime.ReadyPublications);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LateWorkerCompletionCannotRevokeOrCommitOverAHealthyReplacement(bool rekey)
+    {
+        ScriptingBootstrap.HoldPreparation = true;
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(303, scriptCount: 1));
+        PasswordPrompt.Approve();
+        PasswordPrompt.Approve();
+        Action<bool, string> stale = ScriptingBootstrap.LastPreparationCompletion;
+        if (rekey)
+        {
+            AnomalyMessaging.ClearTransportSession();
+            ConnectionContentBootstrap.BeginConnection();
+            ConnectionContentBootstrap.BeginFacilityGeneration(1);
+        }
+        else ConnectionContentBootstrap.BeginFacilityGeneration(2);
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(304, scriptCount: 1));
+        Assert.Equal("script-execution", PasswordPrompt.Owner);
+        PasswordPrompt.Approve();
+        ScriptingBootstrap.LastPreparationCompletion(true, string.Empty);
+        Assert.True(ContentCatalogClient.IsActivated);
+        int revocations = ScriptingBootstrap.Revocations;
+        stale(false, "old worker failed");
+        stale(true, string.Empty);
+        Assert.True(ContentCatalogClient.IsActivated);
+        Assert.True(ScriptingBootstrap.IsConnectionPrepared);
+        Assert.True(ClientContentRegistrar.Active);
+        Assert.Equal(revocations, ScriptingBootstrap.Revocations);
+        Assert.Equal(1, ClientContentRegistrar.Activations);
+        Assert.Single(AnomalyMessaging.Sent.OfType<ContentCatalogAckMessage>());
+        Assert.Equal(0, AnomalyMessaging.TransportFailures);
+    }
+
+    [Fact]
+    public void ReplayedBundleCompletionCannotReprepareOrRepromptWhileWorkerIsPending()
+    {
+        ScriptingBootstrap.HoldPreparation = true;
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(305, scriptCount: 1));
+        PasswordPrompt.Approve();
+        Action<bool, string> bundleCompleted = AssetBundleManager.LastActivationCallback;
+        PasswordPrompt.Approve();
+        bundleCompleted(true, string.Empty);
+        bundleCompleted(false, "duplicate failure");
+        Assert.Equal(1, ScriptingBootstrap.PrepareCalls);
+        Assert.Equal(1, ScriptPackManager.Preparations);
+        Assert.Equal(2, PasswordPrompt.Owners.Count);
+        Assert.Empty(AnomalyMessaging.Sent.OfType<ContentCatalogAckMessage>());
+        ScriptingBootstrap.LastPreparationCompletion(true, string.Empty);
+        Assert.True(ContentCatalogClient.IsActivated);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void QualificationWarmupDefersOfferWithoutConsentOrDownloadThenUsesItsActualResult(bool qualified)
+    {
+        Anomaly.Client.Api.Scripting.ScriptingPolicy.RemoteExecutionEnabled = false;
+        ScriptingBootstrap.IsRemoteQualificationPending = true;
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(306, scriptCount: 1));
+        ContentCatalogClient.Tick();
+        Assert.Empty(PasswordPrompt.Owners);
+        Assert.Empty(AnomalyMessaging.Sent.OfType<FileRequestMessage>());
+        Assert.Equal(0, ScriptingBootstrap.PrepareCalls);
+        Assert.Equal(0, AnomalyMessaging.TransportFailures);
+        ScriptingBootstrap.IsRemoteQualificationPending = false;
+        Anomaly.Client.Api.Scripting.ScriptingPolicy.RemoteExecutionEnabled = qualified;
+        ContentCatalogClient.Tick();
+        ContentCatalogClient.Tick();
+        if (qualified)
+        {
+            Assert.Equal(new[] { "content-catalog" }, PasswordPrompt.Owners);
+            Assert.Equal(0, AnomalyMessaging.TransportFailures);
+            PasswordPrompt.Approve();
+            PasswordPrompt.Approve();
+            Assert.True(ContentCatalogClient.IsActivated);
+        }
+        else
+        {
+            Assert.Empty(PasswordPrompt.Owners);
+            Assert.Equal(1, AnomalyMessaging.TransportFailures);
+            Assert.False(ContentCatalogClient.IsActivated);
+        }
+    }
+
+    [Fact]
+    public void ResetWhileQualificationIsPendingCannotResumeTheOldOffer()
+    {
+        Anomaly.Client.Api.Scripting.ScriptingPolicy.RemoteExecutionEnabled = false;
+        ScriptingBootstrap.IsRemoteQualificationPending = true;
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(307, scriptCount: 1));
+        ConnectionContentBootstrap.BeginFacilityGeneration(2);
+        ScriptingBootstrap.IsRemoteQualificationPending = false;
+        Anomaly.Client.Api.Scripting.ScriptingPolicy.RemoteExecutionEnabled = true;
+        ContentCatalogClient.Tick();
+        Assert.Empty(PasswordPrompt.Owners);
+        Assert.Empty(AnomalyMessaging.Sent.OfType<FileRequestMessage>());
+        Assert.Equal(0, AnomalyMessaging.TransportFailures);
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(308, scriptCount: 0));
+        PasswordPrompt.Approve();
+        Assert.True(ContentCatalogClient.IsActivated);
+    }
+
+    [Fact]
+    public void OldContentConsentCannotDeclineOrRestartTheAlreadyApprovedScriptTransaction()
+    {
+        ScriptingBootstrap.HoldPreparation = true;
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(309, scriptCount: 1));
+        Action approveContent = PasswordPrompt.Approve;
+        Action declineContent = PasswordPrompt.Decline;
+        approveContent();
+        Action approveScripts = PasswordPrompt.Approve;
+        approveScripts();
+        approveContent();
+        declineContent();
+        Assert.Equal(1, ScriptingBootstrap.PrepareCalls);
+        Assert.Empty(AnomalyMessaging.Sent.OfType<ContentCatalogAckMessage>());
+        Assert.Equal(0, AnomalyMessaging.TransportFailures);
+        ScriptingBootstrap.LastPreparationCompletion(true, string.Empty);
+        Assert.True(ContentCatalogClient.IsActivated);
+        Assert.Equal(ContentCatalogActivationStatus.Activated,
+            Assert.Single(AnomalyMessaging.Sent.OfType<ContentCatalogAckMessage>()).Status);
+    }
+
+    [Fact]
+    public void OldContentConsentCallbacksCannotRevokeTheNextOfferAfterItActivates()
+    {
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(311, scriptCount: 0));
+        Action staleApproval = PasswordPrompt.Approve;
+        Action staleDecline = PasswordPrompt.Decline;
+        ConnectionContentBootstrap.BeginFacilityGeneration(2);
+        ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(312, scriptCount: 0));
+        PasswordPrompt.Approve();
+        Assert.True(ContentCatalogClient.IsActivated);
+        int revocations = ScriptingBootstrap.Revocations;
+        staleApproval();
+        staleDecline();
+        Assert.True(ContentCatalogClient.IsActivated);
+        Assert.True(AssetBundleManager.Active);
+        Assert.True(ClientContentRegistrar.Active);
+        Assert.Equal(revocations, ScriptingBootstrap.Revocations);
+        Assert.Single(AnomalyMessaging.Sent.OfType<ContentCatalogAckMessage>());
+        Assert.Equal(0, AnomalyMessaging.TransportFailures);
+    }
+
+    [Fact]
     public void DecliningExecutionNeverPreparesAndClosesTheSameConnection()
     {
         var connection = NetworkClient.connection;
@@ -158,12 +394,15 @@ public sealed class ScriptPackConsentTests : IDisposable
     [Fact]
     public void DataOnlyOfferPreparesWithoutExecutionApprovalPrompt()
     {
+        Anomaly.Client.Api.Scripting.ScriptingPolicy.RemoteExecutionEnabled = false;
+        ScriptingBootstrap.HoldPreparation = true;
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(106, scriptCount: 0));
         PasswordPrompt.Approve();
         Assert.Equal(new[] { "content-catalog" }, PasswordPrompt.Owners);
         Assert.Equal(new[] { false }, ScriptingBootstrap.PrepareApprovals);
         Assert.Equal(0, ScriptingBootstrap.PreparedScriptCount);
         Assert.True(ContentCatalogClient.IsActivated);
+        Assert.False(ScriptingBootstrap.PreparationPending);
     }
 
     [Fact]

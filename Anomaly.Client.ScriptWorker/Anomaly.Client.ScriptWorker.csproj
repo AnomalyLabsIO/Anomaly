@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseAppHost>false</UseAppHost>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\third_party\MoonSharp\Anomaly.MoonSharp.Interpreter.csproj" />
+    <Compile Include="..\Anomaly.Client.Scripting\Remote\Protocol\*.cs" Link="Protocol\%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

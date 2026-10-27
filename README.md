@@ -37,6 +37,14 @@ Things you'll need:
 3. Run `SCPSL-ModLaunch.exe`. This will setup the modding environment and start the game with Anomaly enabled.
 4. You can add other compatible Melon Mods to these directories to install them as well.
 
+Remote Lua content packs additionally require successful Windows AppContainer/job
+qualification and separate content/execution approval. Linux/Proton/Wine and failed
+qualification fail closed for required remote Lua; ordinary client support does not
+imply remote Lua support. Keep the three `Anomaly.Client.ScriptWorker` payloads and
+the single `Anomaly.MoonSharp.Interpreter.dll` together in `UserLibs/`; missing or
+changed payloads cannot enable remote execution. Local owner scripts retain their
+separate verified-host path. See [script packs](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
+
 Connect to an Anomaly-enabled server using the address provided by its owner.
 To try mods in a local game, select **Create Server** from the Servers menu or run `host`
 in the game console.
@@ -88,9 +96,9 @@ input, UI, networking, custom content, and packaging your mods.
 Content authors use `ContentPacks/<namespace>/<pack>/pack.json` to declare one Lua
 entrypoint, an explicit asset index and/or typed server items. See the
 [content-pack contract and embedded sample](Anomaly.Client.Scripting/SCRIPT-PACKS.md)
-and [native asset authoring guide](ASSETBUNDLES.md). Remote Lua remains gated off
-until memory containment is qualified; content/execution consent cannot bypass
-that gate.
+and [native asset authoring guide](ASSETBUNDLES.md). Remote Lua requires actual
+qualified Windows LPAC/job isolation plus content/execution approval; unsupported
+or failed isolation remains fail-closed and cannot be bypassed by consent.
 >We also supply agent readable API documentation for Anomaly's client and server libraries. See https://docs.anomalylabs.io/llms.txt.
 
 ## Get help

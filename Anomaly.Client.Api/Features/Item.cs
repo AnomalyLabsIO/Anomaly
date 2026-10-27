@@ -71,24 +71,51 @@ public class Item
     public Player CurrentOwner => IsDestroyed ? null : Owner;
 
     [ScriptVisible]
-    public bool IsEquipped => Base.IsEquipped;
+    public bool IsEquipped
+    {
+        get { PreflightNativeItemRead(); return Base.IsEquipped; }
+    }
 
     [ScriptVisible]
-    public bool IsLocalPlayerItem => Base.IsLocalPlayer;
+    public bool IsLocalPlayerItem
+    {
+        get { PreflightNativeItemRead(); return Base.IsLocalPlayer; }
+    }
 
     public bool IsDummyItem => Base.IsDummy;
 
     [ScriptVisible]
-    public bool CanEquip => Base.AllowEquip;
+    public bool CanEquip
+    {
+        get { PreflightNativeItemRead(); return Base.AllowEquip; }
+    }
 
     [ScriptVisible]
-    public bool CanHolster => Base.AllowHolster;
+    public bool CanHolster
+    {
+        get { PreflightNativeItemRead(); return Base.AllowHolster; }
+    }
 
     [ScriptVisible]
-    public bool CanDrop => Base.AllowDropping;
+    public bool CanDrop
+    {
+        get { PreflightNativeItemRead(); return Base.AllowDropping; }
+    }
 
     [ScriptVisible]
-    public float Weight => Base.Weight;
+    public float Weight
+    {
+        get { PreflightNativeItemRead(); return Base.Weight; }
+    }
+
+    private void PreflightNativeItemRead()
+    {
+        if (!ScriptHostAccess.IsActive || Base == null)
+            return;
+        var modular = Base.TryCast<Il2CppInventorySystem.Items.Autosync.ModularAutosyncItem>();
+        if (modular != null)
+            ScriptHostAccess.ChargeRegistryEntries(modular.AllSubcomponents?.Length ?? 0);
+    }
 
     public Texture Icon => Base.Icon;
 
@@ -113,6 +140,8 @@ public class Item
             return item;
         }
 
+        ScriptHostAccess.ChargeRegistryEntries(_items.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         item = CreateForType(itemBase);
         _items[itemBase] = item;
         RefreshSerialIndex(item);
@@ -347,7 +376,7 @@ public class Item
                 return 0;
             return Base.ItemSerial;
         }
-        catch
+        catch (Exception) when (!ScriptHostAccess.IsActive)
         {
             return 0;
         }

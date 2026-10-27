@@ -55,6 +55,23 @@ internal sealed record ScriptSource(string PackId, string Address, string Source
         }
     }
 
+    internal bool HasSameContracts(ScriptSource second)
+    {
+        if (IndexSha256 != second.IndexSha256 || (MessageSchemas == null) != (second.MessageSchemas == null)) return false;
+        if (MessageSchemas == null) return true;
+        if (MessageSchemas.Count != second.MessageSchemas!.Count) return false;
+        for (var index = 0; index < MessageSchemas.Count; index++)
+        {
+            var a = MessageSchemas[index];
+            var b = second.MessageSchemas[index];
+            if (a.Name != b.Name || a.Direction != b.Direction || a.Version != b.Version || a.Fields.Count != b.Fields.Count) return false;
+            for (var field = 0; field < a.Fields.Count; field++)
+                if (a.Fields[field].Name != b.Fields[field].Name || a.Fields[field].Type != b.Fields[field].Type ||
+                    a.Fields[field].MaxBytes != b.Fields[field].MaxBytes) return false;
+        }
+        return true;
+    }
+
     private byte[] EncodeAndValidateSource(int byteCount)
     {
         // Do not use capturing allocation factories here: the compiler can

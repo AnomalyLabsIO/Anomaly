@@ -48,6 +48,7 @@ public class Projectile : Pickup
             return projectile;
         }
 
+        ScriptHostAccess.ChargeRegistryEntries(_projectiles.Count);
         projectile = CreateWrapper(projectileBase);
         _projectiles[projectileBase] = projectile;
         RefreshSerialIndex(projectile);
@@ -122,7 +123,10 @@ public class Projectile : Pickup
         if (serial == 0)
             return;
 
-        if (_serialCache.TryGetValue(serial, out Projectile existing) && !ReferenceEquals(existing, projectile))
+        bool known = _serialCache.TryGetValue(serial, out Projectile existing);
+        if (!known)
+            ScriptHostAccess.ChargeRegistryEntries(_serialCache.Count);
+        if (known && !ReferenceEquals(existing, projectile))
         {
             if (existing != null)
                 _projectiles.Remove(existing.ProjectileBase);
@@ -138,7 +142,7 @@ public class Projectile : Pickup
                 return 0;
             return ProjectileBase.Info.Serial;
         }
-        catch
+        catch (Exception) when (!ScriptHostAccess.IsActive)
         {
             return 0;
         }

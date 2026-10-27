@@ -4,7 +4,7 @@ using MoonSharp.Interpreter.Interop;
 namespace Anomaly.Client.Scripting.Events;
 
 /// <summary>Session-owned callbacks; CLR publishers enqueue frozen data and never enter the VM.</summary>
-internal sealed class ScriptEventSubscriptions : IDisposable
+internal sealed class ScriptEventSubscriptions : IDisposable, IScriptEventPublicationOwner
 {
     private readonly ScriptEventCatalog _catalog;
     private readonly Script _owner;
@@ -43,6 +43,15 @@ internal sealed class ScriptEventSubscriptions : IDisposable
 
     internal bool IsUnavailable => Volatile.Read(ref _disposed) != 0 || Volatile.Read(ref _faulted) != 0 || _catalog.IsDisposed;
     internal int Count => _registrations.Count;
+
+    bool IScriptEventPublicationOwner.IsUnavailable => IsUnavailable;
+    bool IScriptEventPublicationOwner.RequiresNativeScope => false;
+    bool IScriptEventPublicationOwner.TryReservePublication(ScriptEventRegistration registration,
+        out MemoryBudget.AllocationReservation reservation) => TryReservePublication(registration, out reservation);
+    void IScriptEventPublicationOwner.Publish(ScriptEventRegistration registration, object?[] arguments, object allocationOwner)
+        => Publish(registration, arguments, allocationOwner);
+    void IScriptEventPublicationOwner.RequestRetirement(string reason, string? eventName) => RequestRetirement(reason, eventName);
+    void IScriptEventPublicationOwner.EnsureOwner(Script script) => EnsureOwner(script);
 
     internal void InstallGlobal()
     {

@@ -75,6 +75,7 @@ public class Locker
             Transform t = Base.transform;
             while (t != null)
             {
+                ScriptHostAccess.ChargeHierarchyStep();
                 Il2CppMapGeneration.RoomIdentifier rid = t.GetComponent<Il2CppMapGeneration.RoomIdentifier>();
                 if (rid != null)
                     return Room.Get(rid);
@@ -109,6 +110,8 @@ public class Locker
         if (lockerBase == null) return null;
         if (_lockers.TryGetValue(lockerBase, out Locker wrapper))
             return wrapper;
+        ScriptHostAccess.ChargeRegistryEntries(_lockers.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         wrapper = new Locker(lockerBase);
         _lockers[lockerBase] = wrapper;
         return wrapper;

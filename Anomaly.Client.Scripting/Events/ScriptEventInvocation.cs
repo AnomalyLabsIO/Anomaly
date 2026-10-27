@@ -47,14 +47,14 @@ internal sealed class ScriptEventInvocation : IQueuedScriptInvocation
 internal sealed class ScriptEventRegistration
 {
     private int _active;
-    internal ScriptEventRegistration(ScriptEventSubscriptions owner, ScriptEventSource source, string token, DynValue callback)
+    internal ScriptEventRegistration(IScriptEventPublicationOwner owner, ScriptEventSource source, string token, DynValue? callback = null)
     {
         Owner = owner;
         Source = source;
         Token = token;
-        Callback = callback.Clone();
+        Callback = callback?.Clone() ?? DynValue.Nil;
     }
-    internal ScriptEventSubscriptions Owner { get; }
+    internal IScriptEventPublicationOwner Owner { get; }
     internal ScriptEventSource Source { get; }
     internal string Token { get; }
     internal DynValue Callback { get; private set; }

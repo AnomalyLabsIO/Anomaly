@@ -91,6 +91,8 @@ public class Tesla
         if (_teslas.TryGetValue(teslaBase, out Tesla wrapper))
             return wrapper;
 
+        ScriptHostAccess.ChargeRegistryEntries(_teslas.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         wrapper = new Tesla(teslaBase);
         _teslas[teslaBase] = wrapper;
         return wrapper;

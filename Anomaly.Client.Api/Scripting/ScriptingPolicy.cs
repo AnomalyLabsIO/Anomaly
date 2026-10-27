@@ -6,10 +6,18 @@ public static class ScriptingPolicy
     /// <summary>Memory containment remains unqualified by the experimental allocation allowance.</summary>
     public static bool MemoryHardeningQualified => false;
 
-    /// <summary>Remote script execution requires a qualified memory boundary in addition to content consent.</summary>
-    public static bool RemoteExecutionEnabled => MemoryHardeningQualified;
+    /// <summary>Whether the isolated worker passed the current process, memory and capability qualification.</summary>
+    public static bool RemoteIsolationQualified { get; internal set; }
 
-    /// <summary>The reason remote execution is unavailable. This is not a configurable permission.</summary>
-    public static string RemoteExecutionDisabledReason => MemoryHardeningQualified ? string.Empty :
-        "Remote scripts are disabled until memory containment is qualified. Accounted VM allocations do not contain arbitrary CLR or native host allocations.";
+    /// <summary>Remote script execution requires qualified worker isolation in addition to exact content and execution consent.</summary>
+    public static bool RemoteExecutionEnabled => RemoteIsolationQualified;
+
+    private static string _remoteExecutionDisabledReason = "Remote worker isolation qualification has not completed.";
+
+    /// <summary>The actual worker qualification failure or pending state. This is not a configurable permission.</summary>
+    public static string RemoteExecutionDisabledReason
+    {
+        get => RemoteIsolationQualified ? string.Empty : _remoteExecutionDisabledReason;
+        internal set => _remoteExecutionDisabledReason = value;
+    }
 }

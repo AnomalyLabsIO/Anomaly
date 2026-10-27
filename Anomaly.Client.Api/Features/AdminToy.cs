@@ -72,6 +72,8 @@ public class AdminToy
         if (_toys.TryGetValue(toyBase, out AdminToy toy))
             return toy;
 
+        ScriptHostAccess.ChargeRegistryEntries(_toys.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         toy = CreateWrapper(toyBase);
         _toys[toyBase] = toy;
         return toy;

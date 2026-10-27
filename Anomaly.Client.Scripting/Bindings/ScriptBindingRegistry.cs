@@ -68,6 +68,11 @@ internal sealed class ScriptBindingRegistry
                 throw new InvalidOperationException("The exact host type is not registered.");
     }
 
+    internal IReadOnlyList<ScriptTypePolicy> GetPolicies()
+    {
+        lock (_sync) return _types.Values.OrderBy(policy => policy.Name, StringComparer.Ordinal).ToArray();
+    }
+
     internal ScriptApiCatalog GetCatalog()
     {
         lock (_sync) return new ScriptApiCatalog(_types.Values.Select(value => value.Catalog), enums: Enums.GetCatalog());

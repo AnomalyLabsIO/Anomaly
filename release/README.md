@@ -15,7 +15,7 @@ The output directory, `artifacts/runtime-1.0.0/`, contains:
 - `SHA256SUMS`, covering all three ZIPs
 
 The script builds
-Bootstrap, Client, Api, Scripting, Shared, AssetValidation, and Server in Release with
+Bootstrap, Client, Api, Scripting, ScriptWorker, Shared, AssetValidation, and Server in Release with
 `DeployLocal=false`. It works from the current checkout, including uncommitted
 changes, and needs no Git tag or signing keys. Use a new or empty output
 directory; existing archives are never overwritten. `-Version` labels the ZIP
@@ -40,14 +40,23 @@ game/loader profile are:
 | Server | `0Harmony.dll` (Lib.Harmony 2.2.2) in `dependencies/global/` | SCP:SL 14.2.7 supplies Bouncy Castle 2.0.0.0 and game/Unity assemblies; LabAPI supplies the plugin host; the server supplies its framework runtime. |
 
 The client also carries six Anomaly DLLs: Bootstrap in `Plugins/`, Client in
-`Mods/`, and Api, Scripting, Shared, and AssetValidation in `UserLibs/`. The server carries
+`Mods/`, and Api, Scripting, Shared, and AssetValidation in `UserLibs/`. The separate
+ScriptWorker DLL, deps.json and runtimeconfig.json sit beside the single private
+engine DLL in `UserLibs/`; the worker is not bootstrapped into the game. Its only
+managed dependency is the engine plus .NET 6 framework assemblies. Scripting embeds
+a generated SHA256 identity manifest for these four payloads; startup verifies them
+before qualification/launch. The server carries
 Server in `plugins/global/` and Shared in `dependencies/global/`. Both installation
 ZIPs include `LICENSE`, `NOTICE`, and `THIRD_PARTY_DEPENDENCIES.md`. The client also
 includes its skin bundle/index pair, asset guide, AssetsTools.NET notice, and the
 private MoonSharp fork's BSD-3-Clause license and provenance under `licenses/`.
-Server-provided client source remains disabled until the scripting runtime's
-memory safeguards are qualified. Build tools, test libraries, NVorbis, and
-raw-image decoders are unnecessary at runtime.
+Server-provided client source requires actual qualified Windows low-privilege
+AppContainer (LPAC)/job isolation and explicit content/execution approval. There is
+no standard-AppContainer fallback. Unsupported platforms/Wine or
+failed qualification fail closed; local CLR accounting remains unqualified.
+The worker uses the trusted installed x64 .NET 6 runtime, not a bundled apphost or
+game/API assemblies. Build tools, test libraries, NVorbis, and raw-image decoders
+are unnecessary at runtime.
 
 Extract the SDK ZIP into a separate developer directory. It includes the client
 and server API DLLs, Shared and its public Bouncy Castle compile dependency,
@@ -68,12 +77,12 @@ and queued events as the runtime catalog. SDK documentation and license files
 stay in that archive, separate from game installation files. Its entries come
 from the complete `anomaly-sdk` definition in `package-layout.json`.
 
-The starter's `EnableScriptPack` defaults to `false`. Do not enable it for
-normal remote connections: remote script offers fail closed before content or
-execution approval while `MemoryHardeningQualified` / `RemoteExecutionEnabled`
-are false. Consent cannot override this gate. The embedded pack is an authoring
-and development example, not a claim that remote Lua is ready; verified local-host
-sources use the guide's separate local owner directory and execution path.
+The server starter's `EnableScriptPack` defaults to false to avoid requiring Lua
+without an intentional owner choice. Enable it for qualified Windows remote clients
+after reviewing the example and its separate content/execution approvals.
+`RemoteExecutionEnabled` follows actual `RemoteIsolationQualified`, not local
+`MemoryHardeningQualified` (still false). Consent cannot override failed isolation.
+Verified local-host sources retain the guide's separate owner directory and path.
 
 The script uses the entries in `package-layout.json` as its allowlist and audits the emitted
 assembly references against packaged DLLs and the actual resolved host inputs.

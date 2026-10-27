@@ -53,6 +53,7 @@ try {
         @{ Name = 'Anomaly.Client'; Path = 'Anomaly.Client/Anomaly.Client.csproj' },
         @{ Name = 'Anomaly.Client.Api'; Path = 'Anomaly.Client.Api/Anomaly.Client.Api.csproj' },
         @{ Name = 'Anomaly.Client.Scripting'; Path = 'Anomaly.Client.Scripting/Anomaly.Client.Scripting.csproj' },
+        @{ Name = 'Anomaly.Client.ScriptWorker'; Path = 'Anomaly.Client.ScriptWorker/Anomaly.Client.ScriptWorker.csproj' },
         @{ Name = 'Anomaly.AssetValidation'; Path = 'Anomaly.AssetValidation/Anomaly.AssetValidation.csproj' },
         @{ Name = 'Anomaly.Server'; Path = 'Anomaly.Server/Anomaly.Server.csproj' },
         @{ Name = 'Anomaly.Shared'; Path = 'Anomaly.Shared/Anomaly.Shared.csproj' }

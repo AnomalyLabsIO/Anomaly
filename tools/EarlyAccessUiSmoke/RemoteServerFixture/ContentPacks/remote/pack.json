@@ -1,0 +1,1 @@
+{"SchemaVersion":1,"PackId":"anomaly_smoke:remote","Version":"1.0.0","Scripts":{"PackId":"anomaly_smoke:remote_scripts","EntryPoint":"scripts/main.lua","Messages":"scripts/messages.json"}}

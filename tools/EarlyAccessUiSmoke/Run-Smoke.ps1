@@ -12,6 +12,7 @@ param(
     [string] $ServerApiMode = 'full',
     [switch] $LocalHosting,
     [switch] $ClientScripting,
+    [switch] $RemoteScripting,
     [switch] $DummyVisibility,
     [switch] $DedicatedDummyControl,
     [switch] $NewsOnly,
@@ -50,6 +51,10 @@ if ($DummyVisibility -and !$LocalHosting) { throw 'DummyVisibility requires Loca
 if ($DedicatedDummyControl -and !$LoopbackServer) { throw 'DedicatedDummyControl requires a loopback test server.' }
 if ($ClientScripting -and (!$LocalHosting -or $LoopbackServer -or $DummyVisibility)) {
     throw 'ClientScripting requires LocalHosting and runs without a remote server or dummy fixture.'
+}
+if ($RemoteScripting -and (!$LoopbackServer -or $ConnectionOnly -or $AdmissionExpect -or $IntegrityMode -or
+    $ServerApi -or $LocalHosting -or $ClientScripting -or $DummyVisibility -or $DedicatedDummyControl -or $NewsOnly)) {
+    throw 'RemoteScripting requires a loopback dedicated server and cannot be combined with another smoke scenario.'
 }
 if ($ClientScripting) {
     $scriptRoot = Join-Path $game 'UserData/Anomaly/ContentPacks'
@@ -191,13 +196,20 @@ $startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Normal
 $startInfo.Environment['ANOMALY_UI_SMOKE_DIR'] = $evidence
 $startInfo.Environment.Remove('ANOMALY_INTEGRITY_SMOKE_MODE') | Out-Null
 if ($IntegrityMode) { $startInfo.Environment['ANOMALY_INTEGRITY_SMOKE_MODE'] = $IntegrityMode }
-foreach ($name in @('ANOMALY_SMOKE_SERVER','ANOMALY_UI_SMOKE_CONNECTION_ONLY','ANOMALY_MOD_ADMISSION_EXPECT','ANOMALY_SERVER_API_SMOKE','ANOMALY_SERVER_API_SMOKE_MODE','ANOMALY_LOCAL_HOSTING_SMOKE','ANOMALY_CLIENT_SCRIPTING_SMOKE','ANOMALY_DUMMY_VISIBILITY_SMOKE','ANOMALY_DEDICATED_DUMMY_SMOKE','ANOMALY_DUMMY_SCREEN_WIDTH','ANOMALY_DUMMY_SCREEN_HEIGHT','ANOMALY_UI_SMOKE_NEWS_ONLY')) {
+foreach ($name in @('ANOMALY_SMOKE_SERVER','ANOMALY_UI_SMOKE_CONNECTION_ONLY','ANOMALY_MOD_ADMISSION_EXPECT','ANOMALY_SERVER_API_SMOKE','ANOMALY_SERVER_API_SMOKE_MODE','ANOMALY_LOCAL_HOSTING_SMOKE','ANOMALY_CLIENT_SCRIPTING_SMOKE','ANOMALY_REMOTE_SCRIPTING_SMOKE','ANOMALY_REMOTE_SCRIPTING_PRIMARY_SHA256','ANOMALY_REMOTE_SCRIPTING_OWNER_SHA256','ANOMALY_DUMMY_VISIBILITY_SMOKE','ANOMALY_DEDICATED_DUMMY_SMOKE','ANOMALY_DUMMY_SCREEN_WIDTH','ANOMALY_DUMMY_SCREEN_HEIGHT','ANOMALY_UI_SMOKE_NEWS_ONLY')) {
     $startInfo.Environment.Remove($name) | Out-Null
 }
 if ($NewsOnly) { $startInfo.Environment['ANOMALY_UI_SMOKE_NEWS_ONLY'] = '1' }
 if ($LoopbackServer) { $startInfo.Environment['ANOMALY_SMOKE_SERVER'] = $LoopbackServer }
 if ($ConnectionOnly) { $startInfo.Environment['ANOMALY_UI_SMOKE_CONNECTION_ONLY'] = '1' }
 if ($AdmissionExpect) { $startInfo.Environment['ANOMALY_MOD_ADMISSION_EXPECT'] = $AdmissionExpect }
+if ($RemoteScripting) {
+    $startInfo.Environment['ANOMALY_REMOTE_SCRIPTING_SMOKE'] = '1'
+    foreach ($fixture in @(@('remote','PRIMARY'), @('owner','OWNER'))) {
+        $source = Join-Path $PSScriptRoot "RemoteServerFixture/ContentPacks/$($fixture[0])/scripts/main.lua"
+        $startInfo.Environment["ANOMALY_REMOTE_SCRIPTING_$($fixture[1])_SHA256"] = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+}
 if ($ServerApi) {
     $startInfo.Environment['ANOMALY_SERVER_API_SMOKE'] = '1'
     $startInfo.Environment['ANOMALY_SERVER_API_SMOKE_MODE'] = $ServerApiMode

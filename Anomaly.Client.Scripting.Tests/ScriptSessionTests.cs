@@ -10,7 +10,6 @@ public sealed class ScriptSessionTests
     {
         using var runtime = new ScriptRuntime();
         Assert.False(ScriptingPolicy.MemoryHardeningQualified);
-        Assert.False(ScriptingPolicy.RemoteExecutionEnabled);
         var invalidOptions = new ScriptExecutionOptions { InstructionLimit = -1 };
         var exception = Assert.Throws<NotSupportedException>(() => runtime.CreateRemoteSession(null, invalidOptions));
         Assert.Contains("approved", exception.Message, StringComparison.OrdinalIgnoreCase);

@@ -41,7 +41,7 @@ public class PlayerStat
                 return StatVisibility.CanObserve(true, Base.Hub == viewer.ReferenceHub,
                     viewer.Role.IsAlive, (int)synced.Mode);
             }
-            catch { return false; }
+            catch (Exception) when (!ScriptHostAccess.IsActive) { return false; }
         }
     }
 
@@ -56,7 +56,7 @@ public class PlayerStat
             value = Value;
             return float.IsFinite(value);
         }
-        catch { return false; }
+        catch (Exception) when (!ScriptHostAccess.IsActive) { return false; }
     }
 
     public Player Player => Player.Get(Base.Hub);
@@ -80,6 +80,8 @@ public class PlayerStat
         if (_stats.TryGetValue(statBase, out PlayerStat stat))
             return stat;
 
+        ScriptHostAccess.ChargeRegistryEntries(_stats.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         stat = new PlayerStat(statBase);
         _stats[statBase] = stat;
         return stat;

@@ -128,8 +128,6 @@ public sealed class HostAllocationTests
         Assert.True(result.AllocationDeltaBytes >= 65536);
         Assert.Equal(1, result.Checks);
         Assert.False(ScriptingPolicy.MemoryHardeningQualified);
-        Assert.False(ScriptingPolicy.RemoteExecutionEnabled);
-        Assert.Contains("memory", ScriptingPolicy.RemoteExecutionDisabledReason, StringComparison.OrdinalIgnoreCase);
     }
 
     [ScriptType]

@@ -44,16 +44,16 @@ The companion does not initiate custom traffic to clients without a request.
 Install the matching companion before using the client command. Its message
 subscriptions, like native item handlers, are removed during `Disable()`.
 
-`EnableScriptPack` defaults to `false`; leave it disabled for normal remote
-connections. **Remote script execution is currently gated off**:
-`ScriptingPolicy.MemoryHardeningQualified` and `RemoteExecutionEnabled` remain
-false. A required remote script offer fails closed before content approval,
-download, or execution approval. Neither player consent nor this sample's config
-can enable that gate.
+`EnableScriptPack` defaults to `false` so the sample does not require Lua without
+an intentional server-owner choice. Set `EnableScriptPack: true` to offer the
+embedded pack to authenticated clients with qualified Windows AppContainer/job
+workers. Clients need both content and execution approval. `RemoteExecutionEnabled`
+follows actual `RemoteIsolationQualified`; `MemoryHardeningQualified` remains false
+for local VMs and is not this gate. Unsupported platforms/Wine, missing runtime or
+payloads and failed isolation probes reject required offers before consent/download;
+neither this flag nor consent can bypass qualification.
 
-Set `EnableScriptPack: true` only when intentionally inspecting/testing the
-embedded pack registration, not to enable remote play. Keep the complete
-[`ContentPacks/example/panel`](ContentPacks/example/panel) directory beside the
+Keep the complete [`ContentPacks/example/panel`](ContentPacks/example/panel) directory beside the
 project when building. Its [`pack.json`](ContentPacks/example/panel/pack.json)
 declares wrapper `example:panel`, diagnostic version `1.0.0`, script component
 `example:panel_scripts`, one entrypoint `scripts/main.lua` and the optional
@@ -78,7 +78,7 @@ For the supported local path, copy the complete pack directory, preserving
 `<UserData>/Anomaly/ContentPacks/example/panel/` and start a nondedicated host.
 The same Lua logs initialization and displays local player/round observations
 without a client companion. Its message handler is installed, but local activation
-zero cannot exchange pack messages; that part remains a remote qualification example.
+zero cannot exchange pack messages; use the qualified remote path to exercise them.
 Enabling the server registration does not select the local owner entry point.
 
 Disabling the plugin removes its registration from future offers, not from an

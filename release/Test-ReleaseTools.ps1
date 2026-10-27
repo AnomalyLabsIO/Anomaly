@@ -139,9 +139,20 @@ try {
         ($failure -join "`n") -notlike '*Resolved-reference list for Anomaly.Client.Scripting is missing.*') {
         throw ("Reviewed scripting layout was rejected or its resolved references were not required: {0}" -f ($failure -join "`n"))
     }
+    [IO.File]::WriteAllText((Join-Path $fixtureReferences 'Anomaly.Client.Scripting.refs'), $packagerAssembly)
+    $failure = @(& dotnet @fixtureArguments 2>&1)
+    if ($LASTEXITCODE -eq 0 -or
+        ($failure -join "`n") -notlike '*Resolved-reference list for Anomaly.Client.ScriptWorker is missing.*') {
+        throw ("Standalone worker resolved references were not required: {0}" -f ($failure -join "`n"))
+    }
+    # Restore the complete reference graph before exercising unrelated staging gates.
+    [IO.File]::WriteAllText((Join-Path $fixtureReferences 'Anomaly.Client.ScriptWorker.refs'), $packagerAssembly)
 
     foreach ($requiredPath in @(
         'UserLibs/Anomaly.Client.Scripting.dll', 'UserLibs/Anomaly.MoonSharp.Interpreter.dll',
+        'UserLibs/Anomaly.Client.ScriptWorker.dll',
+        'UserLibs/Anomaly.Client.ScriptWorker.deps.json',
+        'UserLibs/Anomaly.Client.ScriptWorker.runtimeconfig.json',
         'licenses/MoonSharp.LICENSE', 'licenses/MoonSharp.md',
         'UserData/Anomaly/ContentPacks/personal/skins/pack.json',
         'UserData/Anomaly/ContentPacks/personal/skins/assets/personal-skins.index.json',
@@ -196,7 +207,6 @@ try {
 
     # A local runtime archive must read its BSD notice, rather than silently
     # dropping non-DLL manifest entries. Put the absent notice first to isolate it.
-    [IO.File]::WriteAllText((Join-Path $fixtureReferences 'Anomaly.Client.Scripting.refs'), $packagerAssembly)
     $layout = $originalLayout | ConvertFrom-Json
     $client = $layout.packages | Where-Object packageId -eq 'anomaly-client'
     $notice = $client.entries | Where-Object path -eq 'licenses/MoonSharp.LICENSE'

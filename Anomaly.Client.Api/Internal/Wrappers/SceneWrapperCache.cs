@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Anomaly.Client.Api.Scripting;
 
 namespace Anomaly.Client.Api.Internal.Wrappers;
 
@@ -15,7 +16,11 @@ internal sealed class SceneWrapperCache<TBase, TWrapper> where TBase : UnityEngi
         if (value == null)
             return null;
         if (!_wrappers.TryGetValue(value, out TWrapper wrapper))
+        {
+            ScriptHostAccess.ChargeRegistryEntries(_wrappers.Count);
+            ScriptHostAccess.ChargeWrapperCreation();
             _wrappers[value] = wrapper = _create(value);
+        }
         return wrapper;
     }
 

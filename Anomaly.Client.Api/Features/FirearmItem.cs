@@ -73,6 +73,7 @@ public class FirearmItem : Item
     {
         if (IsDestroyed)
             return default;
+        PreflightModuleLookup();
 
         MagazineModule magazine = Magazine;
         bool hasMagazineData = magazine != null && MagazineModule.SyncData.ContainsKey(Serial);
@@ -106,12 +107,19 @@ public class FirearmItem : Item
         module = null;
         try
         {
+            PreflightModuleLookup();
             return FirearmBase != null && FirearmBase.TryGetModule(out module);
         }
-        catch
+        catch (Exception) when (!ScriptHostAccess.IsActive)
         {
             return false;
         }
+    }
+
+    private void PreflightModuleLookup()
+    {
+        if (ScriptHostAccess.IsActive && FirearmBase != null)
+            ScriptHostAccess.ChargeRegistryEntries(FirearmBase.AllSubcomponents?.Length ?? 0);
     }
 
     public override string ToString() => $"FirearmItem({TypeName}, {Serial}, Ammo={AmmoInMagazine}/{MagazineCapacity})";

@@ -61,7 +61,11 @@ public sealed partial class Core
         Add("scripting-sample-capture-" + entry, () =>
         {
             Require((bool)InvokeScript(ScriptSession("owner-a"), "ReadGame"), "Lua resolves the actual local player and detached native position");
-            Require(!Anomaly.Client.Api.Scripting.ScriptingPolicy.RemoteExecutionEnabled, "Live local execution does not bypass remote qualification");
+            Require(!Anomaly.Client.Api.Scripting.ScriptingPolicy.MemoryHardeningQualified,
+                "Live local execution does not qualify an in-process heap ceiling");
+            Require(Anomaly.Client.Api.Scripting.ScriptingPolicy.RemoteExecutionEnabled ==
+                Anomaly.Client.Api.Scripting.ScriptingPolicy.RemoteIsolationQualified,
+                "Remote availability follows independent worker isolation qualification");
             Require(_readyEvents == (entry == "console" ? 1 : 2), "One public Ready transition per hosted connection");
             Capture("scripting-local-sample-" + entry);
             _scriptingTrafficSession = ScriptSession("owner-a");
@@ -111,7 +115,7 @@ public sealed partial class Core
     private void SaveScriptingState(string entry)
     {
         var bootstrap = Type.GetType("Anomaly.Client.Internal.Bootstrap.ScriptingBootstrap, Anomaly.Client", true);
-        var scripts = bootstrap.GetField("_scripts", All).GetValue(null);
+        var scripts = bootstrap.GetField("_localScripts", All).GetValue(null);
         var hosting = Type.GetType("Anomaly.Client.Internal.Hosting.LocalHostingRuntime, Anomaly.Client", true);
         File.WriteAllText(Path.Combine(_output, "scripting-state-" + entry + ".json"), JsonSerializer.Serialize(new
         {
@@ -122,6 +126,7 @@ public sealed partial class Core
             verifiedHost = hosting.GetProperty("IsVerifiedScriptHost", All).GetValue(null),
             prepared = bootstrap.GetProperty("IsConnectionPrepared", All).GetValue(null),
             scriptSetPresent = scripts != null,
+            remoteScriptSetPresent = bootstrap.GetField("_remoteScripts", All).GetValue(null) != null,
             sourcePresent = File.Exists(Path.Combine(Anomaly.Client.Api.Features.Paths.ContentPacksPath,
                 "example", "panel", "scripts", "main.lua")),
             labelTexts = ScriptOutputLabels().Select(text => text.text).ToArray()

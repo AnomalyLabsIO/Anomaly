@@ -8,11 +8,13 @@ are kept in [`tools/MoonSharpHardening`](../tools/MoonSharpHardening/README.md).
 The API project has no interpreter dependency. Runtime entry points are internal
 to the client and its tests; this is not yet a public mod scripting service.
 
-**Remote execution is disabled until memory containment is qualified.** Both
-`MemoryHardeningQualified` and `RemoteExecutionEnabled` are false. Exact content
-and execution consent cannot bypass that gate. Verified local hosted sources and
-isolated development tests use a separate internal entry point.
-Raw `CreateRemoteSession(string)` rejects before VM creation. Startup discovers
+**Remote execution requires qualified process isolation and explicit approval.**
+`MemoryHardeningQualified` remains false: local CLR accounting is not a heap ceiling.
+`RemoteIsolationQualified` is published only after actual Windows AppContainer/job
+qualification; `RemoteExecutionEnabled` follows that result. Unsupported platforms,
+Wine, missing runtime/payloads or failed probes fail closed, without in-process fallback.
+Verified local hosted sources and development tests retain their separate entry point.
+Raw remote source strings reject before VM creation. Startup discovers
 metadata but runs no scripts. The authenticated content catalog binds generated
 script-pack indexes and exact source files; execution approval applies only to the
 current connection and offer. See [`SCRIPT-PACKS.md`](SCRIPT-PACKS.md) for owner
@@ -27,14 +29,16 @@ player readiness. See [MESSAGING-DESIGN.md](MESSAGING-DESIGN.md) for schemas and
 
 ## First useful local script
 
-Remote execution remains unavailable; the verified nondedicated in-process host
-is the supported local execution path. Copy the complete
+For local owner execution, use the verified nondedicated in-process host path;
+remote packs instead require qualified LPAC/job isolation and separate approval.
+Copy the complete
 [`samples/HelloAnomalyServer/ContentPacks/example/panel`](../samples/HelloAnomalyServer/ContentPacks/example/panel)
 directory to `<UserData>/Anomaly/ContentPacks/example/panel/`, retaining `pack.json`,
 `scripts/main.lua` and `scripts/messages.json`, then start a local host.
 The descriptor selects one entrypoint; unlisted Lua never executes.
-The sample logs initialization and shows local state on future Ready/player-added
-notifications. It does not run in menus or while joining a remote server.
+The sample logs initialization and shows local state on future Ready/player-added notifications.
+This local-owner installation does not run in menus or while joining a remote server;
+the server may separately offer the embedded example through the approved remote path.
 Each logical script pack has one VM; packs do not share globals or import modules.
 Changes take effect on the next connection, not by hot reload.
 
@@ -344,20 +348,45 @@ The host opts into reclaimable mode; direct engine callers retain the explicit
 cumulative default. Isolated workers exercise 10,000 bounded engine calls and 10,000
 actual host invocations with collection between batches, exceeding a lifetime allowance
 while keeping outstanding charges bounded. Retention and resurrection fixtures check
-that live storage cannot regain quota. Forced GC is confined to these test workers.
-These checks do not qualify remote execution or guarantee natural GC timing in Unity.
+that live storage cannot regain quota. Test collection does not guarantee natural GC
+timing in Unity; the production remote worker may collect only its own process.
 
-Qualification still needs a complete allocation-path review, validation of aggregate
-and session-churn behavior, trusted C#/IL2CPP operation budgets, framework diagnostics
-and GC/runtime overhead analysis, and live Unity validation. Arbitrary CLR allocations
-inside an approved method cannot be intercepted by a VM allowance; those operations
-must be bounded and reserve before allocating. No managed OOM recovery is claimed.
-Reflection-wrapped fatal CLR failures escape the Lua error boundary and signal session
-retirement; event snapshot failures also invalidate the other selected recipients.
-An out-of-memory exception, task timeout or process watchdog always fails a probe.
-Capability-scoped object ownership and a reviewed transport/manifest/consent contract
-remain necessary before claiming a qualified memory boundary. The remote gate
-remains closed while those boundaries are unqualified.
+The in-process host remains unqualified for hostile-source memory containment.
+Arbitrary CLR allocations inside an approved method cannot be intercepted by a VM
+allowance. Remote packs therefore execute in a separate framework-dependent .NET 6
+x64 worker, never a game-process VM. The worker references only the private engine
+and framework; bounded data-only RPC preserves the shipped read-only gameplay surface,
+Output, Events, Messages and Enums without exposing CLR/native objects.
+The host verifies an embedded SHA256 identity for the worker DLL, deps, runtimeconfig
+and single adjacent engine DLL before launch. A mandatory low-privilege AppContainer
+(LPAC), never a standard-AppContainer fallback, is created suspended, assigned and
+verified in a kill-on-close job before resume: 256 MiB process/job memory, one process,
+10% CPU, and a 128 MiB CLR heap hard limit. Before resume, qualification requires the
+LPAC creation attribute and actual `AccessCheck` results on a duplicated child token:
+read access with User + ALL APPLICATION PACKAGES must deny, while User +
+ALL RESTRICTED APPLICATION PACKAGES must allow. Zero capabilities and absence of
+loopback exemptions are independently verified. A bounded audit of protected descendants
+rejects explicit ALL APPLICATION PACKAGES / ALL RESTRICTED APPLICATION PACKAGES grants;
+an owner-only protected DACL is permitted. A named cross-process lock coordinates
+ACL changes, confined to explicit payload files, protected UserData and private temp,
+without ancestor ACL changes. Owned cleanup is tracked and drained rather than
+silently abandoned.
+Filesystem/child-process denial, network isolation and native-memory-limit checks
+must qualify before availability is published. Network results distinguish explicit
+denial, timeout and Winsock unavailability. Windows Filtering Platform may drop a
+denied connection rather than return an immediate error. A timeout, or the specifically
+recognized Winsock startup error 10107, is accepted only together with parent-owned
+positive controls against the same known listener before and after, a secret 32-byte
+nonce, no child/other accepted connections, and independently verified LPAC, zero
+capabilities and no loopback exemption. Error 10107 is reported as network unavailable,
+not permission denial; its cause is not established by that code. The authority is
+Windows' verified no-network-capability LPAC contract, never the error or timeout alone.
+Host RPC/native-string/hierarchy/registry work and queues are independently bounded.
+A dedicated watchdog thread, independent of ThreadPool availability, enforces the
+five-second command wall limit and kills/revokes an unhealthy set. Aggregate required-pack
+loading is transactional and async; stale connection/offer/activation scopes cannot
+publish readiness.
+Consent cannot bypass failed isolation, and no managed OOM recovery is claimed.
 
 [`ALLOCATION-AUDIT.md`](ALLOCATION-AUDIT.md) records the reviewed CLR/compiler/error
 and host allocation paths, new preflight/retention regressions, and remaining trusted
@@ -393,3 +422,19 @@ CPU abuse fixtures run in separate .NET 6 workers. Their Windows job/GC ceilings
 independent watchdog protect the test runner; a watchdog kill fails the test. These
 safeguards are not interpreter memory limits. Builds/tests do not prove live game-frame
 performance or IL2CPP event behavior. Normal builds do not deploy or start the game.
+
+Windows x64 live qualification on 2026-10-26 exercised two authenticated dedicated-server
+connections through ModLaunch: exact transferred source hashes, separate content/execution
+consent, held native/public Ready, frozen events, retained player/native queries, typed
+GetState/State messages, independent literal output with clear/expiry, 48 repeated query
+cycles, fresh reconnect activations/workers, and worker exit/output revocation on both
+disconnects. The real IL2CPP string conversion rejected 4097 UTF-16 characters before
+managed copying inside the remote scope and succeeded outside it. This is not a blanket
+qualification of arbitrary game/native method bodies or an in-process heap ceiling.
+
+Reproduce with the opt-in [remote scripting smoke](../tools/EarlyAccessUiSmoke/README.md#remote-lua-worker-and-actual-native-api-scenario).
+Choose an unused loopback endpoint: a new server identity at an already pinned address is
+correctly rejected rather than replacing the owner's trust pin. Runtime archives include
+the three worker payloads, their host-embedded identities, and the single private engine;
+the release gates also compile the packaged client/server starters and verify their exact
+embedded descriptor/script resource names.

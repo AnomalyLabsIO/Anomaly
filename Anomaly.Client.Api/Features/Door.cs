@@ -93,6 +93,8 @@ public class Door
         if (_doors.TryGetValue(doorVariant, out Door door))
             return door;
 
+        ScriptHostAccess.ChargeRegistryEntries(_doors.Count);
+        ScriptHostAccess.ChargeWrapperCreation();
         door = CreateForType(doorVariant);
         _doors[doorVariant] = door;
         return door;

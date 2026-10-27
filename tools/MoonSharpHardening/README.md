@@ -29,10 +29,11 @@ The patch includes CPU checks and experimental conservative allocation accountin
 The host selects reclaimable quotas: tracked storage regains quota only after observed
 CLR collection, with no forced production GC or refund on session disposal. Direct
 engine callers retain the cumulative default. Neither mode measures actual live CLR
-heap or RSS. Remote script execution remains disabled until memory qualification;
-bounded host-operation review and live runtime acceptance remain incomplete.
-Verified local hosted source uses a separate internal entry point. Raw remote
-source remains rejected.
+heap or RSS. The in-process host remains unqualified; remote execution instead
+requires a separate qualified Windows AppContainer/job worker, bounded host RPC,
+and exact content/execution approval. Unsupported or failed isolation fails closed.
+Verified local hosted source retains its separate entry point; raw remote source
+strings remain rejected.
 
 `Fork-README.md` documents the engine-level limits. `LICENSE` retains MoonSharp's
 BSD-3-Clause license; KopiLua attribution remains in the patched source.

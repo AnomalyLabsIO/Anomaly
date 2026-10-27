@@ -6,8 +6,10 @@ remain ordinary LabAPI plugin authors using `ClientMessaging` and
 `ClientEvents.MessageReceived`; no server Lua runtime, extra connection, or RPC
 handshake is introduced. See the [server author guide](../Anomaly.Server/MODDING.md).
 
-Remote script execution remains disabled pending memory qualification. Messaging does not qualify CLR
-heap containment or grant filesystem, socket, reflection, or raw transport access.
+Remote script execution requires actual Windows AppContainer/job qualification and
+explicit content/execution approval. It uses a separate bounded worker; local CLR
+accounting remains unqualified. Messaging grants no filesystem, socket, reflection,
+or raw transport access and cannot bypass unavailable isolation.
 
 ## Lua authoring
 

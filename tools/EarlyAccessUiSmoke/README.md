@@ -302,6 +302,92 @@ assignments. Without `-LoopbackServer`, the result explicitly leaves remote-clie
 exclusion unverified. `-LocalHosting` cannot be combined with `-ConnectionOnly`
 or `-ServerApi`; no physical console keypress or menu mouse click is claimed.
 
+## Remote Lua worker and actual native API scenario
+
+`-RemoteScripting` is a separate opt-in scenario, **not** `-LocalHosting` or
+`-ClientScripting`. It requires an explicit loopback dedicated server and the
+authorized ModLaunch installation. No fixture is added to release packaging.
+Use a newly prepared server identity so the first content consent is not cached.
+The existing client profile, trust stores and runtime files are backed up by
+`Run-Smoke.ps1`; restore the printed backup only after launcher and child exit.
+The client runner never installs these Lua packs as local owner packs.
+
+Prepare a fresh isolated server (the source server's AppData is excluded):
+
+```powershell
+./tools/EarlyAccessUiSmoke/Prepare-Server.ps1 `
+    -SourceServerRoot ./../Server/server `
+    -OutputDirectory ./artifacts/early-access/remote-lua-server-01 `
+    -Port 27988 -RemoteScripting
+
+$server = [IO.Path]::GetFullPath('./artifacts/early-access/remote-lua-server-01')
+$serverEvidence = [IO.Path]::GetFullPath('./artifacts/early-access/remote-lua-server-evidence-01')
+[void][IO.Directory]::CreateDirectory($serverEvidence)
+$start = [Diagnostics.ProcessStartInfo]::new((Join-Path $server 'SCPSL.exe'))
+$start.WorkingDirectory = $server
+$start.UseShellExecute = $false
+$start.Environment['ANOMALY_REMOTE_SCRIPTING_SERVER_EVIDENCE'] = $serverEvidence
+foreach ($argument in @('-batchmode','-nographics','-stdout','-port27988',
+    '-appdatapath',(Join-Path $server 'AppData'),
+    '-configpath',(Join-Path $server 'AppData/config/27988'),
+    '-logFile',(Join-Path $serverEvidence 'server-player.log'))) {
+    $start.ArgumentList.Add($argument)
+}
+$serverProcess = [Diagnostics.Process]::Start($start)
+$serverProcess.Id | Set-Content (Join-Path $serverEvidence 'server.pid')
+# Wait for startup and verify that this PID binds only 127.0.0.1 / ::1.
+Get-NetUDPEndpoint -OwningProcess $serverProcess.Id | Select-Object LocalAddress,LocalPort
+
+./tools/EarlyAccessUiSmoke/Run-Smoke.ps1 `
+    -GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy' `
+    -EvidenceDirectory ./artifacts/early-access/remote-lua-client-01 `
+    -UseModLaunch -RemoteScripting -LoopbackServer '127.0.0.1:27988'
+```
+
+The dedicated-server executable above is the isolated server, not a direct game
+client launch. The client is always launched through `-UseModLaunch`.
+`Prepare-Server -RemoteScripting` builds/stages only the test plugin and enables
+its `enabled: true` config in the new server. The plugin also requires the
+explicit evidence environment variable. Config opt-ins are append-only and
+idempotent for matching values; conflicting values fail rather than overwrite
+owner state. Its two exact embedded roots are `Anomaly.RemoteSmoke.Primary` and
+`Anomaly.RemoteSmoke.Owner`. They register script components
+`anomaly_smoke:remote_scripts` and `anomaly_smoke:remote_owner_scripts`. Do not
+enable the ordinary HelloAnomalyServer script pack in this two-pack scenario.
+
+Require `result.txt`, no `failure.txt`, and the following actual behavior evidence:
+
+- Separate content and exact-script execution consent screenshots; execution is
+  approved again on reconnect, while matching content approval may be cached.
+- `remote-admission-1.json` / `-2.json`: qualified zero-network AppContainer/job,
+  distinct real worker PIDs, fresh nonzero activations, native/public Ready held
+  during asynchronous loading, no in-process VM, and exact transferred source
+  SHA-256 values matching the runner's fixture files.
+- `remote-*-query-0.json` and churn records: real `Game.LocalPlayer`, retained
+  player proxy, cached player queries, native nickname string and detached
+  position; one retained readonly `Client.Ready` snapshot with native scene name.
+  Forty-eight additional queries run through real worker RPC/native APIs.
+- Literal owned TMP output screenshots, independent owner slots, owner-only
+  clear and expiry, plus typed authenticated `GetState`/`State` roundtrips.
+  `remote-server-proof.jsonl` independently records embedded source hashes,
+  ContentReady, requests, validated State, exact index/activation and comparisons
+  against the server's actual player nickname and position.
+- `remote-native-string-preflight.json`: a real native string of 4097 UTF-16
+  characters is passed to `IL2CPP.Il2CppStringToManaged(IntPtr)` by reflection.
+  Inside the real `ScriptHostAccess.Enter()` scope the patched entry must throw
+  the dedicated `ScriptHostAccessException`; the same pointer converts normally
+  outside the scope. This proves rejection before the managed copy and does
+  **not** claim a native-allocation bound.
+- `remote-revoke-*.json`: held OS process handles observe worker exit after
+  connection revoke, the remote actor is unpublished and owned text is removed.
+  The scenario repeats on a new activation and worker.
+
+Evidence JSON is bounded to 32 KiB/file; server proof has at most 128 records of
+8 KiB. Keep client/loader/server logs, inspect the screenshots, stop only the
+recorded dedicated-server PID, then run the existing reversible restore script
+with the runner's printed backup directory. Unsupported worker qualification is
+a failure, never an in-process fallback or a claimed successful skip.
+
 ## Optional loopback connection cycles
 
 `Prepare-Server.ps1` stages a separate server, excludes the source server's

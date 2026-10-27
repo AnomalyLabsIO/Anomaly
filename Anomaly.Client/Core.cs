@@ -197,6 +197,9 @@ public class Core : MelonMod
     private static RequiredClientPatch[] ResolveMandatoryPatches()
     {
         var patches = new List<RequiredClientPatch>();
+        AddRequiredPatch(patches, typeof(NativeScriptStringPatch), "Prefix", false,
+            typeof(Il2CppInterop.Runtime.IL2CPP), nameof(Il2CppInterop.Runtime.IL2CPP.Il2CppStringToManaged),
+            typeof(IntPtr));
         AddRequiredPatch(patches, typeof(AuthenticatedFacilitySeedPatch), "Prefix", false,
             typeof(Il2CppMapGeneration.SeedSynchronizer), "ClientReceiveSeed",
             typeof(Il2CppMapGeneration.SeedSynchronizer.SeedMessage));
