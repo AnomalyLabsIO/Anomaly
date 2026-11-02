@@ -1,10 +1,10 @@
 # AssetBundle content and local customization
 
-Anomaly protocol 7 transfers externally authored Unity AssetBundles and their JSON indexes. The Windows client profile is SCP:SL 14.2.7 / Unity 6000.0.43f1. Build packs on the owner or modder's device using the separate `Anomaly.AssetAuthoring` Unity project. The dedicated server needs only completed files: no Unity Editor, importers, texture decoder, audio decoder, or bundle decompression runs there.
+Anomaly transfers externally authored Unity AssetBundles and their JSON indexes as content packs. The Windows client profile is SCP:SL 14.2.7 / Unity 6000.0.43f1. Build packs with the matching `Anomaly.AssetAuthoring` Unity project. Install the completed files on the server or client; the dedicated server does not need the Unity Editor.
 
 ## Installing a pack
 
-Export one self-contained LZ4 bundle and one `*.index.json` file. Install them under `ContentPacks/<namespace>/<pack>/assets/` inside server `Config.ContentPackDirectory` (default `ContentPacks`) or client `Paths.ContentPacksPath` (`UserData/Anomaly/ContentPacks`). Every pack requires `pack.json` at its root with `SchemaVersion: 1`, its exact directory-derived `PackId`, numeric `Version` such as `1.0.0`, and an explicit `Assets` section containing `PackId` and `Index` (for example `assets/panel.index.json`). The index `PackId` must match `Assets.PackId` and its namespace must match the wrapper. The bundle resolves relative to the index's `BundleFile`. A sole asset component may reuse the wrapper ID; a pack with scripts must use separate component IDs. Version is diagnostic only. Unlisted files and unreferenced indexes are not discovered. See the [complete descriptor contract](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
+Export one self-contained LZ4 bundle and one `*.index.json` file. Install them under `<namespace>/<pack>/assets/` inside the resolved server `Config.ContentPackDirectory` or client `Paths.ContentPacksPath` (`UserData/Anomaly/ContentPacks`). The default server root is `<LabAPI>/plugins/global/Anomaly/ContentPacks` for the packaged global install, or `<LabAPI>/plugins/<port>/Anomaly/ContentPacks` for a port-scoped install. Relative server overrides anchor to that scope's `Anomaly` directory, never the working directory; absolute overrides retain their location. Every pack requires `pack.json` at its root with `SchemaVersion: 1`, its exact directory-derived `PackId`, numeric `Version` such as `1.0.0`, and an explicit `Assets` section containing `PackId` and `Index` (for example `assets/panel.index.json`). The index `PackId` must match `Assets.PackId` and its namespace must match the wrapper. The bundle resolves relative to the index's `BundleFile`. A sole asset component may reuse the wrapper ID; a pack with scripts must use separate component IDs. Version is diagnostic only. Unlisted files and unreferenced indexes are not discovered. See the [complete descriptor contract](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
 
 Local asset changes take effect after restarting the client. Server indexing publishes complete immutable snapshots in the background. Existing connections retain their exact consented snapshot until cleanup; future offers use the new snapshot. Pack updates are not hot reload.
 
@@ -48,8 +48,7 @@ indexes and their bundles, never raw authoring PNG/OGG files.
 
 ## Companion-mod APIs
 
-Build client, server, Shared and companion mods against the same development SDK.
-Managed assembly versions remain `1.0.0.0` under the existing pre-release policy.
+Build client, server, Shared and companion mods against the same release SDK.
 
 Client mods retrieve borrowed native objects on the Unity thread:
 
@@ -72,12 +71,9 @@ Create a `DecorativeVisualScope` for your namespace on the game thread, call `Sp
 
 ## Validation and limits
 
-The client inspects the entire bundle before invoking Unity, including unexposed objects, preload closures and resource ranges. A single bounded background worker uses the pinned AssetsTools.NET core metadata parser only after checked framing/schema preflight. No texture extensions, Mono.Cecil or Cpp2IL are loaded for this feature. Unknown native types, script-backed objects, managed references, scenes, bundled shaders, external paths, mismatched indexes and malformed offsets/counts are rejected. The immutable bytes inspected are the bytes given to Unity; a held read lock prevents replacement during native use.
+The client validates the complete bundle before loading it into Unity. Unknown native types, script-backed objects, scenes, bundled shaders, external paths, mismatched indexes and malformed data are rejected. Export only the supported data types; a general-purpose Unity bundle is not compatible.
 
-Limits include 64 MiB per encoded transfer file, 256 MiB per offered session, 256 files, 16 KiB chunks, 128 MiB expanded per bundle, 4096 serialized objects, 64 MiB decoded per asset and 256 MiB live decoded assets across local and remote packs. Texture/audio encoded budgets remain 16/32 MiB, charged conservatively by complete compressed UnityFS blocks intersecting each asset. Validation success is cached by bundle hash, index hash, validator build/profile and game profile; cache possession alone grants no remote authorization.
+Limits include 64 MiB per encoded transfer file, 256 MiB per offered session, 256 files, 128 MiB expanded per bundle, 4096 serialized objects, 64 MiB decoded per asset and 256 MiB live decoded assets across local and remote packs. Texture/audio encoded budgets remain 16/32 MiB. A cached file still requires approval for use by a server.
 
-This is in-process validation, not process isolation. Unity, FMOD and the graphics driver still parse/use data inside the game process. The restricted data-only profile enforces the no-script policy; it does not claim arbitrary binary content is risk-free. See `Anomaly.AssetValidation/README.md` for the exact subset, parser boundary, tests and provenance.
+Validation restricts what content can be loaded; it does not make arbitrary binary content risk-free. Only accept content from servers you trust. See the [validator reference](Anomaly.AssetValidation/README.md) for the exact supported export profile.
 
-## Qualification
-
-Use `tools/AssetBundleSmoke` with a fresh isolated loadout for native and production skin loading, followed by separate audio/mesh fixtures and authenticated client/server acceptance. The two-texture skin pack alone is insufficient evidence for decoder removal. Runtime evidence belongs under `artifacts/assetbundles`; production packages exclude all smoke plugins and fixture bundles. Normal builds use `-p:DeployLocal=false` and never copy into an installed game.

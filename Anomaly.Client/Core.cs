@@ -164,6 +164,7 @@ public class Core : MelonMod
             CommandRegistry.RegisterBuiltIn(new IdentityCommand());
             CommandRegistry.RegisterBuiltIn(new WhoAmICommand());
             CommandRegistry.RegisterBuiltIn(new StatusCommand());
+            CommandRegistry.RegisterBuiltIn(new LuaDefinitionsCommand());
         });
 
         LoggerInstance.Msg($"Initialized (locale: {Tr.ActiveLocale}).");

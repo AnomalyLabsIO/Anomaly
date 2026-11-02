@@ -39,8 +39,8 @@ public sealed class EnumCatalogTests
         });
         var catalog = new ScriptApiCatalog(Array.Empty<ScriptTypeCatalog>(), enums: new[] { entry });
         var lua = catalog.ToLuaDefinitions();
-        Assert.Contains("Enums.Flags = Enums[\"Game.Owner+Flags\"]", lua);
-        Assert.Contains("GameFlags = Enums[\"Game.Owner+Flags\"]", lua);
+        Assert.Contains("Enums.Flags = Enums[\"Game.Owner.Flags\"]", lua);
+        Assert.Contains("GameFlags = Enums[\"Game.Owner.Flags\"]", lua);
         Assert.Contains("[\"end\"]", lua);
         var script = new Script(CoreModules.None);
         script.DoString(lua);
@@ -63,7 +63,7 @@ public sealed class EnumCatalogTests
     }
 
     [Fact]
-    public void Enum_member_signatures_use_string_values_in_lua_definitions()
+    public void Enum_results_keep_their_domain_while_inputs_accept_name_strings()
     {
         var entry = new ScriptEnumCatalog("Game.Kind", "Kind", "Kind", false,
             new[] { new ScriptEnumMemberCatalog("None", "None", "0") });
@@ -77,7 +77,7 @@ public sealed class EnumCatalogTests
         var lua = new ScriptApiCatalog(new[] { type }, enums: new[] { entry }).ToLuaDefinitions();
         Assert.Contains("---@field Kind string # Writable.", lua);
         Assert.Contains("---@param kind string", lua);
-        Assert.Contains("---@return string", lua);
+        Assert.Contains("---@return Enum_Game_002e_Kind", lua);
     }
 
     [Fact]

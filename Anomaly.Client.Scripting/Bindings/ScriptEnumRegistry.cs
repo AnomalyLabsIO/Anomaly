@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using Anomaly.Client.Scripting.Catalog;
+using Anomaly.Client.Scripting.Remote.Protocol;
 using MoonSharp.Interpreter;
 using MoonSharp.Interpreter.Interop;
 
@@ -12,15 +13,8 @@ internal sealed class ScriptEnumRegistry
     private const int MaxEnums = 1024;
     private const int MaxMembers = 32768;
     private const int MaxMembersPerEnum = 2048;
-    private static readonly HashSet<string> ReservedGlobals = new(StringComparer.Ordinal)
-    {
-        "_G", "_VERSION", "assert", "error", "select", "type", "tonumber", "tostring", "ipairs", "pairs", "next",
-        "pcall", "xpcall", "math", "table", "string", "Enums", "Events", "Messages", "Game", "Output", "io", "os", "package",
-        "debug", "require", "load", "loadfile", "dofile", "coroutine", "collectgarbage", "rawget", "rawset",
-        "getmetatable", "setmetatable", "print"
-    };
     private readonly object _sync = new();
-    private State _state = new(null, new(), new(StringComparer.Ordinal), Array.Empty<ScriptEnumCatalog>());
+    private State _state = new(null, new(), new(StringComparer.Ordinal), new(), new(), Array.Empty<ScriptEnumCatalog>());
 
     internal void Discover(Assembly trustedAssembly, params Type[] additionalEnums)
     {
@@ -37,37 +31,56 @@ internal sealed class ScriptEnumRegistry
                 .Concat(additionalEnums).Distinct()
                 .OrderBy(type => type.FullName, StringComparer.Ordinal).ToArray();
             if (types.Length > MaxEnums) throw new InvalidOperationException("The game enum catalog exceeds its type limit.");
-            var shortCounts = types.GroupBy(type => type.Name, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+            var names = types.Select(type => (Type: type, Canonical: EnumNameRules.Clean(type.FullName!),
+                Relative: EnumNameRules.Clean(type.Namespace == null ? type.FullName! : type.FullName![(type.Namespace.Length + 1)..])))
+                .ToArray();
+            if (names.Any(value => string.IsNullOrEmpty(value.Canonical) || value.Canonical.Length > ScriptBindingRegistry.MaxStringBytes) ||
+                names.GroupBy(value => value.Canonical, StringComparer.Ordinal).Any(group => group.Count() != 1))
+                throw new InvalidOperationException("Clean Lua enum identities must be unique and bounded.");
+            // Plan the complete batch before publishing any name. Short names cannot hide
+            // a qualified enum, another short enum, or an enum namespace branch.
+            var aliases = names.ToDictionary(value => value.Type, value => EnumNameRules.IsPath(value.Relative) &&
+                (value.Relative == value.Canonical || !EnumNameRules.Conflicts(value.Relative, value.Canonical)) &&
+                !names.Any(other => other.Type != value.Type &&
+                    (EnumNameRules.Conflicts(value.Relative, other.Canonical) || EnumNameRules.Conflicts(value.Relative, other.Relative)))
+                    ? value.Relative : null);
             var policies = new Dictionary<Type, Policy>();
-            var nodes = new Dictionary<string, Policy>(StringComparer.Ordinal);
+            var nodes = new Dictionary<string, EnumPathNode<Policy>>(StringComparer.Ordinal);
+            var registryTree = new EnumPathNode<Policy>();
+            var globalTree = new EnumPathNode<Policy>();
             var catalogs = new List<ScriptEnumCatalog>();
             var count = 0;
-            foreach (var type in types)
+            foreach (var value in names)
             {
-                var canonical = type.FullName!;
-                if (canonical.Length > ScriptBindingRegistry.MaxStringBytes)
-                    throw new InvalidOperationException("An enum identity exceeds its length limit.");
-                var alias = shortCounts[type.Name] == 1 && ScriptNameRules.IsValidIdentifier(type.Name) ? type.Name : null;
-                var globalName = type.IsPublic && alias != null && !ReservedGlobals.Contains(alias) ? alias : null;
-                var policy = new Policy(type, alias, globalName);
+                var alias = aliases[value.Type];
+                var globalName = alias != null && !EnumNameRules.ReservedRoots.Contains(EnumNameRules.Root(alias)) ? alias :
+                    EnumNameRules.IsPath(value.Canonical) && !EnumNameRules.ReservedRoots.Contains(EnumNameRules.Root(value.Canonical))
+                        ? value.Canonical : null;
+                var policy = new Policy(value.Type, alias, globalName);
                 count += policy.Catalog.Members.Count;
                 if (count > MaxMembers) throw new InvalidOperationException("The game enum catalog exceeds its member limit.");
-                policies.Add(type, policy);
-                nodes.Add(canonical, policy);
+                policies.Add(value.Type, policy);
+                nodes.Add(value.Canonical, EnumNameRules.IsPath(value.Canonical)
+                    ? registryTree.Add(value.Canonical, policy) : new EnumPathNode<Policy>(policy));
                 catalogs.Add(policy.Catalog);
             }
-            // Canonical CLR identities always win, even if another type has a matching short name.
             foreach (var policy in policies.Values)
-                if (policy.Catalog.Alias is { } alias && !nodes.TryAdd(alias, policy) && nodes[alias] != policy)
-                    throw new InvalidOperationException("An enum alias conflicts with a canonical identity.");
-            _state = new State(trustedAssembly, policies, nodes, catalogs.AsReadOnly());
+            {
+                if (policy.Catalog.Alias is { } alias)
+                {
+                    var node = registryTree.Add(alias, policy);
+                    if (!nodes.TryAdd(alias, node) && nodes[alias].Value != policy)
+                        throw new InvalidOperationException("An enum alias conflicts with a qualified Lua name.");
+                }
+                if (policy.Catalog.GlobalName is { } global) globalTree.Add(global, policy);
+            }
+            _state = new State(trustedAssembly, policies, nodes, registryTree, globalTree, catalogs.AsReadOnly());
         }
     }
 
     internal bool Contains(Type type) => _state.Policies.ContainsKey(type);
     internal IReadOnlyList<ScriptEnumCatalog> GetCatalog() => _state.Catalogs;
-    internal bool IsGlobalName(string name) => name == "Enums" || _state.Catalogs.Any(value => value.GlobalName == name);
+    internal bool IsGlobalName(string name) => name == "Enums" || _state.GlobalTree.Children.ContainsKey(name);
 
     internal object Parse(Type type, string text) => GetPolicy(type).Parse(text);
     internal string Format(Type type, object value) => GetPolicy(type).Format(value);
@@ -79,22 +92,25 @@ internal sealed class ScriptEnumRegistry
     {
         using var memoryScope = owner.MemoryBudget?.EnterScope();
         if (_state.Policies.Count == 0) return;
-        if (!owner.Globals.Get("Enums").IsNil() || _state.Catalogs.Any(value =>
-            value.GlobalName != null && !owner.Globals.Get(value.GlobalName).IsNil()))
+        if (!owner.Globals.Get("Enums").IsNil() || _state.GlobalTree.Children.Keys.Any(name => !owner.Globals.Get(name).IsNil()))
             throw new InvalidOperationException("An enum global is already installed.");
-        owner.Globals.Set("Enums", CreateNode(owner, null));
-        foreach (var policy in _state.Policies.Values)
-            if (policy.Catalog.GlobalName is { } name) owner.Globals.Set(name, CreateNode(owner, policy));
+        var pending = MemoryBudget.Allocate(128L + (_state.GlobalTree.Children.Count + 1L) * 64L,
+            () => new Dictionary<string, DynValue>(_state.GlobalTree.Children.Count + 1, StringComparer.Ordinal));
+        pending.Add("Enums", CreateNode(owner, _state.RegistryTree, "Enums", registryRoot: true));
+        foreach (var root in _state.GlobalTree.Children)
+            pending.Add(root.Key, CreateNode(owner, root.Value, root.Key));
+        foreach (var entry in pending) owner.Globals.Set(entry.Key, entry.Value);
     }
 
-    private DynValue CreateNode(Script owner, Policy? policy)
+    private DynValue CreateNode(Script owner, EnumPathNode<Policy> node, string name, bool registryRoot = false)
     {
-        var node = MemoryBudget.Allocate(384, () => new Descriptor(this, owner, policy));
-        return UserData.Create(node, node);
+        var descriptor = MemoryBudget.Allocate(384, () => new Descriptor(this, owner, node, name, registryRoot));
+        return UserData.Create(descriptor, descriptor);
     }
 
     private sealed record State(Assembly? Assembly, Dictionary<Type, Policy> Policies,
-        Dictionary<string, Policy> Nodes, IReadOnlyList<ScriptEnumCatalog> Catalogs);
+        Dictionary<string, EnumPathNode<Policy>> Nodes, EnumPathNode<Policy> RegistryTree, EnumPathNode<Policy> GlobalTree,
+        IReadOnlyList<ScriptEnumCatalog> Catalogs);
 
     private sealed class Policy
     {
@@ -222,18 +238,23 @@ internal sealed class ScriptEnumRegistry
     {
         private readonly ScriptEnumRegistry _registry;
         private readonly Script _owner;
-        private readonly Policy? _policy;
-        internal Descriptor(ScriptEnumRegistry registry, Script owner, Policy? policy)
-        { _registry = registry; _owner = owner; _policy = policy; }
-        public string Name => _policy?.Catalog.ClrType ?? "Enums";
+        private readonly EnumPathNode<Policy> _node;
+        private readonly bool _registryRoot;
+        public string Name { get; }
+        internal Descriptor(ScriptEnumRegistry registry, Script owner, EnumPathNode<Policy> node, string name, bool registryRoot)
+        { _registry = registry; _owner = owner; _node = node; Name = node.Value?.Catalog.LuaName ?? name; _registryRoot = registryRoot; }
         public Type Type => typeof(Descriptor);
         public DynValue Index(Script script, object obj, DynValue index, bool isDirectIndexing)
         {
             Check(script, obj);
             using var memoryScope = script.MemoryBudget?.EnterScope();
             if (index.Type != DataType.String || index.String.Length > ScriptBindingRegistry.MaxStringBytes) return DynValue.Nil;
-            if (_policy != null) return _policy.Members.TryGetValue(index.String, out var value) ? DynValue.NewString(value) : DynValue.Nil;
-            return _registry._state.Nodes.TryGetValue(index.String, out var policy) ? _registry.CreateNode(script, policy) : DynValue.Nil;
+            if (_node.Value is { } policy)
+                return policy.Members.TryGetValue(index.String, out var value) ? DynValue.NewString(value) : DynValue.Nil;
+            if (_registryRoot && _registry._state.Nodes.TryGetValue(index.String, out var exact))
+                return _registry.CreateNode(script, exact, exact.Value!.Catalog.LuaName);
+            return _node.Children.TryGetValue(index.String, out var child)
+                ? _registry.CreateNode(script, child, Name + "." + index.String) : DynValue.Nil;
         }
         public bool SetIndex(Script script, object obj, DynValue index, DynValue value, bool isDirectIndexing)
         { Check(script, obj); throw new ScriptRuntimeException("Enum constants are read-only."); }

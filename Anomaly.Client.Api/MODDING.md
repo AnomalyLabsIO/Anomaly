@@ -13,14 +13,14 @@ framework-owned initialization, cleanup, dependency ordering, and fault attribut
 See [Client game API](GAME_API.md) for the LabAPI member mapping, typed item and
 facility wrappers, observation events, and client data-availability rules.
 
-This early access SDK intentionally resets the development API baseline while
-retaining version `1.0.0`. Rebuild earlier development mods; see
-[API_VERSIONING.md](API_VERSIONING.md) for the migration list.
+Use the SDK and runtime assemblies from one matching release. The public managed
+contract is recorded in `PublicAPI.Shipped.txt`; consult [API_VERSIONING.md](API_VERSIONING.md)
+when rebuilding a mod against a different SDK.
 
 ## Prerequisites
 
-1. Install the modded client through the Anomaly Launcher (see the repo README).
-2. Start the modded game once so MelonLoader generates `Il2CppAssemblies/` and `UserLibs/`.
+1. Prepare a separate SCP:SL game copy with SCPSL-ModLaunch and install the matching Anomaly runtime release (see the repo README).
+2. Start it once through SCPSL-ModLaunch so MelonLoader 0.7.3 generates `Il2CppAssemblies/` and `UserLibs/`. Windows x64 requires .NET 6 Desktop Runtime 6.0.36 or later; Linux/Proton launcher behavior is unconfirmed.
 3. Extract the matching developer SDK and use its `samples/HelloAnomalyMod` project.
 4. From that sample directory, run `dotnet build -c Release -p:AnomalyGameRoot="X:\Games\Anomaly" -p:DeployLocal=false`.
    The sample finds its enclosing SDK automatically. When copying it elsewhere,
@@ -55,12 +55,12 @@ Mods that only call Anomaly APIs from event handlers (i.e. not during
 `OnInitializeMelon`) do not strictly need `MelonAdditionalDependencies`, but
 declaring it avoids a future load-order footgun.
 
-Anomaly's `SupportedGameVersion` is enforced by the launcher before it
-installs or materializes an assembly. `14.2.7^` means
-`>=14.2.7 && <14.3.0`; an expression without `^` matches exactly that
-three-component version. A missing, malformed, or incompatible declaration
-blocks the affected official-core/modded launch path. Do not add or rely on
-MelonLoader's `MelonGameVersion` attribute.
+Anomaly's `SupportedGameVersion` records the intended game range. `14.2.7^`
+means `>=14.2.7 && <14.3.0`; an expression without `^` matches exactly that
+three-component version. Managed-module sidecars must declare a valid compatible
+range before Anomaly loads them. SCPSL-ModLaunch prepares the game and loader;
+it does not inspect this Anomaly attribute or select compatible mod releases.
+Do not add or rely on MelonLoader's `MelonGameVersion` attribute for this contract.
 
 ## Anomaly-managed modules
 
@@ -156,20 +156,11 @@ cleanup explicitly. An intentional reinstall should remove the exact prior
 registration using the same owner and retain synchronization around its lifecycle.
 Only remove patches and detours that your mod owns.
 
-Bootstrap logs an advisory warning when successful supported Harmony operations
-leave multiple active registrations for the exact target, patch method, kind, and
-owner. It also warns after observing three successful installations of that tuple
-within five minutes with removals between activations. A deliberate reinstall can
-therefore produce a warning; use its owner and assembly attribution to investigate
-restart churn. These warnings do not deduplicate, remove, or block your patches and
-do not change authentication audit flags.
-
-Duplicate warnings are emitted once per tuple per process, and reinstall warnings
-at most once per tuple per five-minute interval. Tracking is bounded to 4,096 tuples
-and 128 queued records, with at most four warnings emitted per frame and suppressed
-diagnostics summarized. An absent warning does not prove idempotence. Anonymous
-MonoMod/native detours cannot always be attributed to a mod; retain their handles,
-reuse process-owned installations, and dispose only the resources you own.
+Bootstrap warns about repeated or duplicate supported Harmony registrations with
+owner and assembly attribution where available. Use these warnings to investigate
+restart churn; they do not deduplicate, remove or block your patches. An absent
+warning does not prove idempotence. Retain anonymous/native detour handles and
+dispose only the resources you own.
 
 ## Subsystems
 
@@ -199,10 +190,10 @@ path data; it is not Anomaly's storage root.
 
 This root contains `user.json` (identity, nickname, and rotation history),
 `server-trust.json` (accepted server identities), `content-consent.json`,
-`FileCache/` (downloaded server assets), and `CrashReports/` (reports, optional
-dumps, and the shutdown marker). Existing bindings, overrides, managed modules,
-and their config/data directories retain their locations beneath it. Completed
-local asset/script packs, including skins, use `Paths.ContentPacksPath` under
+`FileCache/` (downloaded content), and `CrashReports/` (reports, optional
+dumps, and the shutdown marker). Bindings, managed modules, and their config/data
+directories retain their locations beneath this root.
+Completed local asset/script packs, including skins, use `Paths.ContentPacksPath` under
 `UserData/Anomaly/ContentPacks`. Translations stay in `UserData/i18n`;
 `ClientConfig` and `ClientPersistence` use MelonPreferences.
 
@@ -269,7 +260,7 @@ Recognition and readiness APIs are:
 returns the resulting LabAPI item wrapper. It succeeds only after the exact
 catalog has activated for that player and server item registration is confirmed.
 `ContentReadiness` distinguishes `Unknown`, `Offered`, `Approved`,
-`Transferring`, `Declined`, `Activated`, and `Failed`.
+`Transferring`, `Transferred`, `Declined`, `Activated`, and `Failed`.
 
 The authenticated flow is offer, explicit consent decision, requests for
 approved missing files, staged materialization, then an activation ACK for the
@@ -295,74 +286,73 @@ supported only within the [validated asset subset](../ASSETBUNDLES.md).
 
 Required content activation and declared Lua initialization precede native
 Ready/AddPlayer and public `ClientReady`; Lua additionally requires separate
-execution approval. Remote Lua requires actual qualified Windows AppContainer/job
-isolation; failed/unsupported isolation (including Wine) cannot be overridden by
-consent and has no in-process fallback. Local accounting remains unqualified;
-local scripts require verified nondedicated in-process host proof. Pending consent
-reserves no transfer slot;
+execution approval. Remote Lua requires qualified Windows process isolation;
+failed or unsupported isolation (including Wine) cannot be overridden by consent
+and has no in-process fallback. Local scripts run only during verified current
+nondedicated in-process hosting, not in menus or when joining remote servers.
+Pending consent reserves no transfer slot;
 admission retains its fixed 120-second deadline. See the
 [server API guide](../Anomaly.Server/MODDING.md) and
 [descriptor/data schema](../Anomaly.Client.Scripting/SCRIPT-PACKS.md).
 
-## Remote native query bounds
+## Client Lua content
 
-The remote capability bridge and remote event capture enter an internal,
-thread-local `ScriptHostAccess` operation. Ordinary trusted C# API use and local
-owner/development scripts do not enter this scope and retain their existing API
-semantics. No gameplay setter or additional method is exposed by these checks.
-Nested scopes share counters rather than resetting the allowance. Exhaustion is
-a terminal `ScriptHostAccessException`, not an empty result or a swallowed failure.
+A content pack's `Scripts` section selects one Lua entrypoint and optional typed
+message schemas. Install local packs at
+`Paths.ContentPacksPath/<namespace>/<pack>/pack.json`, or embed/register a pack
+from an ordinary LabAPI server companion. Each script component receives one VM;
+unlisted Lua files never execute. There are no shared globals, runtime imports,
+hot reload, or public C# APIs for constructing script sessions.
 
-The reviewed shipped surface comprises the 21 directly annotated getter families
-below, their annotated inherited subtype members, the annotated event argument
-records, and the nine `Game` query methods. Unannotated collection/scene-discovery
-APIs such as `Room.Players`, `Locker.Chambers`, `List`, `FindObjectsOfType`, and raw
-Unity objects are not remotely callable.
+Lua receives the approved surface exported in
+[`ScriptAPI.Shipped.txt`](../Anomaly.Client.Scripting/ScriptAPI.Shipped.txt),
+[`ScriptAPI.json`](../Anomaly.Client.Scripting/ScriptAPI.json), and the SDK's
+[`Anomaly.Client.Api.d.lua`](../Anomaly.Client.Scripting/Anomaly.Client.Api.d.lua).
+Use the last file as a LuaLS library, not an executable script. This surface is
+separate from the managed API: C# public visibility does not expose a member to Lua.
 
-| Reviewed family | Parent work and boundary |
-|---|---|
-| `Player` / inherited `LocalPlayer`; `Role`; `PlayerStat`; `PlayerEffect` | Scalar native fields, fixed role/movement lookups, enum/type names and policy checks. Local-player resolution, fallback identity scans and promotion/remapping have a shared 512-entry operation budget; remote ID lookup uses an explicit bounded hub scan instead of an opaque native ID search. Scoped failures propagate through legacy availability catches. Stat lookup preflights native module array length. |
-| `Item` and its inherited item subtypes; `Pickup` and its inherited pickup/projectile subtypes; `FirearmState` | Scalar fields and readonly state snapshots. Modular item permission/weight reads and firearm module queries preflight the native subcomponent array length. Subtype dispatch uses fixed factory lists, not assembly/type discovery. Serial-index growth is checked before dictionary insertion. |
-| `Room`; `Generator`; `Locker`; `Elevator`; `Tesla`; `Hazard` and inherited hazards; `Workstation` | Room identifiers and scalar state. Generator/locker ancestry walks charge before each component lookup and fail beyond 64 total steps. Position-to-room resolution preflights the native room registry size before calling the game lookup. No chamber/room/player collection snapshot is exposed. |
-| `Door` and inherited doors; `AdminToy` and inherited toys; `FacilityCamera`; `Ragdoll`; `AnnouncerWord` | Scalar state and native names/labels. All IL2CPP-to-managed string copies passing through the guarded conversion preflight their native UTF-16 length. Cached native object identities are reused; cache misses are bounded before wrapper construction and potential dictionary growth. |
-| `MotionDiscontinuity`; `VoiceMessagePacket`; annotated event argument records | Stored readonly scalar/wrapper references and fixed arithmetic. Computed names (`ClipName`, `SceneName`, announcer names) use the same native string guard. Interaction-target getters can create door/locker/generator/workstation wrappers and therefore share the capture operation's wrapper/cache allowance. Event construction performed by the game before publication is not charged as a remote query. |
-| Nine `Game` methods: `GetPlayer`, `GetPlayerAt`, `GetCurrentItem`, `GetRoom`, `GetFirearmState`, `GetHealth`, `GetHumeShield`, `GetStamina`, `GetPosition` | ID resolution uses the bounded registry path; indexed access and cached player count are constant work. Item/inventory, room, stat and role cache misses share the same allowance. Position and firearm results have fixed-size fields; stat synchronization/visibility policy is unchanged. Round flags are cached scalar reads. |
+```lua
+Output:Log("Initialized")
+Events.Client.Ready.Add(function()
+    local player = Game.LocalPlayer
+    if player == nil or player.IsDestroyed then return end
+    local health = Game:GetHealth(player.PlayerId)
+    Output:ShowText("Hello, " .. player.Nickname, 5)
+end)
+```
 
-One operation permits at most four new API wrappers, 64 hierarchy steps and
-512 aggregate registry/module/cache-growth entries. Existing cache hits do not
-recreate wrappers. These are operation limits, not new global cache sizes or
-per-session heap measurements. Existing trusted game lifecycle eviction remains
-responsible for the shared caches.
+`Game` provides read-only client-known player/item/room/stat queries and round
+state. Re-resolve objects after role/despawn changes and check `IsDestroyed`;
+unavailable observations remain `nil`. `Output` provides bounded literal text and
+logging, not UI objects or input capture. Scripts cannot access arbitrary CLR,
+native Unity objects, reflection, files, sockets, gameplay setters or mod preferences.
 
-The Client patches the real
-`Il2CppInterop.Runtime.IL2CPP.Il2CppStringToManaged(IntPtr)` entry point. Its prefix
-calls `il2cpp_string_length` and rejects lengths outside 0..4096 **before** the
-interop method constructs a managed string. Null pointers retain the original
-null behavior. Outside a remote scope the prefix does not perform a native length
-read. The exact prefix/target tuple is a mandatory startup hook registered with
-Bootstrap's existing verifier; a missing hook fails startup rather than enabling
-unbounded remote string conversion. Protocol UTF-8/result-size bounds are separate.
+Event callbacks receive copied read-only notifications, not cancellable native
+arguments. Subscribe during initialization; events are not replayed. Continuous
+coalesced events can skip intervening values per subscription, so re-query when
+tracking multiple entities. Disconnect, scene reset and offer replacement revoke
+sessions and pending work without invoking a Lua unload hook.
 
-These checks do not intercept native allocation, IL2CPP array/proxy allocation,
-or arbitrary C#/native getters. They assume the shipped game/Unity/interop calls
-used for scalar reads, casts, collection iteration, native string-length reads,
-room lookup, module lookup, stat visibility and spectator tracking are trusted and
-return. Native virtual getters may construct native temporary strings or other
-state before conversion; the managed-copy guard does not bound that native work.
-The local exported game stubs establish signatures/collection fields but contain
-`AnalysisFailedException` bodies for several native queries, so they are not
-evidence of native instruction counts or allocation ceilings. Harmony installation
-and the real oversized-string path must also be exercised in the supported game;
-source/unit checks alone do not establish runtime detouring or absence of native
-inlining. The external worker's hard process limits do not interrupt a native
-operation already executing in the game process.
+Declared `Messages.On`, `Messages.Off` and `Messages.Send` exchange bounded flat
+primitive records with a LabAPI companion. Register handlers at top level and
+return promptly; sends remain `NotReady` until content admission and player
+transport are ready. Never wait for a response in a loop. A local owner pack alone
+does not grant authenticated server messaging authority.
+
+See [the scripting guide](../Anomaly.Client.Scripting/README.md) for Lua queries,
+events, enums and output; [content-pack authoring](../Anomaly.Client.Scripting/SCRIPT-PACKS.md)
+for descriptors, typed items and embedding; and
+[message schemas](../Anomaly.Client.Scripting/MESSAGING-DESIGN.md) for the complete
+record contract. Syntax errors, terminal execution limits or required initialization
+failure revoke the required set and close the connection.
 
 ## Events
 
-All handlers are under `Anomaly.Client.Api.Events.Handlers.*`. Ordinary
-MelonMods normally subscribe in `OnInitializeMelon` for the process lifetime.
-Managed modules should use the typed `IModContext.Subscribe` overload so the
-wrapped, owner-contained delegate is unregistered automatically on disposal.
+Most event handlers are under `Anomaly.Client.Api.Events.Handlers.*`;
+asset override events live in `Anomaly.Client.Api.Assets.AssetEvents`. Ordinary
+MelonMods subscribe during `OnInitializeMelon` and unsubscribe during deinitialization.
+Managed modules should use typed `IModContext.Subscribe` so owned delegates are
+removed automatically when the context is disposed.
 
 | Handler | Fires when |
 |---|---|
@@ -394,8 +384,9 @@ Handlers run on the Unity main thread. Exceptions in your handler are caught and
 ## Character model
 
 These helpers operate on an already-present vanilla character model from a
-trusted local mod. They do not register or transfer remote custom models,
-meshes, prefabs, roles, or effects.
+trusted local mod. They do not register or transfer custom item/player models,
+arbitrary prefabs, roles or effects; restricted static decorative meshes are a
+separate asset-pack feature.
 
 If your mod manipulates a player's character model — IK overrides, custom bones, third-person camera attachments, body scaling, finger pose overrides — you'll hit several non-obvious behaviours in SCP:SL's animation pipeline. Use the `CharacterModels` static helpers and the `IModelHook` interface; both encode patterns that the SecretLabVR mod had to discover the hard way.
 
@@ -463,11 +454,14 @@ identical on both sides. Every message must use an authenticated directional
 base and declare a payload ceiling; see
 [NETWORKING.md](Networking/NETWORKING.md).
 
-Public remote password authentication is disabled. A server with
-`RequirePassword=true` rejects remote clients until vetted OPAQUE support is
-available; the legacy password path is restricted to explicit loopback or
-migration use.
+Remote password authentication is unavailable. A server with
+`RequirePassword=true` rejects remote clients; do not build a remote password
+workflow around it.
 
 ## Bundle resources
 
-Use typed catalog addresses with AnomalyResources.TryGetTexture, TryGetSprite, TryGetAudioClip and TryGetMesh. Objects are borrowed and remote bindings must be released on disconnect. The coordinated protocol 6 migration requires dependent mods to rebuild; [ASSETBUNDLES.md](../ASSETBUNDLES.md) describes authoring, replacements, budgets and the no-script policy.
+Use typed catalog addresses with `AnomalyResources.TryGetTexture`, `TryGetSprite`,
+`TryGetAudioClip` and `TryGetMesh`. Objects are borrowed; release remote bindings
+on disconnect and never destroy shared resources. [ASSETBUNDLES.md](../ASSETBUNDLES.md)
+describes supported native types, replacements, budgets and lifetimes. Lua source
+belongs in a descriptor's separate `Scripts` section, never inside a native bundle.

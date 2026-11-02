@@ -7,6 +7,8 @@ internal sealed class WorkerCatalog
     internal Dictionary<string, Dictionary<string, Member>> Types { get; } = new(StringComparer.Ordinal);
     internal Dictionary<string, IReadOnlyDictionary<string, WireValue>> Enums { get; } = new(StringComparer.Ordinal);
     internal Dictionary<string, string> EnumGlobals { get; } = new(StringComparer.Ordinal);
+    internal EnumPathNode<IReadOnlyDictionary<string, WireValue>> EnumPaths { get; } = new();
+    internal EnumPathNode<IReadOnlyDictionary<string, WireValue>> EnumGlobalPaths { get; } = new();
     internal Dictionary<string, Dictionary<string, Event>> Events { get; } = new(StringComparer.Ordinal);
 
     internal WorkerCatalog(WireValue data)
@@ -30,7 +32,8 @@ internal sealed class WorkerCatalog
         }
         foreach (var entry in data.Required("enums").RequireObject(2048))
         {
-            if (entry.Key.Length > 4096) throw new InvalidDataException("Invalid enum identity.");
+            if (entry.Key.Length is 0 or > 4096 || EnumNameRules.Clean(entry.Key) != entry.Key)
+                throw new InvalidDataException("Invalid enum identity.");
             var members = entry.Value.RequireObject(2048);
             foreach (var member in members)
             {
@@ -38,24 +41,31 @@ internal sealed class WorkerCatalog
                 member.Value.RequireString(4096);
             }
             Enums.Add(entry.Key, members);
+            if (EnumNameRules.IsPath(entry.Key)) AddEnumPath(EnumPaths, entry.Key, members);
         }
+        var canonicalEnums = new HashSet<string>(Enums.Keys, StringComparer.Ordinal);
         foreach (var entry in data.Required("enumAliases").RequireObject(1024))
         {
             var canonical = entry.Value.RequireString(4096);
-            if (!Enums.TryGetValue(canonical, out var constants))
+            if (entry.Key.Length > 4096 || !EnumNameRules.IsPath(entry.Key) || !canonicalEnums.Contains(canonical) ||
+                !Enums.TryGetValue(canonical, out var constants))
                 throw new InvalidDataException("Invalid enum alias.");
             if (Enums.TryGetValue(entry.Key, out var existing))
             {
                 if (!ReferenceEquals(existing, constants)) throw new InvalidDataException("Conflicting enum alias.");
             }
             else Enums.Add(entry.Key, constants);
+            AddEnumPath(EnumPaths, entry.Key, constants);
         }
         foreach (var entry in data.Required("enumGlobals").RequireObject(1024))
         {
             var canonical = entry.Value.RequireString(4096);
-            if (!WorkerSession.IsIdentifier(entry.Key) || WorkerSession.ReservedGlobals.Contains(entry.Key) || !Enums.ContainsKey(canonical))
+            if (entry.Key.Length > 4096 || !EnumNameRules.IsPath(entry.Key) ||
+                EnumNameRules.ReservedRoots.Contains(EnumNameRules.Root(entry.Key)) || !canonicalEnums.Contains(canonical) ||
+                !Enums.TryGetValue(canonical, out var constants))
                 throw new InvalidDataException("Invalid enum global.");
             EnumGlobals.Add(entry.Key, canonical);
+            AddEnumPath(EnumGlobalPaths, entry.Key, constants);
         }
         foreach (var item in data.Required("events").RequireArray(512))
         {
@@ -68,6 +78,14 @@ internal sealed class WorkerCatalog
             if (!members.TryAdd(name, new Event(category + "." + name, arity, coalesce)))
                 throw new InvalidDataException("Duplicate event metadata.");
         }
+    }
+
+    private static void AddEnumPath(EnumPathNode<IReadOnlyDictionary<string, WireValue>> root,
+        string path, IReadOnlyDictionary<string, WireValue> constants)
+    {
+        try { root.Add(path, constants); }
+        catch (InvalidOperationException exception)
+        { throw new InvalidDataException("Conflicting enum path metadata.", exception); }
     }
 
     internal sealed record Member(string Name, bool Method, int ArgumentCount);

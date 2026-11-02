@@ -9,7 +9,7 @@ plugins use LabAPI, and Anomaly provides the APIs and networking to connect them
 **[Download the launcher](https://github.com/AnomalyLabsIO/scpsl-modlaunch/releases)** |
 **[Server and SDK releases](https://github.com/AnomalyLabsIO/Anomaly/releases)**
 
-Anomaly is in **early access**. The current release supports SCP:SL **14.2.7**. Use compatible Anomaly versions on the client
+Anomaly is in **early access**. The current release supports SCP:SL **14.2.7–14.2.8**. Use compatible Anomaly versions on the client
 and server.
 
 ## Some features
@@ -17,33 +17,37 @@ and server.
 - Extensive client API with similar structure to LabAPI and EXILED plugins.
 - Multiplayer support for supported servers. Including secure, decentralized UserIDs for granting RemoteAdmin permissions.
 - Custom content support for maps, items, and more.
-- Compliant with the [SCP:SL EULA](https://store.steampowered.com/eula/700330_eula_0) for Offline Mode modding
+- Intended for Offline Mode modding; follow the [SCP:SL EULA](https://store.steampowered.com/eula/700330_eula_0).
 
 ## Set up the client
 
-The client runs on Windows, or on Linux through Proton.
+Use a Windows x64 game installation. Linux/Proton is unconfirmed; do not rely on
+it for connecting to Anomaly servers.
 
 Things you'll need:
 - Steam
 - SCP: Secret Laboratory installed, and preferably copied to a separate folder for modding.
-- .NET runtime 6.0
+- Windows x64 **.NET 6 Desktop Runtime 6.0.36 or later**. A newer major runtime alone is not enough.
 
 1. Download [ModLaunch](https://github.com/AnomalyLabsIO/SCPSL-ModLaunch/releases)
    and place the exe file in the same folder as your `SCPSL.exe`.
 2. Download `anomaly-client-<version>.zip` from the
    [Anomaly releases](https://github.com/AnomalyLabsIO/Anomaly/releases) and extract it into your modded SCP:SL folder.
    `Mods`, `Plugins`, `UserLibs`, and `UserData` should be in the same folder as
-   `SCPSL.exe`. The included AssetBundle supplies Anomaly's logo and loading-screen background.
-3. Run `SCPSL-ModLaunch.exe`. This will setup the modding environment and start the game with Anomaly enabled.
-4. You can add other compatible Melon Mods to these directories to install them as well.
+   `SCPSL.exe`. Keep all bundled files together.
+3. Run `SCPSL-ModLaunch.exe`, review the game folder, and choose **Launch**.
+   The launcher prepares the game and MelonLoader; first preparation can take a few minutes.
+4. For later sessions, use **SCPSL ModLaunch.lnk** or **SCPSL ModLaunch GUI.lnk**
+   in the game folder. The launcher executable moves into `.modlaunch`.
+5. Install additional compatible MelonLoader mods according to their authors' directions.
 
-Remote Lua content packs additionally require successful Windows AppContainer/job
-qualification and separate content/execution approval. Linux/Proton/Wine and failed
-qualification fail closed for required remote Lua; ordinary client support does not
-imply remote Lua support. Keep the three `Anomaly.Client.ScriptWorker` payloads and
-the single `Anomaly.MoonSharp.Interpreter.dll` together in `UserLibs/`; missing or
-changed payloads cannot enable remote execution. Local owner scripts retain their
-separate verified-host path. See [script packs](Anomaly.Client.Scripting/SCRIPT-PACKS.md).
+The launcher restores original game files when the game exits by default. After
+an interrupted session, use **Restore originals** before vanilla play or Steam
+file verification. Keep a separate game copy for modded play.
+
+Server-provided Lua content requires Windows and separate approval to download
+content and run scripts. If the client cannot run a required script pack, it
+cannot join that server. Keep the complete Anomaly client package installed.
 
 Connect to an Anomaly-enabled server using the address provided by its owner.
 To try mods in a local game, select **Create Server** from the Servers menu or run `host`
@@ -73,6 +77,13 @@ working server running a supported game version.
    startup message.
 5. Join using the Anomaly client. Players need Anomaly to connect to the server.
 
+Server-owned content packs default to
+`<LabAPI>/plugins/global/Anomaly/ContentPacks/<namespace>/<pack>/pack.json`
+for the packaged global install. A port-scoped install instead uses
+`<LabAPI>/plugins/<port>/Anomaly/ContentPacks`. Relative `content_pack_directory`
+overrides resolve from that scope's `Anomaly` directory, never the server working
+directory; absolute overrides are also supported.
+
 Continue with the [server installation guide](https://docs.anomalylabs.io/server/02-install/)
 and [configuration reference](https://docs.anomalylabs.io/server/03-configuration/)
 for server settings, custom content, and troubleshooting.
@@ -93,13 +104,12 @@ it from the same release as your Anomaly installation, then follow a quickstart:
 The [full documentation](https://docs.anomalylabs.io/) covers events, commands,
 input, UI, networking, custom content, and packaging your mods.
 
-Content authors use `ContentPacks/<namespace>/<pack>/pack.json` to declare one Lua
-entrypoint, an explicit asset index and/or typed server items. See the
-[content-pack contract and embedded sample](Anomaly.Client.Scripting/SCRIPT-PACKS.md)
-and [native asset authoring guide](ASSETBUNDLES.md). Remote Lua requires actual
-qualified Windows LPAC/job isolation plus content/execution approval; unsupported
-or failed isolation remains fail-closed and cannot be bypassed by consent.
->We also supply agent readable API documentation for Anomaly's client and server libraries. See https://docs.anomalylabs.io/llms.txt.
+Content authors can package Lua scripts, supported Unity assets, and custom item
+definitions together. See the [content-pack guide](https://docs.anomalylabs.io/modding/21-content-packs/),
+[Lua scripting guide](https://docs.anomalylabs.io/modding/22-lua-scripting/),
+and [asset authoring guide](ASSETBUNDLES.md).
+
+Machine-readable documentation is available at [llms.txt](https://docs.anomalylabs.io/llms.txt).
 
 ## Get help
 
@@ -122,6 +132,7 @@ For more information on what we have implemented to comply with your EULA, or if
 ## Disclaimer
 
 Anomaly is an independent project and is not affiliated with Northwood Studios.
-Use the modded client with Anomaly-enabled servers, and report Anomaly issues to
-us. Attempting to contact Northwood Studios about a modded client issue may get you banned.
-Steps have been taken to make Anomaly compatible with the SCP:SL EULA, but we cannot guarantee that Northwood Studios will not change their policies on modding in the future. Use at your own risk.
+Use the modded client only with Anomaly-enabled, Offline Mode servers. Report
+Anomaly issues to this project rather than Northwood support. Follow the
+current SCP:SL EULA; compatibility with today's modding rules is not a guarantee
+against future policy changes.

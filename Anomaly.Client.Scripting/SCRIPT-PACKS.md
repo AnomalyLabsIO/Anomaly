@@ -1,27 +1,35 @@
 # Content packs and client scripts
 
-Content packs compose an explicit Lua entrypoint, an indexed Unity AssetBundle,
-and typed server item definitions in one bounded authoring descriptor. Anomaly
-captures declared content and uses its existing authenticated catalog, manifest,
-transfer, SHA-256 cache and admission flow. There is no ZIP/custom archive or
-parallel downloader. Unlisted files never execute or transfer.
+Content packs combine a Lua entrypoint, an indexed Unity AssetBundle, and typed
+server item definitions in one descriptor. Declare every runtime file explicitly;
+unlisted files never execute or transfer. Install the directory tree directly,
+not a ZIP or custom archive.
 
-**Remote script execution requires qualified Windows process isolation.**
-`RemoteExecutionEnabled` follows `RemoteIsolationQualified`, established by actual
-low-privilege AppContainer (LPAC)/job enforcement and probes, not `MemoryHardeningQualified` (still false).
-Required offers fail closed before consent/download when isolation is unavailable;
-content and separate execution approval are both required when it is available.
-Unsupported platforms and Wine have no in-process fallback. Verified nondedicated
-in-process hosting remains the separate local owner execution path.
-Filesystem, OS, networking, reflection, automatic CLR interop and module loading
-remain unavailable to Lua. Source delivery does not qualify CLR heap containment.
-See [host constraints](README.md) and the [allocation audit](ALLOCATION-AUDIT.md).
+Server-provided Lua requires Windows with remote script support available.
+Players must approve both content use and script execution; a client that cannot
+run or declines a required pack cannot join. Linux/Proton/Wine cannot run remote
+Lua. Local owner scripts run only in a verified nondedicated host session, not
+while joining a remote server.
+
+Lua has no filesystem, OS, arbitrary networking, reflection, automatic CLR interop,
+or module loading. Use the supported Anomaly bindings and declared messages.
+For the authoring walkthrough, see [Content Packs](https://docs.anomalylabs.io/modding/21-content-packs/)
+and [Lua Scripting](https://docs.anomalylabs.io/modding/22-lua-scripting/).
 
 ## Descriptor and directories
 
-Server `Config.ContentPackDirectory` defaults to `ContentPacks`, relative to the
-server process working directory; an absolute path fixes the location. Local
-client packs use `Paths.ContentPacksPath`, `<UserData>/Anomaly/ContentPacks`.
+Server `Config.ContentPackDirectory` defaults to `ContentPacks` beneath
+`PathManager.Plugins/<scope>/Anomaly`, not the process working directory.
+`<scope>` is `global` when LabAPI's loaded plugin `FilePath` is under its
+`plugins/global` tree; otherwise it is the current server port. Thus packaged
+installs use `<LabAPI>/plugins/global/Anomaly/ContentPacks`, while port-scoped
+installs use `<LabAPI>/plugins/<port>/Anomaly/ContentPacks`. Relative overrides
+anchor to that scope's `Anomaly` directory; absolute overrides retain their
+location. An empty value disables disk owner packs, not embedded registrations.
+The scanner and watcher use the same resolved absolute path. LabAPI's ordinary
+configuration remains under `configs/<current-port>/Anomaly/config.yml`, including
+global DLL installs. Local client packs use `Paths.ContentPacksPath`,
+`<UserData>/Anomaly/ContentPacks`.
 Discovery visits exactly `<namespace>/<pack>/pack.json`, not recursive Lua or
 asset-index trees. Every pack directory must contain its descriptor. Root and
 namespace files are ignored; only the root `.anomaly-spool` directory is skipped.
@@ -238,25 +246,3 @@ Local activation zero cannot exchange authenticated pack messages.
 See [connection lifecycle](CONNECTION-LIFECYCLE.md) and
 [message schemas and Lua examples](MESSAGING-DESIGN.md).
 
-## Cutover acceptance (2026-10-26)
-
-The real game/loader smoke passed through both console `host` and Create Server
-with three explicit script descriptors. The sample rendered local player/round
-text; independent owners retained literal, noninteractive output and separate
-clear/expiry. Both hosted connections exercised queued native-query callbacks,
-disconnect and fresh rehost sessions. The loader also reported the declared local
-skin component loaded with both texture roots. Screenshots were inspected and
-the reversible deployment/profile restoration verified protected hashes.
-
-A fresh isolated dedicated server materialized owner and exact-name embedded
-`Data.Items` definitions into distinct native Coin templates. Repeated disposal
-of the embedded registration preserved frozen templates, invalidated new offers
-and rejected the subsequent missing-definition candidate. No client connection
-or remote Lua execution was involved in that server probe.
-
-Contract/lifecycle suites, both public API baselines, release tooling and all
-packaged SDK starters passed. A selected skin index with spaces/uppercase in its
-source filename was accepted and staged under a canonical declared path. Local
-evidence is retained in `artifacts/content-packs-cutover-20261026/`; test-only
-probe sources and deployment DLLs were removed. This does not qualify hostile
-remote Lua, native/CLR heap limits or multiplayer churn.

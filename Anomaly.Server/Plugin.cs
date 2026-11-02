@@ -22,6 +22,7 @@ using LabApi.Features.Console;
 using LabApi.Features;
 using LabApi.Loader;
 using LabApi.Loader.Features.Plugins;
+using LabApi.Loader.Features.Paths;
 using LabApi.Loader.Features.Plugins.Enums;
 
 namespace Anomaly.Server;
@@ -186,11 +187,13 @@ public class Plugin : Plugin<Config>
             },
             [ServerInitializationStage.AssetsAndContent] = () =>
             {
-                ServerAssetManager.Init(Config.ContentPackDirectory);
+                string contentPackDirectory = ContentPackDirectory.Resolve(
+                    PathManager.Plugins.FullName, FilePath, LabApi.Features.Wrappers.Server.Port, Config.ContentPackDirectory);
+                ServerAssetManager.Init(contentPackDirectory);
                 AssetOverrides.Init();
                 DecorativeVisualScope.Init();
                 Announcer.Init();
-                AssetFileWatcher.Start(Config.ContentPackDirectory);
+                AssetFileWatcher.Start(contentPackDirectory);
             },
             [ServerInitializationStage.LifecycleSubscriptions] = () =>
             {

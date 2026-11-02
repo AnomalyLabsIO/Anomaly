@@ -240,6 +240,7 @@
         <Compile Include="Content\ServerContentRegistrar.cs" />
         <Compile Include="Content\ContentRegistry.cs" />
         <Compile Include="Content\ContentGrantGate.cs" />
+        <Compile Include="Content\ContentPackDirectory.cs" />
         <Compile Include="Api\Content\ContentReadiness.cs" />
         <Compile Include="Api\Content\CustomItemDefinition.cs" />
         <Compile Include="FileTransfer\FileTransferSession.cs" />

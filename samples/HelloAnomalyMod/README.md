@@ -18,10 +18,10 @@ When the sample is copied outside the SDK, also pass
 The Anomaly source repository is not needed. In a source checkout, the defaults
 use its configured local references and API project.
 
-Place only `bin/Release/net6.0/HelloAnomalyMod.dll` in the launcher's selected
-loadout `local/Mods/` directory. Approve the changed DLL using the launcher's
-existing trust flow, then start the game. Do not copy game, API or loader DLLs
-from your build references into Mods.
+Place only `bin/Release/net6.0/HelloAnomalyMod.dll` in `Mods/` beside your
+modded game's `SCPSL.exe`, then launch through SCPSL-ModLaunch. Stop the game
+before replacing the DLL. Do not copy game, API, or loader DLLs from your build
+references into `Mods/`.
 
 The Anomaly namespace and MelonLoader `MelonID` are `example.hello`, so a server
 plugin can require this client mod during connection. The raw MelonPreferences category ID is

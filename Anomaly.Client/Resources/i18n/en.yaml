@@ -179,6 +179,15 @@
 "anomaly.commands.status_copied": "Sanitized status copied to clipboard."
 # {0} = exception type
 "anomaly.commands.status_unavailable": "Status unavailable ({0}). Check the local MelonLoader log."
+"anomaly.commands.lua_definitions_description": "Generates installed-version Lua autocomplete references: anomaly.luadefs [directory] [--force]."
+# {0} = absolute generated definitions path
+"anomaly.commands.lua_definitions_written": "Lua references written to {0}."
+# {0} = absolute workspace directory
+"anomaly.commands.lua_definitions_workspace": "Open {0} in an editor with Lua Language Server. Definitions are editor-only; never execute them."
+# {0} = existing editor configuration path
+"anomaly.commands.lua_definitions_preserved": "Preserved {0}. Add .definitions to workspace.library, or use --force to replace this editor configuration."
+# {0} = exception type
+"anomaly.commands.lua_definitions_failed": "Lua reference generation failed ({0}). Check the local MelonLoader log."
 "anomaly.commands.identity_description": "Rotate the client identity while preserving signed enrollment lineage."
 # {0} = literal command syntax, {1} = profile filename
 "anomaly.commands.identity_usage": "Usage: {0} — disconnect first. The previous key signs a bounded public lineage proof; losing {1} instead creates a fresh enrollment."

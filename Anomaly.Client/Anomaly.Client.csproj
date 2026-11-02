@@ -400,6 +400,7 @@
 		<Compile Include="Commands\IdentityCommand.cs" />
     <Compile Include="Commands\WhoAmICommand.cs" />
     <Compile Include="Commands\StatusCommand.cs" />
+    <Compile Include="Commands\LuaDefinitionsCommand.cs" />
 		<Compile Include="Content\ClientContentRegistrar.cs" />
 		<Compile Include="Content\ContentCatalogClient.cs" />
 		<Compile Include="Content\ScriptPackReader.cs" />

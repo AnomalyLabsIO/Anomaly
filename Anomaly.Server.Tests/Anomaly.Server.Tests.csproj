@@ -25,6 +25,7 @@
     <None Include="$(AnomalyServerAssemblyCSharpSource)"
           Link="Assembly-CSharp.dll" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="..\Anomaly.Server\Config.cs" Link="Production\Config.cs" />
+    <Compile Include="..\Anomaly.Server\Content\ContentPackDirectory.cs" Link="Production\ContentPackDirectory.cs" />
     <Compile Include="..\Anomaly.Server\Api\Auth\ClientModRequirements.cs" Link="Production\ClientModRequirements.cs" />
     <Compile Include="..\Anomaly.Server\Auth\ClientModAdmissionPolicy.cs" Link="Production\ClientModAdmissionPolicy.cs" />
     <Compile Include="..\Anomaly.Server\Networking\AnomalyMessaging.cs" Link="Production\AnomalyMessaging.cs" />

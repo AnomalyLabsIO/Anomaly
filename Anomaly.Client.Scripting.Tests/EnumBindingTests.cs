@@ -105,15 +105,16 @@ public sealed class EnumBindingTests
     }
 
     [Fact]
-    public void Canonical_names_keep_duplicate_nested_enum_names_distinct_without_exposing_owner_classes()
+    public void Nested_names_keep_declaring_paths_without_exposing_owner_members()
     {
         var (registry, script, _) = BoundConsumer();
-        var first = typeof(EnumOwnerA.Mode).FullName!;
-        var second = typeof(EnumOwnerB.Mode).FullName!;
+        var first = typeof(EnumOwnerA.Mode).FullName!.Replace('+', '.');
+        var second = typeof(EnumOwnerB.Mode).FullName!.Replace('+', '.');
         Assert.Equal("First", script.DoString($"return Enums['{first}'].First").String);
         Assert.Equal("Second", script.DoString($"return Enums['{second}'].Second").String);
-        Assert.True(script.DoString("return Enums.Mode == nil and Mode == nil and EnumOwnerA == nil and " +
-            "EnumOwnerB == nil and Enums.EnumOwnerA == nil").Boolean);
+        Assert.True(script.DoString("return Enums.Mode == nil and Mode == nil and EnumOwnerA.Mode.First == 'First' and " +
+            "EnumOwnerB.Mode.Second == 'Second' and Enums.EnumOwnerA.Mode.First == 'First' and " +
+            "EnumOwnerA.Sensitive == nil and EnumOwnerA.new == nil").Boolean);
         Assert.False(registry.Enums.Contains(typeof(PrivateEnum)));
         Assert.False(registry.Enums.Contains(typeof(GenericEnumOwner<>.Mode)));
         Assert.False(registry.Enums.Contains(typeof(EnumOwnerA)));
@@ -201,8 +202,11 @@ public sealed class EnumBindingTests
         Assert.True(runtime.Bindings.Enums.Contains(typeof(Il2CppPlayerRoles.RoleTypeId)));
         using var session = runtime.CreateDevelopmentSession();
         var result = session.Load("assert(ItemType.KeycardJanitor == 'KeycardJanitor'); " +
-            "assert(RoleTypeId.ClassD == Enums['Il2CppPlayerRoles.RoleTypeId'].ClassD); " +
-            "assert(Enums.RoleTypeId.ClassD == 'ClassD')");
+            "assert(RoleTypeId.ClassD == Enums['PlayerRoles.RoleTypeId'].ClassD); " +
+            "assert(Enums.RoleTypeId.ClassD == 'ClassD'); " +
+            "assert(ActionName.Jump == 'Jump'); " +
+            "assert(AlphaWarheadNukesitePanel.DiodeType.BlastDoor == 'BlastDoor'); " +
+            "assert(Enums['Il2CppPlayerRoles.RoleTypeId'] == nil)");
         Assert.True(result.Succeeded, result.Message);
     }
 

@@ -75,9 +75,10 @@ public sealed class CatalogTests
         var lua = catalog.ToLuaDefinitions();
         Assert.Contains("---@class CatalogTarget", lua);
         Assert.Contains("---@field Name string|nil # Read-only.", lua);
-        Assert.Contains("function _type_CatalogTarget:Echo(input)", lua);
-        Assert.Contains("function _type_CatalogTarget:KeywordParameter(arg0)", lua);
-        Assert.Contains("function _type_CatalogTarget:KeywordCollision(arg0_1, arg0)", lua);
+        Assert.Contains("function _type_CatalogTarget.Echo(input)", lua);
+        Assert.Contains("---@overload fun(self: CatalogTarget, input: string|nil): string|nil", lua);
+        Assert.Contains("function _type_CatalogTarget.KeywordParameter(arg0)", lua);
+        Assert.Contains("function _type_CatalogTarget.KeywordCollision(arg0_1, arg0)", lua);
         Assert.DoesNotContain("\nCatalogTarget =", lua);
         Assert.DoesNotContain("GetType", lua);
         new Script(CoreModules.None).LoadString(lua);

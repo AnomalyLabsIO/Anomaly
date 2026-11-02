@@ -228,6 +228,11 @@ internal static class TrKeys
     public const string Commands_Usage = "anomaly.commands.usage";
     public const string Commands_StatusCopied = "anomaly.commands.status_copied";
     public const string Commands_StatusUnavailable = "anomaly.commands.status_unavailable";
+    public const string Commands_LuaDefinitionsDescription = "anomaly.commands.lua_definitions_description";
+    public const string Commands_LuaDefinitionsWritten = "anomaly.commands.lua_definitions_written";
+    public const string Commands_LuaDefinitionsWorkspace = "anomaly.commands.lua_definitions_workspace";
+    public const string Commands_LuaDefinitionsPreserved = "anomaly.commands.lua_definitions_preserved";
+    public const string Commands_LuaDefinitionsFailed = "anomaly.commands.lua_definitions_failed";
     public const string Commands_IdentityDescription = "anomaly.commands.identity_description";
     public const string Commands_IdentityUsage = "anomaly.commands.identity_usage";
     public const string Commands_IdentityFailed = "anomaly.commands.identity_failed";

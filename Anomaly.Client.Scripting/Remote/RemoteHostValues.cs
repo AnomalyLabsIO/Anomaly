@@ -75,9 +75,9 @@ internal static class RemoteHostValues
         {
             var members = new Dictionary<string, WireValue>(StringComparer.Ordinal);
             foreach (var member in enumeration.Members) members.Add(member.Name, WireValue.String(member.Value));
-            enums.Add(enumeration.ClrType, WireValue.Object(string.Empty, members));
-            if (enumeration.Alias is { } alias) aliases.Add(alias, WireValue.String(enumeration.ClrType));
-            if (enumeration.GlobalName is { } global) globals.Add(global, WireValue.String(enumeration.ClrType));
+            enums.Add(enumeration.LuaName, WireValue.Object(string.Empty, members));
+            if (enumeration.Alias is { } alias) aliases.Add(alias, WireValue.String(enumeration.LuaName));
+            if (enumeration.GlobalName is { } global) globals.Add(global, WireValue.String(enumeration.LuaName));
         }
         var events = new List<WireValue>();
         if (runtime.EventCatalog is { } catalog)

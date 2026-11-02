@@ -13,18 +13,18 @@ replacing the core plugin after a map already exists is refused; restart the
 server so both runtimes can receive a valid generation snapshot.
 
 Register custom item definitions during `Enable`, before the catalog freezes.
-Registration copies the definition and rejects invalid keys, vanilla base item
-IDs, missing display names, invalid Unicode and oversized text before changing
+Registration copies the definition and rejects invalid keys, invalid stock base
+item IDs, missing display names, invalid Unicode and oversized text before changing
 the catalog. Keys, display names and descriptions are limited to 128, 512 and
 4096 UTF-8 bytes respectively. A rejected registration leaves earlier valid
 registrations intact; asset/template materialization is validated transactionally
 when the catalog freezes.
 Subscribe to `Api.Events.Handlers.ClientEvents` during `Enable` and remove the
 same handlers during `Disable`. These use native LabAPI event-handler conventions
-and `IPlayerEvent` arguments. Protocol 12 acquires and activates the exact required
-catalog before Mirror Ready/AddPlayer or initial Anomaly setup can complete.
-ContentReady publishes the adopted player's activated grant and may precede Connected
-during adoption. Notifications are not replayed to late subscribers.
+and `IPlayerEvent` arguments. Required content activates before the client enters
+gameplay or completes initial Anomaly setup. `ContentReady` publishes the adopted
+player's activated grant and may precede `Connected` during adoption.
+Notifications are not replayed to late subscribers.
 
 Content activation belongs to the current player instance. A native round restart
 can keep the authenticated connection while replacing that instance; the new
@@ -69,10 +69,19 @@ transfer/activation failure revokes the grant and closes the connection.
 
 ## Content packs
 
-Owners install `ContentPacks/<namespace>/<pack>/pack.json` under
-`Config.ContentPackDirectory` (default `ContentPacks`, relative to the server
-working directory). The descriptor explicitly composes one Lua entrypoint, an
-asset index and/or typed server item definitions. Unlisted files do not execute
+Owners install `<namespace>/<pack>/pack.json` beneath the resolved
+`Config.ContentPackDirectory` (default `ContentPacks`). The default absolute root
+is `<LabAPI>/plugins/global/Anomaly/ContentPacks` when LabAPI loaded Anomaly's DLL
+from its `plugins/global` tree, or
+`<LabAPI>/plugins/<current-port>/Anomaly/ContentPacks` otherwise. This uses
+`PathManager.Plugins`, including LabAPI's managed data location, not the process
+working directory or the `configs` tree. Relative overrides anchor to that
+scope's `Anomaly` directory; absolute overrides retain their location. An empty
+value disables disk owner packs without disabling embedded registrations.
+LabAPI still stores Anomaly's configuration in `configs/<current-port>/Anomaly/config.yml`,
+even for a global DLL install. Scanner and watcher receive the same resolved root.
+The descriptor explicitly composes one Lua entrypoint, an asset index and/or
+typed server item definitions. Unlisted files do not execute
 or transfer. There is no recursive Lua/index discovery, runtime module loader,
 dependency resolution or implicit override order.
 
@@ -83,10 +92,44 @@ For example, the [server starter](../samples/HelloAnomalyServer/README.md) conta
 is `mods/example/panel/scripts/main.lua`; messages use the component ID.
 Version is diagnostic metadata only, not compatibility or load-order policy.
 
+A data-only owner pack needs no bundle or client script. For example, install
+`ContentPacks/example/coin/pack.json`:
+
+```json
+{
+  "SchemaVersion": 1,
+  "PackId": "example:coin",
+  "Version": "1.0.0",
+  "Data": { "Items": "data/items.json" }
+}
+```
+
+Alongside `ContentPacks/example/coin/data/items.json`:
+
+```json
+{
+  "SchemaVersion": 1,
+  "Items": [
+    {
+      "Key": "example:coin",
+      "BaseTemplate": "Coin",
+      "DisplayName": "Example coin",
+      "Description": "A stock coin with custom presentation."
+    }
+  ]
+}
+```
+
+Use the exact stock `ItemType` name for `BaseTemplate`, not a numeric ID. An
+optional `IconAddress` must identify a Texture2D or Sprite in this same pack's
+declared asset index. Item data registers definitions, not gameplay handlers or
+automatic grants; give the item with `CustomItems.TryGiveItem` after activation.
+
 Embed the descriptor and its declared files with exact slash-delimited CLR
 `LogicalName` values, then register during the normal LabAPI lifecycle:
 
 ```csharp
+using System;
 using Anomaly.Server.Api.Content;
 
 private IDisposable _pack;
@@ -128,18 +171,17 @@ leases survive.
 
 ## Pack-bound Lua messages
 
-Remote script execution requires a client with actual qualified Windows
-AppContainer/job isolation and separate content/execution approval. Unavailable
-isolation, including unsupported platforms/Wine, rejects required offers before
-consent/download; authoring/messaging APIs cannot bypass it. Local in-process
-accounting remains unqualified and is not the remote availability gate.
+Remote script execution requires qualified Windows AppContainer/job isolation
+and separate content/execution approval. Unavailable isolation, including
+unsupported platforms/Wine, rejects required offers before consent/download.
+Authoring and messaging APIs cannot bypass these requirements.
 
 Use the existing `ClientMessaging` and `ClientEvents.MessageReceived` APIs. The
 built-in `ScriptToClientMessage` and `ScriptToServerMessage` carriers are already
 registered by Anomaly; a plugin does not register another network contract or
-ship a client C# companion for these messages. Declare their case-sensitive
-names, directions and primitive fields in the source pack's `Messages`
-list. See the [script authoring guide](../Anomaly.Client.Scripting/SCRIPT-PACKS.md)
+ship a client C# companion for these messages. Declare case-sensitive names,
+directions and primitive fields in the schema file selected by the descriptor's
+`Scripts.Messages` path. See the [script authoring guide](../Anomaly.Client.Scripting/SCRIPT-PACKS.md)
 and [message contract guide](../Anomaly.Client.Scripting/MESSAGING-DESIGN.md).
 
 For script component `example:panel_scripts`, declare `GetState` as server-to-client with
@@ -202,23 +244,19 @@ Messages.On("GetState", function(Message)
 end)
 ```
 
-Each send is checked against that recipient's retained approved pack, schema
-and activation, then bound to the exact index hash and transfer session. A
-server rescan cannot silently change an existing client's message contract.
-`TrySend` returns false for an unavailable pack, invalid payload, wrong direction
-or exhausted budget. `SendToAll` skips recipients without the matching grant.
-Replies reach the existing public event only after the same checks. Anomaly
-also rechecks approval between its internal handlers before publishing through
-LabAPI's ordinary event dispatcher.
+Each send requires the recipient's retained approved pack, matching schema and
+activation. A server rescan cannot silently change an existing client's message
+contract. `TrySend` returns false for an unavailable pack, invalid payload, wrong
+direction or exhausted budget. Handle that result in gameplay code; `Send` throws
+when it cannot deliver. `SendToAll` skips recipients without the matching grant.
+Replies reach `ClientEvents.MessageReceived` only after validation.
 
-Messages use the existing reliable ordered authenticated transport. Each
-direction has a per-activation aggregate limit of 20 messages/second (burst 40),
-32 KiB/second (burst 64 KiB), plus 5 messages/second (burst 10) per pack/name.
-Sends also stop when the recipient's native reliable queues contain 128 packets;
-backpressure returns false without disconnecting the recipient.
-Payloads, schemas and queued Lua delivery are bounded. Activation and disconnect
-discard queued work and handler registrations. Local-only scripts without an
-adopted server pack grant cannot use this bridge.
+Messages are reliable and ordered, with bounded payloads and per-activation
+rate limits. Backpressure returns false without disconnecting the recipient;
+do not assume every attempted send was queued. See the message contract guide
+for schema and rate limits. Activation replacement and disconnect discard queued
+work and Lua handler registrations. Local-only scripts without an adopted server
+pack grant cannot use this bridge.
 
 `RequestId` is ordinary application data, so track pending requests in your
 normal plugin state and clear them when the player leaves. A valid schema does
@@ -276,12 +314,8 @@ inventory, but remains a client claim rather than attestation. Only the in-proce
 host shortcut bypasses dedicated-server admission; loopback and LAN clients do not.
 Changes to risk or admission inventory after login require a fresh connection.
 
-Texture overrides replace the selected material's base-color texture. The client
-uses the shader's declared main texture, then `_BaseColorMap`, `_BaseMap`, or
-`_MainTex` when available. Clearing an override restores the original texture on
-the same material property; shaders without a supported texture slot are skipped.
 
-## Offline asset packs
+## Indexed asset packs
 
 Build packs on the owner/modder's device with the matching Unity 6000.0.43f1
 exporter for the Windows x64 client. Place the completed bundle/index under
@@ -307,6 +341,10 @@ address. `Announcer.AddWord("EXAMPLE", AssetAddress.Parse("mods/example/audio/wo
 derives its duration from the index's sample count/rate. It rejects stock names;
 stock replacements preserve stock scheduling durations and must match the
 original clip duration within one sample. The standalone pause `.` is excluded.
+Texture overrides replace the selected material's base-color texture. The client
+uses the shader's declared main texture, then `_BaseColorMap`, `_BaseMap`, or
+`_MainTex` when available. Clearing an override restores the original texture on
+the same material property; shaders without a supported texture slot are skipped.
 
 Each offer pins an immutable private spool snapshot for that client's session.
 Changing/removing the source pair affects later offers. Already active clients
@@ -381,56 +419,19 @@ The [server starter](../samples/HelloAnomalyServer/README.md) includes a disable
 by default example that finds a selected room, then moves or removes it. Try it
 only on a test server after choosing the desired room and replacement behavior.
 
-## Migrating development plugins
+## Compatibility
 
-This is a deliberate pre-release compatibility reset while managed versions
-remain `1.0.0` (`1.0.0.0` in assembly metadata). Rebuild every companion against
-the new SDK. Existing releases and tags are unchanged. Future frozen public
-contracts follow semantic versioning and intentional baseline review.
+Build against the matching developer SDK and `Anomaly.Server/PublicAPI.Shipped.txt`.
+The supported managed namespaces are `Anomaly.Server.Api.*`; implementation types
+outside that surface are not plugin integration points. Use native LabAPI players,
+items, configuration, commands and lifecycle methods rather than a separate Anomaly
+plugin base or item-logic lifecycle.
 
-- Move author-facing imports from `Anomaly.Server.Content`, `.Features`,
-  `.Assets`, `.Map`, and `.Networking` into `Anomaly.Server.Api.*`.
-- Replace `Content` with `CustomItems` and `GiveItem` with `TryGiveItem`.
-- Replace `ItemLogicBase` with native LabAPI item events.
-- Replace raw `ReferenceHub`/connection public parameters with LabAPI `Player`
-  and other native wrappers.
-- Replace messaging callbacks with `ClientEvents.MessageReceived` and its
-  player/message event arguments. Use `ClientMessaging.Send`/`TrySend` and
-  `ClientEvents.Connected` instead of the runtime transport's readiness callback.
-- Replace content, capability, and motion callbacks with their `ClientEvents`
-  counterparts; remove global reset, initialization, and teardown calls.
-- Replace raw-path/hash asset calls and `IconPath` with typed `AssetAddress`
-  values and `IconAddress`; remove caller-supplied CASSIE clip durations.
+Update the client, server and shared companion contracts together. The current
+application protocol is 12; incompatible peers are rejected before gameplay.
+Rebuild companion assemblies when their SDK contract changes rather than relying
+on managed assembly version equality.
 
-### Anomaly.Portals migration example
-
-The existing `Anomaly.Portals.Server/PortalServerController.cs` consumes the old
-server surface. Rebuild that companion against the matching SDK and migrate its
-calls as follows; its normal LabAPI lifecycle and gameplay subscriptions remain
-the integration points.
-
-| Existing Portals use | Updated consumer code |
-| --- | --- |
-| `Anomaly.Server.Features` | Import `Anomaly.Server.Api.Features`. |
-| `Anomaly.Server.Networking.AnomalyMessaging` | Import `Anomaly.Server.Api.Networking.ClientMessaging` and `Api.Events.Handlers.ClientEvents`. |
-| `AnomalyMessaging.ClientReady` / `OnClientReady(ReferenceHub)` | Subscribe to `ClientEvents.Connected` with `ClientEventArgs`; use `ev.Player`. |
-| `AnomalyMessaging.MessageReceived` / `(ReferenceHub, IAnomalyMessage)` callback | Subscribe to `ClientEvents.MessageReceived` with `ClientMessageReceivedEventArgs`; use `ev.Player` and `ev.Message`. |
-| `AnomalyMessaging.SendToClient(hub, message)` | Call `ClientMessaging.Send(Player.Get(hub), message)`, or handle a false return from `TrySend`. |
-| `ClientCapabilities.Supports(hub, capability)` | Pass a LabAPI `Player`; `CurrentRoundEpoch` remains on the moved feature class. |
-| `PlayerMotion.TryApply(owner, hub, motion, out failure)` / `Reset(hub, owner)` | Pass a LabAPI `Player` to the same feature methods. |
-
-Use `LabApi.Features.Wrappers.Player.Get(hub)` at boundaries if Portals retains
-its internal hub-keyed motion/collision state. Keep matching event removals in
-`Disable`. `Plugin.Instance.IsOperational` remains available for its existing
-startup dependency check. Register its shared message contracts in both runtimes
-before sending and rebuild the client/shared companion assemblies with the new
-protocol; a namespace edit alone does not make old binaries compatible. These
-are migration instructions, not a claim that the separate Portals repository
-has been migrated or qualified.
-
-The application protocol is v8. Update client and server together; old peers are
-rejected during the handshake. The authenticated facility snapshot is required
-before client procedural generation; it is independent of content consent.
 
 ## Verification
 

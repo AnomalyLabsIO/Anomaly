@@ -5,8 +5,11 @@ namespace Anomaly.Server;
 public class Config
 {
     /// <summary>
-    /// Root of descriptor packs at namespace/pack/pack.json. Declared files are
-    /// captured on a worker for authenticated offers. Empty disables owner packs.
+    /// Root of descriptor packs at namespace/pack/pack.json. Relative paths are
+    /// anchored to LabAPI plugins/global/Anomaly or plugins/&lt;port&gt;/Anomaly,
+    /// matching the loaded plugin's scope, not the process working directory.
+    /// Absolute paths are retained. Captured on a worker for authenticated offers.
+    /// Empty disables owner packs.
     /// </summary>
     public string ContentPackDirectory { get; set; } = "ContentPacks";
 

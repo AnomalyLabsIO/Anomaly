@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Anomaly.Client.Scripting.Remote.Protocol;
 
 namespace Anomaly.Client.Scripting.Catalog;
 
@@ -26,23 +27,31 @@ internal sealed class ScriptApiCatalog
             ScriptNameRules.ValidateIdentifier(entry.Name);
         }
         var enumKeys = new Dictionary<string, ScriptEnumCatalog>(StringComparer.Ordinal);
-        var enumGlobals = new HashSet<string>(StringComparer.Ordinal) { "Enums", "Events", "Messages", "Game", "Output" };
+        var clrTypes = new HashSet<string>(StringComparer.Ordinal);
+        var enumPaths = new EnumPathNode<ScriptEnumCatalog>();
+        var enumGlobals = new EnumPathNode<ScriptEnumCatalog>();
         foreach (var entry in Enums)
         {
-            if (string.IsNullOrEmpty(entry.ClrType) || !enumKeys.TryAdd(entry.ClrType, entry))
+            if (string.IsNullOrEmpty(entry.ClrType) || string.IsNullOrEmpty(entry.LuaName) ||
+                entry.LuaName.Length > 4096 || !clrTypes.Add(entry.ClrType) || !enumKeys.TryAdd(entry.LuaName, entry))
                 throw new InvalidOperationException("Catalog enum identities must be unique and nonempty.");
+            if (EnumNameRules.IsPath(entry.LuaName)) enumPaths.Add(entry.LuaName, entry);
+        }
+        foreach (var entry in Enums)
+        {
             if (entry.Alias != null)
             {
-                ScriptNameRules.ValidateIdentifier(entry.Alias);
+                if (!EnumNameRules.IsPath(entry.Alias)) throw new InvalidOperationException("Invalid enum alias path.");
                 if (enumKeys.TryGetValue(entry.Alias, out var existing) && !ReferenceEquals(existing, entry))
                     throw new InvalidOperationException("Catalog enum aliases must be unique.");
                 enumKeys[entry.Alias] = entry;
+                enumPaths.Add(entry.Alias, entry);
             }
             if (entry.GlobalName != null)
             {
-                ScriptNameRules.ValidateIdentifier(entry.GlobalName);
-                if (!enumGlobals.Add(entry.GlobalName))
+                if (!EnumNameRules.IsPath(entry.GlobalName) || EnumNameRules.ReservedRoots.Contains(EnumNameRules.Root(entry.GlobalName)))
                     throw new InvalidOperationException("Catalog enum globals must be unique and non-reserved.");
+                enumGlobals.Add(entry.GlobalName, entry);
             }
             if (entry.Members.GroupBy(value => value.Name, StringComparer.Ordinal).Any(group => group.Count() > 1))
                 throw new InvalidOperationException("Catalog enum member names must be unique.");
@@ -83,7 +92,7 @@ internal sealed class ScriptApiCatalog
         foreach (var entry in Enums)
         {
             lines.Add($"enum {EnumPath(entry)} -> {entry.ClrType} string{(entry.IsFlags ? " flags" : "")} case-insensitive-input");
-            if (entry.Alias != null && entry.Alias != entry.ClrType) lines.Add($"  alias Enums.{entry.Alias}");
+            if (entry.Alias != null && entry.Alias != entry.LuaName) lines.Add($"  alias Enums.{entry.Alias}");
             if (entry.GlobalName != null) lines.Add($"  global {entry.GlobalName}: readonly-enum-constants");
             foreach (var member in entry.Members)
                 lines.Add($"  constant {LuaString(member.Name)}: {LuaString(member.Value)} = {member.NumericValue}");
@@ -135,7 +144,7 @@ internal sealed class ScriptApiCatalog
             }),
             enums = Enums.Select(entry => new
             {
-                clrType = entry.ClrType, path = EnumPath(entry), alias = entry.Alias, globalName = entry.GlobalName,
+                clrType = entry.ClrType, luaName = entry.LuaName, path = EnumPath(entry), alias = entry.Alias, globalName = entry.GlobalName,
                 isFlags = entry.IsFlags, representation = "string", caseInsensitiveInput = true,
                 documentationId = entry.DocumentationId, documentation = Documentation(documentation, entry.DocumentationId),
                 members = entry.Members.Select(member => new
@@ -158,26 +167,53 @@ internal sealed class ScriptApiCatalog
             .Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
     }
 
+    internal string ToEnumNameTable()
+    {
+        var output = new StringBuilder("| C# enum type | Lua name | Qualified Lua access |\n|---|---|---|\n");
+        foreach (var entry in Enums)
+        {
+            var qualified = EnumNameRules.IsPath(entry.LuaName) ? "Enums." + entry.LuaName : EnumPath(entry);
+            var preferred = entry.GlobalName ?? (entry.Alias != null ? "Enums." + entry.Alias : qualified);
+            output.Append("| `").Append(entry.ClrType).Append("` | `").Append(preferred)
+                .Append("` | `").Append(qualified).AppendLine("` |");
+        }
+        return output.ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
+    }
+
     internal string ToLuaDefinitions(IReadOnlyDictionary<string, string>? documentation = null)
     {
         var output = new StringBuilder("---@meta\n-- Generated from the approved script catalog. Definitions only; no host objects are constructed.\n");
+        output.Append(LuaSandboxDefinitions.Text);
         if (Enums.Count != 0)
         {
             output.AppendLine("\n-- Host enum registries are read-only. Values are canonical names; enum inputs also accept case-insensitive names.");
             output.AppendLine("-- Flags inputs accept comma-separated declared names and the unnamed zero string '0'; other numeric inputs are rejected.");
             output.AppendLine("Enums = {}");
+            var registryNamespaces = new HashSet<string>(StringComparer.Ordinal) { "Enums" };
+            var globalNamespaces = new HashSet<string>(StringComparer.Ordinal);
             foreach (var entry in Enums)
             {
                 output.AppendLine();
                 AppendDocumentation(output, Documentation(documentation, entry.DocumentationId));
-                output.AppendLine("---@enum " + EnumDefinitionName(entry.ClrType));
+                // LuaLS flattens dotted CLR keys in @enum tables into invalid dotted completions.
+                // A literal value domain keeps contextual suggestions independent of registry paths.
+                output.Append("---@alias ").Append(EnumDefinitionName(entry.LuaName));
+                if (entry.Members.Count == 0) output.Append(" string");
+                output.AppendLine();
+                foreach (var value in entry.Members.Select(member => member.Value).Distinct(StringComparer.Ordinal))
+                    output.AppendLine("---| " + LuaString(value));
                 output.AppendLine(EnumPath(entry) + " = {");
                 foreach (var member in entry.Members)
                     output.AppendLine("    [" + LuaString(member.Name) + "] = " + LuaString(member.Value) + ",");
                 output.AppendLine("}");
-                if (entry.Alias != null && entry.Alias != entry.ClrType)
-                    output.AppendLine("Enums." + entry.Alias + " = " + EnumPath(entry));
-                if (entry.GlobalName != null) output.AppendLine(entry.GlobalName + " = " + EnumPath(entry));
+                if (EnumNameRules.IsPath(entry.LuaName) && entry.LuaName.Contains('.'))
+                    AppendEnumPath(output, "Enums." + entry.LuaName, EnumPath(entry), registryNamespaces);
+                if (entry.Alias != null && entry.Alias != entry.LuaName)
+                {
+                    AppendEnumPath(output, "Enums." + entry.Alias, EnumPath(entry), registryNamespaces);
+                    if (entry.Alias.Contains('.')) output.AppendLine("Enums[" + LuaString(entry.Alias) + "] = " + EnumPath(entry));
+                }
+                if (entry.GlobalName != null) AppendEnumPath(output, entry.GlobalName, EnumPath(entry), globalNamespaces);
             }
         }
         foreach (var type in Types)
@@ -188,7 +224,7 @@ internal sealed class ScriptApiCatalog
             foreach (var member in type.Members.Where(value => value.Kind == ScriptMemberKind.Property))
             {
                 var summary = MemberDocumentation(documentation, type, member);
-                output.Append("---@field ").Append(member.Name).Append(' ').Append(LuaType(member.ReturnType));
+                output.Append("---@field ").Append(member.Name).Append(' ').Append(LuaType(member.ReturnType, input: member.AllowWrite));
                 output.Append(member.AllowWrite ? " # Writable." : " # Read-only.");
                 if (!string.IsNullOrEmpty(summary)) output.Append(' ').Append(OneLine(summary));
                 output.AppendLine();
@@ -199,12 +235,20 @@ internal sealed class ScriptApiCatalog
             {
                 AppendDocumentation(output, Documentation(documentation, member.DocumentationId));
                 var parameterNames = ParameterNames(member.Parameters);
+                var receiverName = "self";
+                while (parameterNames.Contains(receiverName, StringComparer.Ordinal)) receiverName = "_" + receiverName;
+                var overloadParameters = new[] { receiverName + ": " + type.Name }.Concat(
+                    member.Parameters.Select((value, index) => parameterNames[index] + ": " + LuaType(value.ClrType, input: true)));
+                output.Append("---@overload fun(").Append(string.Join(", ", overloadParameters)).Append(')');
+                if (member.ReturnType != "System.Void") output.Append(": ").Append(LuaType(member.ReturnType));
+                output.AppendLine();
                 foreach (var parameter in member.Parameters.Select((value, index) => (Value: value, Name: parameterNames[index])))
-                    output.AppendLine("---@param " + parameter.Name + " " + LuaType(parameter.Value.ClrType));
+                    output.AppendLine("---@param " + parameter.Name + " " + LuaType(parameter.Value.ClrType, input: true));
                 if (member.ReturnType != "System.Void") output.AppendLine("---@return " + LuaType(member.ReturnType));
-                output.AppendLine("function _type_" + type.Name + ":" + member.Name + "(" + string.Join(", ", parameterNames) + ") end");
+                output.AppendLine("function _type_" + type.Name + "." + member.Name + "(" + string.Join(", ", parameterNames) + ") end");
             }
         }
+        AppendEventSnapshots(output, documentation);
         if (HasGameGlobal) output.AppendLine("\n---@type GameContext\nGame = nil -- Host-installed read-only local queries; no constructor is exposed.");
         if (HasOutputGlobal) output.AppendLine("\n---@type ScriptOutput\nOutput = nil -- Host-owned bounded logging and plain text; automatically revoked with this session.");
         if (HasEventsGlobal)
@@ -221,7 +265,7 @@ internal sealed class ScriptApiCatalog
                         : "--- Ordered queued delivery; callbacks must remain within the documented traffic limits.");
                     output.AppendLine(entry.Path + " = {}");
                     var parameterNames = ParameterNames(entry.Parameters);
-                    var callback = "fun(" + string.Join(", ", entry.Parameters.Select((value, index) => parameterNames[index] + ": " + LuaType(value.ClrType))) + ")";
+                    var callback = "fun(" + string.Join(", ", entry.Parameters.Select((value, index) => parameterNames[index] + ": " + LuaType(value.ClrType, snapshot: true))) + ")";
                     output.AppendLine("---@param callback " + callback);
                     output.AppendLine("---@return string subscriptionToken");
                     output.AppendLine("function " + entry.Path + ".Add(callback) end");
@@ -251,23 +295,75 @@ internal sealed class ScriptApiCatalog
         return output.ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
-    private string LuaType(string clrType)
+    private void AppendEventSnapshots(StringBuilder output, IReadOnlyDictionary<string, string>? documentation)
+    {
+        var snapshots = new HashSet<ScriptTypeCatalog>();
+        void Visit(string clrType)
+        {
+            const string nullablePrefix = "System.Nullable`1[[";
+            if (clrType.StartsWith(nullablePrefix, StringComparison.Ordinal))
+                clrType = clrType[nullablePrefix.Length..].Split(',')[0];
+            var type = Types.FirstOrDefault(value => value.ClrType == clrType);
+            if (type == null || !snapshots.Add(type)) return;
+            foreach (var member in type.Members.Where(value => value.Kind == ScriptMemberKind.Property))
+                Visit(member.ReturnType);
+        }
+        foreach (var parameter in Events.SelectMany(entry => entry.Parameters)) Visit(parameter.ClrType);
+        if (snapshots.Count == 0) return;
+        // Scope placeholders individually so large catalogs stay below Lua's active-local limit.
+        foreach (var type in snapshots.OrderBy(value => value.Name, StringComparer.Ordinal))
+        {
+            var canBeDestroyed = type.Members.Any(member => member.Kind == ScriptMemberKind.Property &&
+                member.Name == "IsDestroyed" && member.ReturnType == "System.Boolean");
+            output.AppendLine();
+            output.AppendLine("do");
+            AppendDocumentation(output, TypeDocumentation(documentation, type));
+            output.AppendLine("--- Frozen queued event observation; not a live host object.");
+            if (canBeDestroyed)
+                output.AppendLine("--- When IsDestroyed is true, every other field is nil.");
+            output.AppendLine("---@class " + SnapshotName(type));
+            foreach (var member in type.Members.Where(value => value.Kind == ScriptMemberKind.Property))
+            {
+                var valueType = LuaType(member.ReturnType, snapshot: true);
+                if (canBeDestroyed && member.Name != "IsDestroyed") valueType = NullableLuaType(valueType);
+                output.Append("---@field ").Append(member.Name).Append(' ').Append(valueType).Append(" # Read-only.");
+                var summary = MemberDocumentation(documentation, type, member);
+                if (!string.IsNullOrEmpty(summary)) output.Append(' ').Append(OneLine(summary));
+                if (canBeDestroyed && member.Name != "IsDestroyed") output.Append(" Nil when captured after destruction.");
+                output.AppendLine();
+            }
+            output.AppendLine("local _snapshot = {}\nend");
+        }
+    }
+
+    private static string NullableLuaType(string valueType) =>
+        valueType.EndsWith("|nil", StringComparison.Ordinal) || valueType == "nil" ? valueType : valueType + "|nil";
+
+    private string SnapshotName(ScriptTypeCatalog type)
+    {
+        var name = "EventSnapshot_" + type.Name;
+        while (Types.Any(value => value.Name == name)) name = "_" + name;
+        return name;
+    }
+
+    private string LuaType(string clrType, bool input = false, bool snapshot = false)
     {
         const string nullablePrefix = "System.Nullable`1[[";
         if (clrType.StartsWith(nullablePrefix, StringComparison.Ordinal))
         {
-            var valueType = LuaType(clrType[nullablePrefix.Length..].Split(',')[0]);
-            return valueType.EndsWith("|nil", StringComparison.Ordinal) ? valueType : valueType + "|nil";
+            return NullableLuaType(LuaType(clrType[nullablePrefix.Length..].Split(',')[0], input, snapshot));
         }
         if (clrType == "System.String") return "string|nil";
         if (clrType == "System.Boolean") return "boolean";
         if (clrType == "System.Void") return "nil";
         if (clrType is "System.Double" or "System.Single") return "number";
         if (clrType is "System.Byte" or "System.SByte" or "System.Int16" or "System.UInt16" or "System.Int32" or "System.UInt32" or "System.Int64" or "System.UInt64") return "integer";
-        if (Enums.Any(value => value.ClrType == clrType)) return "string";
+        var enumType = Enums.FirstOrDefault(value => value.ClrType == clrType);
+        if (enumType != null)
+            return input ? "string" : EnumDefinitionName(enumType.LuaName) + (enumType.IsFlags ? "|string" : "");
         var type = Types.FirstOrDefault(value => value.ClrType == clrType);
         if (type == null) throw new InvalidOperationException("The catalog contains an unapproved value type.");
-        return type.Name + "|nil";
+        return (snapshot ? SnapshotName(type) : type.Name) + "|nil";
     }
 
     private static string? Documentation(IReadOnlyDictionary<string, string>? documentation, string id)
@@ -298,7 +394,18 @@ internal sealed class ScriptApiCatalog
 
     private static string OneLine(string text) => string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-    private static string EnumPath(ScriptEnumCatalog entry) => "Enums[" + LuaString(entry.ClrType) + "]";
+    private static string EnumPath(ScriptEnumCatalog entry) => "Enums[" + LuaString(entry.LuaName) + "]";
+
+    private static void AppendEnumPath(StringBuilder output, string path, string value, HashSet<string> namespaces)
+    {
+        var parts = path.Split('.');
+        for (var index = 1; index < parts.Length; index++)
+        {
+            var parent = string.Join(".", parts.Take(index));
+            if (namespaces.Add(parent)) output.AppendLine(parent + " = {}");
+        }
+        output.AppendLine(path + " = " + value);
+    }
 
     private static string EnumDefinitionName(string clrType)
     {

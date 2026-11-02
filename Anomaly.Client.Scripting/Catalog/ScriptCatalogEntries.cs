@@ -1,3 +1,5 @@
+using Anomaly.Client.Scripting.Remote.Protocol;
+
 namespace Anomaly.Client.Scripting.Catalog;
 
 internal enum ScriptMemberKind { Property, Method }
@@ -79,6 +81,7 @@ internal sealed class ScriptEnumCatalog
     }
 
     public string ClrType { get; }
+    public string LuaName => EnumNameRules.Clean(ClrType);
     public string? Alias { get; }
     public string? GlobalName { get; }
     public bool IsFlags { get; }

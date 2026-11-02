@@ -44,14 +44,12 @@ The companion does not initiate custom traffic to clients without a request.
 Install the matching companion before using the client command. Its message
 subscriptions, like native item handlers, are removed during `Disable()`.
 
-`EnableScriptPack` defaults to `false` so the sample does not require Lua without
-an intentional server-owner choice. Set `EnableScriptPack: true` to offer the
-embedded pack to authenticated clients with qualified Windows AppContainer/job
-workers. Clients need both content and execution approval. `RemoteExecutionEnabled`
-follows actual `RemoteIsolationQualified`; `MemoryHardeningQualified` remains false
-for local VMs and is not this gate. Unsupported platforms/Wine, missing runtime or
-payloads and failed isolation probes reject required offers before consent/download;
-neither this flag nor consent can bypass qualification.
+`EnableScriptPack` defaults to `false`. Set `EnableScriptPack: true` to offer the
+embedded Lua pack to connecting clients. Players need Windows with remote script
+support available and must approve both the content download and script execution.
+A client that cannot run or declines a required pack cannot join. Keep the full
+matching client package installed; the server setting cannot enable script
+support on an unsupported client.
 
 Keep the complete [`ContentPacks/example/panel`](ContentPacks/example/panel) directory beside the
 project when building. Its [`pack.json`](ContentPacks/example/panel/pack.json)
@@ -105,6 +103,5 @@ frozen for clients and before native `MapGenerated`; saved descriptors cannot be
 edited later. See [facility generation](../../Anomaly.Server/MODDING.md#facility-generation)
 for ordering, lifetime, and synchronization rules.
 
-This is a breaking prerelease API reset that retains version 1.0. Rebuild existing
-server plugins against the matching SDK. The source namespace is
+Build server plugins against the matching SDK. The source namespace is
 `Anomaly.Server.Api`, while the distributable assembly remains `Anomaly.Server.dll`.

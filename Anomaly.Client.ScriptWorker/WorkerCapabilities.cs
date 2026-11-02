@@ -9,10 +9,20 @@ internal sealed partial class WorkerSession
 {
     private void InstallCapabilities()
     {
-        Script.Globals.Set("Enums", NewNode("Enums", name => _catalog.Enums.TryGetValue(name, out var members) ? EnumNode(name, members) : DynValue.Nil,
-            scriptString: false));
-        foreach (var global in _catalog.EnumGlobals)
-            Script.Globals.Set(global.Key, EnumNode(global.Value, _catalog.Enums[global.Value]));
+        var enumRoots = _catalog.EnumGlobalPaths.Children;
+        if (!Script.Globals.Get("Enums").IsNil() || enumRoots.Keys.Any(name => !Script.Globals.Get(name).IsNil()))
+            throw new InvalidOperationException("An enum global is already installed.");
+        // Build pending roots before publishing any capability. Owners are namespace-only
+        // nodes containing approved enum descendants, never proxies for the CLR owner class.
+        var pendingEnums = MemoryBudget.Allocate(128L + enumRoots.Count * 64L,
+            () => new Dictionary<string, DynValue>(enumRoots.Count, StringComparer.Ordinal));
+        foreach (var root in enumRoots)
+            pendingEnums.Add(root.Key, EnumPathValue(root.Key, root.Value));
+        var enums = NewNode("Enums", name => _catalog.Enums.TryGetValue(name, out var members) ? EnumNode(name, members) :
+            _catalog.EnumPaths.Children.TryGetValue(name, out var child) ? EnumPathValue("Enums." + name, child) : DynValue.Nil,
+            scriptString: false);
+        Script.Globals.Set("Enums", enums);
+        foreach (var root in pendingEnums) Script.Globals.Set(root.Key, root.Value);
         Script.Globals.Set("Events", NewNode("Events", category => _catalog.Events.TryGetValue(category, out var members)
             ? NewNode("Events", name => members.TryGetValue(name, out var source) ? EventNode(source) : DynValue.Nil) : DynValue.Nil));
         Node? messages = null;
@@ -38,6 +48,11 @@ internal sealed partial class WorkerSession
 
     private DynValue EnumNode(string name, IReadOnlyDictionary<string, WireValue> members) => NewNode(name,
         member => members.TryGetValue(member, out var value) ? DynValue.NewString(value.Text) : DynValue.Nil, scriptString: false);
+
+    private DynValue EnumPathValue(string name, EnumPathNode<IReadOnlyDictionary<string, WireValue>> node) =>
+        node.Value is { } members ? EnumNode(name, members) : NewNode(name,
+            child => node.Children.TryGetValue(child, out var value) ? EnumPathValue(name + "." + child, value) : DynValue.Nil,
+            scriptString: false);
 
     private DynValue EventNode(WorkerCatalog.Event source)
     {

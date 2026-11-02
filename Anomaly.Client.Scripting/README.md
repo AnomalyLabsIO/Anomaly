@@ -1,4 +1,8 @@
-# Client scripting
+# Scripting runtime contributor reference
+
+This page is for contributors maintaining the scripting runtime and its checks.
+Content authors should use the [content-pack guide](SCRIPT-PACKS.md) and the
+[Lua authoring documentation](https://docs.anomalylabs.io/modding/22-lua-scripting/).
 
 `Anomaly.Client.Scripting` is the client-owned MoonSharp host. It references
 `Anomaly.Client.Api` and the source-pinned, privately named
@@ -145,7 +149,8 @@ Events.Client.Ready.Add(function(args)
 end)
 ```
 
-`Game.GetPlayer(id)` resolves a player ID; `Game.GetPlayerAt(index)` uses a zero-based
+`Game.GetPlayer(id)` and `Game:GetPlayer(id)` both resolve a player ID. Bound host
+methods support both dot and colon calls. `Game.GetPlayerAt(index)` uses a zero-based
 index below `Game.PlayerCount`. `GetRoom`, `GetFirearmState`, `GetHumeShield` and
 `GetStamina` query current client-known state. `SpectatedPlayer`, `RoundPhase`,
 `IsRoundStarted` and `IsRoundEnded` are also available. Re-resolve objects after
@@ -164,17 +169,34 @@ does not scan other mods, Unity assemblies or server-provided assemblies.
 ```lua
 local item = ItemType.KeycardJanitor
 assert(item == Enums.ItemType.KeycardJanitor)
-assert(RoleTypeId.ClassD == Enums["Il2CppPlayerRoles.RoleTypeId"].ClassD)
--- Nested/ambiguous names always have an exact CLR identity lookup:
-local attack = Enums["Il2CppPlayerStatsSystem.Scp049DamageHandler+AttackType"]
+assert(RoleTypeId.ClassD == Enums.PlayerRoles.RoleTypeId.ClassD)
+assert(RoleTypeId.ClassD == Enums["PlayerRoles.RoleTypeId"].ClassD)
+local jump = ActionName.Jump
+local blastDoor = AlphaWarheadNukesitePanel.DiodeType.BlastDoor
+local attack = Scp049DamageHandler.AttackType
 ```
 
-Every enum has an `Enums["Full.Clr.Name"]` entry. A unique simple name also gets an
-`Enums.Name` alias; public top-level enums get a bare `Name` global when the name is
-unambiguous and unreserved. Nested enums do not expose their owner classes. All
-registry nodes and constants are read-only. Duplicate short names have no short
-alias, and their exact identities remain available. IL2CPP prefixes and `+` nested
-separators in canonical keys match the loaded interop metadata.
+Script-facing enum paths omit the leading `Il2Cpp` interop prefix and use `.` for
+nested types. Preferred names omit the parent namespace while retaining the C#
+declaring-type chain: `PlayerRoles.RoleTypeId` becomes `RoleTypeId`, and
+`AlphaWarheadNukesitePanel.DiodeType` retains its owner. Owner nodes expose only
+approved nested enum constants, not the owner's constructors, methods or fields.
+All registry nodes and constants are read-only. Every enum has a clean qualified
+lookup beneath `Enums`, using dotted nodes or one exact string key. Unambiguous
+preferred paths also work beneath `Enums`, such as `Enums.RoleTypeId` and
+`Enums.AlphaWarheadNukesitePanel.DiodeType`.
+
+Registration checks the complete enum batch before publishing names. Conflicting
+short paths do not receive ambiguous aliases; global paths also avoid reserved
+roots such as `Game`, `Output` and `math`. A clean qualified path supplies the
+global name when the preferred path is unavailable and the qualified root is
+valid. The qualified registry path shown in the generated definitions remains
+available, such as `Enums.PlayerStatsSystem.Scp049DamageHandler.AttackType`.
+Duplicate clean identities or an enum-versus-namespace conflict in the qualified
+tree reject the entire batch before registration. The catalog retains the original
+CLR identity separately for tooling and documentation.
+The generated [enum name table](LuaEnumNames.md) lists every approved C# enum and its
+script-facing names from the configured game assembly.
 
 Constants and enum-valued host results are canonical name strings, preserving
 64-bit values without Lua number rounding. Annotated methods and writable properties
@@ -196,8 +218,38 @@ The immutable catalog is the shared source for binding names and permissions, th
 reviewed surface baseline, [`ScriptAPI.json`](ScriptAPI.json), and the
 [`LuaLS definitions`](Anomaly.Client.Api.d.lua). It contains only the approved profile,
 with CLR identities, parameter/return types, write permissions, event operations,
-and XML documentation identifiers. Optional adjacent API XML summaries enrich exports.
+and XML documentation identifiers. Optional adjacent API XML summaries enrich exports,
+including readable names for referenced symbols and parameters.
 No exporter independently walks every public API member or constructs game objects.
+
+### Installed-version editor references
+
+Run `anomaly.luadefs [directory] [--force]` in the client console. Without a directory,
+the workspace is `<MelonLoader UserData>/Anomaly/LuaReferences/<game-version>/`.
+Relative directory arguments resolve beneath `Paths.AnomalyUserDataPath`; quote
+paths containing spaces. The command writes `.definitions/anomaly.lua` and a
+`.luarc.json` for Lua Language Server (`sumneko.lua`). The configuration uses Lua 5.2
+syntax and disables the stock built-in libraries; the definition file describes
+Anomaly's supported Basic, Math, Table and String functions. Open that workspace
+with LuaLS. For another authoring workspace, add the definitions directory to
+`workspace.library` and merge the generated `runtime.version` and `runtime.builtin`
+settings into its configuration. Both the definitions and sandbox configuration
+are needed to avoid suggestions for unavailable functions such as `io.open`,
+`require`, `print` or `string.dump`. These are inert editor references, not
+executable pack content.
+
+The LuaLS signatures support dot and colon calls. Non-flags enum results use the
+declared enum type; enum inputs remain strings for case-insensitive names, and
+flags results allow combined name strings. Event arguments use separate
+`EventSnapshot_<Type>` definitions throughout their copied object graphs. On a
+snapshot type with `IsDestroyed`, other fields are nullable because destroyed
+wrappers publish `nil`; live query types retain their ordinary scalar types.
+
+The command discovers the installed approved API metadata, including game-version
+enums, globals, typed properties, methods and events; it neither starts a VM nor
+requires a server connection. Existing editor configuration is preserved unless
+`--force` is supplied. Unchanged definitions are not rewritten; modified or stale
+definitions are regenerated.
 
 ## Calling scripts and delivering events
 
@@ -215,7 +267,8 @@ if (loaded.Succeeded)
 }
 ```
 
-Lua calls methods as `example:SetLabel("hello")`. C# calls named Lua functions through
+Lua calls methods as `example:SetLabel("hello")` or `example.SetLabel("hello")`.
+C# calls named Lua functions through
 `Invoke`, which creates a fresh cumulative budget for that entry point, including
 argument conversion. Source parsing/loading uses the same budgeted path. Failures
 retire the VM rather than resuming a partially unwound interpreter.
@@ -278,6 +331,8 @@ only approved read-only properties, exact runtime types, depth 8, 64 nodes, 4 Ki
 string and 16 KiB of accounted payload. They expose no methods, writes, reflection or
 conversion back to live CLR arguments. Destroyed wrappers publish `IsDestroyed = true`
 and `nil` for other properties instead of dereferencing dead native objects.
+LuaLS describes these frozen values separately from live wrappers; check nullable
+snapshot fields before arithmetic or other operations that require a scalar value.
 These are transport bounds, not a VM heap quota.
 Foreign-thread publication or invalid snapshots request owner-thread retirement
 without running Lua or reading game properties on the publishing thread. Queued
