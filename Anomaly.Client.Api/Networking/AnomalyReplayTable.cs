@@ -17,6 +17,20 @@ internal static class AnomalyReplayTable
         AnomalyInboundRateLimiter.CreateClientRaw();
     internal static AnomalyInboundRateLimiter PoseInboundRateLimiter { get; private set; } =
         AnomalyInboundRateLimiter.CreatePoseTraffic();
+    internal static BulkReplayState Bulk { get; private set; } = new BulkReplayState();
+    internal static AnomalyInboundRateLimiter BulkInboundRateLimiter { get; private set; } =
+        AnomalyInboundRateLimiter.CreateBulkTraffic();
+    private static AnomalyInboundRateLimiter _bulkRaw = AnomalyInboundRateLimiter.CreateClientBulkRaw();
+
+    internal static AnomalyInboundRateLimiter CurrentRawInboundRateLimiter =>
+        AnomalyMessaging.BulkReceiveExpected?.Invoke() == true ? _bulkRaw : RawInboundRateLimiter;
+
+    internal static void ResetBulk()
+    {
+        Bulk = new BulkReplayState();
+        BulkInboundRateLimiter = AnomalyInboundRateLimiter.CreateBulkTraffic();
+        _bulkRaw = AnomalyInboundRateLimiter.CreateClientBulkRaw();
+    }
 
     internal static void Reset()
     {
@@ -24,5 +38,6 @@ internal static class AnomalyReplayTable
         InboundRateLimiter = new AnomalyInboundRateLimiter();
         RawInboundRateLimiter = AnomalyInboundRateLimiter.CreateClientRaw();
         PoseInboundRateLimiter = AnomalyInboundRateLimiter.CreatePoseTraffic();
+        ResetBulk();
     }
 }

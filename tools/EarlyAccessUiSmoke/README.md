@@ -5,7 +5,7 @@ and captures engine screenshots. **Never include the harness or its test profile
 in release packages.** It runs only when `ANOMALY_UI_SMOKE_DIR` is set.
 
 **Current launch requirement:** every `Run-Smoke.ps1` call must pass
-`-UseModLaunch` and `-GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy'`.
+`-UseModLaunch` and `-GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory'`.
 The runner starts only that installation's `.modlaunch\SCPSL-ModLaunch.exe`.
 Never launch `SCPSL.exe` directly. Older scenario examples below retain their
 historical server/evidence paths; replace their client game path and add
@@ -15,7 +15,7 @@ historical server/evidence paths; replace their client game path and add
 
 Use PowerShell 7 on Windows, the repository's .NET build prerequisites, and a
 graphics-capable game session. The seed client must be the supported SCP:SL
-14.2.7/MelonLoader 0.7.3 installation, started once to generate its IL2CPP
+14.2.9/MelonLoader 0.7.3 installation, started once to generate its IL2CPP
 references. `Prepare-Game.ps1` requires `SCPSL.exe`, `GameAssembly.dll`,
 `version.dll`, `MelonLoader/net6/MelonLoader.dll`, and
 `MelonLoader/Il2CppAssemblies/Assembly-CSharp.dll` under that seed root.
@@ -65,7 +65,7 @@ with your reference layout. Environment properties are used here because
 `Run-Smoke.ps1` invokes its own builds and does not accept extra MSBuild arguments.
 
 ```powershell
-$env:AnomalyClientRoot = 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy'
+$env:AnomalyClientRoot = 'E:\Steam\steamapps\common\SCP Secret Laboratory'
 $env:AnomalyServerRoot = [IO.Path]::GetFullPath('../Server')
 
 dotnet build Anomaly.slnx -c Release -p:DeployLocal=false
@@ -76,6 +76,15 @@ dotnet build tools/EarlyAccessUiSmoke/EarlyAccessUiSmoke.csproj -c Release -p:De
     -EvidenceDirectory ./artifacts/news-ui-smoke/modlaunch-run-01 `
     -UseModLaunch -NewsOnly
 ```
+
+For the installed-version Lua reference command, use `-LuaDefinitions` instead
+of `-NewsOnly` and fresh evidence/backup directories. This menu-only scenario
+dispatches `anomaly.luadefs` into a quoted workspace beneath the evidence directory,
+checks existing `.luarc.json` preservation and explicit `--force` replacement,
+and parses the generated references with the installed private Lua engine.
+`lua-definitions-command.txt` records replies; `lua-definitions-result.json`
+records the installed game version and outcome. It does not start a server or
+write into the default developer workspace. Restore the test deployment afterward.
 
 The solution build includes the runtime, bootstrap, and ordinary starter required
 by preparation. If the reference layout differs, set `AnomalyClientInteropDir`,
@@ -98,7 +107,7 @@ Native game and unrelated mod hashes are recorded for restoration verification.
 Backup contents may contain private profiles; keep them local.
 
 The runner starts exactly
-`E:\Steam\steamapps\common\SCP Secret Laboratory - Copy\.modlaunch\SCPSL-ModLaunch.exe`
+`E:\Steam\steamapps\common\SCP Secret Laboratory\.modlaunch\SCPSL-ModLaunch.exe`
 with the game arguments and harness environment. The launcher passes that
 environment to its game child. The runner writes `launcher.pid` and returns
 after launch; this alone does not certify completion. It does not install a proxy,
@@ -139,7 +148,7 @@ scenarios:
 
 ```powershell
 ./tools/EarlyAccessUiSmoke/Run-Smoke.ps1 `
-    -GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy' `
+    -GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory' `
     -EvidenceDirectory ./artifacts/news-ui-smoke/modlaunch-run-01 `
     -UseModLaunch -NewsOnly
 ```
@@ -223,7 +232,7 @@ Add `-ClientScripting` to a local-host run through the authorized ModLaunch inst
 
 ```powershell
 ./tools/EarlyAccessUiSmoke/Run-Smoke.ps1 `
-    -GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy' `
+    -GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory' `
     -EvidenceDirectory ./artifacts/scripting-readiness/local-output-run `
     -UseModLaunch -LocalHosting -ClientScripting
 ```
@@ -339,7 +348,7 @@ $serverProcess.Id | Set-Content (Join-Path $serverEvidence 'server.pid')
 Get-NetUDPEndpoint -OwningProcess $serverProcess.Id | Select-Object LocalAddress,LocalPort
 
 ./tools/EarlyAccessUiSmoke/Run-Smoke.ps1 `
-    -GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy' `
+    -GameDirectory 'E:\Steam\steamapps\common\SCP Secret Laboratory' `
     -EvidenceDirectory ./artifacts/early-access/remote-lua-client-01 `
     -UseModLaunch -RemoteScripting -LoopbackServer '127.0.0.1:27988'
 ```

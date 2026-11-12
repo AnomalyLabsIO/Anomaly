@@ -40,7 +40,6 @@ jobs:
           dotnet restore Anomaly.slnx
           dotnet restore tools/PublicApiBaseline/PublicApiBaseline.csproj
           dotnet restore tools/ReferencePublicizer/ReferencePublicizer.csproj
-          dotnet restore tools/ReleaseManifest/ReleaseManifest.csproj
           dotnet restore tools/ReleasePackaging/ReleasePackaging.csproj
 
       - name: Run complete unsigned release gate twice

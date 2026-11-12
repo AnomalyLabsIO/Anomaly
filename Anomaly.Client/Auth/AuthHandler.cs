@@ -18,7 +18,6 @@ using Anomaly.Client.Api.Localization;
 using Anomaly.Client.Api.Modding;
 using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Components;
-using Anomaly.Client.Patches;
 using Anomaly.Shared.Auth;
 using Anomaly.Shared.Networking;
 using Il2CppMEC;
@@ -66,7 +65,6 @@ public static class AuthHandler
     internal static void Init()
     {
         AttemptGate.Invalidate();
-        PatchInvocationGuard.BeginAuthenticationScope();
         _connections.Clear();
         AdmissionSends.BeginScope();
         _phase2Sent = false;
@@ -311,10 +309,8 @@ public static class AuthHandler
                         keys.SessionId,
                         keys.TranscriptHash);
                 }
-                // Don't remove _connections[connectionKey] here — LiteNetLib calls
-                // GetConnectData twice per connect and the duplicate must
-                // still see the entry so it dedups instead of re-entering
-                // phase-1. OnDisconnected clears the entry after phase-2.
+                // Retain this attempt until its real disconnect boundary. The writer
+                // transaction gate protects reentry without resetting handshake state.
                 AdmissionSends.Current.PrepareWriter(writer.Pointer.ToInt64());
                 _phase2Sent = true;
             }
@@ -475,19 +471,48 @@ public static class AuthHandler
     /// <returns>true to run the original handler, false to skip it</returns>
     internal static bool RejectAuth(DisconnectInfo info)
     {
+        NetDataReader data = null;
+        try
+        {
+            var original = info.AdditionalData;
+            if (original != null)
+            {
+                var source = original.RawData;
+                int position = original._position;
+                int count = original.AvailableBytes;
+                if (source == null || position < 0 || count < 0 || position > source.Length - count)
+                    throw new InvalidDataException("Server rejection reader bounds were invalid.");
+                var snapshot = new byte[count];
+                for (int index = 0; index < count; index++)
+                    snapshot[index] = source[position + index];
+                data = new NetDataReader(snapshot);
+            }
+        }
+        catch (Exception exception)
+        {
+            MelonLogger.Error("Could not capture the server rejection: " + exception);
+            FailAuthentication(null, Tr.Get(TrKeys.Auth_ConnectionEnded, info.Reason),
+                Tr.Get(TrKeys.Auth_NoResponseAction), "AUTH-NO-RESPONSE");
+            return true;
+        }
+        // Parsing may prompt or schedule a reconnect. Keep the native refusal
+        // reader untouched, including when the original game handler must run.
+        return RejectAuth(info.Reason, data);
+    }
+
+    private static bool RejectAuth(DisconnectReason reason, NetDataReader data)
+    {
         AttemptGate.CompleteWriterAttempt();
-        MelonLogger.Warning($"Rejected Auth - Reason: {info.Reason}");
-        var data = info.AdditionalData;
         var server = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.clientAddress;
         var port = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorTransport.Singleton.port.ToString();
         var connectionKey = BuildTrustEndpoint(server, port);
         if (data == null)
         {
-            FailAuthentication(connectionKey, Tr.Get(TrKeys.Auth_ConnectionEnded, info.Reason),
+            MelonLogger.Warning($"Authentication connection ended without response data ({reason}).");
+            FailAuthentication(connectionKey, Tr.Get(TrKeys.Auth_ConnectionEnded, reason),
                 Tr.Get(TrKeys.Auth_NoResponseAction), "AUTH-NO-RESPONSE");
             return true;
         }
-        var pos = data._position;
         byte requestType;
         try
         {
@@ -495,13 +520,14 @@ public static class AuthHandler
         }
         catch (Exception ex)
         {
-            info.AdditionalData._position = pos;
             CancelAuthentication(connectionKey);
             MelonLogger.Error($"Server rejection did not contain a response code: {ex}");
-            ShowAuthenticationFailure(Tr.Get(TrKeys.Auth_ConnectionEnded, info.Reason),
+            ShowAuthenticationFailure(Tr.Get(TrKeys.Auth_ConnectionEnded, reason),
                 Tr.Get(TrKeys.Auth_NoResponseAction), "AUTH-NO-RESPONSE");
             return true;
         }
+        if (requestType == RetryCookieResponseCode || requestType == HandshakeResponseCode)
+            MelonLogger.Msg($"Authentication continuation received ({requestType}, {reason}).");
         if (requestType == RetryCookieResponseCode)
         {
             try
@@ -529,13 +555,13 @@ public static class AuthHandler
 
         if (requestType == (byte)RejectionReason.Custom)
         {
+            MelonLogger.Warning($"Server rejected authentication with a custom response ({reason}).");
             HandleCustomRejection(connectionKey, data);
             return false;
         }
 
         if (requestType != HandshakeResponseCode)
         {
-            info.AdditionalData._position = pos;
             CancelAuthentication(connectionKey);
             MelonLogger.Warning($"Server rejected with code {requestType}. Passing to base handler.");
             ShowAuthenticationFailure(Tr.Get(TrKeys.Auth_Rejected),
@@ -937,7 +963,6 @@ public static class AuthHandler
     private static void BeginUserConnectionScope()
     {
         AdmissionSends.BeginScope();
-        PatchInvocationGuard.BeginAuthenticationScope();
         _connections.Clear();
         CurrentServerFingerprint = null;
         UsingAnomalyAuth = false;
@@ -1121,19 +1146,24 @@ public static class AuthHandler
 
     public static void OnDisconnected()
     {
-        // LiteNetLib bypasses OnConncetionRefused for timeout/unreachable errors.
+        // LiteNetLib bypasses OnConncetionRefused for network failures and a
+        // connected peer's RemoteConnectionClose. The stock client ignores the
+        // latter's reason by checking DisconnectPeerCalled (the local event).
         // Its callback may originate off-thread, so only capture there and show
         // the terminal notice here, before ordinary main-thread teardown.
         try
         {
             var host = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorCore.Host;
-            bool transportFailed = TransportDisconnects.TryConsume(
-                AttemptGate.Generation, host?.Pointer.ToInt64() ?? 0, out string transportReason);
-            if (transportFailed && UsingAnomalyAuth)
+            bool observed = TransportDisconnects.TryConsumeNotice(
+                AttemptGate.Generation, host?.Pointer.ToInt64() ?? 0, out var notice);
+            if (observed && UsingAnomalyAuth)
             {
-                FailAuthentication(null, Tr.Get(TrKeys.Auth_NoResponse, transportReason),
-                    Tr.Get(TrKeys.Auth_ServerAvailabilityAction),
-                    "AUTH-NO-RESPONSE");
+                if (notice.Outcome == TransportDisconnectGate.Kind.ServerClosed)
+                    FailAuthentication(null, Tr.Get(TrKeys.Auth_ServerClosed, SanitizeDisplayText(notice.Reason)),
+                        Tr.Get(TrKeys.Auth_ServerClosedAction), "CONNECTION-SERVER-CLOSED");
+                else
+                    FailAuthentication(null, Tr.Get(TrKeys.Auth_NoResponse, notice.Reason),
+                        Tr.Get(TrKeys.Auth_ServerAvailabilityAction), "AUTH-NO-RESPONSE");
             }
         }
         catch (Exception exception)
@@ -1182,18 +1212,34 @@ public static class AuthHandler
         MelonLogger.Msg("OnDisconnected");
     }
 
-    internal static void ObserveTransportDisconnect(NetPeer peer, DisconnectReason reason)
+    internal static void ObserveTransportDisconnect(NetPeer peer, DisconnectInfo info)
     {
         int generation = AttemptGate.Generation;
         var host = Il2CppMirror.LiteNetLib4Mirror.LiteNetLib4MirrorCore.Host;
         // Native peer/manager identity rejects late events from an older transport,
         // including when a same-generation authenticated reconnect has begun.
         if (peer == null || host == null || peer.NetManager == null) return;
+        long currentHost = host.Pointer.ToInt64(), peerHost = peer.NetManager.Pointer.ToInt64();
+        if (currentHost != peerHost) return;
+        var reason = info.Reason;
+        if (reason == DisconnectReason.RemoteConnectionClose)
+        {
+            var reader = info.AdditionalData;
+            if (reader == null) return;
+            var source = reader.RawData;
+            int position = reader._position, count = reader.AvailableBytes;
+            if (source == null || position < 0 || count <= 0 || count > StockDisconnectReason.MaximumPayloadBytes ||
+                position > source.Length - count) return;
+            var snapshot = new byte[count];
+            for (int index = 0; index < count; index++) snapshot[index] = source[position + index];
+            TransportDisconnects.ObserveServerClose(generation, currentHost, peerHost, snapshot);
+            return;
+        }
         bool networkFailure = reason == DisconnectReason.ConnectionFailed
             || reason == DisconnectReason.Timeout
             || reason == DisconnectReason.HostUnreachable
             || reason == DisconnectReason.NetworkUnreachable;
-        TransportDisconnects.Observe(generation, host.Pointer.ToInt64(), peer.NetManager.Pointer.ToInt64(),
+        TransportDisconnects.Observe(generation, currentHost, peerHost,
             networkFailure, reason.ToString());
     }
 

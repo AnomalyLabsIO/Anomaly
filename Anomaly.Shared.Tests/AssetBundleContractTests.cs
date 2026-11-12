@@ -206,12 +206,12 @@ public sealed class AssetBundleContractTests
     }
 
     private static AssetPackIndex Pack(params PackAssetEntry[] assets) => new AssetPackIndex {
-        PackId = "example:pack", Namespace = "example", BundleFile = "pack.bundle", BundleSha256 = new string('a', 64), BundleBytes = 100,
+        PackId = "example:pack", Namespace = "example", BundleFile = "pack.bundle", BundleSha256 = new string('a', 64), BundleBytes = 100, DecodedBytes = 1024,
         Assets = assets.ToList() };
     private static PackAssetEntry Texture(string address) => new PackAssetEntry { Address = address, EntryName = address, Kind = "Texture2D", Width = 16, Height = 16 };
     private static PackAssetEntry Audio(string address, int frames, int rate) => new PackAssetEntry { Address = address, EntryName = address, Kind = "AudioClip", SampleFrames = frames, SampleRate = rate, Channels = 1 };
     private static PackAssetEntry Mesh() => new PackAssetEntry { Address = "mods/example/mesh", EntryName = "mods/example/mesh", Kind = "Mesh", VertexCount = 4, TriangleCount = 2 };
-    private static CatalogPack CatalogPack() => new CatalogPack { PackId = "example:pack", IndexHash = Enumerable.Repeat((byte)1, 32).ToArray(), BundleHash = Enumerable.Repeat((byte)2, 32).ToArray(), IndexSize = 100, BundleSize = 100 };
+    private static CatalogPack CatalogPack() => new CatalogPack { PackId = "example:pack", IndexHash = Enumerable.Repeat((byte)1, 32).ToArray(), BundleHash = Enumerable.Repeat((byte)2, 32).ToArray(), IndexSize = 100, BundleSize = 100, DecodedBytes = 1024 };
     private static byte[] Json(AssetPackIndex index)
     {
         var json = JObject.FromObject(index);

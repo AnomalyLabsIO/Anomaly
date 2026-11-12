@@ -373,6 +373,7 @@
 
 	<ItemGroup>
 		<Compile Include="Core.cs" />
+		<Compile Include="Core.RequiredPatches.cs" />
 		<Compile Include="Patches\Runtime\NativeScriptStringPatch.cs" />
         <Compile Include="Internal\Poses\PosePresentationLoop.cs" />
         <Compile Include="Internal\Poses\PoseReceiptLedger.cs" />
@@ -438,6 +439,9 @@
         <Compile Include="Components\News\NewsDiagnosticsPresenter.cs" />
 		<Compile Include="FileTransfer\ChunkBuffer.cs" />
 		<Compile Include="FileTransfer\FileTransferClient.cs" />
+		<Compile Include="FileTransfer\FileReceiveWorker.cs" />
+		<Compile Include="Assets\PreparedPackWarmup.cs" />
+		<Compile Include="Assets\BundleCopyBudget.cs" />
 		<Compile Include="Internal\Bootstrap\ClientRuntime.cs" />
 		<Compile Include="Internal\Bootstrap\ScriptingBootstrap.cs" />
         <Compile Include="Internal\Bootstrap\ScriptTextOverlay.cs" />
@@ -473,7 +477,6 @@
 		<Compile Include="Internal\SilentRoleChange.cs" />
 		<Compile Include="Internal\Stats\HealthStateTracker.cs" />
 		<Compile Include="Patches\Input\VirtualInputPatches.cs" />
-		<Compile Include="Patches\PatchInvocationGuard.cs" />
 		<Compile Include="Patches\Audio\CassieLineSourceSchedulePatch.cs" />
 		<Compile Include="Patches\Audio\AudioSourcePoolManagerPatch.cs" />
 		<Compile Include="Patches\Auth\NetDataWriterPut.cs" />
@@ -522,6 +525,8 @@
 		<Compile Include="Patches\Input\FpcJumpControllerPatch.cs" />
 		<Compile Include="Patches\Input\FpcNoclipPatch.cs" />
 		<Compile Include="Patches\Voice\VoiceMessageReadersWritersPatch.cs" />
+		<Compile Include="Internal\Networking\BulkTransportRuntime.cs" />
+		<Compile Include="Patches\Mirror\BulkTransportPatches.cs" />
 		<Compile Include="Patches\Voice\VoiceTransceiverPatch.cs" />
 		<Compile Include="Patches\Visibility\ClientVisibilityPatches.cs" />
 	</ItemGroup>

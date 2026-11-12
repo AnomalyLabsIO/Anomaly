@@ -85,6 +85,7 @@ internal static class ConnectionContentBootstrap
             case FileManifestMessage:
             case FileChunkMessage:
             case FileTransferCompleteMessage:
+            case FileTransferStatusMessage:
                 FileTransferClient.ReceiveBootstrap(message);
                 break;
             default:

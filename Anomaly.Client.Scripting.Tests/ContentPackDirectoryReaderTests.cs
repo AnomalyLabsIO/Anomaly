@@ -248,6 +248,7 @@ public sealed class ContentPackDirectoryReaderTests : IDisposable
         var index = new AssetPackIndex
         {
             PackId = "example:panel_assets", Namespace = "example", BundleFile = "pack.bundle", BundleSha256 = new string('a', 64), BundleBytes = 100,
+            DecodedBytes = 16 * 16 * 4, // Synthetic metadata for the one declared RGBA32 texture; capture never reads bundle bodies.
             Assets = { new PackAssetEntry { Address = "mods/example/logo", EntryName = "mods/example/logo", Kind = "Texture2D", Width = 16, Height = 16 } }
         };
         var json = JObject.FromObject(index);

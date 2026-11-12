@@ -18,26 +18,99 @@ public sealed class ConnectionContentBootstrapTests : IDisposable
     private static readonly byte[] SessionId = Enumerable.Repeat((byte)0x33, 16).ToArray();
     private static readonly byte[] Transcript = Enumerable.Repeat((byte)0x44, 32).ToArray();
 
+    [Theory]
+    [InlineData("Content transfer failed: available upload capacity cannot complete this request within the content admission deadline")]
+    [InlineData(null)]
+    public void ContentRefusalUsesStockDisconnectReasonAfterRevokingOwnership(string reason)
+    {
+        var connection = Start();
+        var manager = new Mirror.LiteNetLib4Mirror.LiteNetLib4MirrorNetworkManager();
+        var previous = NetworkManager.singleton;
+        NetworkManager.singleton = manager;
+        try
+        {
+            bool keysAtDisconnect = true;
+            connection.BeforeDisconnect = () => keysAtDisconnect = AuthenticatedTransportSessions.IsActiveConnection(connection);
+            ConnectionBootstrap.Reject(connection, reason);
+            Assert.False(keysAtDisconnect);
+            Assert.Equal(reason ?? "Required connection content was rejected.", manager.LastDisconnectReason);
+            Assert.True(connection.Disconnected);
+            Assert.False(ConnectionContentBootstrap.HasPendingAcquisition);
+        }
+        finally { NetworkManager.singleton = previous; }
+    }
+
+    [Fact]
+    public void ThrowingStockDisconnectCannotLeakItsReasonIntoAnotherConnection()
+    {
+        var connection = Start();
+        connection.ThrowOnDisconnect = true;
+        var previousManager = NetworkManager.singleton;
+        var previousReason = Mirror.LiteNetLib4Mirror.LiteNetLib4MirrorServer.DisconnectMessage;
+        NetworkManager.singleton = new Mirror.LiteNetLib4Mirror.LiteNetLib4MirrorNetworkManager();
+        Mirror.LiteNetLib4Mirror.LiteNetLib4MirrorServer.DisconnectMessage = "outer owner";
+        try
+        {
+            ConnectionBootstrap.Reject(connection, "Rejected request");
+            Assert.Equal("outer owner", Mirror.LiteNetLib4Mirror.LiteNetLib4MirrorServer.DisconnectMessage);
+            Assert.False(AuthenticatedTransportSessions.IsActiveConnection(connection));
+            Assert.False(ConnectionContentBootstrap.HasPendingAcquisition);
+            Assert.Equal(1, connection.DisconnectCount);
+        }
+        finally
+        {
+            NetworkManager.singleton = previousManager;
+            Mirror.LiteNetLib4Mirror.LiteNetLib4MirrorServer.DisconnectMessage = previousReason;
+        }
+    }
+
+    [Fact]
+    public void ContentRefusalReasonStaysWithinStockDisconnectPacketBudget()
+    {
+        var connection = Start();
+        var manager = new Mirror.LiteNetLib4Mirror.LiteNetLib4MirrorNetworkManager();
+        var previous = NetworkManager.singleton;
+        NetworkManager.singleton = manager;
+        try
+        {
+            ConnectionBootstrap.Reject(connection, new string('\u263a', 2000));
+            Assert.EndsWith("...", manager.LastDisconnectReason);
+            Assert.Equal(160, manager.LastDisconnectReason.Length);
+            Assert.True(System.Text.Encoding.UTF8.GetByteCount(manager.LastDisconnectReason) <= 480);
+            Assert.Equal(1, connection.DisconnectCount);
+        }
+        finally { NetworkManager.singleton = previous; }
+    }
+
     [Fact]
     public void ExactConsentCacheRequestAndActivationCompleteBeforePlayerReadiness()
     {
         var connection = Start();
         Assert.False(connection.isReady);
         Assert.False(ConnectionContentBootstrap.IsComplete(connection));
+        Assert.True(ConnectionContentBootstrap.HasPendingAcquisition);
         var offer = Offer(connection);
         Send(connection, Decision(offer.Catalog), 1);
         Send(connection, new FileRequestMessage { SessionId = offer.Manifest.SessionId }, 2);
         Assert.False(ConnectionContentBootstrap.IsComplete(connection));
+        Assert.True(ConnectionContentBootstrap.HasPendingAcquisition);
         Assert.DoesNotContain(Messages(connection), message => message is ContentBootstrapReadyMessage);
         Send(connection, Activation(offer.Catalog), 3);
         Assert.True(ConnectionContentBootstrap.IsComplete(connection));
+        // Content-ready confirmation is only enqueued here. Keep normal frames
+        // through native Ready/AddPlayer and the completed offer's hub adoption.
+        Assert.True(ConnectionContentBootstrap.HasPendingAcquisition);
         Assert.False(connection.isReady);
         Assert.True(ConnectionContentBootstrap.RequireComplete(connection));
         var ready = Assert.Single(Messages(connection).OfType<ContentBootstrapReadyMessage>());
         Assert.Equal(offer.Manifest.SessionId, ready.SessionId);
         Assert.Equal(offer.Catalog.CatalogSha256, ready.CatalogSha256);
         Assert.Equal(offer.Manifest.ManifestSha256, ready.ManifestSha256);
-        Assert.True(AuthenticatedTransportSessions.TryAdoptConnection(new ReferenceHub { connectionToClient = connection }, out _));
+        var hub = new ReferenceHub { connectionToClient = connection };
+        Assert.True(AuthenticatedTransportSessions.TryAdoptConnection(hub, out _));
+        Assert.True(ConnectionContentBootstrap.HasPendingAcquisition);
+        Assert.True(ConnectionContentBootstrap.TryGetCompletedCatalog(hub, out _));
+        Assert.False(ConnectionContentBootstrap.HasPendingAcquisition);
     }
 
     [Theory]
@@ -72,6 +145,7 @@ public sealed class ConnectionContentBootstrapTests : IDisposable
         connection.BeforeDisconnect = () => keysAtDisconnect = AuthenticatedTransportSessions.IsActiveConnection(connection);
         Send(connection, invalid, counter);
         Assert.False(keysAtDisconnect);
+        Assert.False(ConnectionContentBootstrap.HasPendingAcquisition);
         Assert.True(connection.Disconnected);
         Assert.False(ConnectionContentBootstrap.IsComplete(connection));
         Send(connection, invalid, counter + 1);
@@ -130,6 +204,7 @@ public sealed class ConnectionContentBootstrapTests : IDisposable
         Assert.True(ConnectionContentBootstrap.IsComplete(connection));
         ConnectionContentBootstrap.OnGenerationStarted();
         Assert.False(ConnectionContentBootstrap.IsComplete(connection));
+        Assert.True(ConnectionContentBootstrap.HasPendingAcquisition);
         int count = connection.Sent.Count;
         MEC.Timing.Advance(); MEC.Timing.Advance();
         Assert.Equal(count, connection.Sent.Count);

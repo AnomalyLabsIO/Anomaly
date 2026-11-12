@@ -47,7 +47,7 @@ using System.Reflection;
 
 namespace Anomaly.Client;
 
-public class Core : MelonMod
+public partial class Core : MelonMod
 {
     public static Core Instance { get; private set; }
     private bool _clientRuntimeReady;
@@ -59,20 +59,6 @@ public class Core : MelonMod
     private bool _offlineAuthReady;
     private static RequiredClientPatch[] _mandatoryPatchDescriptors;
     private static string _mandatoryPatchOwner;
-
-    private readonly struct RequiredClientPatch
-    {
-        internal readonly MethodBase Target;
-        internal readonly MethodInfo Patch;
-        internal readonly HarmonyPatchType Kind;
-
-        internal RequiredClientPatch(MethodBase target, MethodInfo patch, HarmonyPatchType kind)
-        {
-            Target = target;
-            Patch = patch;
-            Kind = kind;
-        }
-    }
 
     internal static bool RequiredConnectionFeaturesReady =>
         Instance != null && Instance._offlineAuthReady && Instance._mandatoryPatchesReady &&
@@ -233,6 +219,16 @@ public class Core : MelonMod
             typeof(EncryptedChannelManager),
             nameof(EncryptedChannelManager.TrySendMessageToServer),
             typeof(string), typeof(EncryptedChannelManager.EncryptedChannel));
+        var byteSendTarget = OptionalByteArrayClientSendPatch.TargetMethod();
+        if (byteSendTarget != null)
+        {
+            var byteSendPrefix = AccessTools.DeclaredMethod(typeof(OptionalByteArrayClientSendPatch),
+                nameof(OptionalByteArrayClientSendPatch.OnPackBytes));
+            if (byteSendPrefix == null)
+                throw new MissingMethodException(typeof(OptionalByteArrayClientSendPatch).FullName,
+                    nameof(OptionalByteArrayClientSendPatch.OnPackBytes));
+            patches.Add(new RequiredClientPatch(byteSendTarget, byteSendPrefix, HarmonyPatchType.Prefix));
+        }
         AddRequiredPatch(patches, typeof(Patches.Mirror.NetworkManagerRegisterClientMessages), "OnRegister", true,
             typeof(NetworkManager), nameof(NetworkManager.RegisterClientMessages));
         AddRequiredPatch(patches, typeof(CustomNetworkManagerPatch), nameof(CustomNetworkManagerPatch.OnClientConnectPostfix), true,
@@ -255,6 +251,12 @@ public class Core : MelonMod
             throw new MissingMethodException(typeof(AdmissionTransportGuard).FullName, "Prefix");
         foreach (var target in AdmissionTransportGuard.TargetMethods())
             patches.Add(new RequiredClientPatch(target, admissionPrefix, HarmonyPatchType.Prefix));
+        AddRequiredPatch(patches, typeof(Patches.Mirror.BulkTransportOptionsPatch), "Prefix", false,
+            typeof(LiteNetLib4MirrorCore), nameof(LiteNetLib4MirrorCore.SetOptions), typeof(bool));
+        AddRequiredPatch(patches, typeof(Patches.Mirror.BulkTransportOptionsPatch), "Postfix", true,
+            typeof(LiteNetLib4MirrorCore), nameof(LiteNetLib4MirrorCore.SetOptions), typeof(bool));
+        AddRequiredPatch(patches, typeof(Patches.Mirror.BulkBatchThresholdPatch), "Prefix", false,
+            typeof(Il2CppMirror.Transport), nameof(Il2CppMirror.Transport.GetBatchThreshold), typeof(int));
         return patches.ToArray();
     }
 
@@ -272,16 +274,6 @@ public class Core : MelonMod
             postfix ? HarmonyPatchType.Postfix : HarmonyPatchType.Prefix));
     }
 
-    private static void RequireExactPatch(string owner, RequiredClientPatch required)
-    {
-        HarmonyLib.Patches patchInfo = HarmonyLib.Harmony.GetPatchInfo(required.Target);
-        var patches = required.Kind == HarmonyPatchType.Postfix ? patchInfo?.Postfixes : patchInfo?.Prefixes;
-        if (patches == null ||
-            !patches.Any(patch => patch.owner == owner && patch.PatchMethod == required.Patch))
-            throw new InvalidOperationException(
-                $"Mandatory Anomaly patch is missing: {required.Target.DeclaringType?.FullName}.{required.Target.Name} -> {required.Patch.Name}.");
-    }
-
     public override void OnUpdate()
     {
         if (Bootstrap.Core.State != Bootstrap.StartupState.Ready || !Bootstrap.RuntimeGuard.HeartbeatFresh)
@@ -297,6 +289,7 @@ public class Core : MelonMod
         }
         AuthHandler.UpdateIntegrityMonitoring();
         PoseRuntime.Update();
+        UpdateFeature("file-transfer", FileTransfer.FileTransferClient.Tick, failClosed: true);
         UpdateFeature("asset-bundles", AssetBundleManager.Update, failClosed: true);
         if (_clientRuntimeReady)
             _clientRuntimeReady = UpdateFeature("runtime-hooks", ClientRuntime.Update, failClosed: true);
@@ -306,6 +299,7 @@ public class Core : MelonMod
 
     public override void OnApplicationQuit()
     {
+        ShutdownFeature("file-transfer", FileTransfer.FileTransferClient.Shutdown);
         ShutdownFeature("player-poses", PoseRuntime.Shutdown);
         if (_managedModsReady) ShutdownFeature("managed-mods", ManagedModRuntime.Shutdown);
         if (_clientRuntimeReady) ShutdownFeature("runtime-hooks", ClientRuntime.Shutdown);

@@ -33,11 +33,65 @@ public sealed class CustomNetworkManager
     public void OnServerDisconnect(Mirror.NetworkConnectionToClient connection) { }
 }
 
+// Deterministic boundary for the inspected stock idle transitions. The tests
+// install the real Harmony guards; this does not emulate Unity scheduling.
+public sealed class IdleMode
+{
+    public static bool IdleModeActive;
+    public static bool PauseIdleMode;
+    public static bool IdleModeEnabled = true;
+    public static bool IdleTimerReady;
+    public static bool PreauthTimerReady;
+    public static int TimerConsumptions;
+    public static int TargetFrameRate = 60;
+    public static float TimeScale = 1;
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    public static void SetIdleMode(bool state) => SetIdleMode(state, false);
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void SetIdleMode(bool state, bool force)
+    {
+        if ((!state || !PauseIdleMode || force) && (state != IdleModeActive || force) && (!state || IdleModeEnabled))
+        {
+            IdleModeActive = state;
+            TargetFrameRate = state ? 1 : 60;
+            TimeScale = state ? .01f : 1;
+        }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void FixedUpdate()
+    {
+        if (IdleTimerReady && !PauseIdleMode && PreauthTimerReady)
+        {
+            IdleTimerReady = PreauthTimerReady = false;
+            TimerConsumptions++;
+            if (ReferenceHub.AllHubs.Count <= 1) SetIdleMode(true);
+        }
+    }
+
+    public void Tick() => FixedUpdate();
+    public static void ForceIdle() => SetIdleMode(true, true);
+    internal static void Reset()
+    {
+        IdleModeActive = PauseIdleMode = IdleTimerReady = PreauthTimerReady = false;
+        IdleModeEnabled = true;
+        TimerConsumptions = 0; TargetFrameRate = 60; TimeScale = 1;
+    }
+}
+
 namespace GameCore { internal static class BoundaryMarker { } }
 namespace UnityEngine { internal static class BoundaryMarker { } public sealed class GameObject { } }
 
 namespace Mirror
 {
+    public abstract class Transport
+    {
+        public static Transport active;
+        public List<int> FlushedChannels { get; } = new();
+        public virtual int GetBatchThreshold(int channelId) => int.MaxValue;
+    }
     public class NetworkConnection { }
     public class NetworkConnectionToClient : NetworkConnection
     {
@@ -45,6 +99,7 @@ namespace Mirror
         public bool isReady;
         public int DisconnectCount;
         public bool ThrowOnDisconnect;
+        public bool ThrowOnSend;
         public bool Disconnected;
         public Action BeforeDisconnect;
         public List<EncryptedChannelManager.EncryptedMessageOutside> Sent { get; } = new();
@@ -55,7 +110,15 @@ namespace Mirror
             if (ThrowOnDisconnect) throw new InvalidOperationException("injected disconnect failure");
             Disconnected = true;
         }
-        public void Send(EncryptedChannelManager.EncryptedMessageOutside message, int channel) => Sent.Add(message);
+        public void Send(EncryptedChannelManager.EncryptedMessageOutside message, int channel)
+        {
+            if (ThrowOnSend) throw new InvalidOperationException("injected send failure");
+            Sent.Add(message);
+        }
+        public void FlushBatch(ArraySegment<byte> segment, int channelId) => SendToTransport(segment, channelId);
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        protected virtual void SendToTransport(ArraySegment<byte> segment, int channelId) =>
+            Transport.active.FlushedChannels.Add(channelId);
     }
     public sealed class LocalConnectionToClient : NetworkConnectionToClient { }
     public static class NetworkServer
@@ -66,6 +129,7 @@ namespace Mirror
     }
     public class NetworkManager
     {
+        public static NetworkManager singleton { get; set; }
         public virtual void OnServerReady(NetworkConnectionToClient conn) { }
         public virtual void OnServerAddPlayer(NetworkConnectionToClient conn) { }
     }
@@ -113,11 +177,24 @@ namespace NetworkManagerUtils.Dummies
 
 namespace Mirror.LiteNetLib4Mirror
 {
-    public sealed class LiteNetLib4MirrorTransport
+    public sealed class LiteNetLib4MirrorNetworkManager : Mirror.NetworkManager
     {
+        public string LastDisconnectReason { get; private set; }
+        public void DisconnectConnection(Mirror.NetworkConnectionToClient connection, string message = null)
+        {
+            LastDisconnectReason = message;
+            LiteNetLib4MirrorServer.DisconnectMessage = message;
+            connection.Disconnect();
+            LiteNetLib4MirrorServer.DisconnectMessage = null;
+        }
+    }
+
+    public sealed class LiteNetLib4MirrorTransport : Mirror.Transport
+    {
+        public LiteNetLib4MirrorTransport() => Mirror.Transport.active = this;
         public static LiteNetLib4MirrorTransport Singleton { get; } = new();
         public int MaximumPacketBytes { get; set; } = int.MaxValue;
-        public LiteNetLib.DeliveryMethod[] channels { get; } =
+        public LiteNetLib.DeliveryMethod[] channels { get; set; } =
         {
             LiteNetLib.DeliveryMethod.ReliableOrdered, LiteNetLib.DeliveryMethod.Unreliable,
             LiteNetLib.DeliveryMethod.Sequenced, LiteNetLib.DeliveryMethod.ReliableSequenced,
@@ -130,16 +207,24 @@ namespace Mirror.LiteNetLib4Mirror
         public IPEndPoint EndPoint { get; set; }
         public LiteNetLib.ConnectionState ConnectionState { get; set; } = LiteNetLib.ConnectionState.Connected;
         public int Mtu { get; set; } = 1200;
+        public int RoundTripTime { get; set; } = 100;
         public int ReliableQueuedPackets { get; set; }
+        public Dictionary<byte, int> QueuedByChannel { get; } = new();
         public bool AcceptSends { get; set; } = true;
         public List<byte[]> SentPackets { get; } = new();
         public int GetMaxSinglePacketSize(LiteNetLib.DeliveryMethod delivery) =>
             Mtu - (delivery == LiteNetLib.DeliveryMethod.Unreliable ? 1 : 4);
         public int GetPacketsCountInReliableQueue(byte channel, bool ordered) =>
-            channel == 0 ? ReliableQueuedPackets : 0;
+            QueuedByChannel.TryGetValue(channel, out int count) ? count : channel == 0 ? ReliableQueuedPackets : 0;
+    }
+    public static class LiteNetLib4MirrorCore
+    {
+        public static LiteNetLib.NetManager Host { get; set; } = new();
+        private static void SetOptions(bool server) => Host.ChannelsCount = (byte)LiteNetLib4MirrorTransport.Singleton.channels.Length;
     }
     public static class LiteNetLib4MirrorServer
     {
+        internal static string DisconnectMessage;
         public static Dictionary<int, Peer> Peers { get; } = new();
         public static bool Send(int connectionId, LiteNetLib.DeliveryMethod delivery,
             byte[] data, int start, int length, byte channel)
@@ -157,6 +242,11 @@ namespace LiteNetLib
 {
     public enum DeliveryMethod { ReliableUnordered, Sequenced, ReliableOrdered, ReliableSequenced, Unreliable }
     public enum ConnectionState { Connected, Disconnected }
+    public sealed class NetManager
+    {
+        public byte ChannelsCount { get; set; } = 5;
+        public Mirror.LiteNetLib4Mirror.Peer FirstPeer { get; set; }
+    }
 }
 
 namespace Anomaly.Server

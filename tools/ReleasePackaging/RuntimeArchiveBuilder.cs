@@ -116,6 +116,8 @@ internal static partial class ReleasePackageBuilder
             index.BundleSha256,
             index.Assets.Select(asset => new BundleAssetExpectation(
                 asset.Address, asset.EntryName, classId: 28, width: asset.Width, height: asset.Height))));
+        if (validated.TotalDecodedBytes != index.DecodedBytes)
+            throw new InvalidDataException("Skin index decoded resource summary disagrees with the validated bundle.");
         Console.WriteLine($"Validated logo/background skin pack '{index.PackId}'.");
     }
 

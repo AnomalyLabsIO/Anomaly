@@ -18,6 +18,14 @@ public sealed class DescriptorItemLifecycleTests : IDisposable
     private readonly List<IDisposable> _registrations = new();
     private string PackRoot => Path.Combine(_root, "example", "panel");
 
+    public DescriptorItemLifecycleTests()
+    {
+        // Each case owns its first freeze. Other fixtures can leave a retained
+        // snapshot or frozen registry in these shared server seams.
+        ServerAssetManager.SetAssets();
+        ContentRegistry.Reset();
+    }
+
     [Fact]
     public void OneDescriptorComposesScriptsAssetsAndNativeItemsAtFirstOffer()
     {
@@ -180,8 +188,8 @@ public sealed class DescriptorItemLifecycleTests : IDisposable
             File.WriteAllText(Path.Combine(PackRoot, "main.lua"), "return 1", new UTF8Encoding(false));
             byte[] bundle = { 1, 2, 3 };
             File.WriteAllBytes(Path.Combine(PackRoot, "content.bundle"), bundle);
-            string index = "{\"SchemaVersion\":1,\"PackId\":\"example:assets\",\"Namespace\":\"example\",\"UnityVersion\":\"6000.0.43f1\",\"Platform\":\"windows-x64\",\"GameProfile\":\"" + AssetPackIndex.SupportedGameProfile +
-                "\",\"BundleFile\":\"content.bundle\",\"BundleSha256\":\"" + ScriptSourceValidator.HashHex(bundle) + "\",\"BundleBytes\":3,\"Assets\":[{\"Address\":\"mods/example/icon\",\"EntryName\":\"mods/example/icon\",\"Kind\":\"Texture2D\",\"Width\":2,\"Height\":2}],\"Visuals\":[]}";
+            string index = "{\"SchemaVersion\":2,\"PackId\":\"example:assets\",\"Namespace\":\"example\",\"UnityVersion\":\"6000.0.43f1\",\"Platform\":\"windows-x64\",\"GameProfile\":\"" + AssetPackIndex.SupportedGameProfile +
+                "\",\"BundleFile\":\"content.bundle\",\"BundleSha256\":\"" + ScriptSourceValidator.HashHex(bundle) + "\",\"BundleBytes\":3,\"DecodedBytes\":16,\"Assets\":[{\"Address\":\"mods/example/icon\",\"EntryName\":\"mods/example/icon\",\"Kind\":\"Texture2D\",\"Width\":2,\"Height\":2}],\"Visuals\":[]}";
             File.WriteAllText(Path.Combine(PackRoot, "content.index.json"), index, new UTF8Encoding(false));
             if (items.Count == 1 && (string)items[0]["Key"] == "example:coin") items[0]["IconAddress"] = "mods/example/icon";
         }
@@ -192,9 +200,11 @@ public sealed class DescriptorItemLifecycleTests : IDisposable
         new JObject { ["SchemaVersion"] = 1, ["Items"] = items }.ToString(), new UTF8Encoding(false));
     public void Dispose()
     {
+        ServerAssetManager.SetAssets();
         ContentRegistry.Reset();
         ServerContentRegistrar.AcceptItems = true;
         foreach (var registration in _registrations) registration.Dispose();
+        ServerAssetManager.SetAssets();
         string spool = Path.Combine(_root, ".anomaly-spool");
         Assert.True(System.Threading.SpinWait.SpinUntil(() => !Directory.Exists(spool) || !Directory.EnumerateDirectories(spool).Any(), 5000));
         if (Directory.Exists(_root)) Directory.Delete(_root, true);

@@ -44,9 +44,9 @@ public sealed class ContentPackOrderingTests : IDisposable
         string hex;
         using (var sha = SHA256.Create()) hex = BitConverter.ToString(sha.ComputeHash(bundle)).Replace("-", "").ToLowerInvariant();
         File.WriteAllText(Path.Combine(pack, "content.index.json"),
-            "{\"SchemaVersion\":1,\"PackId\":\"example:" + component + "_assets\",\"Namespace\":\"example\"," +
+            "{\"SchemaVersion\":2,\"PackId\":\"example:" + component + "_assets\",\"Namespace\":\"example\"," +
             "\"UnityVersion\":\"6000.0.43f1\",\"Platform\":\"windows-x64\",\"GameProfile\":\"scpsl-14.2.7-unity-6000.0.43f1-windows-x64-v1\"," +
-            "\"BundleFile\":\"content.bundle\",\"BundleSha256\":\"" + hex + "\",\"BundleBytes\":3,\"Assets\":[{" +
+            "\"BundleFile\":\"content.bundle\",\"BundleSha256\":\"" + hex + "\",\"BundleBytes\":3,\"DecodedBytes\":1024,\"Assets\":[{" +
             "\"Address\":\"mods/example/" + wrapper + "/icon\",\"EntryName\":\"mods/example/" + wrapper + "/icon\",\"Kind\":\"Texture2D\",\"Width\":16,\"Height\":16}]}", new UTF8Encoding(false));
         File.WriteAllText(Path.Combine(pack, "pack.json"),
             "{\"SchemaVersion\":1,\"PackId\":\"example:" + wrapper + "\",\"Version\":\"1.0.0\"," +

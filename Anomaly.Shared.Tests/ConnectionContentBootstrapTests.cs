@@ -34,6 +34,32 @@ public sealed class ConnectionContentBootstrapTests : IDisposable
         ConnectionContentBootstrap.Loaded(1, Hash(1), Hash(2), true);
     }
 
+    [Theory]
+    [InlineData("connection")]
+    [InlineData("crypto")]
+    [InlineData("generation")]
+    public void MessageAdmissionRequiresTheExactPreparedAndConfirmedConnection(string replacement)
+    {
+        ConnectionContentBootstrap.BeginFacilityGeneration(1);
+        InitializeContent();
+        Assert.False(ConnectionContentBootstrap.IsAdmitted);
+        AnomalyMessaging.ContentBootstrapMessageReceived(new ContentBootstrapReadyMessage
+        { SessionId = 1, CatalogSha256 = Hash(1), ManifestSha256 = Hash(2) });
+        Assert.False(ConnectionContentBootstrap.IsAdmitted);
+        FacilityRecipeClient.IsReady = true;
+        ConnectionContentBootstrap.TryRelease();
+        Assert.True(ConnectionContentBootstrap.IsAdmitted);
+        ScriptingBootstrap.ScriptsReady = false;
+        Assert.False(ConnectionContentBootstrap.IsAdmitted);
+        ScriptingBootstrap.ScriptsReady = true;
+        Assert.True(ConnectionContentBootstrap.IsAdmitted);
+
+        if (replacement == "connection") NetworkClient.connection = new NetworkConnection { Pointer = new IntPtr(2) };
+        else if (replacement == "crypto") AnomalyMessaging.ClearTransportSession();
+        else ConnectionContentBootstrap.BeginFacilityGeneration(2);
+        Assert.False(ConnectionContentBootstrap.IsAdmitted);
+    }
+
     [Fact]
     public void Native_and_public_ready_wait_for_local_initialization_server_confirmation_and_facility()
     {

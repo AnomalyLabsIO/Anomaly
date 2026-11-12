@@ -84,6 +84,12 @@ internal static class AuthenticatedTransportSessions
             return connection != null && Connections.TryGetValue(connection, out var session) ? session.Replay : null;
     }
 
+    internal static BulkReplayState GetBulkReplayState(NetworkConnectionToClient connection)
+    {
+        lock (Sync)
+            return connection != null && Connections.TryGetValue(connection, out var session) ? session.BulkReplay : null;
+    }
+
     internal static AnomalyInboundRateLimiter GetRateLimiter(ReferenceHub hub, bool raw)
     {
         lock (Sync)
@@ -338,6 +344,7 @@ internal static class AuthenticatedTransportSessions
         internal ReferenceHub Hub { get; set; }
         internal NetworkConnectionToClient Connection { get; set; }
         internal AnomalyReplayState Replay { get; } = new AnomalyReplayState();
+        internal BulkReplayState BulkReplay { get; } = new BulkReplayState();
         internal AnomalyInboundRateLimiter RawLimiter { get; } = new AnomalyInboundRateLimiter();
         internal AnomalyInboundRateLimiter MessageLimiter { get; } = new AnomalyInboundRateLimiter();
         public byte[] ClientToServerKey { get; }

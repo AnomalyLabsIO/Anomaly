@@ -6,7 +6,7 @@
          default is the MelonLoader 0.7.3 installation; server inputs retain the
          sibling layout used by local Anomaly development. -->
     <AnomalyClientRoot Condition="'$(AnomalyClientRoot)' == '' And '$(AnomalyGameRoot)' != ''">$(AnomalyGameRoot)</AnomalyClientRoot>
-    <AnomalyClientRoot Condition="'$(AnomalyClientRoot)' == ''">E:\Steam\steamapps\common\SCP Secret Laboratory - Copy</AnomalyClientRoot>
+    <AnomalyClientRoot Condition="'$(AnomalyClientRoot)' == ''">E:\Steam\steamapps\common\SCP Secret Laboratory</AnomalyClientRoot>
     <AnomalyClientInteropDir Condition="'$(AnomalyClientInteropDir)' == ''">$(AnomalyClientRoot)\MelonLoader\Il2CppAssemblies</AnomalyClientInteropDir>
     <AnomalyClientMelonLibDir Condition="'$(AnomalyClientMelonLibDir)' == ''">$(AnomalyClientRoot)\MelonLoader\net6</AnomalyClientMelonLibDir>
 

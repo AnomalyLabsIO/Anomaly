@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
@@ -29,10 +30,12 @@
     <Compile Include="..\Anomaly.Server\Api\Auth\ClientModRequirements.cs" Link="Production\ClientModRequirements.cs" />
     <Compile Include="..\Anomaly.Server\Auth\ClientModAdmissionPolicy.cs" Link="Production\ClientModAdmissionPolicy.cs" />
     <Compile Include="..\Anomaly.Server\Networking\AnomalyMessaging.cs" Link="Production\AnomalyMessaging.cs" />
+    <Compile Include="..\Anomaly.Server\Networking\BulkTransportRuntime.cs" Link="Production\BulkTransportRuntime.cs" />
     <Compile Include="..\Anomaly.Server\Networking\ScriptMessageGate.cs" Link="Production\ScriptMessageGate.cs" />
     <Compile Include="..\Anomaly.Server\Networking\ConnectionBootstrap.cs" Link="Production\ConnectionBootstrap.cs" />
     <Compile Include="..\Anomaly.Server\Networking\ConnectionContentBootstrap.cs" Link="Production\ConnectionContentBootstrap.cs" />
     <Compile Include="..\Anomaly.Server\Networking\ConnectionContentState.cs" Link="Production\ConnectionContentState.cs" />
+    <Compile Include="..\Anomaly.Server\Networking\ContentAcquisitionIdleGuard.cs" Link="Production\ContentAcquisitionIdleGuard.cs" />
     <Compile Include="..\Anomaly.Server\Networking\ContentReadinessPatches.cs" Link="Production\ContentReadinessPatches.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\FileTransferSession.cs" Link="Production\FileTransferSession.cs" />
     <Compile Include="..\Anomaly.Server\Networking\AuthenticatedTransportSessions.cs" Link="Production\AuthenticatedTransportSessions.cs" />
@@ -44,6 +47,11 @@
     <Compile Include="..\Anomaly.Server\Api\Content\ContentPacks.cs" Link="Production\ContentPacks.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\ContentPackFiles.cs" Link="Production\ContentPackFiles.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\AssetChunkReader.cs" Link="Production\AssetChunkReader.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\BulkTransferPump.cs" Link="Production\BulkTransferPump.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\BulkSchedulerCapacity.cs" Link="Production\BulkSchedulerCapacity.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\FileCompletionPacer.cs" Link="Production\FileCompletionPacer.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\BulkTransferBudget.cs" Link="Production\BulkTransferBudget.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\FileTransferAdmission.cs" Link="Production\FileTransferAdmission.cs" />
     <Compile Include="..\Anomaly.Server\Assets\DecorativeVisualState.cs" Link="Production\DecorativeVisualState.cs" />
     <Compile Include="..\Anomaly.Server\Poses\PlayerPoseState.cs" Link="Production\PlayerPoseState.cs" />
     <Compile Include="..\Anomaly.Server\Poses\PoseTrafficBudget.cs" Link="Production\PoseTrafficBudget.cs" />

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Threading;
 using Anomaly.Client.Api.Features;
 using MelonLoader;
 
@@ -8,6 +9,7 @@ namespace Anomaly.Client.Api.FileTransfer;
 internal static class FileCache
 {
     private static readonly object Lock = new();
+    private static readonly object IndexWriteLock = new();
     private static Dictionary<string, CacheEntry> _index = new();
     private static string _cacheDir;
     private static string _manifestPath;
@@ -112,10 +114,9 @@ internal static class FileCache
                 stream.Write(data, 0, data.Length);
                 stream.Flush(true);
             }
-            File.Move(tempPath, filePath, overwrite: true);
-
             lock (Lock)
             {
+                File.Move(tempPath, filePath, overwrite: true);
                 _index[hex] = new CacheEntry
                 {
                     OriginalPath = originalPath,
@@ -145,7 +146,14 @@ internal static class FileCache
         string tempPath,
         byte[] expectedHash,
         string originalPath,
-        uint expectedSize)
+        uint expectedSize) => ImportVerifiedFile(tempPath, expectedHash, originalPath, expectedSize, CancellationToken.None);
+
+    internal static bool ImportVerifiedFile(
+        string tempPath,
+        byte[] expectedHash,
+        string originalPath,
+        uint expectedSize,
+        CancellationToken cancellation)
     {
         if (string.IsNullOrWhiteSpace(tempPath) ||
             expectedHash == null ||
@@ -174,10 +182,21 @@ internal static class FileCache
             if (info.Length != expectedSize)
                 return false;
 
+            cancellation.ThrowIfCancellationRequested();
             byte[] actualHash;
             using (var stream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan))
             using (var sha = SHA256.Create())
-                actualHash = sha.ComputeHash(stream);
+            {
+                var block = new byte[81920];
+                int count;
+                while ((count = stream.Read(block, 0, block.Length)) != 0)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    sha.TransformBlock(block, 0, count, block, 0);
+                }
+                sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                actualHash = sha.Hash;
+            }
 
             if (!actualHash.AsSpan().SequenceEqual(expectedHash))
                 return false;
@@ -186,10 +205,12 @@ internal static class FileCache
             if (!Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            File.Move(sourcePath, filePath, overwrite: true);
-
             lock (Lock)
             {
+                cancellation.ThrowIfCancellationRequested();
+                // Serialize replacement and index publication with cache readers
+                // and eviction. Hashing and manifest I/O stay outside this lock.
+                File.Move(sourcePath, filePath, overwrite: true);
                 _index[hex] = new CacheEntry
                 {
                     OriginalPath = originalPath,
@@ -202,6 +223,7 @@ internal static class FileCache
             SaveIndex();
             return true;
         }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             MelonLogger.Error($"FileCache.ImportVerifiedFile failed for {hex}: {ex.Message}");
@@ -374,12 +396,13 @@ internal static class FileCache
 
     private static void SaveIndex()
     {
-        lock (Lock)
+        lock (IndexWriteLock)
         {
             string temporary = null;
             try
             {
-                var manifest = new CacheManifest
+                CacheManifest manifest;
+                lock (Lock) manifest = new CacheManifest
                 {
                     Version = 1,
                     Files = new Dictionary<string, CacheEntry>(_index, StringComparer.Ordinal),

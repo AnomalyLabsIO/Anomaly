@@ -30,7 +30,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
         ConnectionContentBootstrap.BeginFacilityGeneration(2);
         Offer(2);
 
-        oldApproval();
+        oldApproval(); FileTransferTestPump.Drain();
         Assert.Empty(AnomalyMessaging.Sent);
         Assert.Equal(2, PasswordPrompt.Shown);
         Assert.Equal("AwaitingConsent", TransferState());
@@ -47,7 +47,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
         ContentCatalogClient.BeginFacilityScene();
         Assert.Same(approval, PasswordPrompt.Approve);
         Assert.Equal("AwaitingConsent", TransferState());
-        approval();
+        approval(); FileTransferTestPump.Drain();
         Assert.True(ContentCatalogClient.IsActivated);
         Assert.Equal(1, ClientContentRegistrar.Activations);
         Assert.Equal(0, AnomalyMessaging.TransportFailures);
@@ -74,7 +74,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
         FileCache.HasFileResult = _ => true;
         var first = Offer(20);
         FileTransferOverlay.Show();
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Assert.True(FileTransferClient.IsFileApproved(first.Files[0].Hash, FileContentKind.Bundle));
         Assert.False(FileTransferOverlay.Visible);
         Assert.Equal(1, ClientContentRegistrar.Activations);
@@ -100,7 +100,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
     {
         byte[] bytes = Enumerable.Range(0, 16).Select(value => (byte)value).ToArray();
         var manifest = Offer(25, content: bytes);
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         FileTransferOverlay.Show();
         Invoke(typeof(FileTransferClient), "HandleFileComplete", new FileTransferCompleteMessage
         {
@@ -109,8 +109,9 @@ public sealed class ContentSceneLifecycleTests : IDisposable
         Invoke(typeof(FileTransferClient), "HandleChunk", new FileChunkMessage
         {
             SessionId = manifest.SessionId, Hash = manifest.Files[0].Hash,
-            ChunkIndex = 0, TotalChunks = 1, Data = bytes,
+            ChunkIndex = 0, TotalChunks = 1, FrameCounter = 1, Data = bytes,
         });
+        FileTransferTestPump.Drain();
 
         Assert.Equal("Complete", TransferState());
         Assert.False(FileTransferOverlay.Visible);
@@ -125,7 +126,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
     {
         FileCache.HasFileResult = _ => true;
         var first = Offer(30);
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         ConnectionContentBootstrap.BeginFacilityGeneration(2);
         Offer(31, hashByte: 0x22);
 
@@ -141,7 +142,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
     {
         FileCache.HasFileResult = _ => true;
         var first = Offer(40);
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         first.SessionId = 41;
         Invoke(typeof(FileTransferClient), "HandleManifest", first);
 
@@ -155,7 +156,7 @@ public sealed class ContentSceneLifecycleTests : IDisposable
     {
         FileCache.HasFileResult = _ => true;
         var first = Offer(50);
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         ClientContentRegistrar.ThrowOnReset = true;
 
         FileTransferClient.Reset();
@@ -184,9 +185,11 @@ public sealed class ContentSceneLifecycleTests : IDisposable
         if (content != null) FileCache.HasFileResult = candidate => candidate.SequenceEqual(indexHash);
         manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
         var catalog = CatalogBuilder.Build(Array.Empty<CatalogEntry>(), 1, 0, manifest.ManifestSha256,
-            new[] { new CatalogPack { PackId = "fixture:test", IndexHash = indexHash, IndexSize = 16, BundleHash = hash, BundleSize = manifest.Files[0].Size } });
+            new[] { new CatalogPack { PackId = "fixture:test", IndexHash = indexHash, IndexSize = 16, BundleHash = hash, BundleSize = manifest.Files[0].Size, DecodedBytes = 64 } });
         Invoke(typeof(ContentCatalogClient), "HandleMessage", new ContentCatalogMessage { Catalog = catalog });
+        FileTransferTestPump.Configure(manifest);
         Invoke(typeof(FileTransferClient), "HandleManifest", manifest);
+        FileTransferTestPump.Drain();
         return manifest;
     }
 

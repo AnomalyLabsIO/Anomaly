@@ -137,12 +137,13 @@ namespace Anomaly.Shared.Networking.Messages
                     (previousPack != null && StringComparer.Ordinal.Compare(previousPack, pack.PackId) >= 0) ||
                     !ValidHash(pack.IndexHash) || !ValidHash(pack.BundleHash) ||
                     pack.IndexSize == 0 || pack.IndexSize > AssetPackIndexCodec.MaxIndexBytes ||
-                    pack.BundleSize == 0 || pack.BundleSize > FileManifestMessage.MaxFileBytes)
+                    pack.BundleSize == 0 || pack.BundleSize > FileManifestMessage.MaxFileBytes ||
+                    pack.DecodedBytes <= 0 || pack.DecodedBytes > AssetPackIndexCodec.MaxDecodedBytes)
                     throw new InvalidDataException("Catalog contained an invalid, duplicate or noncanonical pack.");
                 AddPhysical(physical, pack.IndexHash, FileContentKind.PackIndex, pack.IndexSize, false, ref transferBytes);
                 AddPhysical(physical, pack.BundleHash, FileContentKind.Bundle, pack.BundleSize, false, ref transferBytes);
                 previousPack = pack.PackId;
-                encodedPayloadBytes += 2 + pack.PackId.Length + 32 + 4 + 32 + 4;
+                encodedPayloadBytes += 2 + pack.PackId.Length + 32 + 4 + 32 + 4 + 8;
             }
             previousPack = null;
             int scriptCount = 0;

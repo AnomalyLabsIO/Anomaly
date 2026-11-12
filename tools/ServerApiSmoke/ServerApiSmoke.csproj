@@ -7,7 +7,12 @@
   </PropertyGroup>
   <Import Project="..\..\samples\Anomaly.Server.Sample.props" />
   <ItemGroup>
+    <Compile Include="..\NetworkTransferSmoke\Peers\Program.cs" Link="NetworkTransferPeers\Program.cs" />
+    <Compile Include="..\NetworkTransferSmoke\Peers\PeerCoordinator.cs" Link="NetworkTransferPeers\PeerCoordinator.cs" />
+    <Compile Include="..\NetworkTransferSmoke\Peers\PeerReceivePolicy.cs" Link="NetworkTransferPeers\PeerReceivePolicy.cs" />
+    <PackageReference Include="Lib.Harmony" Version="2.2.2" />
     <Reference Include="mscorlib" HintPath="$(AnomalyServerReferenceDir)\mscorlib.dll" Private="false" />
+    <Reference Include="Assembly-CSharp-firstpass" HintPath="$(AnomalyServerReferenceDir)\Assembly-CSharp-firstpass.dll" Private="false" />
     <Reference Include="System.Text.Json" HintPath="$(AnomalyServerReferenceDir)\System.Text.Json.dll" Private="false" />
     <Reference Include="System.Memory" HintPath="$(AnomalyServerReferenceDir)\System.Memory.dll" Private="false" />
     <Reference Include="UnityEngine.PhysicsModule" HintPath="$(AnomalyServerReferenceDir)\UnityEngine.PhysicsModule.dll" Private="false" />

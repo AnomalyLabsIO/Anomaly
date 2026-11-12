@@ -111,7 +111,7 @@ public sealed class AssetPackLifecycleTests : IDisposable
         File.WriteAllBytes(Path.Combine(PackRoot, "content.bundle"), bundle);
         string hash;
         using (var sha = SHA256.Create()) hash = BitConverter.ToString(sha.ComputeHash(bundle)).Replace("-", "").ToLowerInvariant();
-        string json = "{\"SchemaVersion\":1,\"PackId\":\"fixture:pack\",\"Namespace\":\"fixture\",\"UnityVersion\":\"6000.0.43f1\",\"Platform\":\"windows-x64\",\"GameProfile\":\"" + AssetPackIndex.SupportedGameProfile + "\",\"BundleFile\":\"content.bundle\",\"BundleSha256\":\"" + hash + "\",\"BundleBytes\":" + bundle.Length + ",\"Assets\":[{\"Address\":\"" + Address.Value + "\",\"EntryName\":\"" + Address.Value + "\",\"Kind\":\"Texture2D\",\"Width\":2,\"Height\":2}],\"Visuals\":[]}";
+        string json = "{\"SchemaVersion\":2,\"PackId\":\"fixture:pack\",\"Namespace\":\"fixture\",\"UnityVersion\":\"6000.0.43f1\",\"Platform\":\"windows-x64\",\"GameProfile\":\"" + AssetPackIndex.SupportedGameProfile + "\",\"BundleFile\":\"content.bundle\",\"BundleSha256\":\"" + hash + "\",\"BundleBytes\":" + bundle.Length + ",\"DecodedBytes\":16,\"Assets\":[{\"Address\":\"" + Address.Value + "\",\"EntryName\":\"" + Address.Value + "\",\"Kind\":\"Texture2D\",\"Width\":2,\"Height\":2}],\"Visuals\":[]}";
         File.WriteAllText(Path.Combine(PackRoot, "content.index.json"), json, new UTF8Encoding(false));
     }
     public void Dispose()

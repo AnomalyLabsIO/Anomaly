@@ -10,7 +10,7 @@ namespace Anomaly.Shared.Content
     /// <summary>Deterministic assignment and SHA-256 canonicalization for item catalogs.</summary>
     public static class CatalogBuilder
     {
-        private static readonly byte[] Domain = Encoding.ASCII.GetBytes("ANOMALY-CONTENT-CATALOG-V4");
+        private static readonly byte[] Domain = Encoding.ASCII.GetBytes("ANOMALY-CONTENT-CATALOG-V5");
 
         public static int ComputeIdBase(int maxDefinedEnumValue)
         {

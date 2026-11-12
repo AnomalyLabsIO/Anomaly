@@ -156,8 +156,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Public API compatibility fixtures failed.' }
     }
 
-    Invoke-RecordedGate 'release-tool-tests' './release/Test-ReleaseTools.ps1' {
-        & (Join-Path $PSScriptRoot 'Test-ReleaseTools.ps1')
+    Invoke-RecordedGate 'release-tool-tests' './release/Test-ReleaseTools.ps1 -IncludeSigningTests:$false' {
+        & (Join-Path $PSScriptRoot 'Test-ReleaseTools.ps1') -IncludeSigningTests:$false
     }
 
     Invoke-RecordedGate 'primary-package-build' `

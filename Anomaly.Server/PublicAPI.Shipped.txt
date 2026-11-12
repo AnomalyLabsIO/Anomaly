@@ -98,6 +98,9 @@ M|System.IDisposable Anomaly.Server.Api.Auth.ClientModRequirements::Register(Sys
 M|System.IDisposable Anomaly.Server.Api.Content.ContentPacks::RegisterEmbedded(System.Reflection.Assembly,System.String)|static=True|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="assembly":in=False:out=False:optional=False:default=none:params=False;"resourceRoot":in=False:out=False:optional=False:default=none:params=False
 M|System.Int32 Anomaly.Server.Api.Events.Arguments.FacilityLayoutFinalizingEventArgs::get_Seed()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Int32 Anomaly.Server.Api.Features.PlayerPoseOptions::get_Priority()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|System.Int32 Anomaly.Server.Config::get_BulkClientBytesPerSecond()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|System.Int32 Anomaly.Server.Config::get_BulkGameplayHeadroomPercent()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
+M|System.Int32 Anomaly.Server.Config::get_BulkUploadBytesPerSecond()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Int32 Anomaly.Server.Config::get_PasswordBlockSeconds()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Int32 Anomaly.Server.Config::get_PasswordKdfIterations()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
 M|System.Int32 Anomaly.Server.Config::get_PasswordMaxFailuresPerIp()|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params=
@@ -191,6 +194,9 @@ M|System.Void Anomaly.Server.Config::.ctor()|static=False|virtual=False|abstract
 M|System.Void Anomaly.Server.Config::set_AllowRiskyClientModifications(System.Boolean)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_BlockAnyAdditionalClientMods(System.Boolean)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_BlockedClientModIds(System.Collections.Generic.List`1<System.String>)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
+M|System.Void Anomaly.Server.Config::set_BulkClientBytesPerSecond(System.Int32)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
+M|System.Void Anomaly.Server.Config::set_BulkGameplayHeadroomPercent(System.Int32)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
+M|System.Void Anomaly.Server.Config::set_BulkUploadBytesPerSecond(System.Int32)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_ContentPackDirectory(System.String)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_EnableLegacyPasswordAuthOnLoopback(System.Boolean)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
 M|System.Void Anomaly.Server.Config::set_PasswordBlockSeconds(System.Int32)|static=False|virtual=False|abstract=False|gp=|access=public|final=False|newslot=False|params="value":in=False:out=False:optional=False:default=none:params=False
@@ -236,6 +242,9 @@ P|System.Collections.Generic.IReadOnlyList`1<Anomaly.Server.Api.Map.GlyphPairInf
 P|System.Collections.Generic.List`1<System.String> Anomaly.Server.Config::BlockedClientModIds()|get=public|set=public|params=
 P|System.Int32 Anomaly.Server.Api.Events.Arguments.FacilityLayoutFinalizingEventArgs::Seed()|get=public|set=none|params=
 P|System.Int32 Anomaly.Server.Api.Features.PlayerPoseOptions::Priority()|get=public|set=public|params=
+P|System.Int32 Anomaly.Server.Config::BulkClientBytesPerSecond()|get=public|set=public|params=
+P|System.Int32 Anomaly.Server.Config::BulkGameplayHeadroomPercent()|get=public|set=public|params=
+P|System.Int32 Anomaly.Server.Config::BulkUploadBytesPerSecond()|get=public|set=public|params=
 P|System.Int32 Anomaly.Server.Config::PasswordBlockSeconds()|get=public|set=public|params=
 P|System.Int32 Anomaly.Server.Config::PasswordKdfIterations()|get=public|set=public|params=
 P|System.Int32 Anomaly.Server.Config::PasswordMaxFailuresPerIp()|get=public|set=public|params=

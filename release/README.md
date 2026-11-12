@@ -99,7 +99,7 @@ exact embedded names `HelloAnomalyServer.Panel/pack.json`,
 `HelloAnomalyServer.Panel/scripts/messages.json`; a successful build alone is
 not enough. `DeployLocal=false` applies throughout.
 This command creates unsigned local packages; the complete release gate below
-provides the additional core tests, reproducibility, and signing evidence for
+provides the additional core tests, reproducibility, and retained evidence for
 publication.
 
 After building the default skin package, run the focused regression checks:
@@ -156,7 +156,7 @@ Run the complete unsigned release gate from the repository root:
 
 This command runs the private-key marker scan, explicit compile-list check,
 Release/x64 warning-as-error build, every core test, shipped API baseline,
-release-signing tool tests, runtime package closure tests, and staged SDK sample
+unsigned packaging tool tests, runtime package closure tests, and staged SDK sample
 compilation. It then performs a clean second build and requires the complete
 unsigned release output to be byte-for-byte identical. Deploy-local is disabled
 throughout. Controlled CI supplies the client/server/LabAPI reference-root
@@ -181,12 +181,12 @@ receipt from attributing uncommitted source bytes to an unrelated Git object.
 Finish and review the implementation, commit it deliberately, and then create
 the release evidence from that clean checkout.
 
-`Build-Release.ps1` is the lower-level build/package/signing command. It builds
+`Build-Release.ps1` is the lower-level build/package command. It builds
 unless `-SkipBuild` is supplied, captures and hashes resolved inputs, stages the
 declared payloads, emits canonically ordered commit-timestamped archives, and
 verifies the result. It deliberately does not claim to run the complete test,
 API, secret, or two-build reproducibility gate; use
-`Invoke-CompleteReleaseGate.ps1` before signing or publishing.
+`Invoke-CompleteReleaseGate.ps1` before publishing.
 
 `release/package-layout.json` is the reviewed closure policy. Packaged DLLs are
 verified from their PE assembly metadata. Framework exclusions are exact names
@@ -213,32 +213,16 @@ compile dependency and declares the separate, non-redistributed SCP:SL client
 interop profile. CI compiles a staged-SDK probe both with and without that DLL
 to prove the dependency is necessary and present.
 
-Signing requires all three external operator inputs:
+The first release publishes unsigned client, server, and SDK archives, their
+`SHA256SUMS`, dependency inventory, and unsigned release receipt. The current
+client install route extracts the client ZIP into the game directory and uses
+SCPSL-ModLaunch; it requires no signing key, signature, official release
+envelope, or embedded launcher trust store.
 
-```powershell
-./release/Build-Release.ps1 -Version 1.0.0 `
-  -OutputDirectory artifacts/release-1.0.0-signed `
-  -SigningKeyPath X:\controlled\release-private.pem `
-  -PublicKeyPath X:\controlled\release-public.pem `
-  -KeyId production-2026
-```
-
-Keys must be ECDSA P-256. No production private key belongs in this repository
-or a normal CI worker. Use a new empty output directory for the signing pass;
-the lower-level packager intentionally refuses to overwrite the unsigned gate
-evidence. The trusted public key and `keyId` must be added to the
-launcher's embedded trust store before publishing. The distribution endpoint
-must return the generated client envelope (`manifestBase64`,
-`signatureBase64`, and `dependencyInventoryBase64`) and every artifact named by
-the signed `anomaly-client` manifest, mapped to its launcher install target.
-The mandatory launcher identity remains `target=client-runtime` and
-`packageId=releaseId=anomaly-client`; adding dependency artifacts does not alter
-the schema-v2 signed-manifest contract. Each archive hash is recorded in the
-dependency inventory, whose SHA-256 is bound by the signed manifest, while the
-manifest also signs every post-extraction artifact hash and size.
-After all signatures and the official client envelope verify,
-`Build-Release.ps1` changes the receipt signing state to `signed`, records the
-verified `keyId`, and binds the public manifests, signatures, and envelope by
-size and SHA-256. Neither key path nor any private/public key bytes are written
-to the receipt. This signing-evidence update is intentionally outside the
-unsigned reproducibility comparison.
+Signing tooling is retained separately for future work and is outside the
+first-release gate. `Test-ReleaseTools.ps1` defaults to packaging checks only;
+`-IncludeSigningTests` explicitly opts into `Test-ReleaseSigning.ps1` and its
+temporary test keys. The optional signing path needs separate qualification
+before publication, including support for SDK files with repeated basenames.
+Client/server authentication, worker payload identities, package hashes, and
+download integrity checks remain required.

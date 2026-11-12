@@ -48,6 +48,9 @@ internal static class ClientRuntime
 {
     private static readonly TransactionalInitializer Initializer = new();
     private static readonly ClientLifecycleGate LifecycleGate = new();
+    private static readonly EntityLifecyclePublicationGate PlayerPublications = new();
+    private static readonly EntityLifecyclePublicationGate PickupPublications = new();
+    private static readonly EntityLifecyclePublicationGate AdminToyPublications = new();
 
     internal static bool IsInitialized => Initializer.IsInitialized;
 
@@ -313,11 +316,11 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
+            if (hub == null || !PlayerPublications.TryAdd(hub.GetInstanceID(), out _)) return;
             PlayerWrapper player = PlayerRegistry.Get(hub);
+            HealthStateTracker.Reset(hub);
             if (player != null)
                 PlayerEvents.OnAdded(new PlayerAddedEventArgs(player));
-
-            HealthStateTracker.Reset(hub);
         }, nameof(HandlePlayerAdded));
     }
 
@@ -325,13 +328,28 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
+            if (hub == null) return;
+            int instanceId = hub.GetInstanceID();
+            if (!PlayerPublications.TryRemove(instanceId, out long revision)) return;
             PlayerWrapper player = PlayerRegistry.Get(hub);
-            if (player != null)
-                PlayerEvents.OnRemoved(new PlayerRemovedEventArgs(player));
-
             HealthStateTracker.Reset(hub);
             ClearPlayerCaches(hub);
             PlayerRegistry.Remove(hub);
+            try
+            {
+                if (player != null)
+                    PlayerEvents.OnRemoved(new PlayerRemovedEventArgs(player));
+            }
+            finally
+            {
+                // A subscriber may look the departing hub up again. Evict that
+                // wrapper, but never clear a real re-add or a replacement scene.
+                if (PlayerPublications.IsCurrent(instanceId, revision))
+                {
+                    ClearPlayerCaches(hub);
+                    PlayerRegistry.Remove(hub);
+                }
+            }
         }, nameof(HandlePlayerRemoved));
     }
 
@@ -377,6 +395,7 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
+            if (pickupBase == null || !PickupPublications.TryAdd(pickupBase.GetInstanceID(), out _)) return;
             Pickup pickup = Pickup.Get(pickupBase);
             if (pickup != null)
                 PickupEvents.OnAdded(new PickupAddedEventArgs(pickup));
@@ -387,14 +406,24 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
+            if (pickupBase == null) return;
+            int instanceId = pickupBase.GetInstanceID();
+            if (!PickupPublications.TryRemove(instanceId, out long revision)) return;
             Pickup pickup = Pickup.Get(pickupBase);
-            if (pickup != null)
-                PickupEvents.OnRemoved(new PickupRemovedEventArgs(pickup));
-
-            if (pickup is Projectile projectile)
-                ProjectileEvents.OnRemoved(new ProjectileRemovedEventArgs(projectile));
-
             Pickup.Unregister(pickupBase);
+            try
+            {
+                if (pickup != null)
+                    PickupEvents.OnRemoved(new PickupRemovedEventArgs(pickup));
+
+                if (PickupPublications.IsCurrent(instanceId, revision) && pickup is Projectile projectile)
+                    ProjectileEvents.OnRemoved(new ProjectileRemovedEventArgs(projectile));
+            }
+            finally
+            {
+                if (PickupPublications.IsCurrent(instanceId, revision))
+                    Pickup.Unregister(pickupBase);
+            }
         }, nameof(HandlePickupRemoved));
     }
 
@@ -554,6 +583,7 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
+            if (adminToyBase == null || !AdminToyPublications.TryAdd(adminToyBase.GetInstanceID(), out _)) return;
             AdminToy adminToy = AdminToy.Get(adminToyBase);
             if (adminToy != null)
                 AdminToyEvents.OnAdded(new AdminToyAddedEventArgs(adminToy));
@@ -564,10 +594,21 @@ internal static class ClientRuntime
     {
         RunSafely(() =>
         {
+            if (adminToyBase == null) return;
+            int instanceId = adminToyBase.GetInstanceID();
+            if (!AdminToyPublications.TryRemove(instanceId, out long revision)) return;
             AdminToy adminToy = AdminToy.Get(adminToyBase);
-            if (adminToy != null)
-                AdminToyEvents.OnRemoved(new AdminToyRemovedEventArgs(adminToy));
             AdminToy.Unregister(adminToyBase);
+            try
+            {
+                if (adminToy != null)
+                    AdminToyEvents.OnRemoved(new AdminToyRemovedEventArgs(adminToy));
+            }
+            finally
+            {
+                if (AdminToyPublications.IsCurrent(instanceId, revision))
+                    AdminToy.Unregister(adminToyBase);
+            }
         }, nameof(HandleAdminToyRemoved));
     }
 
@@ -595,6 +636,9 @@ internal static class ClientRuntime
     {
         // Scripts belong to the connection/content generation. A scene cache
         // refresh may follow approved initialization and must not discard it.
+        PlayerPublications.Reset();
+        PickupPublications.Reset();
+        AdminToyPublications.Reset();
         PlayerObservationBridge.Reset();
         ItemStateRuntime.ResetSession();
         FacilityEventsRuntime.Clear();

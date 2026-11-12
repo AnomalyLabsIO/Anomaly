@@ -1,7 +1,9 @@
 using System;
 using System.IO;
 using System.Text;
+using Anomaly.Server.FileTransfer;
 using Anomaly.Shared.Networking;
+using Anomaly.Shared.Networking.Messages;
 using Anomaly.Shared.Scripting;
 using GameCore;
 using Mirror;
@@ -93,6 +95,7 @@ internal static class AnomalyMessaging
     internal static bool TrySendToConnection(NetworkConnectionToClient connection, IAnomalyMessage message)
     {
         if (!AuthenticatedTransportSessions.IsActiveConnection(connection) ||
+            message is FileChunkMessage ||
             !ContentBootstrapPolicy.IsServerMessage(message) ||
             !AnomalyMessageRegistry.TryGetSendContract(message, AnomalyMessageDirection.ServerToClient,
                 out uint hash, out var channel, out var policy)) return false;
@@ -119,6 +122,59 @@ internal static class AnomalyMessaging
         }
     }
 
+    internal static bool TryGetBulkTransferProfile(out byte version, out ulong mask) =>
+        BulkTransportRuntime.TryGetProfile(out version, out mask);
+
+    internal static bool TryGetBulkLinkCapacity(NetworkConnectionToClient connection, ulong selectedMask,
+        out int effectiveMtu, out int roundTripTimeMilliseconds) =>
+        BulkTransportRuntime.TryGetLinkCapacity(connection, selectedMask, out effectiveMtu, out roundTripTimeMilliseconds);
+
+    internal static BulkSendResult TrySendBulkChunkToConnection(NetworkConnectionToClient connection,
+        FileChunkMessage chunk, int domain)
+    {
+        if (chunk?.GetType() != typeof(FileChunkMessage) || chunk.Domain != domain ||
+            chunk.ProfileVersion != BulkTransferProtocol.ProfileVersion ||
+            !AuthenticatedTransportSessions.IsActiveConnection(connection) ||
+            !FileTransferSession.TryGetBulkSendScope(connection, out ulong selectedMask, out ulong sessionId) ||
+            chunk.SessionId != sessionId ||
+            !BulkTransportRuntime.TryGetRoute(connection, selectedMask, domain, out int physical, out bool blocked))
+            return BulkSendResult.Failed;
+        if (blocked) return BulkSendResult.Backpressured;
+        try
+        {
+            if (!AnomalyMessageRegistry.TryGetSendContract(chunk, AnomalyMessageDirection.ServerToClient,
+                    out uint hash, out var logicalChannel, out var policy) || logicalChannel != MessageChannel.ReliableUnordered)
+                return BulkSendResult.Failed;
+            byte[] data = BuildPayload(chunk, 0, hash, policy);
+            var replay = AuthenticatedTransportSessions.GetBulkReplayState(connection);
+            if (data == null || replay == null) return BulkSendResult.Failed;
+            uint counter = replay.PeekNextTxCounter(domain);
+            if (counter == 0 || counter == uint.MaxValue) return BulkSendResult.Failed;
+            BitConverter.GetBytes(counter).CopyTo(data, 1);
+            if (!AuthenticatedTransportSessions.TryEncryptToConnection(connection, data, out byte[] envelope) ||
+                !TransportPacketPolicy.Fits(LiteNetLib4MirrorTransport.Singleton.GetMaxPacketSize(physical), envelope.Length) ||
+                !FileTransferSession.TryGetBulkSendScope(connection, out ulong currentMask, out ulong currentSession) ||
+                currentMask != selectedMask || currentSession != sessionId ||
+                !BulkTransportRuntime.TryGetRoute(connection, selectedMask, domain, out int currentPhysical, out blocked) ||
+                currentPhysical != physical)
+                return BulkSendResult.Failed;
+            if (blocked) return BulkSendResult.Backpressured;
+            // Until this point backpressure must not spend a counter. A send
+            // exception after commit is terminal and closes the connection keys.
+            if (!replay.TryCommitTxCounter(domain, counter)) return BulkSendResult.Failed;
+            chunk.FrameCounter = counter;
+            connection.Send(new EncryptedChannelManager.EncryptedMessageOutside(
+                EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated, envelope), physical);
+            return BulkSendResult.Sent;
+        }
+        catch (Exception exception)
+        {
+            SafeLogWarning("Authenticated bulk chunk delivery failed: " + exception.GetType().Name);
+            ConnectionBootstrap.Reject(connection, "Authenticated bulk delivery failed before the committed frame could be queued.");
+            return BulkSendResult.Failed;
+        }
+    }
+
     internal static bool TrySendToClient(ReferenceHub hub, IAnomalyMessage msg) =>
         TrySendToClientCore(hub, msg, optional: false);
 
@@ -134,6 +190,7 @@ internal static class AnomalyMessaging
 
     private static bool TrySendToClientCore(ReferenceHub hub, IAnomalyMessage msg, bool optional)
     {
+        if (msg is FileChunkMessage) return false;
         if (!IsAnomalyTarget(hub) || hub.encryptedChannelManager == null) return false;
 
         bool localTransport = hub.encryptedChannelManager.isLocalPlayer;
@@ -719,13 +776,15 @@ internal static class AnomalyMessaging
         if (hub.encryptedChannelManager.isLocalPlayer)
             return true;
         var transport = LiteNetLib4MirrorTransport.Singleton;
-        if (transport?.channels == null || hub.connectionToClient == null || LiteNetLib4MirrorServer.Peers == null ||
+        if (transport?.channels == null || transport.channels.Length > BulkTransferProtocol.MaxPhysicalChannels ||
+            hub.connectionToClient == null || LiteNetLib4MirrorServer.Peers == null ||
             !LiteNetLib4MirrorServer.Peers.TryGetValue(hub.connectionToClient.connectionId, out var peer) || peer == null)
             return false;
 
         long queued = 0;
         for (int i = 0; i < transport.channels.Length; i++)
         {
+            if (BulkTransportRuntime.IsBulkPhysicalChannel(i)) continue;
             var delivery = transport.channels[i];
             if (delivery != LiteNetLib.DeliveryMethod.ReliableOrdered && delivery != LiteNetLib.DeliveryMethod.ReliableUnordered)
                 continue;

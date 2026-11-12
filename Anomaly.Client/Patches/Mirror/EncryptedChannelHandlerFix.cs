@@ -95,10 +95,15 @@ public static class EncryptedChannelHandlerFix
             if (handlers.TryGetValue((ushort)9934, out NetworkMessageDelegate existing) &&
                 SameDelegate(existing, _bridgeDelegate))
             {
+                // Rechecking our own publication must preserve its rollback
+                // owner. A different dictionary has no recorded predecessor.
+                if (!_published || _publishedDictionaryPointer != handlers.Pointer)
+                {
+                    _hadPreviousDelegate = false;
+                    _previousDelegate = null;
+                }
                 _published = true;
                 _publishedDictionaryPointer = handlers.Pointer;
-                _hadPreviousDelegate = false;
-                _previousDelegate = null;
             }
             else
             {
@@ -106,8 +111,11 @@ public static class EncryptedChannelHandlerFix
                 _publishedDictionaryPointer = handlers.Pointer;
                 try
                 {
-                    handlers[(ushort)9934] = _bridgeDelegate;
+                    // Record the attempt before mutating: an interop setter
+                    // can fail after publication. Rollback still verifies that
+                    // the slot belongs to our bridge before restoring it.
                     _published = true;
+                    handlers[(ushort)9934] = _bridgeDelegate;
                     if (!handlers.TryGetValue((ushort)9934, out NetworkMessageDelegate installed) ||
                         !SameDelegate(installed, _bridgeDelegate))
                     {

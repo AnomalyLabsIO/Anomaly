@@ -69,9 +69,9 @@ The dependency inventory records names, sizes, and SHA-256 hashes without
 publishing machine-specific absolute paths. `release-receipt.json` binds the
 source commit, archive hashes, runtime version, reproducibility timestamp, and
 canonical release commands. Each full release archive carries `LICENSE`, `NOTICE`, and the
-same `THIRD_PARTY_DEPENDENCIES.md` whose hash is bound by the inventory. Signing
-is a separate operator step so private keys never enter the repository or
-ordinary CI workers.
+same `THIRD_PARTY_DEPENDENCIES.md` whose hash is bound by the inventory. The
+first release uses unsigned packages through the manual ZIP/SCPSL-ModLaunch
+installation route; no production signing keys or signatures are required.
 
 The deterministic packaging pass emits a schema-v3 receipt with explicit
 unsigned signing state, no `keyId`, an empty `trustedKeyIds` list, and no gate
@@ -90,8 +90,13 @@ receipt, and runs the full release verifier again. Thus nondeterministic logs
 and timestamps never participate in (or mask) the deterministic package
 comparison.
 
-After a signed `Build-Release.ps1` pass has independently verified every
-ECDSA-P256 manifest, it invokes
+Signing is outside the first-release gate. Optional signing regressions can be
+run with `release/Test-ReleaseTools.ps1 -IncludeSigningTests` or the standalone
+`release/Test-ReleaseSigning.ps1`; the default packaging gate does not build or
+run `ReleaseManifest`.
+
+For future signing work, after a signed `Build-Release.ps1` pass has independently
+verified every ECDSA-P256 manifest, it invokes
 `record-signing <output-directory> <key-id> <public-key-pem>`. The command
 re-verifies every signature with that P-256 public key, checks all manifest
 identities, records only the verified key ID, and hashes the public

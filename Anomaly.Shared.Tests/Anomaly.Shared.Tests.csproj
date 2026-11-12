@@ -24,6 +24,9 @@
     <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj" AdditionalProperties="DeployLocal=false" />
     <Compile Include="..\Anomaly.Client\FileTransfer\ChunkBuffer.cs" Link="ClientFileTransfer\ChunkBuffer.cs" />
     <Compile Include="..\Anomaly.Client\FileTransfer\FileTransferClient.cs" Link="ClientFileTransfer\FileTransferClient.cs" />
+    <Compile Include="..\Anomaly.Client\FileTransfer\FileReceiveWorker.cs" Link="ClientFileTransfer\FileReceiveWorker.cs" />
+    <Compile Include="..\Anomaly.Client\Assets\PreparedPackWarmup.cs" Link="ClientAssets\PreparedPackWarmup.cs" />
+    <Compile Include="..\Anomaly.Client\Assets\BundleCopyBudget.cs" Link="ClientAssets\BundleCopyBudget.cs" />
     <Compile Include="..\Anomaly.Client\Content\ContentCatalogClient.cs" Link="ClientContent\ContentCatalogClient.cs" />
     <Compile Include="..\Anomaly.Client\Content\ConnectionContentBootstrap.cs" Link="ClientContent\ConnectionContentBootstrap.cs" />
     <Compile Include="..\Anomaly.Client.Api\Internal\Localization\TrKeys.cs" Link="ClientRuntime\TrKeys.cs" />
@@ -50,6 +53,11 @@
     <Compile Include="..\Anomaly.Server\Api\Content\ContentPacks.cs" Link="ServerContent\ContentPacks.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\ContentPackFiles.cs" Link="ServerFileTransfer\ContentPackFiles.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\AssetChunkReader.cs" Link="ServerFileTransfer\AssetChunkReader.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\BulkTransferPump.cs" Link="ServerFileTransfer\BulkTransferPump.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\BulkSchedulerCapacity.cs" Link="ServerFileTransfer\BulkSchedulerCapacity.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\FileCompletionPacer.cs" Link="ServerFileTransfer\FileCompletionPacer.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\BulkTransferBudget.cs" Link="ServerFileTransfer\BulkTransferBudget.cs" />
+    <Compile Include="..\Anomaly.Server\FileTransfer\FileTransferAdmission.cs" Link="ServerFileTransfer\FileTransferAdmission.cs" />
     <Compile Include="..\Anomaly.Server\FileTransfer\FileTransferSession.cs" Link="ServerFileTransfer\FileTransferSession.cs" />
     <Compile Include="..\Anomaly.Server\Utils\OffThreadLogger.cs" Link="ServerUtils\OffThreadLogger.cs" />
     <Compile Include="..\Anomaly.Server\Networking\AnomalyReplayTable.cs" Link="ServerNetworking\AnomalyReplayTable.cs" />

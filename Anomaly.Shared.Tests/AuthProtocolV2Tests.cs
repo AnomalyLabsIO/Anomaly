@@ -492,6 +492,7 @@ public sealed class AuthProtocolV2Tests
     [InlineData(2)]
     [InlineData(3)]
     [InlineData(4)]
+    [InlineData(12)]
     public void OlderProtocolHandshakesAreRejectedWithoutDowngrade(byte version)
     {
         var encoded = new byte[ClientHandshake.MinimumSize];

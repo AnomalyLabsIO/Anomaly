@@ -6,17 +6,12 @@ using Il2CppLiteNetLib.Utils;
 using Il2CppMirror;
 using Il2CppMirror.LiteNetLib4Mirror;
 using MelonLoader;
-using UnityEngine;
 
 namespace Anomaly.Client.Patches.Auth;
 
 /// <summary>
-/// Harmony patches for the client authentication flow.
-///
-/// In IL2CPP, Harmony patches on virtual method overrides fire twice per call
-/// due to vtable slot dispatch (once for the derived class, once for the base).
-/// We use frame-count guards to deduplicate: two calls in the same frame from
-/// the same virtual dispatch are collapsed into one.
+/// Authentication adapters. Writer transactions and connection state own their
+/// lifetime; unrelated callbacks in the same Unity frame are not interchangeable.
 /// </summary>
 [HarmonyPatch]
 public static class NetDataWriterPut
@@ -46,17 +41,6 @@ public static class NetDataWriterPut
         if (!AuthHandler.UsingAnomalyAuth)
             return true;
 
-        // IL2CPP dispatches virtual-method prefixes twice per invocation (once
-        // for the derived slot, once for the base). The first call consumes
-        // bytes from DisconnectInfo.AdditionalData inside RejectAuth; a second
-        // call in the same frame would read past the consumed bytes, misread
-        // the handshake response as a real rejection, and forward it to the
-        // vanilla handler — which tears down the connection.
-        if (!PatchInvocationGuard.ShouldFireAuthentication(
-                __instance,
-                PatchInvocationGuard.ConnectionRefused))
-            return false;
-
         try
         {
             MelonLogger.Msg(
@@ -71,11 +55,6 @@ public static class NetDataWriterPut
     [HarmonyPrefix]
     public static void OnClientDisconnect(CustomNetworkManager __instance)
     {
-        if (!PatchInvocationGuard.ShouldFireAuthentication(
-                __instance,
-                PatchInvocationGuard.ClientDisconnect))
-            return;
-
         AuthHandler.OnDisconnected();
     }
 
@@ -84,8 +63,9 @@ public static class NetDataWriterPut
     public static void ObservePeerDisconnect(NetPeer peer, DisconnectInfo disconnectinfo)
     {
         // The transport queues its main-thread disconnect continuation. Capture
-        // only detached reason/identity here; never create UI in this callback.
-        try { AuthHandler.ObserveTransportDisconnect(peer, disconnectinfo.Reason); }
+        // detached identity and bounded data here, before a pooled reader can
+        // be recycled. Never advance the stock reader or create UI here.
+        try { AuthHandler.ObserveTransportDisconnect(peer, disconnectinfo); }
         catch (Exception exception)
         {
             try { MelonLogger.Warning("Could not capture transport disconnect: " + exception.Message); }

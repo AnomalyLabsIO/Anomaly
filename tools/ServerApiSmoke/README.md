@@ -10,9 +10,13 @@ dotnet build tools/ServerApiSmoke/ServerApiSmoke.csproj -c Release -p:DeployLoca
 ./tools/ServerApiSmoke/Prepare-Assets.ps1 -OutputDirectory ./artifacts/server-api/assets-01 -PackIndexPath ./artifacts/assetbundles/qualified-fixture/anomaly-qualified-fixture.index.json
 ```
 
-Set the isolated Anomaly plugin's `ContentPackDirectory` to that absolute content
-root before starting the server. Preparation wraps the exported index/bundle in
-a descriptor pack with explicit `Assets.Index`; loose pairs are not discovered.
+Pass that source root as `Run-Server.ps1 -ContentPackDirectory`. The launcher
+copies its contents into the isolated server's
+`AppData/SCP Secret Laboratory/LabAPI/plugins/global/Anomaly/ContentPacks`
+and configures the default relative `ContentPacks` value, exercising LabAPI-based
+discovery rather than a working-directory or absolute-path workaround.
+Preparation wraps the exported index/bundle in a descriptor pack with explicit
+`Assets.Index`; loose pairs are not discovered.
 Stage `Anomaly.ServerApiSmoke.dll` only in the
 isolated LabAPI `plugins/global` directory. Anomaly initializes at highest
 priority; this fixture uses Low and waits for completed pack indexing.

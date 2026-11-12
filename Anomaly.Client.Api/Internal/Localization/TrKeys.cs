@@ -301,6 +301,8 @@ internal static class TrKeys
     public const string Auth_RotationError = "anomaly.auth.rotation_error";
     public const string Auth_NoResponse = "anomaly.auth.no_response";
     public const string Auth_ServerAvailabilityAction = "anomaly.auth.server_availability_action";
+    public const string Auth_ServerClosed = "anomaly.auth.server_closed";
+    public const string Auth_ServerClosedAction = "anomaly.auth.server_closed_action";
     public const string Auth_ReconnectFailed = "anomaly.auth.reconnect_failed";
     public const string Auth_ReconnectAction = "anomaly.auth.reconnect_action";
 

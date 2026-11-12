@@ -17,16 +17,20 @@ public static partial class AssetPackIndexCodec
     public const int MaxSceneInstances = 128;
     public const int MaxSceneTriangles = 1000000;
     public const long MaxExpandedBytes = 128L * 1024 * 1024;
+    public const long MaxDecodedBytes = 256L * 1024 * 1024;
 
     public static AssetPackIndex Parse(byte[] bytes, bool remote)
     {
         Dictionary<string, object> map = BoundedPackJson.Read(bytes);
-        Keys(map, "SchemaVersion", "PackId", "Namespace", "UnityVersion", "Platform", "GameProfile", "BundleFile", "BundleSha256", "BundleBytes", "Assets", "Visuals");
+        if (Integer(map, "SchemaVersion") != AssetPackIndex.CurrentSchemaVersion)
+            throw Bad("Unsupported asset index schema; re-export this pack with the current authoring tools to include its measured decoded resource budget");
+        Keys(map, "SchemaVersion", "PackId", "Namespace", "UnityVersion", "Platform", "GameProfile", "BundleFile", "BundleSha256", "BundleBytes", "DecodedBytes", "Assets", "Visuals");
         var index = new AssetPackIndex
         {
             SchemaVersion = Integer(map, "SchemaVersion"), PackId = Text(map, "PackId"), Namespace = Text(map, "Namespace"),
             UnityVersion = Text(map, "UnityVersion"), Platform = Text(map, "Platform"), GameProfile = Text(map, "GameProfile"),
             BundleFile = Text(map, "BundleFile"), BundleSha256 = Text(map, "BundleSha256"), BundleBytes = Integer(map, "BundleBytes"),
+            DecodedBytes = Integer(map, "DecodedBytes"),
         };
         foreach (object value in List(map, "Assets", MaxAssets))
         {
@@ -77,6 +81,8 @@ public static partial class AssetPackIndexCodec
             !index.BundleFile.EndsWith(".bundle", StringComparison.Ordinal) || !ValidSegment(index.BundleFile)) throw Bad("BundleFile must be one lowercase .bundle filename");
         if (!IsHash(index.BundleSha256) || index.BundleBytes <= 0 || index.BundleBytes > 64L * 1024 * 1024)
             throw Bad("Invalid bundle hash or encoded size");
+        if (index.DecodedBytes <= 0 || index.DecodedBytes > MaxDecodedBytes)
+            throw Bad("Invalid measured decoded bundle size");
         if (index.Assets == null || index.Assets.Count == 0 || index.Assets.Count > MaxAssets ||
             index.Visuals == null || index.Visuals.Count > MaxVisuals) throw Bad("Invalid asset or visual count");
         var roots = new Dictionary<string, PackAssetEntry>(StringComparer.Ordinal);

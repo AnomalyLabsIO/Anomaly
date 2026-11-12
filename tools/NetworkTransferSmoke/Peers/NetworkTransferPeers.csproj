@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>Anomaly.NetworkTransferPeers</AssemblyName>
+    <LangVersion>12</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="PolicyChecks\**\*.cs" />
+    <Reference Include="Anomaly.Shared" HintPath="$(AnomalyRepositoryRoot)Anomaly.Shared\bin\Release\Anomaly.Shared.dll" />
+    <Reference Include="Anomaly.Server" HintPath="$(AnomalyRepositoryRoot)Anomaly.Server\bin\Release\Anomaly.Server.dll" Private="false" />
+    <Reference Include="Assembly-CSharp" HintPath="$(AnomalyServerManagedDir)\Assembly-CSharp.dll" />
+    <Reference Include="Assembly-CSharp-firstpass" HintPath="$(AnomalyServerManagedDir)\Assembly-CSharp-firstpass.dll" Private="false" />
+    <Reference Include="Mirror" HintPath="$(AnomalyServerManagedDir)\Mirror.dll" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(AnomalyServerManagedDir)\UnityEngine.CoreModule.dll" />
+    <Reference Include="BouncyCastle.Cryptography" HintPath="$(AnomalyServerManagedDir)\BouncyCastle.Cryptography.dll" />
+    <Reference Include="mscorlib" HintPath="$(AnomalyServerManagedDir)\mscorlib.dll" Private="false" />
+    <Reference Include="System.Text.Json" HintPath="$(AnomalyServerManagedDir)\System.Text.Json.dll" Private="false" />
+    <Reference Include="System.Memory" HintPath="$(AnomalyServerManagedDir)\System.Memory.dll" Private="false" />
+  </ItemGroup>
+</Project>

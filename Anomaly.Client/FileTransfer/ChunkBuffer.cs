@@ -1,6 +1,7 @@
 using Anomaly.Client.Api.Features;
 using Anomaly.Client.Api.FileTransfer;
 using Anomaly.Shared.Networking.Messages;
+using System.Threading;
 
 namespace Anomaly.Client.FileTransfer;
 
@@ -9,7 +10,7 @@ namespace Anomaly.Client.FileTransfer;
 /// arrive out of order, but they can never extend the pre-sized temp file or
 /// exceed the manifest's expected byte count.
 /// </summary>
-public sealed class ChunkBuffer : IDisposable
+public sealed class ChunkBuffer : IDisposable, IFileReceiveBuffer
 {
     private readonly bool[] _received;
     private FileStream _stream;
@@ -48,7 +49,9 @@ public sealed class ChunkBuffer : IDisposable
         string incomingDir = Path.Combine(Paths.FileCachePath, ".incoming");
         Directory.CreateDirectory(incomingDir);
         string hex = FileCache.ToHex(hash);
-        TempPath = Path.Combine(incomingDir, $"{sessionId:x16}-{hex}.part");
+        // Each owner/attempt has a unique path; delayed cancellation cleanup must
+        // never remove a newer transfer's partial file for the same hash.
+        TempPath = Path.Combine(incomingDir, $"{sessionId:x16}-{hex}-{Guid.NewGuid():N}.part");
         _stream = new FileStream(
             TempPath,
             FileMode.Create,
@@ -105,8 +108,11 @@ public sealed class ChunkBuffer : IDisposable
         return true;
     }
 
-    public bool CommitToCache()
+    public bool CommitToCache() => CommitToCache(CancellationToken.None);
+
+    public bool CommitToCache(CancellationToken cancellation)
     {
+        cancellation.ThrowIfCancellationRequested();
         if (!IsComplete || _stream == null)
             return false;
 
@@ -118,7 +124,8 @@ public sealed class ChunkBuffer : IDisposable
             TempPath,
             Hash,
             OriginalPath,
-            ExpectedSize);
+            ExpectedSize,
+            cancellation);
         return _committed;
     }
 

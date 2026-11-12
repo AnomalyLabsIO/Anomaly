@@ -8,6 +8,8 @@ param(
     [ValidateSet('', 'clean', 'blocked', 'allowed-rejected', 'allowed-accepted', 'gap-rejected', 'gap-accepted', 'late')]
     [string] $IntegrityMode = '',
     [switch] $UseModLaunch,
+    [switch] $SkipBuild,
+    [switch] $OmitBundledSkin,
     [switch] $ServerApi,
     [string] $ServerApiMode = 'full',
     [switch] $LocalHosting,
@@ -16,6 +18,7 @@ param(
     [switch] $DummyVisibility,
     [switch] $DedicatedDummyControl,
     [switch] $NewsOnly,
+    [switch] $LuaDefinitions,
     [string] $BackupDirectory = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -23,8 +26,8 @@ $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $game = [IO.Path]::GetFullPath($GameDirectory)
 $evidence = [IO.Path]::GetFullPath($EvidenceDirectory)
 if (!$UseModLaunch) { throw 'Always select -UseModLaunch; direct SCPSL.exe launches are forbidden for this qualification.' }
-if (![string]::Equals($game,'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy',[StringComparison]::OrdinalIgnoreCase)) {
-    throw 'Use the explicitly authorized SCP Secret Laboratory - Copy installation and its .modlaunch launcher.'
+if (![string]::Equals($game,'E:\Steam\steamapps\common\SCP Secret Laboratory',[StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Use the explicitly authorized SCP Secret Laboratory installation and its .modlaunch launcher.'
 }
 if (!(Test-Path -LiteralPath (Join-Path $game '.modlaunch/SCPSL-ModLaunch.exe'))) { throw 'The installed ModLaunch launcher is required.' }
 . (Join-Path $PSScriptRoot 'ModLaunchBackup.ps1')
@@ -55,6 +58,10 @@ if ($ClientScripting -and (!$LocalHosting -or $LoopbackServer -or $DummyVisibili
 if ($RemoteScripting -and (!$LoopbackServer -or $ConnectionOnly -or $AdmissionExpect -or $IntegrityMode -or
     $ServerApi -or $LocalHosting -or $ClientScripting -or $DummyVisibility -or $DedicatedDummyControl -or $NewsOnly)) {
     throw 'RemoteScripting requires a loopback dedicated server and cannot be combined with another smoke scenario.'
+}
+if ($LuaDefinitions -and ($LoopbackServer -or $ConnectionOnly -or $AdmissionExpect -or $IntegrityMode -or
+    $ServerApi -or $LocalHosting -or $ClientScripting -or $RemoteScripting -or $DummyVisibility -or $DedicatedDummyControl -or $NewsOnly)) {
+    throw 'LuaDefinitions runs its own developer-command scenario and cannot be combined with another smoke scenario or loopback server.'
 }
 if ($ClientScripting) {
     $scriptRoot = Join-Path $game 'UserData/Anomaly/ContentPacks'
@@ -91,11 +98,17 @@ if ($DummyVisibility -or $DedicatedDummyControl) {
     $screenHeight = $primaryDisplay.Height
     if ($screenWidth -le 0 -or $screenHeight -le 0) { throw 'Cannot determine the primary display resolution.' }
 }
-foreach ($project in @('Anomaly.Client/Anomaly.Client.csproj','samples/HelloAnomalyMod/HelloAnomalyMod.csproj','tools/EarlyAccessUiSmoke/EarlyAccessUiSmoke.csproj')) {
+foreach ($project in $(if ($SkipBuild) { @() } else { @('Anomaly.Client/Anomaly.Client.csproj','samples/HelloAnomalyMod/HelloAnomalyMod.csproj','tools/EarlyAccessUiSmoke/EarlyAccessUiSmoke.csproj') })) {
     & dotnet build (Join-Path $repository $project) -c Release -p:DeployLocal=false --nologo
     if ($LASTEXITCODE -ne 0) { throw "Smoke build failed: $project" }
 }
 $layout = Get-Content -Raw -LiteralPath (Join-Path $repository 'release/package-layout.json') | ConvertFrom-Json
+if ($OmitBundledSkin) {
+    if (!$ServerApi -or $ServerApiMode -ne 'network-transfer') { throw 'The no-local-skin control is limited to network-transfer qualification.' }
+    foreach ($entry in (($layout.packages | Where-Object packageId -eq 'anomaly-client').entries | Where-Object { $_.source.StartsWith('release/assets/skins/') })) {
+        if (Test-Path -LiteralPath (Join-Path $game $entry.path)) { throw 'This control cannot omit an already installed local skin pack; existing content is never removed.' }
+    }
+}
 $backupPaths = @((($layout.packages | Where-Object packageId -eq 'anomaly-client').entries).path) +
     @('Mods/HelloAnomalyMod.dll','Mods/Anomaly.EarlyAccessUiSmoke.dll','UserData/Anomaly/mod-trust.json',
       'UserData/Anomaly/user.json','UserData/Anomaly/server-trust.json','UserData/Anomaly/content-consent.json',
@@ -117,6 +130,7 @@ if (!$BackupDirectory) { $BackupDirectory = Join-Path $repository ('artifacts/ne
 $backupRoot = New-ModLaunchSmokeBackup $repository $game $BackupDirectory $backupPaths
 Write-Output "Reversible test backup: $backupRoot. Restore with tools/EarlyAccessUiSmoke/Restore-ModLaunchSmoke.ps1 after both launcher and child exit and ModLaunch restores its session."
 foreach ($entry in ($layout.packages | Where-Object packageId -eq 'anomaly-client').entries) {
+    if ($OmitBundledSkin -and $entry.source.StartsWith('release/assets/skins/')) { continue }
     $target = Join-Path $game $entry.path
     New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
     Copy-Item -LiteralPath (Join-Path $repository $entry.source) -Destination $target
@@ -185,8 +199,8 @@ $inputs = @($inputPaths | Sort-Object -Unique | ForEach-Object {
         [ordered]@{ path=$_; exists=$true; size=$file.Length; sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     } else { [ordered]@{path=$_;exists=$false;size=0;sha256=$null} }
 })
-[ordered]@{ sourceCommit=$sourceCommit; sourceWorktreeClean=($sourceStatus.Count -eq 0); beforeLaunch=$true;
-    backupDirectory=$backupRoot; startedUtc=[DateTimeOffset]::UtcNow.ToString('O'); inputs=$inputs } |
+[ordered]@{ sourceCommit=$sourceCommit; sourceWorktreeClean=($sourceStatus.Count -eq 0); beforeLaunch=$true; buildSkipped=$SkipBuild.IsPresent;
+    bundledSkinOmitted=$OmitBundledSkin.IsPresent; backupDirectory=$backupRoot; startedUtc=[DateTimeOffset]::UtcNow.ToString('O'); inputs=$inputs } |
     ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $evidence 'runtime-inputs.json')
 $launchPath = Join-Path $game '.modlaunch/SCPSL-ModLaunch.exe'
 $startInfo = [Diagnostics.ProcessStartInfo]::new($launchPath)
@@ -199,6 +213,8 @@ if ($IntegrityMode) { $startInfo.Environment['ANOMALY_INTEGRITY_SMOKE_MODE'] = $
 foreach ($name in @('ANOMALY_SMOKE_SERVER','ANOMALY_UI_SMOKE_CONNECTION_ONLY','ANOMALY_MOD_ADMISSION_EXPECT','ANOMALY_SERVER_API_SMOKE','ANOMALY_SERVER_API_SMOKE_MODE','ANOMALY_LOCAL_HOSTING_SMOKE','ANOMALY_CLIENT_SCRIPTING_SMOKE','ANOMALY_REMOTE_SCRIPTING_SMOKE','ANOMALY_REMOTE_SCRIPTING_PRIMARY_SHA256','ANOMALY_REMOTE_SCRIPTING_OWNER_SHA256','ANOMALY_DUMMY_VISIBILITY_SMOKE','ANOMALY_DEDICATED_DUMMY_SMOKE','ANOMALY_DUMMY_SCREEN_WIDTH','ANOMALY_DUMMY_SCREEN_HEIGHT','ANOMALY_UI_SMOKE_NEWS_ONLY')) {
     $startInfo.Environment.Remove($name) | Out-Null
 }
+$startInfo.Environment.Remove('ANOMALY_LUA_DEFINITIONS_SMOKE') | Out-Null
+if ($LuaDefinitions) { $startInfo.Environment['ANOMALY_LUA_DEFINITIONS_SMOKE'] = '1' }
 if ($NewsOnly) { $startInfo.Environment['ANOMALY_UI_SMOKE_NEWS_ONLY'] = '1' }
 if ($LoopbackServer) { $startInfo.Environment['ANOMALY_SMOKE_SERVER'] = $LoopbackServer }
 if ($ConnectionOnly) { $startInfo.Environment['ANOMALY_UI_SMOKE_CONNECTION_ONLY'] = '1' }

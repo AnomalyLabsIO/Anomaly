@@ -86,23 +86,21 @@ public sealed class ServerConsentDeadlineTests : IDisposable
         ServerBootstrapFixture.Approve(hub);
         object session = ServerBootstrapFixture.Session(hub);
         Field("_lastActivityUtc", false).SetValue(session, DateTime.UtcNow.AddMinutes(-1));
-        var routine = (IEnumerator<float>)typeof(FileTransferSession).GetMethod("Watchdog", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(session, null);
-        Assert.True(routine.MoveNext());
-        Assert.False(routine.MoveNext());
+        FileTransferSession.Tick();
         Assert.Empty(Sessions);
         Assert.Equal(1, hub.connectionToClient.DisconnectCount);
     }
 
     [Fact]
-    public void Approved_watchdog_start_failure_revokes_the_connection()
+    public void Approved_transfer_does_not_require_starting_a_coroutine()
     {
         var hub = new ReferenceHub { netId = 26 };
         ServerBootstrapFixture.Start(hub);
         MEC.Timing.ThrowOnRun = true;
         ServerBootstrapFixture.Approve(hub);
-        Assert.Empty(Sessions);
-        Assert.False(hub.connectionToClient.isReady);
-        Assert.Equal(1, hub.connectionToClient.DisconnectCount);
+        Assert.Single(Sessions);
+        Assert.True(AuthenticatedTransportSessions.IsActiveConnection(hub.connectionToClient));
+        Assert.Equal(0, hub.connectionToClient.DisconnectCount);
     }
 
     [Fact]

@@ -13,6 +13,19 @@ public class Config
     /// </summary>
     public string ContentPackDirectory { get; set; } = "ContentPacks";
 
+    /// <summary>Per-client accounted upload allowance in bytes/second before gameplay reserve (64 KiB–16 MiB/s).</summary>
+    public int BulkClientBytesPerSecond { get; set; } = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// Aggregate accounted upload allowance in bytes/second before gameplay reserve (64 KiB–64 MiB/s).
+    /// Set at or below the available server uplink; the default is not automatic link detection.
+    /// Bulk accounting includes a 25 percent retransmission/framing margin plus 256 bytes per chunk.
+    /// </summary>
+    public int BulkUploadBytesPerSecond { get; set; } = 16 * 1024 * 1024;
+
+    /// <summary>Percentage of both upload allowances reserved for gameplay/control (10–90). Requires WAN qualification.</summary>
+    public int BulkGameplayHeadroomPercent { get; set; } = 20;
+
     /// <summary>
     /// Requests password-gated admission. Public/remote password authentication is
     /// deliberately unavailable until a vetted OPAQUE implementation supports both

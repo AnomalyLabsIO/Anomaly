@@ -62,6 +62,8 @@ public sealed partial class Core
             !System.Net.IPAddress.TryParse(endpoint.Host, out var ip) || !System.Net.IPAddress.IsLoopback(ip))
             throw new InvalidOperationException("Server API smoke requires an explicit loopback endpoint.");
         string mode = Environment.GetEnvironmentVariable("ANOMALY_SERVER_API_SMOKE_MODE") ?? "full";
+        if (mode == "network-dedup") { EnqueueNetworkDedupSmoke(server); return; }
+        if (mode == "network-transfer") { EnqueueNetworkTransferSmoke(server); return; }
         if (mode == "facility-views") { EnqueueFacilityViews(server); return; }
         if (mode == "recipients-sender" || mode == "recipients-observer") { EnqueueRecipients(server, mode.Substring("recipients-".Length)); return; }
         if (mode == "facility") { EnqueueFacilityMatrix(server); return; }

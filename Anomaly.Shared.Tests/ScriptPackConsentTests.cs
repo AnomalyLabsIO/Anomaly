@@ -51,7 +51,7 @@ public sealed class ScriptPackConsentTests : IDisposable
         var offer = ContentConsentFixture.CreateOffer(101, scriptCount: 1);
         ContentConsentFixture.Deliver(offer);
         Assert.Equal("content-catalog", PasswordPrompt.Owner);
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Assert.Equal("script-execution", PasswordPrompt.Owner);
         Assert.Equal(0, ScriptingBootstrap.PrepareCalls);
         Assert.Equal(0, ClientContentRegistrar.Activations);
@@ -68,8 +68,8 @@ public sealed class ScriptPackConsentTests : IDisposable
             Assert.Equal(0, NetworkClient.AddPlayerCalls);
         };
         Action approveScripts = PasswordPrompt.Approve;
-        approveScripts();
-        approveScripts(); // A repeated UI callback cannot initialize twice.
+        approveScripts(); FileTransferTestPump.Drain();
+        approveScripts(); FileTransferTestPump.Drain(); // A repeated UI callback cannot initialize twice.
         Assert.True(observed);
         Assert.Equal(1, ScriptingBootstrap.PrepareCalls);
         Assert.Equal(new[] { true }, ScriptingBootstrap.PrepareApprovals);
@@ -85,10 +85,10 @@ public sealed class ScriptPackConsentTests : IDisposable
     {
         ScriptingBootstrap.HoldPreparation = true;
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(301, scriptCount: 1));
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Action approval = PasswordPrompt.Approve;
-        approval();
-        approval();
+        approval(); FileTransferTestPump.Drain();
+        approval(); FileTransferTestPump.Drain();
         Assert.Equal(1, ScriptingBootstrap.PrepareCalls);
         Assert.True(ScriptingBootstrap.PreparationPending);
         Assert.False(ScriptingBootstrap.IsConnectionPrepared);
@@ -129,8 +129,8 @@ public sealed class ScriptPackConsentTests : IDisposable
     {
         ScriptingBootstrap.HoldPreparation = true;
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(302, scriptCount: 1));
-        PasswordPrompt.Approve();
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
+        ContentConsentFixture.Approve();
         Action<bool, string> completed = ScriptingBootstrap.LastPreparationCompletion;
         completed(false, "required source failed in worker");
         completed(true, string.Empty);
@@ -153,8 +153,8 @@ public sealed class ScriptPackConsentTests : IDisposable
     {
         ScriptingBootstrap.HoldPreparation = true;
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(310, scriptCount: 1));
-        PasswordPrompt.Approve();
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
+        ContentConsentFixture.Approve();
         Action<bool, string> completed = ScriptingBootstrap.LastPreparationCompletion;
         int revocations = ScriptingBootstrap.Revocations;
         NetworkClient.connection = null;
@@ -178,8 +178,8 @@ public sealed class ScriptPackConsentTests : IDisposable
     {
         ScriptingBootstrap.HoldPreparation = true;
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(303, scriptCount: 1));
-        PasswordPrompt.Approve();
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
+        ContentConsentFixture.Approve();
         Action<bool, string> stale = ScriptingBootstrap.LastPreparationCompletion;
         if (rekey)
         {
@@ -190,7 +190,7 @@ public sealed class ScriptPackConsentTests : IDisposable
         else ConnectionContentBootstrap.BeginFacilityGeneration(2);
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(304, scriptCount: 1));
         Assert.Equal("script-execution", PasswordPrompt.Owner);
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         ScriptingBootstrap.LastPreparationCompletion(true, string.Empty);
         Assert.True(ContentCatalogClient.IsActivated);
         int revocations = ScriptingBootstrap.Revocations;
@@ -210,9 +210,9 @@ public sealed class ScriptPackConsentTests : IDisposable
     {
         ScriptingBootstrap.HoldPreparation = true;
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(305, scriptCount: 1));
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Action<bool, string> bundleCompleted = AssetBundleManager.LastActivationCallback;
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         bundleCompleted(true, string.Empty);
         bundleCompleted(false, "duplicate failure");
         Assert.Equal(1, ScriptingBootstrap.PrepareCalls);
@@ -244,8 +244,8 @@ public sealed class ScriptPackConsentTests : IDisposable
         {
             Assert.Equal(new[] { "content-catalog" }, PasswordPrompt.Owners);
             Assert.Equal(0, AnomalyMessaging.TransportFailures);
-            PasswordPrompt.Approve();
-            PasswordPrompt.Approve();
+            ContentConsentFixture.Approve();
+            ContentConsentFixture.Approve();
             Assert.True(ContentCatalogClient.IsActivated);
         }
         else
@@ -270,7 +270,7 @@ public sealed class ScriptPackConsentTests : IDisposable
         Assert.Empty(AnomalyMessaging.Sent.OfType<FileRequestMessage>());
         Assert.Equal(0, AnomalyMessaging.TransportFailures);
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(308, scriptCount: 0));
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Assert.True(ContentCatalogClient.IsActivated);
     }
 
@@ -282,8 +282,9 @@ public sealed class ScriptPackConsentTests : IDisposable
         Action approveContent = PasswordPrompt.Approve;
         Action declineContent = PasswordPrompt.Decline;
         approveContent();
+        FileTransferTestPump.Drain();
         Action approveScripts = PasswordPrompt.Approve;
-        approveScripts();
+        approveScripts(); FileTransferTestPump.Drain();
         approveContent();
         declineContent();
         Assert.Equal(1, ScriptingBootstrap.PrepareCalls);
@@ -303,7 +304,7 @@ public sealed class ScriptPackConsentTests : IDisposable
         Action staleDecline = PasswordPrompt.Decline;
         ConnectionContentBootstrap.BeginFacilityGeneration(2);
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(312, scriptCount: 0));
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Assert.True(ContentCatalogClient.IsActivated);
         int revocations = ScriptingBootstrap.Revocations;
         staleApproval();
@@ -321,7 +322,7 @@ public sealed class ScriptPackConsentTests : IDisposable
     {
         var connection = NetworkClient.connection;
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(102, scriptCount: 1));
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         PasswordPrompt.Decline();
         Assert.Equal(0, ScriptingBootstrap.PrepareCalls);
         Assert.False(ContentCatalogClient.IsActivated);
@@ -338,7 +339,7 @@ public sealed class ScriptPackConsentTests : IDisposable
     public void PriorExecutionApprovalCannotRunAfterResetOrReconnect(bool reconnect)
     {
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(103, scriptCount: 1));
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Action staleApproval = PasswordPrompt.Approve;
         if (reconnect)
         {
@@ -365,10 +366,10 @@ public sealed class ScriptPackConsentTests : IDisposable
     public void UnavailableOrThrowingPreparationCannotSendActivated(bool throws)
     {
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(104, scriptCount: 1));
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         ScriptingBootstrap.ScriptsReady = throws;
         ScriptingBootstrap.ThrowOnPrepare = throws;
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Assert.Equal(1, ScriptingBootstrap.PrepareCalls);
         Assert.Equal(0, ScriptingBootstrap.PreparedScriptCount);
         Assert.False(ContentCatalogClient.IsActivated);
@@ -383,7 +384,7 @@ public sealed class ScriptPackConsentTests : IDisposable
     {
         ScriptPackManager.PreparationError = "verified source hash mismatch";
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(105, scriptCount: 1));
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Assert.Equal(new[] { "content-catalog" }, PasswordPrompt.Owners);
         Assert.Equal(0, ScriptingBootstrap.PrepareCalls);
         Assert.False(ContentCatalogClient.IsActivated);
@@ -397,7 +398,7 @@ public sealed class ScriptPackConsentTests : IDisposable
         Anomaly.Client.Api.Scripting.ScriptingPolicy.RemoteExecutionEnabled = false;
         ScriptingBootstrap.HoldPreparation = true;
         ContentConsentFixture.Deliver(ContentConsentFixture.CreateOffer(106, scriptCount: 0));
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Assert.Equal(new[] { "content-catalog" }, PasswordPrompt.Owners);
         Assert.Equal(new[] { false }, ScriptingBootstrap.PrepareApprovals);
         Assert.Equal(0, ScriptingBootstrap.PreparedScriptCount);
@@ -440,10 +441,10 @@ public sealed class ScriptPackConsentTests : IDisposable
         offer.Catalog.CatalogSha256 = CatalogBuilder.ComputeCatalogHash(offer.Catalog);
         ContentConsentFixture.Deliver(offer);
         Assert.Equal("content-catalog", PasswordPrompt.Owner);
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Assert.Equal("script-execution", PasswordPrompt.Owner);
         Assert.False(ContentCatalogClient.IsActivated);
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
         Assert.True(ContentCatalogClient.IsActivated);
         Assert.Equal(1, ScriptingBootstrap.PreparedScriptCount);
         Assert.Equal(1, ScriptPackManager.Preparations);
@@ -462,6 +463,12 @@ internal static class ContentConsentFixture
         internal ContentCatalog Catalog { get; }
         internal FileManifestMessage Manifest { get; }
     }
+    internal static void Approve()
+    {
+        PasswordPrompt.Approve();
+        FileTransferTestPump.Drain();
+    }
+
     internal static void Begin()
     {
         Anomaly.Client.Auth.AuthHandler.UsingAnomalyAuth = true;
@@ -482,7 +489,7 @@ internal static class ContentConsentFixture
         manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
         var catalog = CatalogBuilder.Build(Array.Empty<CatalogEntry>(), 1, 0, manifest.ManifestSha256, new[]
         {
-            new CatalogPack { PackId = "fixture:assets", BundleHash = bundle, BundleSize = 64, IndexHash = index, IndexSize = 512 },
+            new CatalogPack { PackId = "fixture:assets", BundleHash = bundle, BundleSize = 64, IndexHash = index, IndexSize = 512, DecodedBytes = 64 },
         }, scriptPacks: scriptCount == 0 ? Array.Empty<CatalogScriptPack>() : new[] { new CatalogScriptPack
         {
             PackId = "fixture:scripts", IndexHash = Enumerable.Repeat((byte)0x63, 32).ToArray(), IndexSize = 256,
@@ -508,10 +515,12 @@ internal static class ContentConsentFixture
 
     internal static void Deliver(Offer offer)
     {
+        FileTransferTestPump.Configure(offer.Manifest);
         typeof(ContentCatalogClient).GetMethod("HandleMessage", BindingFlags.NonPublic | BindingFlags.Static)
             .Invoke(null, new object[] { new ContentCatalogMessage { Catalog = offer.Catalog } });
         typeof(FileTransferClient).GetMethod("HandleManifest", BindingFlags.NonPublic | BindingFlags.Static)
             .Invoke(null, new object[] { offer.Manifest });
+        FileTransferTestPump.Drain();
     }
 
     internal static void DrainGrace()
@@ -534,7 +543,7 @@ internal static class ContentConsentFixture
         FileTransferOverlay.ThrowOnHide = false;
         MelonLogger.ThrowOnError = MelonLogger.ThrowOnWarning = false;
         ConnectionContentBootstrap.Revoke();
-        ContentCatalogClient.Reset(); FileTransferClient.Reset();
+        ContentCatalogClient.Reset(); FileTransferTestPump.Reset();
         ContentConsentStore.Approved.Clear(); FileCache.HasFileResult = _ => false;
         ClientContentRegistrar.Activations = 0;
         AssetBundleManager.ActivationError = null;
@@ -543,6 +552,11 @@ internal static class ContentConsentFixture
         AssetBundleManager.NativeLeaseOwned = false;
         AssetBundleManager.ClearRemoteCalls = 0;
         AssetBundleManager.LastActivationCallback = null;
+        AssetBundleManager.PrewarmOffers = 0;
+        AssetBundleManager.PrewarmedPacks.Clear();
+        AssetBundleManager.BudgetLocalCopies.Clear();
+        AssetBundleManager.BudgetLocalDecoded.Clear();
+        ConnectionInfoOverlay.FailureReason = ConnectionInfoOverlay.FailureCode = null;
         PasswordPrompt.ResetForTests(); FileTransferOverlay.Hide();
         AnomalyMessaging.ResetForTests();
         FacilityRecipeClient.IsReady = false;

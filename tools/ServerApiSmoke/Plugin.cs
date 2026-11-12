@@ -58,6 +58,9 @@ public sealed class Plugin : Plugin<Config>
         if (string.IsNullOrWhiteSpace(_evidence)) return;
         _evidence = Path.GetFullPath(_evidence);
         Directory.CreateDirectory(_evidence);
+        NetworkDedupProbe.Initialize(_evidence);
+        NetworkTransferProbe.Initialize(_evidence);
+        Anomaly.NetworkTransferPeers.PeerCoordinator.Initialize(_evidence);
         var requestedMods = Environment.GetEnvironmentVariable("ANOMALY_MOD_ADMISSION_REQUIREMENTS");
         if (!string.IsNullOrEmpty(requestedMods))
         {
@@ -101,6 +104,9 @@ public sealed class Plugin : Plugin<Config>
 
     public override void Disable()
     {
+        NetworkDedupProbe.Shutdown();
+        NetworkTransferProbe.Shutdown();
+        Anomaly.NetworkTransferPeers.PeerCoordinator.Shutdown();
         if (!_enabled) return;
         foreach (var requirement in _admissionRequirements) requirement.Dispose();
         _admissionRequirements.Clear();
@@ -139,8 +145,12 @@ public sealed class Plugin : Plugin<Config>
     {
         CaptureCryptoProvider("connected");
         _connected[ev.Player.NetworkId] = DateTime.UtcNow;
-        bool prematureGrant = CustomItems.TryGiveItem(ev.Player, ItemKey, out _);
-        Record("connected", Status(ev.Player, "\"prematureGrant\":" + Boolean(prematureGrant)));
+        // Pre-player acquisition can finish before Connected. Only a grant while
+        // content is still unactivated tests the negative admission contract.
+        bool checkedBeforeActivation = CustomItems.GetPlayerReadiness(ev.Player) != ContentReadiness.Activated;
+        bool prematureGrant = checkedBeforeActivation && CustomItems.TryGiveItem(ev.Player, ItemKey, out _);
+        Record("connected", Status(ev.Player, "\"checkedBeforeActivation\":" + Boolean(checkedBeforeActivation)
+            + ",\"prematureGrant\":" + Boolean(prematureGrant)));
         if (prematureGrant) File.WriteAllText(Path.Combine(_evidence, "failure.txt"), "Custom item was granted before catalog activation.");
     }
 
@@ -189,6 +199,9 @@ public sealed class Plugin : Plugin<Config>
             bool restartFacility = false;
             switch (operation)
             {
+                case "ping":
+                    details = "{\"pong\":true}";
+                    break;
                 case "status":
                 case "report":
                     CaptureFacilityDiagnostics();
@@ -241,6 +254,8 @@ public sealed class Plugin : Plugin<Config>
                     restartFacility = operation == "facility-restart";
                     details = "{\"nextFacilityScenario\":" + Quote(command[1]) + "}";
                     break;
+                case "network-report": details = NetworkDedupProbe.Report(); break;
+                case "transfer-report": details = NetworkTransferProbe.Report(); break;
                 default: throw new ArgumentException("Unknown fixture command: " + operation);
             }
             Record(operation, details);

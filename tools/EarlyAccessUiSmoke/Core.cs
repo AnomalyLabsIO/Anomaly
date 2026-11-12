@@ -55,6 +55,7 @@ public sealed partial class Core : MelonMod
         _output = Environment.GetEnvironmentVariable("ANOMALY_UI_SMOKE_DIR");
         if (string.IsNullOrEmpty(_output)) return;
         Directory.CreateDirectory(_output);
+        if (RejectUnsupportedDisconnectPayloadCapture()) return;
         Application.runInBackground = true;
         FacilityCatalogFailureProbe.Initialize(_output);
         _localHostingSmoke = Environment.GetEnvironmentVariable("ANOMALY_LOCAL_HOSTING_SMOKE") == "1";
@@ -62,7 +63,8 @@ public sealed partial class Core : MelonMod
         _dedicatedDummyControlSmoke = Environment.GetEnvironmentVariable("ANOMALY_DEDICATED_DUMMY_SMOKE") == "1";
         _newsSmokeOnly = Environment.GetEnvironmentVariable("ANOMALY_UI_SMOKE_NEWS_ONLY") == "1";
         _remoteScriptingSmoke = Environment.GetEnvironmentVariable("ANOMALY_REMOTE_SCRIPTING_SMOKE") == "1";
-        if (_localHostingSmoke || _dedicatedDummyControlSmoke || FacilityCatalogFailureProbe.Enabled || _newsSmokeOnly || _remoteScriptingSmoke)
+        _luaDefinitionsSmoke = Environment.GetEnvironmentVariable("ANOMALY_LUA_DEFINITIONS_SMOKE") == "1";
+        if (_localHostingSmoke || _dedicatedDummyControlSmoke || FacilityCatalogFailureProbe.Enabled || _newsSmokeOnly || _remoteScriptingSmoke || _luaDefinitionsSmoke)
         {
             if (_remoteScriptingSmoke) InitializeServerApiSmoke();
             ClientEvents.CanvasReady += OnCanvasReady;
@@ -107,6 +109,7 @@ public sealed partial class Core : MelonMod
         _canvasInstanceId = UiCanvas.Root.GetInstanceID();
         _next = Time.realtimeSinceStartupAsDouble + 8;
         if (_newsSmokeOnly) { EnqueueNewsSmoke(); return; }
+        if (_luaDefinitionsSmoke) { EnqueueLuaDefinitionsSmoke(); return; }
         if (FacilityCatalogFailureProbe.Enabled) { EnqueueFacilityCatalogFailureProbe(); return; }
         if (_localHostingSmoke) { EnqueueLocalHostingSmoke(); return; }
         if (_dedicatedDummyControlSmoke) { EnqueueDedicatedDummyControlSmoke(); return; }
@@ -427,6 +430,7 @@ public sealed partial class Core : MelonMod
 
     public override void OnUpdate()
     {
+        PollNetworkTransferSmoke();
         TickClientScriptingSmoke();
         TickRemoteScriptingSmoke();
         if ((_dummyVisibilitySmoke || _dedicatedDummyControlSmoke) && !_failed)

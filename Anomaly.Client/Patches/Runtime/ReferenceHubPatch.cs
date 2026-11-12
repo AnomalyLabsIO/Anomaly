@@ -11,7 +11,6 @@ public static class ReferenceHubPatch
     [HarmonyPatch(typeof(ReferenceHub), nameof(ReferenceHub.Start))]
     public static void StartPostfix(ReferenceHub __instance)
     {
-        if (!PatchInvocationGuard.ShouldFire(__instance, PatchInvocationGuard.PlayerAdded)) return;
         ClientRuntime.HandlePlayerAdded(__instance);
     }
 
@@ -19,7 +18,6 @@ public static class ReferenceHubPatch
     [HarmonyPatch(typeof(ReferenceHub), nameof(ReferenceHub.OnDestroy))]
     public static void OnDestroyPrefix(ReferenceHub __instance)
     {
-        if (!PatchInvocationGuard.ShouldFire(__instance, PatchInvocationGuard.PlayerRemoved)) return;
         ClientRuntime.HandlePlayerRemoved(__instance);
     }
 }

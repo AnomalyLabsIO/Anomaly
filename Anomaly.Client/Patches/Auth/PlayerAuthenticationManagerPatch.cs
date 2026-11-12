@@ -4,6 +4,7 @@ using Anomaly.Client.Api.Features;
 using Anomaly.Client.Api.Events;
 using Anomaly.Client.Api.Networking;
 using Anomaly.Client.Auth;
+using Anomaly.Client.Content;
 using Anomaly.Client.Components;
 using Anomaly.Client.Api.Internal.Wrappers;
 using Anomaly.Client.Api.Modding;
@@ -17,7 +18,6 @@ using Il2CppGameCore;
 using Il2CppMirror;
 using Il2CppRemoteAdmin;
 using MelonLoader;
-using UnityEngine;
 
 namespace Anomaly.Client.Patches.Auth;
 
@@ -39,7 +39,6 @@ public static class PlayerAuthenticationManagerPatch
     private const uint GenericTransportRateKeyPrefix = 0xFFF00000u;
     private const uint RawTransportRateKey = 0xFFE00000u;
     private static readonly Dictionary<EncryptedChannelManager.EncryptedChannel, List<PendingEncryptedMessage>> PendingClientMessages = new();
-    private static readonly InboundEnvelopeDispatchCoalescer ReceiveDispatchCoalescer = new();
     private static int _pendingClientMessageCount;
     private static int _pendingClientBytes;
 
@@ -77,8 +76,6 @@ public static class PlayerAuthenticationManagerPatch
         FlushPendingClientMessages(EncryptedChannelManager.EncryptedChannel.AdminChat);
     }
 
-    private static int _lastSendFrame = -1;
-    private static long _lastSendFingerprint;
     [HarmonyPrefix]
     [HarmonyPatch(typeof(EncryptedChannelManager), nameof(EncryptedChannelManager.TrySendMessageToServer), new Type[] { typeof(string), typeof(EncryptedChannelManager.EncryptedChannel) })]
     public static bool OnPack(EncryptedChannelManager __instance, out bool __result,
@@ -89,22 +86,6 @@ public static class PlayerAuthenticationManagerPatch
         {
             return true;
         }
-
-        // Same IL2CPP double-dispatch shape as the receive path: the prefix
-        // fires 2–3 times per underlying send, and a naive frame-only dedup
-        // drops the second legitimate send that shares a frame with another.
-        // Fingerprint content + channel so repeat dispatches of the same
-        // send are squashed while two distinct sends in the same frame both
-        // go through.
-        int frame = UnityEngine.Time.frameCount;
-        long fp = ComputeSendFingerprint(content, channel);
-        if (frame == _lastSendFrame && fp == _lastSendFingerprint)
-        {
-            __result = true; // first call already handled it
-            return false;
-        }
-        _lastSendFrame = frame;
-        _lastSendFingerprint = fp;
 
         if (!TryAdvanceTransportCounter(__instance))
             return false;
@@ -176,29 +157,11 @@ public static class PlayerAuthenticationManagerPatch
         if (!AuthHandler.UsingAnomalyAuth)
             return true;
 
-        // IL2CPP re-marshals the byte[] field per Harmony prefix dispatch,
-        // so the same underlying receive fires this prefix 2–3 times with a
-        // fresh byte[] of identical content each call. Both vanilla and
-        // Anomaly branches below gate on a strict-monotonic counter
-        // (vanilla: EncryptedChannelManager._rxCounter; Anomaly: per-channel
-        // state on AnomalyReplayTable), which naturally rejects the duplicate
-        // dispatches as replays.
-
+        // Each delivered envelope is charged before authentication. Replay
+        // rejection belongs to the authenticated session/counter checks below;
+        // equal bytes or a shared Unity frame do not identify one delivery.
         byte[] packedData = packed.Data;
-        var rawLimiter = AnomalyReplayTable.RawInboundRateLimiter;
-        var dispatchDisposition = ReceiveDispatchCoalescer.Observe(
-            UnityEngine.Time.frameCount,
-            (byte)packed.Level,
-            packedData);
-        if (dispatchDisposition == InboundEnvelopeDispatchCoalescer.DispatchDisposition.IgnoreExpectedDuplicate)
-            return false;
-        if (dispatchDisposition == InboundEnvelopeDispatchCoalescer.DispatchDisposition.ChargeExcessDuplicate)
-        {
-            HandleRawTransportResult(
-                rawLimiter.RegisterProtocolViolation(),
-                "Encrypted-channel receive exceeded the expected duplicate Harmony invocation count.");
-            return false;
-        }
+        var rawLimiter = AnomalyReplayTable.CurrentRawInboundRateLimiter;
 
         if (packedData == null)
         {
@@ -307,7 +270,10 @@ public static class PlayerAuthenticationManagerPatch
                 anomalyPayload,
                 packed.Level == EncryptedChannelManager.SecurityLevel.EncryptedAndAuthenticated,
                 NetworkServer.active,
-                beforeHubReady: hub == null);
+                // AddPlayer is released only after the exact content commit.
+                // Another physical channel can deliver authenticated control
+                // before the ordered local-hub spawn reaches this client.
+                beforeContentReady: !NetworkServer.active && !ConnectionContentBootstrap.IsAdmitted);
             return false;
         }
 
@@ -409,21 +375,6 @@ public static class PlayerAuthenticationManagerPatch
         {
             SafeLogWarning($"{message} Drops={result.DroppedInWindow}.");
         }
-    }
-
-    private static long ComputeSendFingerprint(string content, EncryptedChannelManager.EncryptedChannel channel)
-    {
-        long fp = (long)channel;
-        if (content == null) return fp;
-        int len = content.Length;
-        fp = unchecked(fp * 1315423911L + len);
-        int headEnd = len < 4 ? len : 4;
-        for (int i = 0; i < headEnd; i++)
-            fp = unchecked(fp * 31L + content[i]);
-        int tailStart = len < 8 ? headEnd : len - 4;
-        for (int i = tailStart; i < len; i++)
-            fp = unchecked(fp * 31L + content[i]);
-        return fp;
     }
 
     private static void QueuePendingClientMessage(
@@ -552,9 +503,6 @@ public static class PlayerAuthenticationManagerPatch
         PendingClientMessages.Clear();
         _pendingClientMessageCount = 0;
         _pendingClientBytes = 0;
-        ReceiveDispatchCoalescer.Reset();
-        _lastSendFrame = -1;
-        _lastSendFingerprint = 0;
     }
 
     private static void SafeLogWarning(string message)
@@ -576,8 +524,6 @@ internal static class OptionalByteArrayClientSendPatch
     private const string FeatureId = "encrypted-channel-byte-send";
     private const string ExpectedTarget =
         "EncryptedChannelManager.TrySendMessageToServer(byte[], EncryptedChannel)";
-    private static int _lastSendFrame = -1;
-    private static long _lastSendFingerprint;
 
     [HarmonyPrepare]
     public static bool Prepare()
@@ -643,16 +589,6 @@ internal static class OptionalByteArrayClientSendPatch
         // Pack into managed storage, as in the string-send path. An IL2CPP copy
         // must not be mistaken for the managed buffer consumed by our transport.
         byte[] bytes = content.ToArray();
-        int frame = UnityEngine.Time.frameCount;
-        long fingerprint = ComputeSendFingerprint(bytes, channel);
-        if (frame == _lastSendFrame && fingerprint == _lastSendFingerprint)
-        {
-            __result = true;
-            return false;
-        }
-        _lastSendFrame = frame;
-        _lastSendFingerprint = fingerprint;
-
         if (!PlayerAuthenticationManagerPatch.TryAdvanceTransportCounter(__instance))
             return false;
 
@@ -661,24 +597,5 @@ internal static class OptionalByteArrayClientSendPatch
         BitConverter.GetBytes(__instance._txCounter).CopyTo(data, 1);
         Array.Copy(bytes, 0, data, 5, bytes.Length);
         return PlayerAuthenticationManagerPatch.SendPackedClientData(data, out __result);
-    }
-
-    private static long ComputeSendFingerprint(
-        byte[] content,
-        EncryptedChannelManager.EncryptedChannel channel)
-    {
-        long fingerprint = (long)channel;
-        if (content == null)
-            return fingerprint;
-
-        int length = content.Length;
-        fingerprint = unchecked(fingerprint * 1315423911L + length);
-        int headEnd = length < 4 ? length : 4;
-        for (int i = 0; i < headEnd; i++)
-            fingerprint = unchecked(fingerprint * 31L + content[i]);
-        int tailStart = length < 8 ? headEnd : length - 4;
-        for (int i = tailStart; i < length; i++)
-            fingerprint = unchecked(fingerprint * 31L + content[i]);
-        return fingerprint;
     }
 }

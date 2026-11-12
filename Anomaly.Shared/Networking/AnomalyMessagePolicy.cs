@@ -165,6 +165,14 @@ namespace Anomaly.Shared.Networking
         internal static AnomalyInboundRateLimiter CreatePoseTraffic() =>
             new AnomalyInboundRateLimiter(1024, 512, 384L * 1024, 192d * 1024);
 
+        // Only the exact authenticated, credited file-chunk contract uses this profile.
+        internal static AnomalyInboundRateLimiter CreateBulkTraffic() =>
+            new AnomalyInboundRateLimiter(256, 1024, 2L * 1024 * 1024, 12d * 1024 * 1024);
+
+        // The larger pre-decrypt ceiling exists only during a live bulk offer.
+        internal static AnomalyInboundRateLimiter CreateClientBulkRaw() =>
+            new AnomalyInboundRateLimiter(1536, 1280, 10L * 1024 * 1024, 16d * 1024 * 1024);
+
         internal AnomalyRateLimitResult TryAcceptOptional(uint messageHash, int payloadBytes) =>
             TryAcceptCore(messageHash, payloadBytes, optional: true);
 

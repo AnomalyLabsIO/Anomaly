@@ -74,6 +74,13 @@ public static class ReferenceHubStressTestExtensions
     public static string LoggedNameFromRefHub(this ReferenceHub hub) => "stress-test-peer";
 }
 
+// Native scheduling is covered in the Server boundary suite. Shared tests only
+// need the exit-idle boundary used when an authenticated admission begins.
+public static class IdleMode
+{
+    public static void SetIdleMode(bool state) { }
+}
+
 namespace Anomaly.Server
 {
     internal static class Plugin
@@ -237,11 +244,35 @@ namespace Anomaly.Server.Networking
             _ => true;
         public static Func<IAnomalyMessage, Exception> TrySendException =
             _ => null;
+        internal static Func<FileChunkMessage, Anomaly.Server.FileTransfer.BulkSendResult> BulkSendResult =
+            _ => Anomaly.Server.FileTransfer.BulkSendResult.Sent;
+        internal static Func<Mirror.NetworkConnectionToClient, (int Mtu, int RoundTripTime)> BulkLinkMetrics = _ => (1024, 100);
 
         public static void SendToClient(ReferenceHub hub, IAnomalyMessage message)
             => Sent.Add(message);
         public static bool TrySendToConnection(Mirror.NetworkConnectionToClient connection, IAnomalyMessage message) =>
             TrySendToClient(connection.Owner, message);
+
+        internal static bool TryGetBulkTransferProfile(out byte version, out ulong laneMask)
+        { version = BulkTransferProtocol.ProfileVersion; laneMask = ((1UL << 16) - 1) << 6; return true; }
+        internal static bool TryGetBulkLinkCapacity(Mirror.NetworkConnectionToClient connection, ulong laneMask,
+            out int mtu, out int roundTripTime)
+        {
+            var metrics = BulkLinkMetrics(connection);
+            mtu = metrics.Mtu; roundTripTime = metrics.RoundTripTime;
+            return mtu > 10 && roundTripTime >= 0;
+        }
+        internal static Anomaly.Server.FileTransfer.BulkSendResult TrySendBulkChunkToConnection(
+            Mirror.NetworkConnectionToClient connection, FileChunkMessage message, int domain)
+        {
+            var result = BulkSendResult(message);
+            if (result != Anomaly.Server.FileTransfer.BulkSendResult.Sent) return result;
+            var replay = AuthenticatedTransportSessions.GetBulkReplayState(connection);
+            if (replay == null) return Anomaly.Server.FileTransfer.BulkSendResult.Failed;
+            message.FrameCounter = replay.NextTxCounter(domain);
+            return TrySendToConnection(connection, message) ? Anomaly.Server.FileTransfer.BulkSendResult.Sent :
+                Anomaly.Server.FileTransfer.BulkSendResult.Failed;
+        }
 
         public static bool TrySendToClient(ReferenceHub hub, IAnomalyMessage message)
         {
@@ -261,6 +292,8 @@ namespace Anomaly.Server.Networking
             Sent.Clear();
             TrySendResult = _ => true;
             TrySendException = _ => null;
+            BulkSendResult = _ => Anomaly.Server.FileTransfer.BulkSendResult.Sent;
+            BulkLinkMetrics = _ => (1024, 100);
         }
     }
 }
@@ -301,11 +334,11 @@ namespace Anomaly.Server.FileTransfer
                 File.Copy(file.FullPath, Path.Combine(packRoot, name));
                 var index = new AssetPackIndex
                 {
-                    SchemaVersion = 1, PackId = "fixture:pack" + i, Namespace = "fixture",
+                    SchemaVersion = AssetPackIndex.CurrentSchemaVersion, PackId = "fixture:pack" + i, Namespace = "fixture",
                     UnityVersion = AssetPackIndex.SupportedUnityVersion,
                     Platform = AssetPackIndex.SupportedPlatform,
                     GameProfile = AssetPackIndex.SupportedGameProfile,
-                    BundleFile = name, BundleSha256 = ToHex(file.Hash), BundleBytes = file.Size,
+                    BundleFile = name, BundleSha256 = ToHex(file.Hash), BundleBytes = file.Size, DecodedBytes = 192000,
                     Assets = new List<PackAssetEntry>
                     {
                         new PackAssetEntry { Address = "mods/fixture/audio/test", EntryName = "mods/fixture/audio/test", Kind = "AudioClip", SampleFrames = 48000, SampleRate = 48000, Channels = 1 }
@@ -376,8 +409,10 @@ namespace Anomaly.Client.Api.FileTransfer
             string tempPath,
             byte[] expectedHash,
             string originalPath,
-            uint expectedSize)
+            uint expectedSize,
+            System.Threading.CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (ThrowOnImport)
                 throw new IOException("injected cache-import failure");
             if (!File.Exists(tempPath) || new FileInfo(tempPath).Length != expectedSize)
@@ -427,7 +462,11 @@ namespace Anomaly.Client.Api.Events.Args
     {
         public FileTransferCompleteEventArgs(bool succeeded, int completedFiles)
         {
+            Success = succeeded;
+            FileCount = completedFiles;
         }
+        internal bool Success { get; }
+        internal int FileCount { get; }
     }
 }
 
@@ -457,6 +496,7 @@ namespace Anomaly.Client.Api.Events.Handlers
     internal static class FileTransferEvents
     {
         public static bool ThrowOnComplete { get; set; }
+        internal static Action<Anomaly.Client.Api.Events.Args.FileTransferCompleteEventArgs> CompleteObserved;
 
         public static void OnProgress(
             Anomaly.Client.Api.Events.Args.FileTransferProgressEventArgs args)
@@ -468,6 +508,7 @@ namespace Anomaly.Client.Api.Events.Handlers
         {
             if (ThrowOnComplete)
                 throw new InvalidOperationException("injected completion-event failure");
+            CompleteObserved?.Invoke(args);
         }
     }
 }
@@ -485,6 +526,8 @@ namespace Anomaly.Client.Api.Networking
     internal static class AnomalyMessaging
     {
         internal static Action<IAnomalyMessage> ContentBootstrapMessageReceived;
+        internal static Func<bool> BulkReceiveExpected;
+        internal static Func<ulong, bool> BulkSessionExpected;
         internal static Action TransportSessionRevoked;
         internal static long TransportGeneration { get; private set; }
         public static event Action<IAnomalyMessage> MessageReceived
@@ -610,6 +653,7 @@ namespace MelonLoader
     {
         public static bool ThrowOnError { get; set; }
         public static bool ThrowOnWarning { get; set; }
+        internal static Action<string> ErrorObserved;
 
         public static void Msg(string message)
         {
@@ -625,6 +669,7 @@ namespace MelonLoader
         {
             if (ThrowOnError)
                 throw new InvalidOperationException("injected logger failure");
+            ErrorObserved?.Invoke(message);
         }
     }
 

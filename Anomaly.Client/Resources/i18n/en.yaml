@@ -275,6 +275,8 @@
 "anomaly.auth.rotation_error": "Could not save the new identity ({0}). Check the game log before trying again."
 # {0} = literal transport reason
 "anomaly.auth.no_response": "The server did not respond ({0})."
+"anomaly.auth.server_closed": "The server ended the connection.\nServer message: {0}"
+"anomaly.auth.server_closed_action": "Review the server message before reconnecting. If this repeats, ask the server operator for help."
 "anomaly.auth.server_availability_action": "Check the server address and that the server is running, then reconnect. If it is reachable, check that client and server use matching Anomaly releases."
 "anomaly.auth.reconnect_failed": "The authenticated reconnect could not be started."
 "anomaly.auth.reconnect_action": "Return to the server browser and connect again."

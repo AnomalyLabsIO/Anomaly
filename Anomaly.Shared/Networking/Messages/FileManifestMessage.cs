@@ -22,11 +22,15 @@ namespace Anomaly.Shared.Networking.Messages
         public MessageChannel TransportChannel => MessageChannel.ReliableUnordered;
 
         public ulong SessionId { get; set; }
+        public byte BulkProfileVersion { get; set; } = BulkTransferProtocol.ProfileVersion;
+        public ulong BulkLaneMask { get; set; }
+        public uint[] BulkCounterBases { get; set; } = new uint[BulkTransferProtocol.MaxDomains];
         public byte[] ManifestSha256 { get; set; } = new byte[32];
         public List<FileEntry> Files { get; set; } = new List<FileEntry>();
 
         public void Serialize(BinaryWriter writer)
         {
+            ValidateBulkProfile();
             if (SessionId == 0)
                 throw new InvalidDataException("File-transfer session id cannot be zero.");
             if (Files == null || Files.Count > MaxFiles)
@@ -35,6 +39,9 @@ namespace Anomaly.Shared.Networking.Messages
                 throw new InvalidDataException("Manifest SHA-256 did not match its canonical entries.");
 
             writer.Write(SessionId);
+            writer.Write(BulkProfileVersion);
+            writer.Write(BulkLaneMask);
+            foreach (uint counter in BulkCounterBases) writer.Write(counter);
             writer.Write(ManifestSha256);
             writer.Write((ushort)Files.Count);
             long aggregateBytes = 0;
@@ -69,6 +76,12 @@ namespace Anomaly.Shared.Networking.Messages
             SessionId = reader.ReadUInt64();
             if (SessionId == 0)
                 throw new InvalidDataException("File-transfer session id cannot be zero.");
+
+            BulkProfileVersion = reader.ReadByte();
+            BulkLaneMask = reader.ReadUInt64();
+            BulkCounterBases = new uint[BulkTransferProtocol.MaxDomains];
+            for (int domain = 0; domain < BulkCounterBases.Length; domain++) BulkCounterBases[domain] = reader.ReadUInt32();
+            ValidateBulkProfile();
 
             ManifestSha256 = reader.ReadBytes(32);
             if (ManifestSha256.Length != 32)
@@ -108,6 +121,15 @@ namespace Anomaly.Shared.Networking.Messages
             }
             if (!HashesEqual(ManifestSha256, ComputeManifestSha256(Files)))
                 throw new InvalidDataException("Manifest SHA-256 did not match its canonical entries.");
+        }
+
+        private void ValidateBulkProfile()
+        {
+            if (BulkProfileVersion != BulkTransferProtocol.ProfileVersion || !BulkTransferProtocol.IsValidMask(BulkLaneMask) ||
+                BulkCounterBases == null || BulkCounterBases.Length != BulkTransferProtocol.MaxDomains)
+                throw new InvalidDataException("Manifest bulk profile or physical-lane offer is invalid.");
+            foreach (uint counter in BulkCounterBases)
+                if (counter == uint.MaxValue) throw new InvalidDataException("Manifest bulk counter base is reserved.");
         }
 
         private static void ValidateRelativePath(string path)

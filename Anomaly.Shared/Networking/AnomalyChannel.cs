@@ -32,9 +32,9 @@ namespace Anomaly.Shared.Networking
     public static class AnomalyProtocol
     {
         /// <summary>
-        /// v12: authenticated source packs bind direct Lua files, message schemas and connection approval.
+        /// v13: negotiated, credited bulk domains and per-file attempts retain the authenticated readiness barrier.
         /// </summary>
-        public const byte CurrentVersion = 12;
+        public const byte CurrentVersion = 13;
     }
 
     /// <summary>

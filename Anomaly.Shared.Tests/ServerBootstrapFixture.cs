@@ -35,8 +35,15 @@ internal static class ServerBootstrapFixture
     internal static FileManifestMessage Manifest => AnomalyMessaging.Sent.OfType<FileManifestMessage>().Last();
     internal static FileTransferSession Session(ReferenceHub hub) => (FileTransferSession)((IDictionary)typeof(FileTransferSession)
         .GetField("ActiveSessions", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null))[hub.connectionToClient];
-    internal static void Handle(ReferenceHub hub, IAnomalyMessage message) =>
+    internal static void Handle(ReferenceHub hub, IAnomalyMessage message)
+    {
+        if (message is FileRequestMessage request && request.RequestedHashes.Count != 0 && request.BulkLaneMask == 0)
+        {
+            request.BulkProfileVersion = Session(hub).Manifest.BulkProfileVersion;
+            request.BulkLaneMask = Session(hub).Manifest.BulkLaneMask;
+        }
         ConnectionContentBootstrap.HandleMessage(hub.connectionToClient, message);
+    }
     internal static void Approve(ReferenceHub hub) => Handle(hub, new ContentCatalogDecisionMessage
     { Decision = ContentCatalogDecision.Approved, CatalogSha256 = Catalog.CatalogSha256, ManifestSha256 = Catalog.ManifestSha256 });
     internal static bool ActivateAndAdopt(ReferenceHub hub)

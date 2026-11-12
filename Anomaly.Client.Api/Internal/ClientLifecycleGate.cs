@@ -3,10 +3,9 @@ using System.Collections.Generic;
 namespace Anomaly.Client.Api.Internal;
 
 /// <summary>
-/// Instance-aware state gate for Mirror lifecycle hooks. IL2CPP can route one
-/// logical virtual call through more than one patched vtable slot; this gate
-/// accepts each state transition once while still permitting a later reconnect
-/// on the same NetworkManager instance.
+/// Owns Mirror lifecycle transitions for a concrete manager. Native hooks and
+/// local-host readiness recovery share this state, while a later reconnect on
+/// the same manager starts a new lifecycle.
 /// </summary>
 internal sealed class ClientLifecycleGate
 {

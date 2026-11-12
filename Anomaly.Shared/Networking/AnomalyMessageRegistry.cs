@@ -263,6 +263,8 @@ namespace Anomaly.Shared.Networking
             RegisterBuiltIn("anomaly:filechunk", () => new FileChunkMessage());
             RegisterBuiltIn("anomaly:filecomplete", () => new FileTransferCompleteMessage());
             RegisterBuiltIn("anomaly:fileack", () => new FileAckMessage());
+            RegisterBuiltIn("anomaly:filecredit", () => new FileCreditMessage());
+            RegisterBuiltIn("anomaly:filestatus", () => new FileTransferStatusMessage());
 
             RegisterBuiltIn("anomaly:asset:override-texture", () => new AssetOverrideTextureMessage());
             RegisterBuiltIn("anomaly:asset:override-clear", () => new AssetClearOverrideMessage());

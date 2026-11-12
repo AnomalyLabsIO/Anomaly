@@ -5,7 +5,7 @@ namespace Anomaly.Shared.Assets;
 /// <summary>Offline-produced metadata. Clients independently inspect every bundle object.</summary>
 public sealed class AssetPackIndex
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
     public const string SupportedUnityVersion = "6000.0.43f1";
     public const string SupportedPlatform = "windows-x64";
     public const string SupportedGameProfile = "scpsl-14.2.7-unity-6000.0.43f1-windows-x64-v1";
@@ -18,6 +18,8 @@ public sealed class AssetPackIndex
     public string BundleFile = string.Empty;
     public string BundleSha256 = string.Empty;
     public long BundleBytes;
+    /// <summary>Authoring validator's total decoded bytes, independently checked before native loading.</summary>
+    public long DecodedBytes;
     public List<PackAssetEntry> Assets = new List<PackAssetEntry>();
     public List<DecorativeVisualDefinition> Visuals = new List<DecorativeVisualDefinition>();
 }

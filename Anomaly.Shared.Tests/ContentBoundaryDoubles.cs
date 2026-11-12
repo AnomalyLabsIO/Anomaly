@@ -1,4 +1,5 @@
 using System.Linq;
+using Anomaly.Client.Api.FileTransfer;
 using Anomaly.Shared.Content;
 
 namespace Anomaly.Client.Api.Scripting
@@ -103,7 +104,8 @@ namespace Anomaly.Client.Components
     }
     internal static class ConnectionInfoOverlay
     {
-        internal static void ShowFailure(string reason, string advice, string code) { }
+        internal static string FailureReason, FailureCode;
+        internal static void ShowFailure(string reason, string advice, string code) { FailureReason = reason; FailureCode = code; }
     }
 }
 
@@ -123,6 +125,22 @@ namespace Anomaly.Client.Assets
     // Native bundle validation/loading has its own fixture suite; this boundary exercises the coordinator.
     internal static class AssetBundleManager
     {
+        internal static readonly Dictionary<string, long> BudgetLocalCopies = new(StringComparer.Ordinal);
+        internal static readonly List<BundleCopyBudget.DecodedDemand> BudgetLocalDecoded = new();
+        internal static string BudgetKey(CatalogPack pack) => FileCache.ToHex(pack.BundleHash) + ":" + FileCache.ToHex(pack.IndexHash);
+        internal static void PreflightRemoteBudget(ContentCatalog catalog)
+        {
+            var offered = new List<KeyValuePair<string, long>>();
+            foreach (var pack in catalog.Packs) offered.Add(new KeyValuePair<string, long>(BudgetKey(pack), pack.BundleSize));
+            BundleCopyBudget.Validate(BudgetLocalCopies, offered);
+            BundleCopyBudget.ValidateDecoded(BudgetLocalDecoded, catalog.Packs.Select(pack =>
+                new BundleCopyBudget.DecodedDemand(FileCache.ToHex(pack.BundleHash), BudgetKey(pack), pack.DecodedBytes)));
+        }
+        internal static int PrewarmOffers;
+        internal static readonly List<string> PrewarmedPacks = new();
+        internal static void BeginRemotePrewarm(ContentCatalog catalog)
+        { PreflightRemoteBudget(catalog); PrewarmOffers++; PrewarmedPacks.Clear(); }
+        internal static void PrewarmRemotePack(string packId) { PrewarmedPacks.Add(packId); }
         internal static bool Active;
         internal static string ActivationError;
         internal static bool ThrowOnRevokeRemote, NativeLeaseOwned;
@@ -137,6 +155,7 @@ namespace Anomaly.Client.Assets
         }
         internal static void RevokeRemote()
         {
+            PrewarmedPacks.Clear();
             Active = false;
             if (ThrowOnRevokeRemote) throw new InvalidOperationException("injected native binding refresh failure");
         }

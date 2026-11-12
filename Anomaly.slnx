@@ -6,6 +6,7 @@
   <Project Path="Anomaly.Client/Anomaly.Client.csproj" Id="305945be-80b7-4120-a40c-df8a56f9aad4" />
   <Project Path="Anomaly.Client.Api/Anomaly.Client.Api.csproj" />
   <Project Path="Anomaly.Client.Api.Tests/Anomaly.Client.Api.Tests.csproj" />
+  <Project Path="Anomaly.Client.Patches.Tests/Anomaly.Client.Patches.Tests.csproj" />
   <Project Path="Anomaly.Client.Scripting/Anomaly.Client.Scripting.csproj" />
   <Project Path="Anomaly.Client.Scripting.Tests/Anomaly.Client.Scripting.Tests.csproj" />
   <Project Path="Anomaly.Client.ScriptWorker/Anomaly.Client.ScriptWorker.csproj" />
@@ -16,4 +17,5 @@
   <Project Path="Anomaly.Shared.Tests/Anomaly.Shared.Tests.csproj" />
   <Project Path="samples/HelloAnomalyModule/HelloAnomalyModule.csproj" />
   <Project Path="samples/HelloAnomalyMod/HelloAnomalyMod.csproj" />
+  <Project Path="tools/AssetPackIndexUpgrade/AssetPackIndexUpgrade.csproj" />
 </Solution>

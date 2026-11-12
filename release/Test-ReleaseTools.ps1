@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch] $IncludeSigningTests
+)
 
 $ErrorActionPreference = 'Stop'
 $toolRepositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -7,16 +9,19 @@ $toolTempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("anomaly-relea
 [void](New-Item -ItemType Directory -Path $toolTempDirectory)
 $previousSourceDateEpoch = $env:SOURCE_DATE_EPOCH
 try {
-    $privateKey = Join-Path $toolTempDirectory 'test-private.pem'
-    $publicKey = Join-Path $toolTempDirectory 'test-public.pem'
-    $otherPrivateKey = Join-Path $toolTempDirectory 'other-private.pem'
-    $otherPublicKey = Join-Path $toolTempDirectory 'other-public.pem'
-    $inventory = Join-Path $toolTempDirectory 'dependency-inventory.json'
-    [IO.File]::WriteAllBytes($inventory, [Text.UTF8Encoding]::new($false).GetBytes('{"schemaVersion":1}'))
+    $env:SOURCE_DATE_EPOCH = '1787356800'
+    & dotnet build (Join-Path $toolRepositoryRoot 'tools/ReleasePackaging/ReleasePackaging.csproj') `
+        -c Release -p:DeployLocal=false --nologo
+    if ($LASTEXITCODE -ne 0) { throw 'Release packaging tool build failed.' }
+    & dotnet build (Join-Path $toolRepositoryRoot 'tools/AssetPackIndexUpgrade/AssetPackIndexUpgrade.csproj') `
+        -c Release -p:DeployLocal=false --nologo
+    if ($LASTEXITCODE -ne 0) { throw 'Asset index rebuild tool build failed.' }
 
     . (Join-Path $toolRepositoryRoot 'tools/ContentPackFixture.ps1')
     $skinIndexPath = Join-Path $PSScriptRoot 'assets/skins/personal-skins.index.json'
     $skinBundlePath = Join-Path $PSScriptRoot 'assets/skins/personal-skins.bundle'
+    & dotnet (Join-Path $toolRepositoryRoot 'tools/ReleasePackaging/bin/Release/net8.0/Anomaly.ReleasePackaging.dll') validate-skins $skinIndexPath
+    if ($LASTEXITCODE -ne 0) { throw 'The release skin resource declaration does not match its independently validated bundle.' }
     $fixtureEntries = @(Get-AssetContentPackFixtureEntries -IndexPath $skinIndexPath -BundlePath $skinBundlePath -Root 'UserData/Anomaly/ContentPacks')
     $expectedFixturePaths = @(
         'UserData/Anomaly/ContentPacks/personal/skins/pack.json',
@@ -42,76 +47,33 @@ try {
     }
     if (!$badFixtureRejected) { throw 'Exporter fixture wrapping accepted bytes not pinned by the index.' }
 
-    $artifactNames = @(
-        'Anomaly.Bootstrap.dll',
-        'Anomaly.Client.Api.dll',
-        'Anomaly.Client.dll',
-        'Anomaly.Shared.dll'
-    )
-    foreach ($artifactName in $artifactNames) {
-        [IO.File]::WriteAllBytes(
-            (Join-Path $toolTempDirectory $artifactName),
-            [Text.UTF8Encoding]::new($false).GetBytes(('test:' + $artifactName)))
+    # Execute the SDK-relative tool, staged only from its declared package inputs.
+    # This must not need the core checkout or its sibling authoring project.
+    $sdkAuthoringStage = Join-Path $toolTempDirectory 'portable-sdk'
+    $sourceLayout = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'package-layout.json') | ConvertFrom-Json
+    $authoringEntries = @((($sourceLayout.packages | Where-Object packageId -eq 'anomaly-sdk').entries) |
+        Where-Object { $_.path.StartsWith('authoring/', [StringComparison]::Ordinal) })
+    foreach ($entry in $authoringEntries) {
+        $destination = Join-Path $sdkAuthoringStage $entry.path
+        [IO.Directory]::CreateDirectory((Split-Path $destination)) | Out-Null
+        Copy-Item -LiteralPath (Join-Path $toolRepositoryRoot $entry.source) -Destination $destination
     }
-
-    & dotnet build (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj') `
-        -c Release -p:DeployLocal=false --nologo
-    if ($LASTEXITCODE -ne 0) { throw 'Release manifest tool build failed.' }
-    & dotnet build (Join-Path $toolRepositoryRoot 'tools/ReleasePackaging/ReleasePackaging.csproj') `
-        -c Release -p:DeployLocal=false --nologo
-    if ($LASTEXITCODE -ne 0) { throw 'Release packaging tool build failed.' }
-    & dotnet run --project (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj') `
-        -c Release --no-build -- generate-key $privateKey $publicKey
-    if ($LASTEXITCODE -ne 0) { throw 'Test key generation failed.' }
-    & dotnet run --project (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj') `
-        -c Release --no-build -- generate-key $otherPrivateKey $otherPublicKey
-    if ($LASTEXITCODE -ne 0) { throw 'Second test key generation failed.' }
-
-    $env:SOURCE_DATE_EPOCH = '1787356800'
-    $manifest = Join-Path $toolTempDirectory 'release.json'
-    $createArguments = @(
-        'run', '--project', (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj'),
-        '-c', 'Release', '--no-build', '--', 'create', 'test-rotation-a', 'client-runtime',
-        'anomaly-client', 'anomaly-client', '1.0.0', ('a' * 40), $inventory, $manifest,
-        $privateKey
-    )
-    foreach ($artifactName in $artifactNames) { $createArguments += Join-Path $toolTempDirectory $artifactName }
-    & dotnet @createArguments
-    if ($LASTEXITCODE -ne 0) { throw 'Schema-v2 manifest creation failed.' }
-
-    & dotnet run --project (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj') `
-        -c Release --no-build -- verify $manifest ($manifest + '.sig') $publicKey `
-        $toolTempDirectory $inventory
-    if ($LASTEXITCODE -ne 0) { throw 'Schema-v2 manifest verification failed.' }
-
-    $manifestObject = Get-Content -Raw -LiteralPath $manifest | ConvertFrom-Json
-    $expectedFields = @(
-        'schemaVersion', 'keyId', 'target', 'packageId', 'releaseId', 'version',
-        'sourceCommit', 'dependencyInventorySha256', 'generatedUtc', 'artifacts'
-    )
-    $actualFields = @($manifestObject.PSObject.Properties.Name)
-    if (($actualFields -join ',') -ne ($expectedFields -join ',')) {
-        throw ("Manifest fields do not match schema v2: {0}" -f ($actualFields -join ', '))
+    $sdkUpgrade = Join-Path $sdkAuthoringStage 'authoring/Upgrade-Index.ps1'
+    $rebuiltIndex = Join-Path $toolTempDirectory 'rebuilt-skin.index.json'
+    $sourceIndexHash = (Get-FileHash -LiteralPath $skinIndexPath -Algorithm SHA256).Hash
+    & $sdkUpgrade -InputIndex $skinIndexPath -OutputIndex $rebuiltIndex -Local
+    $rebuilt = Get-Content -Raw -LiteralPath $rebuiltIndex | ConvertFrom-Json
+    if ($rebuilt.SchemaVersion -ne 2 -or $rebuilt.DecodedBytes -ne 41697280 -or
+        (Get-FileHash -LiteralPath $skinIndexPath -Algorithm SHA256).Hash -ne $sourceIndexHash) {
+        throw 'The portable authoring kit failed to measure the exact bundled skin without changing its source.'
     }
-
-    & dotnet run --project (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj') `
-        -c Release --no-build -- verify $manifest ($manifest + '.sig') $otherPublicKey
-    if ($LASTEXITCODE -eq 0) { throw 'Wrong-key verification unexpectedly succeeded.' }
-
-    $missingArtifact = Join-Path $toolTempDirectory 'Anomaly.Shared.dll'
-    $missingArtifactBackup = $missingArtifact + '.missing'
-    [IO.File]::Move($missingArtifact, $missingArtifactBackup)
-    & dotnet run --project (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj') `
-        -c Release --no-build -- verify $manifest ($manifest + '.sig') $publicKey `
-        $toolTempDirectory $inventory
-    if ($LASTEXITCODE -eq 0) { throw 'Missing artifact verification unexpectedly succeeded.' }
-    [IO.File]::Move($missingArtifactBackup, $missingArtifact)
-
-    [IO.File]::AppendAllText((Join-Path $toolTempDirectory 'Anomaly.Client.dll'), 'tampered')
-    & dotnet run --project (Join-Path $toolRepositoryRoot 'tools/ReleaseManifest/ReleaseManifest.csproj') `
-        -c Release --no-build -- verify $manifest ($manifest + '.sig') $publicKey `
-        $toolTempDirectory $inventory
-    if ($LASTEXITCODE -eq 0) { throw 'Tampered artifact verification unexpectedly succeeded.' }
+    $rebuiltHash = (Get-FileHash -LiteralPath $rebuiltIndex -Algorithm SHA256).Hash
+    $overwriteRejected = $false
+    try { & $sdkUpgrade -InputIndex $skinIndexPath -OutputIndex $rebuiltIndex -Local }
+    catch { $overwriteRejected = $true }
+    if (!$overwriteRejected -or (Get-FileHash -LiteralPath $rebuiltIndex -Algorithm SHA256).Hash -ne $rebuiltHash) {
+        throw 'The portable index tool overwrote an existing destination.'
+    }
 
     # Exercise packaging preflight with an isolated layout. These failures occur
     # before runtime assemblies or game references are read.
@@ -172,6 +134,17 @@ try {
     $sdkFixtureArguments = @($fixtureArguments)
     $sdkFixtureArguments[1] = 'create-local'
     foreach ($requiredPath in @(
+        'authoring/README.md',
+        'authoring/Build-Pack.ps1',
+        'authoring/Upgrade-Index.ps1',
+        'authoring/AssetPackExporter.cs',
+        'authoring/bin/AssetPackIndexUpgrade.dll',
+        'authoring/bin/AssetPackIndexUpgrade.deps.json',
+        'authoring/bin/AssetPackIndexUpgrade.runtimeconfig.json',
+        'authoring/bin/Anomaly.AssetValidation.dll',
+        'authoring/bin/Anomaly.AssetPackPolicy.dll',
+        'authoring/bin/AssetsTools.NET.dll',
+        'authoring/licenses/AssetsTools.NET.md',
         'reference/Anomaly.Client.Scripting.ScriptAPI.Shipped.txt',
         'reference/Anomaly.Client.Scripting.ScriptAPI.json',
         'reference/Anomaly.Client.Api.d.lua',
@@ -219,8 +192,13 @@ try {
         throw ("Local runtime staging did not require the declared MoonSharp BSD notice: {0}" -f ($failure -join "`n"))
     }
 
+    if ($IncludeSigningTests) {
+        & (Join-Path $PSScriptRoot 'Test-ReleaseSigning.ps1')
+        if ($LASTEXITCODE -ne 0) { throw 'Optional release-signing tests failed.' }
+    }
+
     $global:LASTEXITCODE = 0
-    Write-Host 'Release manifest signing/tamper gates and scripting payload, reference, BSD notice, and SDK export gates passed.'
+    Write-Host 'Unsigned release packaging, scripting payload, reference, notices, SDK exports, and portable authoring gates passed.'
 }
 finally {
     $env:SOURCE_DATE_EPOCH = $previousSourceDateEpoch

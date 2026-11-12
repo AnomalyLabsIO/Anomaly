@@ -471,7 +471,7 @@ public sealed class AdversarialStressTests : IDisposable
     }
 
     [Fact]
-    public void ServerTransferCoroutineStartFailureRevokesAdmissionAfterReleasingState()
+    public void ServerTransferPumpSendFailureRevokesAdmissionAfterReleasingState()
     {
         byte[] bytes = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
         string path = Path.GetTempFileName();
@@ -496,13 +496,15 @@ public sealed class AdversarialStressTests : IDisposable
             var manifest = Assert.IsType<FileManifestMessage>(
                 Anomaly.Server.Networking.AnomalyMessaging.Sent.OfType<FileManifestMessage>().Single());
             ApproveServerTransfer(hub, manifest);
-            MEC.Timing.ThrowOnRun = true;
+            Anomaly.Server.Networking.AnomalyMessaging.BulkSendResult = _ => BulkSendResult.Failed;
 
             ServerBootstrapFixture.Handle(hub, new FileRequestMessage
             {
                 SessionId = manifest.SessionId,
                 RequestedHashes = { hash },
             });
+
+            DrainCurrentServerFile(ActiveTransferFor(hub));
 
             Assert.Equal(0, ActiveTransferCount());
             Assert.Equal(0, ReservedTransferCount());
@@ -523,7 +525,7 @@ public sealed class AdversarialStressTests : IDisposable
     }
 
     [Fact]
-    public void ServerTransferRetryCancellationFailureRevokesAdmissionAfterReleasingState()
+    public void ServerTransferRetryReadFailureRevokesAdmissionAfterReleasingState()
     {
         byte[] bytes = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
         string path = Path.GetTempFileName();
@@ -555,14 +557,18 @@ public sealed class AdversarialStressTests : IDisposable
             });
             Assert.Equal(1, ReservedTransferCount());
 
-            SetTransferState(ActiveTransferFor(hub), "AwaitingAck");
-            MEC.Timing.ThrowOnKill = true;
+            var session = (FileTransferSession)ActiveTransferFor(hub);
+            DrainCurrentServerFile(session);
+            File.Delete(session.Snapshot.Files[ServerAssetManager.ToHex(hash)].FullPath);
             ServerBootstrapFixture.Handle(hub, new FileAckMessage
             {
                 SessionId = manifest.SessionId,
                 Hash = hash,
                 Status = 1,
             });
+            DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+            while (ActiveTransferCount() != 0 && DateTime.UtcNow < deadline)
+            { FileTransferSession.Tick(); System.Threading.Thread.Sleep(1); }
 
             Assert.Equal(0, ActiveTransferCount());
             Assert.Equal(0, ReservedTransferCount());
@@ -616,7 +622,7 @@ public sealed class AdversarialStressTests : IDisposable
             Assert.Equal(1, ReservedTransferCount());
 
             object session = ActiveTransferFor(hub);
-            SetTransferState(session, "AwaitingAck");
+            DrainCurrentServerFile(session);
             ConnectionContentBootstrap.OnGenerationStarted();
             ServerBootstrapFixture.Handle(hub, new FileAckMessage
             {
@@ -688,6 +694,7 @@ public sealed class AdversarialStressTests : IDisposable
         {
             SessionId = 99,
             Hash = hash,
+            FrameCounter = 2,
             ChunkIndex = 1,
             TotalChunks = 2,
             Data = complete.Skip(FileChunkMessage.MaxChunkBytes).ToArray(),
@@ -703,6 +710,7 @@ public sealed class AdversarialStressTests : IDisposable
         {
             SessionId = 99,
             Hash = hash,
+            FrameCounter = 1,
             ChunkIndex = 0,
             TotalChunks = 2,
             Data = first,
@@ -722,7 +730,7 @@ public sealed class AdversarialStressTests : IDisposable
         Assert.Equal(complete.Length, ClientTransferReceivedBytes());
         Assert.Equal(0, ClientTransferBufferCount());
         Assert.Equal("Aborted", ClientTransferState());
-        Assert.False(File.Exists(partial));
+        Assert.True(SpinWait.SpinUntil(() => !File.Exists(partial), TimeSpan.FromSeconds(5)));
 
         FileTransferClient.Reset();
         Assert.Equal(0, ClientTransferBufferCount());
@@ -731,7 +739,7 @@ public sealed class AdversarialStressTests : IDisposable
     }
 
     [Fact]
-    public void ClientTransferAbortSignalsFailureBeforeLoggerUiAndPublicEventFailures()
+    public void ClientTransferAbortSignalsFailureDespiteLoggerUiAndPublicEventFailures()
     {
         FileTransferClient.Reset();
         bool failureObserved = false;
@@ -840,6 +848,7 @@ public sealed class AdversarialStressTests : IDisposable
         {
             SessionId = 123,
             Hash = hash,
+            FrameCounter = 1,
             ChunkIndex = 0,
             TotalChunks = 1,
             Data = complete,
@@ -847,7 +856,7 @@ public sealed class AdversarialStressTests : IDisposable
 
         Assert.Equal("Complete", ClientTransferState());
         Assert.Equal(0, ClientTransferBufferCount());
-        Assert.Equal(2, Anomaly.Client.Api.Networking.AnomalyMessaging.Sent.Count);
+        Assert.Equal(3, Anomaly.Client.Api.Networking.AnomalyMessaging.Sent.Count);
         var ack = Assert.IsType<FileAckMessage>(
             Anomaly.Client.Api.Networking.AnomalyMessaging.Sent.Last());
         Assert.Equal(123ul, ack.SessionId);
@@ -896,6 +905,7 @@ public sealed class AdversarialStressTests : IDisposable
             {
                 SessionId = 124,
                 Hash = hash,
+                FrameCounter = 1,
                 ChunkIndex = 0,
                 TotalChunks = 1,
                 Data = complete,
@@ -917,7 +927,7 @@ public sealed class AdversarialStressTests : IDisposable
     }
 
     [Fact]
-    public void ClientTransferUnknownCompletionAcknowledgesBeforeThrowingWarningLogger()
+    public void ClientTransferUnknownCompletionCannotReleaseCreditsOrAcknowledgeUnrequestedContent()
     {
         byte[] advertisedHash = Enumerable.Repeat((byte)0x2A, 32).ToArray();
         byte[] unknownHash = Enumerable.Repeat((byte)0x5A, 32).ToArray();
@@ -947,11 +957,9 @@ public sealed class AdversarialStressTests : IDisposable
                 Hash = unknownHash,
             });
 
-            Assert.Equal("Receiving", ClientTransferState());
-            var failureAck = Assert.IsType<FileAckMessage>(
-                Anomaly.Client.Api.Networking.AnomalyMessaging.Sent.Last());
-            Assert.Equal(unknownHash, failureAck.Hash);
-            Assert.Equal((byte)1, failureAck.Status);
+            Assert.Equal("AwaitingAdmission", ClientTransferState());
+            Assert.Empty(Anomaly.Client.Api.Networking.AnomalyMessaging.Sent.OfType<FileAckMessage>());
+            Assert.Empty(Anomaly.Client.Api.Networking.AnomalyMessaging.Sent.OfType<FileCreditMessage>());
         }
         finally
         {
@@ -1089,30 +1097,17 @@ public sealed class AdversarialStressTests : IDisposable
             ?? throw new InvalidOperationException("Missing transfer session.");
     }
 
-    private static void SetTransferState(object session, string name)
-    {
-        FieldInfo field = session.GetType().GetField("_state", BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? throw new InvalidOperationException("Missing transfer state field.");
-        field.SetValue(session, Enum.Parse(field.FieldType, name));
-    }
-
     private static void DrainCurrentServerFile(object session)
     {
-        FieldInfo currentFileField = session.GetType().GetField(
-            "_currentFile",
-            BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? throw new InvalidOperationException("Missing current server transfer file.");
-        MethodInfo sendFileChunks = session.GetType().GetMethod(
-            "SendFileChunks",
-            BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? throw new InvalidOperationException("Missing server transfer coroutine.");
-        var routine = (IEnumerator<float>)sendFileChunks.Invoke(
-            session,
-            new[] { currentFileField.GetValue(session) });
+        var transfer = (FileTransferSession)session;
+        FieldInfo state = typeof(FileTransferSession).GetField("_state", BindingFlags.NonPublic | BindingFlags.Instance);
         DateTime deadline = DateTime.UtcNow.AddSeconds(5);
-        while (routine.MoveNext())
+        while (state.GetValue(session).ToString() != "Aborted" && !transfer.IsComplete &&
+            !Anomaly.Server.Networking.AnomalyMessaging.Sent.OfType<FileTransferCompleteMessage>()
+                .Any(message => message.SessionId == transfer.Manifest.SessionId))
         {
             Assert.True(DateTime.UtcNow < deadline, "Chunk reader did not complete within its test deadline.");
+            FileTransferSession.Tick();
             System.Threading.Thread.Sleep(1);
         }
     }
@@ -1135,6 +1130,7 @@ public sealed class AdversarialStressTests : IDisposable
 
     private static void InvokeClientTransfer(string methodName, IAnomalyMessage message)
     {
+        if (message is FileManifestMessage manifest) FileTransferTestPump.Configure(manifest);
         MethodInfo method = typeof(FileTransferClient).GetMethod(
             methodName,
             BindingFlags.NonPublic | BindingFlags.Static)
@@ -1142,6 +1138,7 @@ public sealed class AdversarialStressTests : IDisposable
         try
         {
             method.Invoke(null, new object[] { message });
+            FileTransferTestPump.Drain();
         }
         catch (TargetInvocationException exception) when (exception.InnerException != null)
         {
@@ -1156,6 +1153,7 @@ public sealed class AdversarialStressTests : IDisposable
             BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("Missing FileTransferClient.ApprovePendingManifest.");
         Assert.True((bool)method.Invoke(null, new object[] { manifestSha256 }));
+        FileTransferTestPump.Drain();
     }
 
     private static int ClientTransferBufferCount()
@@ -1178,17 +1176,18 @@ public sealed class AdversarialStressTests : IDisposable
 
     private static IEnumerable<string> ClientTransferPartialPaths()
     {
-        object buffers = typeof(FileTransferClient)
-            .GetField("_buffers", BindingFlags.NonPublic | BindingFlags.Static)
-            ?.GetValue(null) ?? throw new InvalidOperationException("Missing client transfer buffers.");
-        foreach (object value in (IEnumerable)((IDictionary)buffers).Values)
-            yield return ((ChunkBuffer)value).TempPath;
+        string directory = Path.Combine(Anomaly.Client.Api.Features.Paths.FileCachePath, ".incoming");
+        ulong session = (ulong)typeof(FileTransferClient).GetField("_sessionId", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+        return Directory.Exists(directory) ? Directory.GetFiles(directory, $"{session:x16}-*.part") : Array.Empty<string>();
     }
 
     private static byte[] OversizeChunkPayload()
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
+        writer.Write(BulkTransferProtocol.ProfileVersion);
+        writer.Write((byte)0);
+        writer.Write((byte)0);
         writer.Write(1ul);
         writer.Write(new byte[32]);
         writer.Write((ushort)0);
@@ -1203,6 +1202,10 @@ public sealed class AdversarialStressTests : IDisposable
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
         writer.Write(sessionId);
+        writer.Write(BulkTransferProtocol.ProfileVersion);
+        writer.Write(1UL << 6);
+        writer.Write(BulkTransferProtocol.MaxWindowBytes);
+        writer.Write(BulkTransferProtocol.MaxWindowFrames);
         writer.Write((ushort)count);
         writer.Flush();
         return stream.ToArray();
@@ -1213,6 +1216,9 @@ public sealed class AdversarialStressTests : IDisposable
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
         writer.Write(sessionId);
+        writer.Write(BulkTransferProtocol.ProfileVersion);
+        writer.Write(0UL);
+        for (int domain = 0; domain < BulkTransferProtocol.MaxDomains; domain++) writer.Write(0u);
         writer.Write(new byte[32]);
         writer.Write((ushort)count);
         writer.Flush();

@@ -8,7 +8,7 @@ $allowedRoot = [IO.Path]::GetFullPath((Join-Path $repository 'artifacts/news-ui-
 if (!$backupRoot.StartsWith($allowedRoot,[StringComparison]::OrdinalIgnoreCase)) { throw 'Backup directory must remain within artifacts/news-ui-smoke.' }
 $manifest = Get-Content -LiteralPath (Join-Path $backupRoot 'backup.json') -Raw | ConvertFrom-Json
 $game = [IO.Path]::GetFullPath($manifest.gameDirectory)
-$authorizedGame = 'E:\Steam\steamapps\common\SCP Secret Laboratory - Copy'
+$authorizedGame = 'E:\Steam\steamapps\common\SCP Secret Laboratory'
 if (![string]::Equals($game,$authorizedGame,[StringComparison]::OrdinalIgnoreCase)) { throw 'This restore targets only the explicitly authorized ModLaunch installation.' }
 Assert-SmokeGameIdle $game
 foreach ($entry in $manifest.entries) {

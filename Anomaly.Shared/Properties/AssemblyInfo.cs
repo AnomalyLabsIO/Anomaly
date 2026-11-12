@@ -23,6 +23,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Anomaly.Client")]
 [assembly: InternalsVisibleTo("Anomaly.Client.Api")]
 [assembly: InternalsVisibleTo("Anomaly.Client.Api.Tests")]
+[assembly: InternalsVisibleTo("Anomaly.Client.Patches.Tests")]
 [assembly: InternalsVisibleTo("Anomaly.Server")]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM

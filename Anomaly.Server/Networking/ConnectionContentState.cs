@@ -21,6 +21,7 @@ internal sealed class ConnectionContentState
     }
 
     internal ulong SessionId { get; private set; }
+    internal double RemainingSeconds => Math.Max(0, TimeoutSeconds - _elapsed());
     internal bool DeadlineElapsed => _elapsed() >= TimeoutSeconds;
     internal bool Expired => _phase != Phase.Complete && DeadlineElapsed;
     internal ConnectionContentState PreserveDeadline() => new ConnectionContentState(_elapsed);

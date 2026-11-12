@@ -14,10 +14,14 @@ tools/AssetBundleServerSmoke/Prepare-Server.ps1 -SourceServerRoot E:/Projects/An
 tools/AssetBundleServerSmoke/Run-Server.ps1 -ServerDirectory artifacts/assetbundles/network-server-01 -EvidenceDirectory artifacts/assetbundles/network-server-run01 -ContentPackDirectory artifacts/assetbundles/network-packs-01
 ```
 
-The content root must contain `<namespace>/<pack>/pack.json` matching the exported
-index identity and declaring `Assets.Index`; unlisted bundle/index pairs are not
-discovered. Use the fixture preparation tooling to stage the descriptor and
-its referenced files together.
+The `-ContentPackDirectory` source root must contain
+`<namespace>/<pack>/pack.json` matching the exported index identity and declaring
+`Assets.Index`; unlisted bundle/index pairs are not discovered. Use the fixture
+preparation tooling to stage the descriptor and its referenced files together.
+The launcher copies them beneath the isolated server's
+`AppData/SCP Secret Laboratory/LabAPI/plugins/global/Anomaly/ContentPacks`
+and uses the default relative `ContentPacks` config value, so the smoke exercises
+the LabAPI-managed root rather than an absolute override.
 
 Default port: `27989`. Preserve the stage's `AppData` between client joins to
 keep the same server identity. Use a new evidence directory for each server run.

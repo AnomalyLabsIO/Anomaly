@@ -17,6 +17,7 @@ using Anomaly.Server.Utils;
 using Anomaly.Shared.Networking;
 using CentralAuth;
 using HarmonyLib;
+using MEC;
 using LabApi.Events.Handlers;
 using LabApi.Features.Console;
 using LabApi.Features;
@@ -47,6 +48,8 @@ public class Plugin : Plugin<Config>
     internal Harmony Harmony { get; }
     private bool _configReloadSubscribed;
     private bool _lifecycleHandlersSubscribed;
+    private bool _bulkPumpStarted;
+    private CoroutineHandle _bulkPumpHandle;
     private bool _harmonyPatched;
     private bool _runtimeSnapshotCaptured;
     private bool _runtimeOverridesApplied;
@@ -158,6 +161,9 @@ public class Plugin : Plugin<Config>
                     Harmony.PatchAll();
                 }
                 VerifyMandatoryPatches();
+                FileTransferSession.ConfigureBudget(Config.BulkClientBytesPerSecond, Config.BulkUploadBytesPerSecond,
+                    Config.BulkGameplayHeadroomPercent);
+                BulkTransportRuntime.Initialize();
                 var patchedMethods = Harmony.GetPatchedMethods().ToList();
                 Logger.Info($"Anomaly.Server prepared - {patchedMethods.Count} methods patched:");
                 foreach (var method in patchedMethods)
@@ -209,6 +215,8 @@ public class Plugin : Plugin<Config>
                 // chunks — otherwise ActiveSessions would leak an entry per drop.
                 // Also clear the per-hub replay state so a new session starts fresh.
                 PlayerEvents.Left += OnPlayerLeft;
+                _bulkPumpStarted = true;
+                _bulkPumpHandle = Timing.RunCoroutine(BulkTransferLoop());
             },
             [ServerInitializationStage.RoundAndFacility] = () =>
             {
@@ -247,6 +255,27 @@ public class Plugin : Plugin<Config>
     private static void OnAnomalyMessage(ReferenceHub hub, IAnomalyMessage message)
     {
         // Connection-owned content messages are consumed before public hub dispatch.
+    }
+
+    private IEnumerator<float> BulkTransferLoop()
+    {
+        // Store the coroutine handle before a first failure can invoke teardown.
+        yield return Timing.WaitForOneFrame;
+        while (ReferenceEquals(Instance, this) && !_teardownStarted)
+        {
+            if (IsOperational)
+            {
+                try { FileTransferSession.Tick(); }
+                catch (Exception exception)
+                {
+                    _bulkPumpStarted = false;
+                    SafeLogError("The required bulk transfer pump failed; authenticated admission is closing: " + exception);
+                    CleanupRuntime("bulk transfer pump failure");
+                    yield break;
+                }
+            }
+            yield return Timing.WaitForOneFrame;
+        }
     }
 
     private static void OnClientReady(ReferenceHub hub)
@@ -320,6 +349,12 @@ public class Plugin : Plugin<Config>
         {
             _teardownStarted = true;
             IsOperational = false;
+        }
+
+        if (_bulkPumpStarted)
+        {
+            _bulkPumpStarted = false;
+            RunCleanup(context, "bulk transfer pump", () => Timing.KillCoroutines(_bulkPumpHandle));
         }
 
         int acceptedPendingPeers = AuthHandler.DrainStoredPlayers();
@@ -398,6 +433,7 @@ public class Plugin : Plugin<Config>
                 throw new InvalidOperationException("One or more server item templates remain pending cleanup.");
         });
         RunCleanup(context, "file transfer sessions", FileTransferSession.Reset);
+        RunCleanup(context, "bulk transport profile", BulkTransportRuntime.Disable);
         RunCleanup(context, "server asset manager", ServerAssetManager.Reset);
         RunCleanup(context, "content catalog bridge", ContentCatalogBridge.Disable);
         RunCleanup(context, "content registry", ContentRegistry.Reset);
@@ -613,6 +649,11 @@ public class Plugin : Plugin<Config>
     {
         var required = new List<MethodBase>
         {
+            BulkTransportRuntime.SetOptionsTarget,
+            BulkTransportRuntime.BatchThresholdTarget,
+            BulkTransportRuntime.SendToTransportTarget,
+            ContentAcquisitionIdleGuard.FixedUpdateTarget,
+            ContentAcquisitionIdleGuard.SetIdleModeTarget,
             AccessTools.Method(typeof(MapGeneration.SeedSynchronizer), "Awake"),
             AccessTools.Method(typeof(MapGeneration.SeedSynchronizer), "GenerateLevel"),
             AccessTools.Method(typeof(MapGeneration.SeedSynchronizer), "OnNewPlayerConnected"),

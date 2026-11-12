@@ -218,11 +218,13 @@
         <Compile Include="Patches\Poses\PlayerPoseLifecyclePatches.cs" />
         <Compile Include="Properties\AssemblyInfo.cs"/>
         <Compile Include="Networking\AnomalyMessaging.cs" />
+        <Compile Include="Networking\BulkTransportRuntime.cs" />
         <Compile Include="Networking\ScriptMessageGate.cs" />
         <Compile Include="Networking\AuthenticatedTransportSessions.cs" />
         <Compile Include="Networking\ConnectionBootstrap.cs" />
         <Compile Include="Networking\ConnectionContentBootstrap.cs" />
         <Compile Include="Networking\ConnectionContentState.cs" />
+        <Compile Include="Networking\ContentAcquisitionIdleGuard.cs" />
         <Compile Include="Networking\ContentReadinessPatches.cs" />
         <Compile Include="Networking\EncryptedTransportCounterGuard.cs" />
         <Compile Include="Networking\AnomalyReplayTable.cs" />
@@ -249,6 +251,11 @@
         <Compile Include="Api\Content\ContentPacks.cs" />
         <Compile Include="FileTransfer\ContentPackFiles.cs" />
         <Compile Include="FileTransfer\AssetChunkReader.cs" />
+        <Compile Include="FileTransfer\BulkTransferPump.cs" />
+        <Compile Include="FileTransfer\BulkSchedulerCapacity.cs" />
+        <Compile Include="FileTransfer\FileCompletionPacer.cs" />
+        <Compile Include="FileTransfer\BulkTransferBudget.cs" />
+        <Compile Include="FileTransfer\FileTransferAdmission.cs" />
         <Compile Include="Assets\DecorativeVisualState.cs" />
         <Compile Include="Api\Assets\DecorativeVisualScope.cs" />
         <Compile Include="Api\Map\FacilityGlyphs.cs" />

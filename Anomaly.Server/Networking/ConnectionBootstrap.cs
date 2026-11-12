@@ -130,7 +130,26 @@ internal static class ConnectionBootstrap
         catch (Exception exception) { try { OffThreadLogger.Error("Rejected content cleanup failed: " + exception.Message); } catch { } }
         try
         {
-            connection?.Disconnect();
+            // Use the game's disconnect payload, not a final Mirror message:
+            // queued batches can be discarded by the disconnect below. The
+            // stock client decodes this reason before its main-thread teardown.
+            // Bound text so UTF-8/base64 framing fits the stock initial MTU.
+            const int maximumReasonCharacters = 160;
+            string disconnectReason = reason ?? "Required connection content was rejected.";
+            if (disconnectReason.Length > maximumReasonCharacters)
+                disconnectReason = disconnectReason.Substring(0, maximumReasonCharacters - 3) + "...";
+            // The stock helper clears this internal shared field only on a
+            // normal return. Preserve another caller's value even if an active
+            // transport throws while disconnecting this connection.
+            var reasonField = AccessTools.Field(typeof(LiteNetLib4MirrorServer), "DisconnectMessage");
+            if (NetworkManager.singleton is LiteNetLib4MirrorNetworkManager manager && reasonField != null)
+            {
+                var previousReason = reasonField.GetValue(null);
+                try { manager.DisconnectConnection(connection, disconnectReason); }
+                finally { reasonField.SetValue(null, previousReason); }
+            }
+            else
+                connection.Disconnect();
             // A failed claim never enters NetworkServer.connections, so Mirror
             // cannot deliver its normal OnServerDisconnect callback. Once the
             // disconnect is initiated, release that connection-only marker too.

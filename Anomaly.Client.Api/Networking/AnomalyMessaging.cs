@@ -21,6 +21,9 @@ public static class AnomalyMessaging
     internal static Action TransportSessionRevoked;
     internal static Func<ScriptToClientMessage, bool> ScriptMessageReceived;
     internal static Func<ScriptToServerMessage, bool> ScriptMessageSendAllowed;
+    internal static Func<bool> BulkReceiveExpected;
+    internal static Func<ulong, bool> BulkSessionExpected;
+    internal static Func<int, bool> IsBulkPhysicalChannel;
     [ScriptIgnore]
     public static event Action<IAnomalyMessage> MessageReceived;
 
@@ -138,7 +141,7 @@ public static class AnomalyMessaging
                 out string transportFailure))
         {
             if (authenticatedTransportRequired)
-                FailClosedTransport("The required custom-message payload did not fit the deployed transport.");
+                FailClosedTransport("The required custom-message transport preflight failed: " + transportFailure);
             SafeLogWarning(transportFailure);
             return false;
         }
@@ -195,7 +198,7 @@ public static class AnomalyMessaging
         byte[] anomalyPayload,
         bool encryptedAndAuthenticated,
         bool localTransport,
-        bool beforeHubReady = false)
+        bool beforeContentReady = false)
     {
         if (!encryptedAndAuthenticated && !localTransport)
         {
@@ -225,18 +228,42 @@ public static class AnomalyMessaging
         uint counter = BitConverter.ToUInt32(anomalyPayload, 0);
         uint hash = BitConverter.ToUInt32(anomalyPayload, 4);
         int payloadBytes = anomalyPayload.Length - 8;
+        bool bulkChunk = AnomalyMessageRegistry.IsRegisteredType<FileChunkMessage>(hash);
+        byte bulkDomain = 0;
+        ulong bulkSessionId = 0;
+        if (bulkChunk && !BulkTransferProtocol.TryReadChunkDomain(anomalyPayload, 8, payloadBytes, out bulkDomain))
+        {
+            RegisterProtocolViolation("File chunk had an invalid authenticated bulk prefix.", localTransport);
+            return;
+        }
+        if (bulkChunk && !BulkTransferProtocol.TryReadChunkSession(anomalyPayload, 8, payloadBytes, out bulkSessionId))
+        {
+            RegisterProtocolViolation("File chunk had an invalid authenticated session prefix.", localTransport);
+            return;
+        }
+        if (bulkChunk && BulkSessionExpected?.Invoke(bulkSessionId) != true)
+        {
+            // Raw admission already charged this authenticated envelope before
+            // decryption. Retired content must neither spend ordinary semantic
+            // allowance nor advance the crypto-session replay window.
+            if (!AnomalyMessageRegistry.TryGetPolicy(hash, out var retiredPolicy) || payloadBytes > retiredPolicy.MaxPayloadBytes)
+                RegisterProtocolViolation("Retired file chunk exceeded its built-in payload contract.", localTransport);
+            return;
+        }
 
         // These registered built-ins are optional, authenticated server presentation. Keep
         // their bounded allowance separate so normal traffic cannot turn cosmetic congestion
         // into a disconnect. Invalid counters and oversized contracts keep the strict path.
         bool poseSample = AnomalyMessageRegistry.IsRegisteredType<PlayerPoseSampleMessage>(hash) ||
             AnomalyMessageRegistry.IsRegisteredType<PlayerCombatPoseSampleMessage>(hash);
-        bool optionalPose = encryptedAndAuthenticated && !beforeHubReady && counter != 0 && counter != uint.MaxValue &&
+        bool optionalPose = encryptedAndAuthenticated && !beforeContentReady && counter != 0 && counter != uint.MaxValue &&
             (poseSample || AnomalyMessageRegistry.IsRegisteredType<PlayerPoseControlMessage>(hash) ||
              AnomalyMessageRegistry.IsRegisteredType<PlayerCombatPoseControlMessage>(hash)) &&
             AnomalyMessageRegistry.TryGetPolicy(hash, out var posePolicy) &&
             posePolicy.Direction == AnomalyMessageDirection.ServerToClient && payloadBytes <= posePolicy.MaxPayloadBytes;
-        var rateResult = optionalPose
+        var rateResult = bulkChunk && BulkReceiveExpected?.Invoke() == true
+            ? AnomalyReplayTable.BulkInboundRateLimiter.TryAccept(hash, payloadBytes)
+            : optionalPose
             ? AnomalyReplayTable.PoseInboundRateLimiter.TryAcceptOptional(hash, payloadBytes)
             : AnomalyReplayTable.InboundRateLimiter.TryAccept(hash, payloadBytes);
         if (!rateResult.Allowed)
@@ -289,7 +316,10 @@ public static class AnomalyMessaging
             return;
         }
 
-        var rx = AnomalyReplayTable.Instance.TryAcceptRx(channel, counter, out bool shouldLog);
+        bool shouldLog;
+        var rx = bulkChunk
+            ? AnomalyReplayTable.Bulk.TryAcceptRx(bulkDomain, counter, out shouldLog)
+            : AnomalyReplayTable.Instance.TryAcceptRx(channel, counter, out shouldLog);
         if (rx != AnomalyReplayState.RxResult.Accepted)
         {
             // Unreliable pose samples may legitimately arrive outside the transport replay
@@ -321,9 +351,9 @@ public static class AnomalyMessaging
             return;
         }
 
-        if (beforeHubReady && !ContentBootstrapPolicy.IsServerMessage(message))
+        if (beforeContentReady && !ContentBootstrapPolicy.IsServerMessage(message))
         {
-            FailClosedTransport("Only authenticated connection bootstrap is permitted before player readiness.");
+            FailClosedTransport($"Message '{message.MessageName}' arrived before authenticated content readiness.");
             return;
         }
 
@@ -332,6 +362,7 @@ public static class AnomalyMessaging
             using var ms = new MemoryStream(anomalyPayload, 8, anomalyPayload.Length - 8);
             using var reader = new BinaryReader(ms);
             message.Deserialize(reader);
+            if (message is FileChunkMessage chunk) chunk.FrameCounter = counter;
             if (ms.Position != ms.Length)
                 throw new InvalidDataException(
                     $"Message left {ms.Length - ms.Position} unread payload bytes.");
@@ -576,6 +607,7 @@ public static class AnomalyMessaging
 
     private static void ClearTransportSessionLocked()
     {
+        AnomalyReplayTable.ResetBulk();
         Clear(_clientToServerKey);
         Clear(_serverToClientKey);
         Clear(_sessionId);
@@ -646,11 +678,12 @@ public static class AnomalyMessaging
         {
             var transport = LiteNetLib4MirrorTransport.Singleton;
             var peer = LiteNetLib4MirrorCore.Host?.FirstPeer;
-            if (transport?.channels == null || transport.channels.Length > 32 || peer == null ||
+            if (transport?.channels == null || transport.channels.Length > BulkTransferProtocol.MaxPhysicalChannels || peer == null ||
                 peer.ConnectionState != Il2CppLiteNetLib.ConnectionState.Connected) return false;
             long queued = 0;
             for (int index = 0; index < transport.channels.Length; index++)
             {
+                if (IsBulkPhysicalChannel?.Invoke(index) == true) continue;
                 var delivery = transport.channels[index];
                 if (delivery != Il2CppLiteNetLib.DeliveryMethod.ReliableOrdered &&
                     delivery != Il2CppLiteNetLib.DeliveryMethod.ReliableUnordered) continue;

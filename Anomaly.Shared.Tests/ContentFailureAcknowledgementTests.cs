@@ -320,13 +320,14 @@ public sealed class ContentFailureAcknowledgementTests : IDisposable
         } };
         manifest.ManifestSha256 = FileManifestMessage.ComputeManifestSha256(manifest.Files);
         var catalog = CatalogBuilder.Build(Array.Empty<CatalogEntry>(), 1, 0, manifest.ManifestSha256,
-            new[] { new CatalogPack { PackId = "fixture:invalid", IndexHash = indexHash, IndexSize = 512, BundleHash = bundleHash, BundleSize = 64 } });
+            new[] { new CatalogPack { PackId = "fixture:invalid", IndexHash = indexHash, IndexSize = 512, BundleHash = bundleHash, BundleSize = 64, DecodedBytes = 64 } });
         typeof(ContentCatalogClient).GetMethod("HandleMessage", PrivateStatic)
             .Invoke(null, new object[] { new ContentCatalogMessage { Catalog = catalog } });
+        FileTransferTestPump.Configure(manifest);
         typeof(FileTransferClient).GetMethod("HandleManifest", PrivateStatic).Invoke(null, new object[] { manifest });
         Assert.NotNull(PasswordPrompt.Approve);
         beforeApproval?.Invoke();
-        PasswordPrompt.Approve();
+        ContentConsentFixture.Approve();
     }
 
     public void Dispose() => ContentConsentFixture.Reset();

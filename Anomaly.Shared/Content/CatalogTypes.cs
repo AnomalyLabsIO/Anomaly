@@ -123,7 +123,7 @@ namespace Anomaly.Shared.Content
     /// </summary>
     public sealed class ContentCatalog
     {
-        public const byte CurrentSchemaVersion = 4;
+        public const byte CurrentSchemaVersion = 5;
         public const int Sha256Bytes = 32;
 
         public byte SchemaVersion = CurrentSchemaVersion;
@@ -142,17 +142,19 @@ namespace Anomaly.Shared.Content
         public uint IndexSize;
         public byte[] BundleHash;
         public uint BundleSize;
+        public long DecodedBytes;
         public void WriteTo(BinaryWriter writer)
         {
             CatalogIo.WriteStr(writer, PackId);
             CatalogIo.WriteRequiredHash(writer, IndexHash); writer.Write(IndexSize);
             CatalogIo.WriteRequiredHash(writer, BundleHash); writer.Write(BundleSize);
-
+            writer.Write(DecodedBytes);
         }
         public static CatalogPack ReadFrom(BinaryReader reader) => new CatalogPack
         {
             PackId = CatalogIo.ReadStr(reader, 128), IndexHash = CatalogIo.ReadRequiredHash(reader), IndexSize = reader.ReadUInt32(),
             BundleHash = CatalogIo.ReadRequiredHash(reader), BundleSize = reader.ReadUInt32(),
+            DecodedBytes = reader.ReadInt64(),
         };
     }
 }

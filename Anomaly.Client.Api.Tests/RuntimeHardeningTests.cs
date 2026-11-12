@@ -59,80 +59,6 @@ public sealed class RuntimeHardeningTests
     }
 
     [Fact]
-    public void Receive_dispatch_coalescer_suppresses_only_expected_same_frame_copies()
-    {
-        var coalescer = new InboundEnvelopeDispatchCoalescer();
-        var limiter = new Anomaly.Shared.Networking.AnomalyInboundRateLimiter();
-        byte[] first = BuildEnvelopePrefix(0x10);
-        byte[] second = BuildEnvelopePrefix(0x20);
-        int processed = 0;
-
-        for (int invocation = 0; invocation < 3; invocation++)
-        {
-            var disposition = coalescer.Observe(100, 1, (byte[])first.Clone());
-            if (disposition == InboundEnvelopeDispatchCoalescer.DispatchDisposition.Process)
-            {
-                processed++;
-                Assert.True(limiter.TryAccept(1, first.Length).Allowed);
-            }
-            else
-            {
-                Assert.Equal(
-                    InboundEnvelopeDispatchCoalescer.DispatchDisposition.IgnoreExpectedDuplicate,
-                    disposition);
-            }
-        }
-
-        Assert.Equal(1, processed);
-        Assert.Equal(
-            InboundEnvelopeDispatchCoalescer.DispatchDisposition.Process,
-            coalescer.Observe(100, 1, second));
-        Assert.Equal(
-            InboundEnvelopeDispatchCoalescer.DispatchDisposition.ChargeExcessDuplicate,
-            coalescer.Observe(100, 1, first));
-
-        Anomaly.Shared.Networking.AnomalyRateLimitResult fourthCopy =
-            limiter.RegisterProtocolViolation();
-        Assert.Equal(1, fourthCopy.DroppedInWindow);
-
-        Assert.Equal(
-            InboundEnvelopeDispatchCoalescer.DispatchDisposition.Process,
-            coalescer.Observe(101, 1, first));
-    }
-
-    [Fact]
-    public void Receive_dispatch_coalescer_reset_starts_a_new_connection_scope()
-    {
-        var coalescer = new InboundEnvelopeDispatchCoalescer();
-        byte[] envelope = BuildEnvelopePrefix(0x33);
-
-        Assert.Equal(
-            InboundEnvelopeDispatchCoalescer.DispatchDisposition.Process,
-            coalescer.Observe(7, 1, envelope));
-        Assert.Equal(
-            InboundEnvelopeDispatchCoalescer.DispatchDisposition.IgnoreExpectedDuplicate,
-            coalescer.Observe(7, 1, envelope));
-
-        coalescer.Reset();
-
-        Assert.Equal(
-            InboundEnvelopeDispatchCoalescer.DispatchDisposition.Process,
-            coalescer.Observe(7, 1, envelope));
-    }
-
-    private static byte[] BuildEnvelopePrefix(byte nonceSeed)
-    {
-        var envelope = new byte[64];
-        envelope[0] = (byte)'A';
-        envelope[1] = (byte)'N';
-        envelope[2] = (byte)'2';
-        envelope[3] = (byte)'E';
-        for (int index = 4; index < 16; index++)
-            envelope[index] = unchecked((byte)(nonceSeed + index));
-        return envelope;
-    }
-
-    [Fact]
     public void HintEventArgumentsSupportTextDurationAndCancellationMutation()
     {
         var args = new HintDisplayingEventArgs("original", 3f)
@@ -375,21 +301,6 @@ public sealed class RuntimeHardeningTests
         Assert.Equal(
             ConnectionWriterDisposition.NewUserAttempt,
             gate.BeginWriterAttempt("other.example:7777", 303));
-    }
-
-    [Fact]
-    public void Frame_invocation_gate_is_instance_aware_and_resettable()
-    {
-        var gate = new FrameInvocationGate();
-
-        Assert.True(gate.ShouldFire(101, 9, 42));
-        Assert.False(gate.ShouldFire(101, 9, 42));
-        Assert.True(gate.ShouldFire(202, 9, 42));
-        Assert.True(gate.ShouldFire(101, 10, 42));
-        Assert.True(gate.ShouldFire(101, 9, 43));
-
-        gate.Reset();
-        Assert.True(gate.ShouldFire(101, 9, 43));
     }
 
     [Fact]

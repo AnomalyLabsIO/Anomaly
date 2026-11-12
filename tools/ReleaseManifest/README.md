@@ -1,5 +1,10 @@
 # Signed release manifests
 
+This optional tool is outside the first-release publication and CI gate. The
+first release uses unsigned archives and the manual ZIP/SCPSL-ModLaunch install
+route. Run its isolated regressions with `release/Test-ReleaseSigning.ps1` or
+`release/Test-ReleaseTools.ps1 -IncludeSigningTests`.
+
 This tool creates and verifies canonical schema-v2 artifact inventories signed
 with an operator-owned ECDSA P-256 private key and SHA-256. Private keys must
 remain outside the repository and CI logs.
@@ -22,7 +27,7 @@ The exact camel-case manifest contract is:
 `sourceCommit`, `dependencyInventorySha256`, `generatedUtc`, and `artifacts`.
 
 Artifacts are canonically ordered bare filenames with `sizeBytes` and lowercase
-`sha256`. For the launcher's mandatory official core, use `target` =
+`sha256`. For the separate platform launcher's signed official core, use `target` =
 `client-runtime` and both `packageId` and `releaseId` = `anomaly-client`.
 `SOURCE_DATE_EPOCH` makes the manifest timestamp reproducible. The detached
 signature remains separate from deterministic payload archives.

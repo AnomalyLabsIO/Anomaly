@@ -9,15 +9,19 @@ $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $server=[IO.Path]::GetFullPath($ServerDirectory)
 $evidence=[IO.Path]::GetFullPath($EvidenceDirectory)
-$contentPacks=[IO.Path]::GetFullPath($ContentPackDirectory)
+$contentPackSource=[IO.Path]::GetFullPath($ContentPackDirectory)
 $allowed=(Join-Path $repo 'artifacts/assetbundles')+[IO.Path]::DirectorySeparatorChar
-if (!$server.StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase) -or !$evidence.StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase) -or !$contentPacks.StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase)) { throw 'All runtime state must be private assetbundles artifacts.' }
+if (!$server.StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase) -or !$evidence.StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase) -or !$contentPackSource.StartsWith($allowed,[StringComparison]::OrdinalIgnoreCase)) { throw 'All runtime state must be private assetbundles artifacts.' }
 if (Test-Path -LiteralPath $evidence) { throw 'Use a new evidence directory; keep the server AppData to preserve its identity.' }
 $policy=Get-Content -LiteralPath (Join-Path $server 'hoster_policy.txt')
 if ('ipv4_bind_ip: 127.0.0.1' -notin $policy -or 'ipv6_bind_ip: ::1' -notin $policy) { throw 'Loopback-only binding required.' }
 & dotnet build (Join-Path $PSScriptRoot 'AssetBundleServerSmoke.csproj') -c Debug -p:DeployLocal=false --no-restore
 if ($LASTEXITCODE -ne 0) { throw 'Fixture build failed.' }
 $lab=Join-Path $server 'AppData/SCP Secret Laboratory/LabAPI'
+$contentPacks=Join-Path $lab 'plugins/global/Anomaly/ContentPacks'
+if (!(Test-Path -LiteralPath $contentPackSource -PathType Container)) { throw 'Content pack source directory is missing.' }
+New-Item -ItemType Directory -Force -Path $contentPacks | Out-Null
+Get-ChildItem -LiteralPath $contentPackSource -Force | Copy-Item -Destination $contentPacks -Recurse -Force
 $inputs=@(
     @('Anomaly.Server/bin/Debug/Anomaly.Server.dll','plugins/global/Anomaly.Server.dll'),
     @('Anomaly.Shared/bin/Debug/Anomaly.Shared.dll','dependencies/global/Anomaly.Shared.dll'),
@@ -27,7 +31,7 @@ $inputs=@(
 foreach($entry in $inputs) { $target=Join-Path $lab $entry[1]; New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null; Copy-Item -LiteralPath (Join-Path $repo $entry[0]) -Destination $target }
 $config=Join-Path $lab "configs/$Port/Anomaly/config.yml"
 New-Item -ItemType Directory -Force -Path (Split-Path $config) | Out-Null
-"content_pack_directory: '$($contentPacks.Replace("'","''"))'" | Set-Content -LiteralPath $config
+"content_pack_directory: 'ContentPacks'" | Set-Content -LiteralPath $config
 New-Item -ItemType Directory -Path $evidence | Out-Null
 $start=[Diagnostics.ProcessStartInfo]::new((Join-Path $server 'SCPSL.exe'))
 $start.WorkingDirectory=$server

@@ -36,11 +36,36 @@ internal static class ConnectionContentBootstrap
     internal static bool IsLocal(NetworkConnectionToClient connection) =>
         connection is LocalConnectionToClient || connection is DummyNetworkConnection;
 
+    // Stock idle callbacks and admission run on the main thread. Derive the busy
+    // reason from their real owner, without a second ledger or renewable lease.
+    // A rejected/revoked/expired owner cannot keep the server awake while it is
+    // waiting for its watchdog or disconnect cleanup to run.
+    internal static bool HasPendingAcquisition
+    {
+        get
+        {
+            foreach (var entry in Admissions)
+                if (!entry.Value.Gate.Rejected && entry.Value.AdoptedHub == null && !entry.Value.Gate.DeadlineElapsed &&
+                    AuthenticatedTransportSessions.IsActiveConnection(entry.Key))
+                    return true;
+            return false;
+        }
+    }
+
     internal static void Begin(NetworkConnectionToClient connection)
     {
         if (IsLocal(connection)) return;
-        var admission = new Admission();
+        StartAdmission(connection, new Admission());
+    }
+
+    private static void StartAdmission(NetworkConnectionToClient connection, Admission admission)
+    {
+        if (!AuthenticatedTransportSessions.IsActiveConnection(connection))
+            throw new InvalidOperationException("Content acquisition requires an authenticated connection owner.");
         Admissions.Add(connection, admission);
+        // PauseIdleMode is shared stock state, not ours to toggle or restore.
+        // Exiting idle uses the native transition; scoped guards defer re-entry.
+        if (!admission.Gate.DeadlineElapsed) IdleMode.SetIdleMode(false);
         admission.Watchdog = Timing.RunCoroutine(Watch(connection, admission));
     }
 
@@ -74,9 +99,8 @@ internal static class ConnectionContentBootstrap
                 Cleanup(connection);
                 if (!AuthenticatedTransportSessions.IsActiveConnection(connection)) continue;
                 var admission = new Admission(nextGate) { AwaitingGeneration = true };
-                Admissions.Add(connection, admission);
+                StartAdmission(connection, admission);
                 connection.isReady = false;
-                admission.Watchdog = Timing.RunCoroutine(Watch(connection, admission));
             }
             catch (Exception exception) { ConnectionBootstrap.Reject(connection, "Content generation reset failed: " + exception.Message); }
         }
@@ -96,9 +120,8 @@ internal static class ConnectionContentBootstrap
             var nextGate = admission.Ready ? new ConnectionContentState() : admission.Gate.PreserveDeadline();
             Cleanup(connection);
             admission = new Admission(nextGate);
-            Admissions.Add(connection, admission);
+            StartAdmission(connection, admission);
             connection.isReady = false;
-            admission.Watchdog = Timing.RunCoroutine(Watch(connection, admission));
             if (!Admissions.TryGetValue(connection, out admission)) return;
         }
         admission.Generation = generation;
@@ -135,7 +158,8 @@ internal static class ConnectionContentBootstrap
             if (!ServerAssetManager.TryAcquireOfferSnapshot(out snapshot)) return;
             admission.Transfer = FileTransferSession.StartForConnection(connection, snapshot,
                 () => OnTransferComplete(connection, admission),
-                reason => ConnectionBootstrap.Reject(connection, "Content transfer failed: " + reason));
+                reason => ConnectionBootstrap.Reject(connection, "Content transfer failed: " + reason),
+                () => admission.Gate.RemainingSeconds);
             snapshot = null; // Transfer now owns the retained immutable snapshot.
             admission.Catalog = ContentRegistry.CreateOfferCatalog(admission.Transfer.Manifest.ManifestSha256, admission.Transfer.Snapshot);
             if (!admission.Gate.Offer(admission.Transfer.Manifest.SessionId,
@@ -179,6 +203,11 @@ internal static class ConnectionContentBootstrap
                     break;
                 case FileAckMessage acknowledgement:
                     admission.Transfer.HandleMessage(acknowledgement);
+                    break;
+                case FileCreditMessage credit:
+                    if (credit.SessionId != admission.Gate.SessionId)
+                        throw new InvalidDataException("Bulk credit belongs to a different content offer.");
+                    admission.Transfer.HandleMessage(credit);
                     break;
                 case ContentCatalogAckMessage acknowledgement:
                     if (acknowledgement.Status != ContentCatalogActivationStatus.Activated ||

@@ -120,6 +120,11 @@
         <Compile Include="Networking\AnomalyMessageDirection.cs" />
         <Compile Include="Networking\AnomalyMessageRegistry.cs" />
         <Compile Include="Networking\AnomalyReplayState.cs" />
+        <Compile Include="Networking\BulkTransferProtocol.cs" />
+        <Compile Include="Networking\BulkReplayState.cs" />
+        <Compile Include="Networking\BulkCreditWindow.cs" />
+        <Compile Include="Networking\BulkConsumptionTracker.cs" />
+        <Compile Include="Networking\Messages\FileCreditMessage.cs" />
         <Compile Include="Networking\AnomalySequenceState.cs" />
         <Compile Include="Networking\TransportPacketPolicy.cs" />
         <Compile Include="Networking\HalfHelper.cs" />
@@ -150,6 +155,7 @@
         <Compile Include="Networking\Messages\FileManifestMessage.cs" />
         <Compile Include="Networking\Messages\FileRequestMessage.cs" />
         <Compile Include="Networking\Messages\FileTransferCompleteMessage.cs" />
+        <Compile Include="Networking\Messages\FileTransferStatusMessage.cs" />
         <Compile Include="Networking\Messages\SilentRoleChangeMessage.cs" />
         <Compile Include="Networking\Messages\RoundStateMessage.cs" />
         <Compile Include="Assets\TextureOverridePolicy.cs" />

@@ -186,10 +186,10 @@ public sealed class ContentPackCodecTests
         ["scripts/messages.json"] = Bytes("{\"Messages\":[{\"Name\":\"State\",\"Direction\":\"ServerToClient\",\"Fields\":[]}]}"),
         ["assets/panel.index.json"] = JsonBytes(new JObject
         {
-            ["SchemaVersion"] = 1, ["PackId"] = "example:panel_assets", ["Namespace"] = "example",
+            ["SchemaVersion"] = AssetPackIndex.CurrentSchemaVersion, ["PackId"] = "example:panel_assets", ["Namespace"] = "example",
             ["UnityVersion"] = AssetPackIndex.SupportedUnityVersion, ["Platform"] = AssetPackIndex.SupportedPlatform,
             ["GameProfile"] = AssetPackIndex.SupportedGameProfile, ["BundleFile"] = "panel.bundle",
-            ["BundleSha256"] = new string('a', 64), ["BundleBytes"] = 3,
+            ["BundleSha256"] = new string('a', 64), ["BundleBytes"] = 3, ["DecodedBytes"] = 1024,
             ["Assets"] = new JArray(new JObject
             {
                 ["Address"] = "mods/example/icon", ["EntryName"] = "mods/example/icon", ["Kind"] = "Texture2D", ["Width"] = 16, ["Height"] = 16

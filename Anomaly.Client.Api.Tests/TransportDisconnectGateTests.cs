@@ -66,12 +66,98 @@ public sealed class TransportDisconnectGateTests
     }
 
     [Fact]
-    public void Missing_native_host_drops_observation_without_reusing_it_later()
+    public void Missing_native_host_cannot_drain_a_valid_notice()
     {
         var gate = new TransportDisconnectGate();
         gate.Begin(1);
         gate.Observe(1, 100, 100, true, "Timeout");
         Assert.False(gate.TryConsume(1, 0, out _));
+        Assert.True(gate.TryConsume(1, 100, out _));
         Assert.False(gate.TryConsume(1, 100, out _));
+    }
+
+    [Fact]
+    public void Remote_server_close_hands_detached_reason_to_main_thread_once()
+    {
+        var gate = new TransportDisconnectGate();
+        gate.Begin(1);
+        var frame = StockDisconnectReasonTests.Frame("Available upload capacity is exhausted.");
+        gate.ObserveServerClose(1, 100, 100, frame);
+        Array.Clear(frame); // The pooled/native source may be recycled after the callback.
+        Assert.True(gate.TryConsumeNotice(1, 100, out var notice));
+        Assert.Equal(TransportDisconnectGate.Kind.ServerClosed, notice.Outcome);
+        Assert.Equal("Available upload capacity is exhausted.", notice.Reason);
+        gate.ObserveServerClose(1, 100, 100, StockDisconnectReasonTests.Frame("Duplicate callback"));
+        Assert.False(gate.TryConsumeNotice(1, 100, out _));
+    }
+
+    [Fact]
+    public void Malformed_server_payload_never_becomes_network_timeout_or_reuses_a_reason()
+    {
+        var gate = new TransportDisconnectGate();
+        gate.Begin(1);
+        gate.ObserveServerClose(1, 100, 100, new byte[] { 5, 0, 37, 37, 37, 37 });
+        Assert.False(gate.TryConsumeNotice(1, 100, out _));
+        gate.ObserveServerClose(1, 100, 100, new byte[1025]);
+        Assert.False(gate.TryConsumeNotice(1, 100, out _));
+        gate.Observe(1, 100, 100, true, "Timeout");
+        Assert.True(gate.TryConsumeNotice(1, 100, out var failure));
+        Assert.Equal(TransportDisconnectGate.Kind.NetworkFailure, failure.Outcome);
+        Assert.Equal("Timeout", failure.Reason);
+    }
+
+    [Fact]
+    public void Explicit_local_stop_cancels_remote_reasons_including_later_native_callback()
+    {
+        var gate = new TransportDisconnectGate();
+        gate.Begin(1);
+        var frame = StockDisconnectReasonTests.Frame("Server closed.");
+        gate.ObserveServerClose(1, 100, 100, frame);
+        gate.Cancel(1);
+        Assert.False(gate.TryConsumeNotice(1, 100, out _));
+        gate.ObserveServerClose(1, 100, 100, frame);
+        Assert.False(gate.TryConsumeNotice(1, 100, out _));
+    }
+
+    [Fact]
+    public void Retired_attempt_and_host_cannot_publish_or_drain_current_server_notice()
+    {
+        var gate = new TransportDisconnectGate();
+        var old = StockDisconnectReasonTests.Frame("Old server.");
+        var current = StockDisconnectReasonTests.Frame("Current server.");
+        gate.Begin(1);
+        gate.ObserveServerClose(1, 100, 100, old);
+        gate.Begin(2);
+        gate.ObserveServerClose(1, 200, 100, old);
+        gate.ObserveServerClose(2, 200, 100, old);
+        Assert.False(gate.TryConsumeNotice(2, 200, out _));
+        gate.ObserveServerClose(2, 200, 200, current);
+        Assert.False(gate.TryConsumeNotice(1, 100, out _));
+        Assert.True(gate.TryConsumeNotice(2, 200, out var notice));
+        Assert.Equal("Current server.", notice.Reason);
+    }
+
+    [Fact]
+    public void New_native_host_in_same_handshake_generation_cannot_inherit_previous_host_notice()
+    {
+        var gate = new TransportDisconnectGate();
+        gate.Begin(1);
+        gate.ObserveServerClose(1, 100, 100, StockDisconnectReasonTests.Frame("Old host."));
+        Assert.False(gate.TryConsumeNotice(1, 200, out _));
+        gate.ObserveServerClose(1, 200, 200, StockDisconnectReasonTests.Frame("New host."));
+        Assert.True(gate.TryConsumeNotice(1, 200, out var notice));
+        Assert.Equal("New host.", notice.Reason);
+    }
+
+    [Fact]
+    public void Same_generation_old_host_consumer_cannot_drain_replacement_host_notice()
+    {
+        var gate = new TransportDisconnectGate();
+        gate.Begin(1);
+        gate.ObserveServerClose(1, 100, 100, StockDisconnectReasonTests.Frame("Retired host."));
+        gate.ObserveServerClose(1, 200, 200, StockDisconnectReasonTests.Frame("Live host."));
+        Assert.False(gate.TryConsumeNotice(1, 100, out _));
+        Assert.True(gate.TryConsumeNotice(1, 200, out var notice));
+        Assert.Equal("Live host.", notice.Reason);
     }
 }

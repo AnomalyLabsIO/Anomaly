@@ -15,11 +15,12 @@ namespace Anomaly.Client.Assets;
 /// <summary>Owns validated pack bytes, native bundle lifetimes and atomically published address layers.</summary>
 internal static class AssetBundleManager
 {
-    private const int MaximumPacks = 128;
+    private const int MaximumPacks = BundleCopyBudget.MaximumCopies;
     private const int MaximumIndexBytes = AssetPackIndexCodec.MaxIndexBytes;
-    private const long MaximumLiveDecodedBytes = 256L * 1024 * 1024;
-    private const long MaximumCachedBytes = 256L * 1024 * 1024;
+    private const long MaximumLiveDecodedBytes = BundleCopyBudget.MaximumBytes;
+    private const long MaximumCachedBytes = BundleCopyBudget.MaximumBytes;
     private static readonly object CacheLock = new();
+    private static readonly SemaphoreSlim RemoteValidation = new(1, 1);
     private static readonly Dictionary<string, CachedCopy> Cache = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, LoadedPack> NativePacks = new(StringComparer.Ordinal);
     private static readonly List<LoadedPack> FailedNativeCleanup = new();
@@ -34,6 +35,9 @@ internal static class AssetBundleManager
     private static bool _remoteActive;
     private static bool _cleanupFailed;
     private static string _verifiedRoot;
+    private static PreparedPackWarmup<PreparedPack> _warmup;
+    private static Dictionary<string, PackOffer> _warmOffers;
+    private static string _warmIdentity;
 
     private sealed class Layer
     {
@@ -84,7 +88,7 @@ internal static class AssetBundleManager
     private sealed class PackOffer
     {
         internal string PackId, IndexPath, BundlePath, IndexHash, BundleHash;
-        internal long IndexSize, BundleSize;
+        internal long IndexSize, BundleSize, DecodedBytes;
     }
 
     private sealed class PendingOffer
@@ -92,6 +96,7 @@ internal static class AssetBundleManager
         internal long Generation;
         internal List<PackOffer> Packs;
         internal Action<bool, string> Completed;
+        internal PreparedPackWarmup<PreparedPack> Warmup;
     }
 
     internal static void Initialize()
@@ -196,15 +201,80 @@ internal static class AssetBundleManager
     internal static void ActivateRemote(ContentCatalog catalog, Action<bool, string> completed)
     {
         if (!_initialized || _cleanupFailed) throw new InvalidOperationException("The asset bundle runtime requires a clean restart.");
-        CancelPending();
+        bool retainWarmup = _warmup != null && _warmIdentity == OfferIdentity(catalog);
+        CancelPending(retainWarmup);
+        var packs = RemoteOffers(catalog);
+        _pending = new PendingOffer { Generation = _generation, Packs = packs, Completed = completed,
+            Warmup = retainWarmup ? _warmup : null };
+        StartPending();
+    }
+
+    // Admission comes from the exact approved offer and verified-file callbacks.
+    // This stage never invokes Unity or publishes a remote address layer.
+    internal static void BeginRemotePrewarm(ContentCatalog catalog)
+    {
+        PreflightRemoteBudget(catalog);
+        _warmup?.Dispose();
+        _warmup = null;
+        _warmOffers = null;
+        _warmIdentity = null;
+        if (catalog.Packs.Count == 0) return;
+        if (!_initialized || _cleanupFailed) throw new InvalidOperationException("The asset bundle runtime requires a clean restart.");
+        var offers = new Dictionary<string, PackOffer>(StringComparer.Ordinal);
+        foreach (var offer in RemoteOffers(catalog)) offers.Add(offer.PackId, offer);
+        _warmOffers = offers;
+        _warmIdentity = OfferIdentity(catalog);
+        _warmup = new PreparedPackWarmup<PreparedPack>();
+    }
+
+    internal static void PreflightRemoteBudget(ContentCatalog catalog)
+    {
+        // Native/local ownership is changed only on the game thread. Read its
+        // immutable copy identities without waiting on a worker's cache-copy I/O.
+        var local = new List<KeyValuePair<string, long>>();
+        foreach (var pack in _local.Packs)
+        {
+            var copy = pack.Prepared.Copy;
+            local.Add(new KeyValuePair<string, long>(copy.Key, copy.Bytes));
+        }
+        var offered = new List<KeyValuePair<string, long>>();
+        var localDecoded = new List<BundleCopyBudget.DecodedDemand>();
+        foreach (var pack in NativePacks.Values)
+            localDecoded.Add(new BundleCopyBudget.DecodedDemand(pack.Prepared.Index.BundleSha256,
+                pack.Prepared.Copy.Key, pack.Prepared.Copy.DecodedBytes));
+        var offeredDecoded = new List<BundleCopyBudget.DecodedDemand>();
+        foreach (var pack in catalog.Packs)
+        {
+            string bundleHash = FileCache.ToHex(pack.BundleHash);
+            string copyKey = CacheKey(bundleHash, FileCache.ToHex(pack.IndexHash));
+            offered.Add(new KeyValuePair<string, long>(
+                copyKey, pack.BundleSize));
+            offeredDecoded.Add(new BundleCopyBudget.DecodedDemand(bundleHash, copyKey, pack.DecodedBytes));
+        }
+        BundleCopyBudget.Validate(local, offered);
+        BundleCopyBudget.ValidateDecoded(localDecoded, offeredDecoded);
+    }
+
+    internal static void PrewarmRemotePack(string packId)
+    {
+        if (_warmup == null || _warmOffers == null || !_warmOffers.TryGetValue(packId, out var offer))
+            throw new InvalidOperationException("No approved bundle prewarm owns this pack.");
+        _warmup.Schedule(packId, token => PrepareRemotePack(offer, token));
+    }
+
+    private static string OfferIdentity(ContentCatalog catalog) =>
+        FileCache.ToHex(catalog.CatalogSha256) + ":" + FileCache.ToHex(catalog.ManifestSha256);
+
+    private static List<PackOffer> RemoteOffers(ContentCatalog catalog)
+    {
         var packs = catalog.Packs.Select(pack => new PackOffer {
             PackId = pack.PackId, IndexPath = FileCache.GetFilePath(pack.IndexHash),
             BundlePath = FileCache.GetFilePath(pack.BundleHash), IndexHash = FileCache.ToHex(pack.IndexHash),
             BundleHash = FileCache.ToHex(pack.BundleHash), IndexSize = pack.IndexSize, BundleSize = pack.BundleSize,
+            DecodedBytes = pack.DecodedBytes,
         }).ToList();
         if (packs.Count > MaximumPacks) throw new InvalidDataException("Too many remote asset packs.");
-        _pending = new PendingOffer { Generation = _generation, Packs = packs, Completed = completed };
-        StartPending();
+        return packs;
     }
 
     private static void StartPending()
@@ -215,7 +285,8 @@ internal static class AssetBundleManager
         _cancellation = new CancellationTokenSource();
         var request = _running;
         var token = _cancellation.Token;
-        _work = Task.Run(() => PrepareRemote(request.Packs, token), token);
+        // Always enter the delegate so cancelled pending work still retires its warm leases.
+        _work = Task.Run(() => PrepareRemote(request.Packs, token, request.Warmup));
     }
 
     internal static void Update()
@@ -246,11 +317,18 @@ internal static class AssetBundleManager
         finally { StartPending(); }
     }
 
-    private static void CancelPending()
+    private static void CancelPending(bool retainWarmup = false)
     {
         checked { _generation++; }
         _pending = null;
         _cancellation?.Cancel();
+        if (!retainWarmup)
+        {
+            _warmup?.Dispose();
+            _warmup = null;
+            _warmOffers = null;
+            _warmIdentity = null;
+        }
     }
 
     // Call only after restoring all consumers of remote assets.
@@ -326,7 +404,8 @@ internal static class AssetBundleManager
         catch { set.Dispose(); throw; }
     }
 
-    private static PreparedSet PrepareRemote(IEnumerable<PackOffer> offers, CancellationToken token)
+    private static PreparedSet PrepareRemote(IEnumerable<PackOffer> offers, CancellationToken token,
+        PreparedPackWarmup<PreparedPack> warmup)
     {
         var set = new PreparedSet();
         try
@@ -334,36 +413,45 @@ internal static class AssetBundleManager
             foreach (var offer in offers)
             {
                 token.ThrowIfCancellationRequested();
-                try
-                {
-                    byte[] bytes = ReadIndex(offer.IndexPath, offer.IndexHash, offer.IndexSize);
-                    var index = AssetPackIndexCodec.Parse(bytes, remote: true);
-                    if (index.PackId != offer.PackId || index.BundleSha256 != offer.BundleHash || index.BundleBytes != offer.BundleSize)
-                        throw new InvalidDataException("The pack index disagreed with its exact authenticated offer.");
-                    set.Packs.Add(PreparePack(index, offer.IndexHash, offer.BundlePath, token));
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception exception)
-                {
-                    throw new InvalidDataException($"Pack '{offer.PackId}' validation failed: {exception.Message}", exception);
-                }
+                set.Packs.Add(warmup?.Take(offer.PackId, token) ?? PrepareRemotePack(offer, token));
             }
             token.ThrowIfCancellationRequested();
             return set;
         }
         catch { set.Dispose(); throw; }
+        finally { warmup?.Dispose(); }
+    }
+
+    private static PreparedPack PrepareRemotePack(PackOffer offer, CancellationToken token)
+    {
+        bool entered = false;
+        try
+        {
+            // A cancelled generation may still be unwinding a validator. Keep
+            // aggregate decoding/copy memory bounded across offer replacements.
+            RemoteValidation.Wait(token);
+            entered = true;
+            byte[] bytes = ReadIndex(offer.IndexPath, offer.IndexHash, offer.IndexSize);
+            var index = AssetPackIndexCodec.Parse(bytes, remote: true);
+            if (index.PackId != offer.PackId || index.BundleSha256 != offer.BundleHash || index.BundleBytes != offer.BundleSize ||
+                index.DecodedBytes != offer.DecodedBytes)
+                throw new InvalidDataException("The pack index disagreed with its exact authenticated offer.");
+            return PreparePack(index, offer.IndexHash, offer.BundlePath, token);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception exception)
+        { throw new InvalidDataException($"Pack '{offer.PackId}' validation failed: {exception.Message}", exception); }
+        finally { if (entered) RemoteValidation.Release(); }
     }
 
     private static PreparedPack PreparePack(AssetPackIndex index, string indexHash, string bundlePath, CancellationToken token)
     {
-        var validator = typeof(BundleValidator).Assembly;
-        string key = BundleValidator.ProfileId + ":" + validator.GetName().Version + ":" +
-            validator.ManifestModule.ModuleVersionId.ToString("N") + ":" + AssetPackIndex.SupportedGameProfile +
-            ":" + index.BundleSha256 + ":" + indexHash;
+        string key = CacheKey(index.BundleSha256, indexHash);
         lock (CacheLock)
         {
             if (Cache.TryGetValue(key, out var cached))
             {
+                BundleCopyBudget.ValidateMeasurement(index.DecodedBytes, cached.DecodedBytes);
                 cached.Leases++;
                 return new PreparedPack { Index = index, Copy = cached };
             }
@@ -374,8 +462,18 @@ internal static class AssetBundleManager
         using var input = new FileStream(bundlePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         if (input.Length != index.BundleBytes) throw new InvalidDataException("Bundle length disagreed with the index.");
         using var verified = BundleValidator.Validate(input, new BundleValidationRequest(index.BundleSha256, expectations), token);
+        BundleCopyBudget.ValidateMeasurement(index.DecodedBytes, verified.TotalDecodedBytes);
         lock (CacheLock)
         {
+            token.ThrowIfCancellationRequested();
+            // A retired offer and its replacement can finish validation concurrently.
+            // Reuse the winning protected copy rather than adding the same key twice.
+            if (Cache.TryGetValue(key, out var existing))
+            {
+                BundleCopyBudget.ValidateMeasurement(index.DecodedBytes, existing.DecodedBytes);
+                existing.Leases++;
+                return new PreparedPack { Index = index, Copy = existing };
+            }
             EvictUnused(all: false);
             if (Cache.Count >= MaximumPacks || Cache.Values.Sum(copy => copy.Bytes) + verified.BundleLength > MaximumCachedBytes)
                 throw new InvalidDataException("The validated bundle cache budget is exhausted.");
@@ -409,6 +507,14 @@ internal static class AssetBundleManager
                 throw;
             }
         }
+    }
+
+    private static string CacheKey(string bundleHash, string indexHash)
+    {
+        var validator = typeof(BundleValidator).Assembly;
+        return BundleValidator.ProfileId + ":" + validator.GetName().Version + ":" +
+            validator.ManifestModule.ModuleVersionId.ToString("N") + ":" + AssetPackIndex.SupportedGameProfile +
+            ":" + bundleHash + ":" + indexHash;
     }
 
     private static void EvictUnused(bool all)

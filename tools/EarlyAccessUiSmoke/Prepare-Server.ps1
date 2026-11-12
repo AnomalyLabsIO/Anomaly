@@ -47,7 +47,7 @@ if ($RemoteScripting) {
     $fixtureTarget = Join-Path $labRoot 'plugins/global/Anomaly.RemoteScriptingSmoke.Server.dll'
     New-Item -ItemType Directory -Force -Path (Split-Path $fixtureTarget) | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'RemoteServerFixture/bin/Release/net48/Anomaly.RemoteScriptingSmoke.Server.dll') -Destination $fixtureTarget
-    $packRoot = Join-Path $destination 'RemoteScriptingSmoke/ContentPacks'
+    $packRoot = Join-Path $labRoot 'plugins/global/Anomaly/ContentPacks'
     New-Item -ItemType Directory -Force -Path $packRoot | Out-Null
     function Add-SmokeOptIn([string] $Path, [string] $Key, [string] $Value) {
         $lines = if (Test-Path -LiteralPath $Path) { @(Get-Content -LiteralPath $Path) } else { @() }
@@ -59,7 +59,7 @@ if ($RemoteScripting) {
         New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
         Add-Content -LiteralPath $Path -Value "${Key}: $Value"
     }
-    Add-SmokeOptIn (Join-Path $labRoot "configs/$Port/Anomaly/config.yml") 'content_pack_directory' "'$($packRoot.Replace("'", "''"))'"
+    Add-SmokeOptIn (Join-Path $labRoot "configs/$Port/Anomaly/config.yml") 'content_pack_directory' "'ContentPacks'"
     Add-SmokeOptIn (Join-Path $labRoot "configs/$Port/Anomaly.RemoteScriptingSmoke/config.yml") 'enabled' 'true'
     Write-Output 'Remote fixture staged and explicitly enabled. Set ANOMALY_REMOTE_SCRIPTING_SERVER_EVIDENCE when starting this private server.'
 }

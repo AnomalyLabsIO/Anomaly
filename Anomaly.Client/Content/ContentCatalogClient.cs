@@ -45,6 +45,8 @@ internal static class ContentCatalogClient
     private static bool _offerResolutionStarted;
     private static string _offerFingerprint;
     private static long _offerGeneration;
+    private static readonly HashSet<string> VerifiedFiles = new(StringComparer.Ordinal);
+    private static readonly HashSet<string> WarmingPacks = new(StringComparer.Ordinal);
     internal static bool IsActivated { get; private set; }
 
     internal static void Init()
@@ -61,6 +63,9 @@ internal static class ContentCatalogClient
             new InitializationStep(
                 () => FileTransferClient.TransferFinished += HandleTransferFinished,
                 () => FileTransferClient.TransferFinished -= HandleTransferFinished),
+            new InitializationStep(
+                () => FileTransferClient.FileVerified += HandleFileVerified,
+                () => FileTransferClient.FileVerified -= HandleFileVerified),
             new InitializationStep(
                 () => ClientEvents.Disconnected += HandleDisconnected,
                 () => ClientEvents.Disconnected -= HandleDisconnected));
@@ -96,6 +101,8 @@ internal static class ContentCatalogClient
         _qualificationPending = false;
         _offerResolutionStarted = false;
         _offerFingerprint = null;
+        VerifiedFiles.Clear();
+        WarmingPacks.Clear();
         Exception cleanupFailure = null;
         try { ScriptingBootstrap.RevokeAll(); }
         catch (Exception exception) { cleanupFailure = exception; }
@@ -209,6 +216,7 @@ internal static class ContentCatalogClient
         try
         {
             ValidateCatalogFiles(_catalog, _manifest);
+            AssetBundleManager.PreflightRemoteBudget(_catalog);
             _offerFingerprint ??= AuthHandler.CurrentServerFingerprint;
             ConnectionContentBootstrap.BindOffer(_manifest.SessionId, _catalog.CatalogSha256, _catalog.ManifestSha256);
             if (_catalog.ScriptPacks.Any(pack => pack.Sources.Count != 0) && !ScriptingPolicy.RemoteExecutionEnabled)
@@ -220,6 +228,11 @@ internal static class ContentCatalogClient
                 }
                 throw new NotSupportedException(ScriptingPolicy.RemoteExecutionDisabledReason);
             }
+        }
+        catch (BundleCopyBudgetException exception)
+        {
+            Fail(exception.Message, explainBundleBudget: true);
+            return;
         }
         catch (Exception exception)
         {
@@ -282,6 +295,19 @@ internal static class ContentCatalogClient
     {
         if (_decisionSent || _catalog == null)
             return;
+        // Consent can remain open while local/native ownership changes. Recheck
+        // before publishing approval or allowing any file request.
+        try { AssetBundleManager.PreflightRemoteBudget(_catalog); }
+        catch (BundleCopyBudgetException exception)
+        {
+            Fail(exception.Message, explainBundleBudget: true);
+            return;
+        }
+        catch (Exception exception)
+        {
+            Fail("bundle-copy capacity preflight failed: " + exception.Message);
+            return;
+        }
         _decisionSent = true;
         ConnectionContentBootstrap.Consent(_manifest.SessionId, _catalog.CatalogSha256, _catalog.ManifestSha256);
         if (!AnomalyMessaging.TrySend(new ContentCatalogDecisionMessage
@@ -303,9 +329,43 @@ internal static class ContentCatalogClient
         }
         ReportHealth(FeatureHealthStatus.Degraded,
             "The exact authenticated catalog and manifest were approved; activation is pending.");
+        try { AssetBundleManager.BeginRemotePrewarm(_catalog); }
+        catch (BundleCopyBudgetException exception)
+        {
+            Fail(exception.Message, explainBundleBudget: true);
+            return;
+        }
+        catch (Exception exception)
+        {
+            FailActivation("bundle preparation could not begin: " + exception.Message,
+                _catalog.Packs.Select(pack => pack.PackId));
+            return;
+        }
         if (!FileTransferClient.ApprovePendingManifest(_catalog.ManifestSha256))
             FailActivation("the approved manifest could not enter the transfer state",
                 _catalog.Entries.Select(entry => entry.Key));
+    }
+
+    private static void HandleFileVerified(byte[] hash)
+    {
+        if (!_decisionSent || _declined || _failureLatched || _activationPending || _catalog == null || _manifest == null)
+            return;
+        VerifiedFiles.Add(FileCache.ToHex(hash));
+        foreach (var pack in _catalog.Packs)
+        {
+            if (WarmingPacks.Contains(pack.PackId) || !VerifiedFiles.Contains(FileCache.ToHex(pack.IndexHash)) ||
+                !VerifiedFiles.Contains(FileCache.ToHex(pack.BundleHash))) continue;
+            try
+            {
+                AssetBundleManager.PrewarmRemotePack(pack.PackId);
+                WarmingPacks.Add(pack.PackId);
+            }
+            catch (Exception exception)
+            {
+                FailActivation("approved bundle preparation failed: " + exception.Message, new[] { pack.PackId });
+                return;
+            }
+        }
     }
 
     private static void DeclineByUser(string reason)
@@ -320,7 +380,7 @@ internal static class ContentCatalogClient
         SafeLogWarning("Custom content declined: " + reason);
     }
 
-    private static void Fail(string reason)
+    private static void Fail(string reason, bool explainBundleBudget = false)
     {
         if (_failureLatched)
             return;
@@ -334,7 +394,8 @@ internal static class ContentCatalogClient
         AnomalyMessaging.FailClosedTransport("Required custom-content validation failed: " + reason);
         ReportHealth(FeatureHealthStatus.Failed, reason);
         SafeLogError("Required custom-content validation failed: " + reason);
-        ShowContentFailure(Tr.Get(TrKeys.Content_ValidationFailed), "CONTENT-VALIDATION");
+        ShowContentFailure(explainBundleBudget ? reason : Tr.Get(TrKeys.Content_ValidationFailed),
+            explainBundleBudget ? "CONTENT-BUNDLE-BUDGET" : "CONTENT-VALIDATION");
     }
 
     private static bool SendDecline()

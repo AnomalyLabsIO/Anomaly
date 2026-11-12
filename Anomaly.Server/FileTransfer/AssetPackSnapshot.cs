@@ -68,7 +68,7 @@ internal sealed class AssetPackSnapshot : IDisposable
     internal List<CatalogPack> CopyPacks() => _packs.Select(pack => new CatalogPack
     {
         PackId = pack.PackId, IndexHash = (byte[])pack.IndexHash.Clone(), IndexSize = pack.IndexSize,
-        BundleHash = (byte[])pack.BundleHash.Clone(), BundleSize = pack.BundleSize
+        BundleHash = (byte[])pack.BundleHash.Clone(), BundleSize = pack.BundleSize, DecodedBytes = pack.DecodedBytes
     }).ToList();
     internal List<CatalogScriptPack> CopyScriptPacks() => _sourcePacks.Select(pack => new CatalogScriptPack
     {
@@ -120,7 +120,7 @@ internal sealed class AssetPackSnapshot : IDisposable
                     result._packs.Add(new CatalogPack
                     {
                         PackId = index.PackId, IndexHash = metadata.Hash, IndexSize = metadata.Size,
-                        BundleHash = bundle.Hash, BundleSize = bundle.Size,
+                        BundleHash = bundle.Hash, BundleSize = bundle.Size, DecodedBytes = index.DecodedBytes,
                     });
                     foreach (var entry in index.Assets) result.Add(new AssetRecord(index.PackId, metadata.Hash, entry, null, entry.AssetKind, entry.TriangleCount));
                     foreach (var visual in index.Visuals)
