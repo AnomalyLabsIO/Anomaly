@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+    <PackageReference Include="xunit" Version="2.7.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7" />
+    <ProjectReference Include="..\Anomaly.Shared\Anomaly.Shared.csproj" AdditionalProperties="DeployLocal=false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Anomaly.Client\Core.RequiredPatches.cs" Link="Runtime\Core.RequiredPatches.cs" />
+    <Compile Include="..\Anomaly.Client\Patches\Auth\PlayerAuthenticationManagerPatch.cs" Link="Runtime\PlayerAuthenticationManagerPatch.cs" />
+    <Compile Include="..\Anomaly.Client\Patches\Mirror\EncryptedChannelHandlerFix.cs" Link="Runtime\EncryptedChannelHandlerFix.cs" />
+    <Compile Include="..\Anomaly.Client\Internal\Networking\BulkTransportRuntime.cs" Link="Runtime\BulkTransportRuntime.cs" />
+    <Compile Include="..\Anomaly.Client\Patches\Mirror\BulkTransportPatches.cs" Link="Runtime\BulkTransportPatches.cs" />
+    <Compile Include="..\Anomaly.Client.Api\Internal\TransactionalInitializer.cs" Link="Runtime\TransactionalInitializer.cs" />
+    <Compile Include="..\Anomaly.Client.Api\Networking\AnomalyReplayTable.cs" Link="Runtime\AnomalyReplayTable.cs" />
+  </ItemGroup>
+</Project>
